@@ -36,9 +36,9 @@ export function createCompleteScreen(
 
   return {
     show: (summary) => {
-      title.textContent = `${summary.title} Complete!`;
-      subtitle.textContent = `${summary.difficultyLabel} · ${formatMs(summary.elapsedMs)} · ${summary.moves} move${summary.moves === 1 ? '' : 's'}`;
-      stats.textContent = 'Nice work.';
+      title.textContent = `${summary.title} 完成`;
+      subtitle.textContent = `${summary.difficultyLabel} · ${formatMs(summary.elapsedMs)} · ${summary.moves} 步`;
+      stats.textContent = '做得漂亮。';
       root.classList.remove('hidden');
     },
     hide: () => root.classList.add('hidden'),

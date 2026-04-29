@@ -2,7 +2,7 @@
   "id": "cats/001-cat",
   "title": "First Cat",
   "source": "source.png",
-  "tablecloth": { "type": "color", "value": "#2b2b2b" },
+  "tablecloth": { "type": "image", "value": "sakura-mat.png" },
   "difficulty": {
     "pieceCount": 9,
     "shapeStyle": "curve",

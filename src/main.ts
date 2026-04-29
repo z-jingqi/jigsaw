@@ -16,6 +16,8 @@ import { createSettingsModal } from './ui/settings-modal';
 import { playSfx, preloadSfx } from './core/audio';
 import { saveCompletion } from './core/progress';
 import { getSettings } from './core/settings';
+import menuBgUrl from '../assets/ui/menu-bg.png';
+import sakuraMatUrl from '../assets/tablecloths/sakura-mat.png';
 
 const LONG_PRESS_MOVE_THRESHOLD = 6;
 
@@ -54,8 +56,11 @@ const hud = document.getElementById('hud')!;
 const globalBackBtn = document.getElementById('global-back-button')!;
 const globalSettingsBtn = document.getElementById('global-settings-button')!;
 const DEFAULT_HUD_HELP = isTouchDevice()
-  ? 'Drag to move · Long-press to rotate'
-  : 'Left-drag to move · Right-click to rotate';
+  ? '拖动移动 · 长按旋转'
+  : '左键拖动 · 右键旋转';
+
+document.documentElement.style.setProperty('--menu-bg-image', `url("${menuBgUrl}")`);
+document.documentElement.style.setProperty('--tablecloth-bg-image', `url("${sakuraMatUrl}")`);
 
 function difficultyToOverrides(d: DifficultyEntry): Partial<LevelData> {
   const slice: LevelData['slice'] = {
@@ -80,7 +85,7 @@ function levelSeedBase(): string {
 }
 
 function setHudCopy(): void {
-  hud.textContent = `${DEFAULT_HUD_HELP} · 0:00 · 0 moves`;
+  hud.textContent = `${DEFAULT_HUD_HELP} · 0:00 · 0 步`;
 }
 setHudCopy();
 
@@ -259,7 +264,7 @@ function formatElapsedMs(elapsedMs: number): string {
 }
 
 function updateHud(s: GameState): void {
-  hud.textContent = `${DEFAULT_HUD_HELP} · ${formatElapsedMs(s.elapsedMs)} · ${s.moves} move${s.moves === 1 ? '' : 's'}`;
+  hud.textContent = `${DEFAULT_HUD_HELP} · ${formatElapsedMs(s.elapsedMs)} · ${s.moves} 步`;
 }
 
 function beginHudTicker(s: GameState): void {
@@ -290,30 +295,100 @@ function resumeGameplay(): void {
   beginHudTicker(state);
 }
 
-function parseTablecloth(loaded: LoadedLevel): number {
+function parseTablecloth(loaded: LoadedLevel): { color: number; imageUrl?: string } {
   const t = loaded.level.tablecloth;
   if (t.type === 'color' && t.value.startsWith('#')) {
-    return parseInt(t.value.slice(1), 16);
+    return { color: parseInt(t.value.slice(1), 16) };
   }
-  return 0x2b2b2b;
+  if (t.type === 'image') {
+    return {
+      color: 0xf2e3c8,
+      imageUrl: t.value === 'sakura-mat.png' ? sakuraMatUrl : undefined,
+    };
+  }
+  return { color: 0xf2e3c8 };
 }
 
 function scatterPieces(loaded: LoadedLevel, stage: StageHandles): PieceGroup[] {
   const groups: PieceGroup[] = [];
   const minSide = Math.min(stage.canvasWidth, stage.canvasHeight);
   const requested = loaded.level.difficulty.scatterRadius;
-  const cap = minSide * 0.45;
-  const radius = Math.max(80, Math.min(requested, cap));
-  const minR = radius * 0.45;
+  const cap = minSide * 0.46;
+  const radius = Math.max(120, Math.min(requested, cap));
+  const minR = radius * 0.62;
   const rotationEnabled = loaded.level.difficulty.rotationEnabled;
-  for (const piece of loaded.pieces) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = minR + Math.random() * (radius - minR);
-    const pos: Vec2 = [Math.cos(angle) * r, Math.sin(angle) * r];
+
+  const placements: Array<{ piece: LoadedLevel['pieces'][number]; footprint: number; pos: Vec2 }> = [];
+  const footprintPadding = Math.max(20, minSide * 0.018);
+  const orderedPieces = [...loaded.pieces]
+    .map((piece) => ({ piece, footprint: estimatePieceFootprint(piece) + footprintPadding }))
+    .sort((a, b) => b.footprint - a.footprint);
+
+  for (const entry of orderedPieces) {
+    const pos = findScatterPosition(placements, entry.footprint, minR, radius);
+    placements.push({ ...entry, pos });
+  }
+
+  for (const entry of placements) {
     const rot = rotationEnabled ? Math.floor(Math.random() * 4) * 90 : 0;
-    groups.push(new PieceGroup(piece, pos, rot));
+    groups.push(new PieceGroup(entry.piece, entry.pos, rot));
   }
   return groups;
+}
+
+function estimatePieceFootprint(piece: LoadedLevel['pieces'][number]): number {
+  let maxSq = 0;
+  for (const [x, y] of piece.polygon) {
+    const dx = x - piece.homePosition[0];
+    const dy = y - piece.homePosition[1];
+    const distSq = dx * dx + dy * dy;
+    if (distSq > maxSq) maxSq = distSq;
+  }
+  return Math.max(18, Math.sqrt(maxSq));
+}
+
+function findScatterPosition(
+  placements: Array<{ footprint: number; pos: Vec2 }>,
+  footprint: number,
+  minR: number,
+  maxR: number,
+): Vec2 {
+  const tries = 140;
+  for (let i = 0; i < tries; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const t = (i + Math.random()) / tries;
+    const r = minR + (maxR - minR) * Math.sqrt(t);
+    const candidate: Vec2 = [Math.cos(angle) * r, Math.sin(angle) * r];
+    if (isScatterPositionValid(candidate, footprint, placements)) return candidate;
+  }
+
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const startIndex = placements.length + 1;
+  for (let i = 0; i < 220; i++) {
+    const ringT = (i + startIndex) / (220 + startIndex);
+    const r = minR + (maxR - minR) * Math.min(1, Math.sqrt(ringT));
+    const angle = goldenAngle * (i + startIndex);
+    const candidate: Vec2 = [Math.cos(angle) * r, Math.sin(angle) * r];
+    if (isScatterPositionValid(candidate, footprint, placements, 0.92)) return candidate;
+  }
+
+  const fallbackAngle = goldenAngle * (placements.length + 1);
+  return [Math.cos(fallbackAngle) * maxR, Math.sin(fallbackAngle) * maxR];
+}
+
+function isScatterPositionValid(
+  candidate: Vec2,
+  footprint: number,
+  placements: Array<{ footprint: number; pos: Vec2 }>,
+  looseness = 1,
+): boolean {
+  for (const placed of placements) {
+    const dx = candidate[0] - placed.pos[0];
+    const dy = candidate[1] - placed.pos[1];
+    const minDistance = (footprint + placed.footprint) * looseness;
+    if (dx * dx + dy * dy < minDistance * minDistance) return false;
+  }
+  return true;
 }
 
 function wireInteraction(s: GameState): void {
@@ -490,7 +565,7 @@ function checkComplete(s: GameState): void {
       setGlobalChrome({ gear: true, back: false });
       completeScreen.show({
         title: s.loaded.level.title,
-        difficultyLabel: currentDifficulty?.label ? `Difficulty ${currentDifficulty.label}` : 'Puzzle',
+        difficultyLabel: currentDifficulty?.label ? `难度 ${currentDifficulty.label}` : '拼图',
         elapsedMs: s.elapsedMs,
         moves: s.moves,
       });

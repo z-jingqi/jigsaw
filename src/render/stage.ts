@@ -1,6 +1,11 @@
 import { Application, Container, Rectangle } from 'pixi.js';
 import { getSettings, resolutionDimensions } from '../core/settings';
 
+export interface StageBackground {
+  color: number;
+  imageUrl?: string;
+}
+
 export interface StageHandles {
   app: Application;
   world: Container;
@@ -11,14 +16,26 @@ export interface StageHandles {
   canvasHeight: number;
 }
 
-export async function createStage(host: HTMLElement, background: number): Promise<StageHandles> {
+export async function createStage(host: HTMLElement, background: StageBackground): Promise<StageHandles> {
   const settings = getSettings();
   const fixed = resolutionDimensions(settings.resolution);
+  const previousBackground = host.style.background;
+  const previousBackgroundSize = host.style.backgroundSize;
+  const previousBackgroundPosition = host.style.backgroundPosition;
+  const previousBackgroundColor = host.style.backgroundColor;
+
+  host.style.backgroundColor = `#${background.color.toString(16).padStart(6, '0')}`;
+  if (background.imageUrl) {
+    host.style.background = `linear-gradient(rgba(255, 248, 232, 0.12), rgba(232, 213, 185, 0.20)), url("${background.imageUrl}") center / cover`;
+    host.style.backgroundSize = 'cover';
+    host.style.backgroundPosition = 'center';
+  }
 
   const app = new Application();
   if (fixed) {
     await app.init({
-      background,
+      background: background.color,
+      backgroundAlpha: background.imageUrl ? 0 : 1,
       width: fixed.width,
       height: fixed.height,
       antialias: true,
@@ -27,7 +44,8 @@ export async function createStage(host: HTMLElement, background: number): Promis
     });
   } else {
     await app.init({
-      background,
+      background: background.color,
+      backgroundAlpha: background.imageUrl ? 0 : 1,
       resizeTo: window,
       antialias: true,
       autoDensity: true,
@@ -73,6 +91,10 @@ export async function createStage(host: HTMLElement, background: number): Promis
     resize,
     destroy: () => {
       window.removeEventListener('resize', resize);
+      host.style.background = previousBackground;
+      host.style.backgroundSize = previousBackgroundSize;
+      host.style.backgroundPosition = previousBackgroundPosition;
+      host.style.backgroundColor = previousBackgroundColor;
       app.destroy(true, { children: true, texture: false });
     },
     canvasWidth: app.screen.width,

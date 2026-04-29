@@ -40,7 +40,7 @@ export function createLevelsList(
         const meta = document.createElement('div');
         meta.className = 'meta';
         const completed = completedDifficultyCount(lvl.path, lvl.difficulties);
-        meta.textContent = `${lvl.path} · ${completed}/${lvl.difficulties.length} clears`;
+        meta.textContent = `${lvl.path} · ${completed}/${lvl.difficulties.length} 已完成`;
 
         const best = lvl.difficulties
           .map((diff) => ({ diff, record: getCompletion(lvl.path, diff.label) }))
@@ -48,8 +48,8 @@ export function createLevelsList(
         const bestMeta = document.createElement('div');
         bestMeta.className = 'meta';
         bestMeta.textContent = best?.record
-          ? `Best ${best.diff.label}: ${formatBestTime(best.record.bestElapsedMs)} · ${best.record.bestMoves} moves`
-          : 'No clears yet';
+          ? `最佳 ${best.diff.label}: ${formatBestTime(best.record.bestElapsedMs)} · ${best.record.bestMoves} 步`
+          : '还没有完成记录';
 
         const buttons = document.createElement('div');
         buttons.className = 'difficulty-row';

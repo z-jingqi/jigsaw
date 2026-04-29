@@ -55,17 +55,16 @@ if (!series) {
 if (!Array.isArray(series.levels)) series.levels = [];
 const existing = series.levels.find((entry) => entry.path === `${seriesId}/${levelDirName}`);
 if (!existing) {
-  series.levels.push({
-    path: `${seriesId}/${levelDirName}`,
-    title: levelTitle,
-    difficulties: [
-      { label: '1', cols: 2, rows: 2, shapeStyle: 'straight', rotationEnabled: false, scatterRadius: 260 },
-      { label: '2', cols: 3, rows: 3, shapeStyle: 'curve', scatterRadius: 320 },
-      { label: '3', cols: 4, rows: 4, shapeStyle: 'mixed', scatterRadius: 380 },
-      { label: '4', cols: 5, rows: 5, shapeStyle: 'classic-knob', scatterRadius: 430 },
-    ],
-  });
-}
+    series.levels.push({
+      path: `${seriesId}/${levelDirName}`,
+      title: levelTitle,
+      difficulties: [
+        { label: '简单', cols: 2, rows: 2, shapeStyle: 'straight', rotationEnabled: false, scatterRadius: 300 },
+        { label: '中等', cols: 3, rows: 3, shapeStyle: 'curve', scatterRadius: 360 },
+        { label: '困难', cols: 5, rows: 5, shapeStyle: 'classic-knob', scatterRadius: 430 },
+      ],
+    });
+  }
 series.levels.sort((a, b) => a.path.localeCompare(b.path));
 index.series.sort((a, b) => a.id.localeCompare(b.id));
 await writeJson(indexPath, index);

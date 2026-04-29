@@ -84,7 +84,7 @@ export function createSeriesList(
       const levelCount = s.levels.length;
       const done = s.levels.reduce((sum, level) => sum + completedDifficultyCount(level.path, level.difficulties), 0);
       const total = s.levels.reduce((sum, level) => sum + level.difficulties.length, 0);
-      meta.textContent = `${levelCount} level${levelCount === 1 ? '' : 's'} · ${done}/${total} clears`;
+      meta.textContent = `${levelCount} 个关卡 · ${done}/${total} 已完成`;
       card.appendChild(meta);
 
       const pick = (): void => onPick(s);
