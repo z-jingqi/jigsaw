@@ -1,4 +1,5 @@
 import type { DifficultyEntry } from '../core/types';
+import { completedDifficultyCount, formatBestTime, getCompletion, isDifficultyUnlocked } from '../core/progress';
 import type { LevelEntry, SeriesEntry } from './series-list';
 
 export interface LevelsListHandle {
@@ -38,17 +39,33 @@ export function createLevelsList(
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = lvl.path;
+        const completed = completedDifficultyCount(lvl.path, lvl.difficulties);
+        meta.textContent = `${lvl.path} · ${completed}/${lvl.difficulties.length} clears`;
+
+        const best = lvl.difficulties
+          .map((diff) => ({ diff, record: getCompletion(lvl.path, diff.label) }))
+          .find((entry) => entry.record);
+        const bestMeta = document.createElement('div');
+        bestMeta.className = 'meta';
+        bestMeta.textContent = best?.record
+          ? `Best ${best.diff.label}: ${formatBestTime(best.record.bestElapsedMs)} · ${best.record.bestMoves} moves`
+          : 'No clears yet';
 
         const buttons = document.createElement('div');
         buttons.className = 'difficulty-row';
-        for (const diff of lvl.difficulties) {
+        for (const [index, diff] of lvl.difficulties.entries()) {
           const btn = document.createElement('button');
           btn.className = 'difficulty-btn';
-          btn.textContent = diff.label;
+          const record = getCompletion(lvl.path, diff.label);
+          const unlocked = isDifficultyUnlocked(lvl.path, lvl.difficulties, index);
+          btn.textContent = record ? `${diff.label} ✓` : diff.label;
           btn.title = `${diff.cols} × ${diff.rows}`;
+          btn.disabled = !unlocked;
+          if (record) btn.dataset.state = 'complete';
+          else if (!unlocked) btn.dataset.state = 'locked';
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!unlocked) return;
             onPick(lvl, diff);
           });
           buttons.appendChild(btn);
@@ -57,6 +74,7 @@ export function createLevelsList(
         card.appendChild(img);
         card.appendChild(title);
         card.appendChild(meta);
+        card.appendChild(bestMeta);
         card.appendChild(buttons);
         grid.appendChild(card);
       }

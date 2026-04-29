@@ -177,6 +177,16 @@
         transform: translateY(-1px);
       }
       .level-card .difficulty-btn:active { transform: translateY(0); }
+      .level-card .difficulty-btn[data-state="complete"] {
+        background: rgba(88, 195, 129, 0.18);
+        border-color: rgba(88, 195, 129, 0.45);
+      }
+      .level-card .difficulty-btn[data-state="locked"],
+      .level-card .difficulty-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+      }
 
       /* Settings modal — narrow, centered panel */
       .modal {

@@ -1,4 +1,5 @@
 import type { DifficultyEntry } from '../core/types';
+import { completedDifficultyCount } from '../core/progress';
 
 export interface LevelEntry {
   path: string;
@@ -54,48 +55,55 @@ export function createSeriesList(
 
   backBtn.addEventListener('click', () => onBack());
 
-  grid.innerHTML = '';
-  for (const s of index.series) {
-    const card = document.createElement('div');
-    card.className = 'series-card';
-    card.tabIndex = 0;
+  const render = (): void => {
+    grid.innerHTML = '';
+    for (const s of index.series) {
+      const card = document.createElement('div');
+      card.className = 'series-card';
+      card.tabIndex = 0;
 
-    const cover = s.levels[0]?.path
-      ? `/${s.levels[0].path}/source.png`
-      : '';
-    if (cover) {
-      const img = document.createElement('img');
-      img.className = 'thumb';
-      img.src = cover;
-      img.alt = s.title;
-      img.draggable = false;
-      card.appendChild(img);
-    }
-
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = s.title;
-    card.appendChild(title);
-
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    const n = s.levels.length;
-    meta.textContent = `${n} level${n === 1 ? '' : 's'}`;
-    card.appendChild(meta);
-
-    const pick = (): void => onPick(s);
-    card.addEventListener('click', pick);
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        pick();
+      const cover = s.levels[0]?.path
+        ? `/${s.levels[0].path}/source.png`
+        : '';
+      if (cover) {
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.src = cover;
+        img.alt = s.title;
+        img.draggable = false;
+        card.appendChild(img);
       }
-    });
-    grid.appendChild(card);
-  }
+
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = s.title;
+      card.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const levelCount = s.levels.length;
+      const done = s.levels.reduce((sum, level) => sum + completedDifficultyCount(level.path, level.difficulties), 0);
+      const total = s.levels.reduce((sum, level) => sum + level.difficulties.length, 0);
+      meta.textContent = `${levelCount} level${levelCount === 1 ? '' : 's'} · ${done}/${total} clears`;
+      card.appendChild(meta);
+
+      const pick = (): void => onPick(s);
+      card.addEventListener('click', pick);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          pick();
+        }
+      });
+      grid.appendChild(card);
+    }
+  };
 
   return {
-    show: () => root.classList.remove('hidden'),
+    show: () => {
+      render();
+      root.classList.remove('hidden');
+    },
     hide: () => root.classList.add('hidden'),
   };
 }

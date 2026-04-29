@@ -14,6 +14,7 @@ import { createCompleteScreen } from './ui/complete-screen';
 import { createPauseMenu } from './ui/pause-menu';
 import { createSettingsModal } from './ui/settings-modal';
 import { playSfx, preloadSfx } from './core/audio';
+import { saveCompletion } from './core/progress';
 import { getSettings } from './core/settings';
 
 const LONG_PRESS_MOVE_THRESHOLD = 6;
@@ -476,6 +477,9 @@ function checkComplete(s: GameState): void {
     }
     s.elapsedMs = performance.now() - s.startedAt;
     updateHud(s);
+    if (currentLevel && currentDifficulty) {
+      saveCompletion(currentLevel.path, currentDifficulty.label, s.elapsedMs, s.moves);
+    }
     playSfx('complete');
     setTimeout(() => {
       hud.classList.add('hidden');
