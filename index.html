@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jigsaw</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; position: absolute; }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 1.5rem;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
+        color: #f5f5f5;
+        z-index: 10;
+        pointer-events: auto;
+        padding: 2rem;
+        box-sizing: border-box;
+        overflow-y: auto;
+      }
+      .overlay.bare {
+        background: transparent;
+        backdrop-filter: none;
+      }
+      .overlay h1 { font-size: 3rem; margin: 0; letter-spacing: 0.05em; }
+      .overlay p { margin: 0; opacity: 0.8; }
+      .overlay button {
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        background: #f5f5f5;
+        color: #111;
+        border: none;
+        border-radius: 999px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: transform 0.1s ease, background 0.15s ease;
+      }
+      .overlay button:hover { background: #fff; transform: translateY(-1px); }
+      .overlay button:active { transform: translateY(0); }
+      .overlay .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+      .overlay button.secondary {
+        background: transparent;
+        color: #f5f5f5;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+      }
+      .overlay button.secondary:hover { background: rgba(255, 255, 255, 0.08); }
+      .hidden { display: none !important; }
+
+      /* Main screen — title centered, button row at bottom-center */
+      #main-screen {
+        justify-content: flex-start;
+        padding-top: 12vh;
+      }
+      #main-screen h1 { font-size: 5rem; }
+      .main-bottom {
+        position: absolute;
+        bottom: 8vh;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      .main-bottom .start-btn {
+        font-size: 1.1rem;
+        padding: 0.85rem 2.5rem;
+      }
+
+      /* Top-left back arrow + top-right gear, both fixed */
+      .top-back {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        z-index: 20;
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f5f5f5;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 999px;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.1s ease;
+      }
+      .top-back:hover { background: rgba(255, 255, 255, 0.18); }
+
+      .gear-btn {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f5f5f5;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 999px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.1s ease;
+      }
+      .gear-btn:hover { background: rgba(255, 255, 255, 0.18); transform: rotate(35deg); }
+
+      #global-settings-button {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 20;
+      }
+
+      /* Series + levels grids share most styles */
+      .series-grid, .level-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        max-width: 720px;
+        width: 100%;
+      }
+      .series-card, .level-card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .series-card { cursor: pointer; transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease; }
+      .series-card:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.10);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .series-card .thumb, .level-card .thumb {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        object-fit: contain;
+        background: #1a1a1a;
+        border-radius: 8px;
+      }
+      .series-card .title, .level-card .title { font-weight: 600; font-size: 1rem; }
+      .series-card .meta, .level-card .meta { font-size: 0.75rem; opacity: 0.55; }
+
+      .level-card .difficulty-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 0.25rem;
+      }
+      .level-card .difficulty-btn {
+        flex: 1 1 auto;
+        min-width: 36px;
+        padding: 0.45rem 0.7rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.08);
+        color: #f5f5f5;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: transform 0.1s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      .level-card .difficulty-btn:hover {
+        background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.28);
+        transform: translateY(-1px);
+      }
+      .level-card .difficulty-btn:active { transform: translateY(0); }
+
+      /* Settings modal — narrow, centered panel */
+      .modal {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      .modal-panel {
+        background: #1a1a1a;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 1.25rem 1.5rem;
+        width: 100%;
+        max-width: 360px;
+        color: #f5f5f5;
+        font-size: 0.9rem;
+      }
+      .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+      .modal-header h2 { margin: 0; font-size: 1.15rem; }
+      .modal-close {
+        background: none; border: none; color: #f5f5f5;
+        font-size: 1.2rem; cursor: pointer; padding: 4px 8px;
+      }
+      .modal-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0; }
+      .modal-row label { flex: 1; opacity: 0.85; }
+      .modal-row input[type="range"] { flex: 1.5; }
+      .modal-row input[type="number"] {
+        width: 70px; padding: 4px 6px; font-size: 0.85rem;
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        color: inherit; border-radius: 6px;
+      }
+      .modal-row select {
+        flex: 1.2; padding: 4px 6px; font-size: 0.85rem;
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        color: inherit; border-radius: 6px;
+      }
+      .modal-row .value { font-variant-numeric: tabular-nums; opacity: 0.7; min-width: 38px; text-align: right; }
+      .modal-note { margin-top: 0.5rem; font-size: 0.75rem; opacity: 0.55; line-height: 1.3; }
+
+      @media (max-width: 480px) {
+        .series-grid, .level-grid { grid-template-columns: 1fr; }
+        .overlay h1 { font-size: 2rem; }
+        #main-screen h1 { font-size: 3.5rem; }
+      }
+
+      .hud {
+        position: fixed;
+        top: 16px;
+        left: 64px; /* leave space for back arrow when present */
+        z-index: 5;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        pointer-events: none;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud" class="hud hidden">Left-drag to move · Right-click to rotate</div>
+
+    <!-- Main / title screen -->
+    <div id="main-screen" class="overlay">
+      <h1>Jigsaw</h1>
+      <div class="main-bottom">
+        <button id="main-start-button" class="start-btn">Start</button>
+        <button id="main-settings-button" class="gear-btn" title="Settings">⚙</button>
+      </div>
+    </div>
+
+    <!-- Series picker -->
+    <div id="series-list" class="overlay hidden">
+      <button id="series-back-button" class="top-back" title="Back">←</button>
+      <h1>Pick a Series</h1>
+      <div id="series-grid" class="series-grid"></div>
+    </div>
+
+    <!-- Levels in a series -->
+    <div id="levels-list" class="overlay hidden">
+      <button id="levels-back-button" class="top-back" title="Back">←</button>
+      <h1 id="levels-title">Series</h1>
+      <div id="levels-grid" class="level-grid"></div>
+    </div>
+
+    <!-- Complete screen -->
+    <div id="complete-screen" class="overlay hidden">
+      <h1 id="complete-title">Complete!</h1>
+      <p id="complete-subtitle">Nice work.</p>
+      <p id="complete-stats">Nice work.</p>
+      <div class="btn-row">
+        <button id="restart-button">Play Again</button>
+        <button id="back-to-levels-button" class="secondary">Back to Levels</button>
+      </div>
+    </div>
+
+    <!-- Persistent top-right gear (hidden on main screen) -->
+    <button id="global-settings-button" class="gear-btn hidden" title="Settings">⚙</button>
+
+    <!-- Settings modal -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button id="settings-close-button" class="modal-close" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-row">
+          <label for="settings-sfx">SFX volume</label>
+          <input id="settings-sfx" type="range" min="0" max="100" step="1" />
+          <span id="settings-sfx-value" class="value">60%</span>
+        </div>
+        <div class="modal-row">
+          <label for="settings-longpress-enabled">Long-press rotate</label>
+          <input id="settings-longpress-enabled" type="checkbox" />
+        </div>
+        <div class="modal-row">
+          <label for="settings-longpress-ms">Long-press duration (ms)</label>
+          <input id="settings-longpress-ms" type="number" min="150" max="2000" step="50" />
+        </div>
+        <div class="modal-row">
+          <label for="settings-resolution">Resolution</label>
+          <select id="settings-resolution">
+            <option value="1280x720">1280 × 720</option>
+            <option value="1920x1080">1920 × 1080</option>
+            <option value="2560x1440">2560 × 1440</option>
+            <option value="native">Native (fit window)</option>
+          </select>
+        </div>
+        <div class="modal-note">Resolution applies on next puzzle.</div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

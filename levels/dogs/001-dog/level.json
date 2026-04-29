@@ -1,0 +1,15 @@
+{
+  "id": "dogs/001-dog",
+  "title": "First Dog",
+  "source": "source.png",
+  "tablecloth": { "type": "color", "value": "#2b2b2b" },
+  "difficulty": {
+    "pieceCount": 16,
+    "shapeStyle": "classic-knob",
+    "rotationEnabled": true,
+    "scatterRadius": 480
+  },
+  "snap": { "positionTolerance": 11, "angleTolerance": 8 },
+  "displayScale": 0.7,
+  "slice": { "mode": "grid", "cols": 4, "rows": 4 }
+}
