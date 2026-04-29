@@ -239,6 +239,13 @@
         pointer-events: none;
         user-select: none;
       }
+
+      #global-back-button {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        z-index: 20;
+      }
     </style>
   </head>
   <body>
@@ -280,7 +287,18 @@
     </div>
 
     <!-- Persistent top-right gear (hidden on main screen) -->
+    <button id="global-back-button" class="top-back hidden" title="Pause">←</button>
     <button id="global-settings-button" class="gear-btn hidden" title="Settings">⚙</button>
+
+    <div id="pause-menu" class="overlay hidden">
+      <h1>Paused</h1>
+      <p id="pause-title">Current Puzzle</p>
+      <div class="btn-row">
+        <button id="pause-resume-button">Resume</button>
+        <button id="pause-restart-button" class="secondary">Restart</button>
+        <button id="pause-back-to-levels-button" class="secondary">Back to Levels</button>
+      </div>
+    </div>
 
     <!-- Settings modal -->
     <div id="settings-modal" class="modal hidden">

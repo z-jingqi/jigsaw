@@ -11,6 +11,7 @@ import { createMainScreen } from './ui/main-screen';
 import { createSeriesList, loadLevelIndex, type LevelEntry, type SeriesEntry } from './ui/series-list';
 import { createLevelsList } from './ui/levels-list';
 import { createCompleteScreen } from './ui/complete-screen';
+import { createPauseMenu } from './ui/pause-menu';
 import { createSettingsModal } from './ui/settings-modal';
 import { playSfx, preloadSfx } from './core/audio';
 import { getSettings } from './core/settings';
@@ -28,6 +29,7 @@ interface GameState {
   elapsedMs: number;
   moves: number;
   hudTimerId: number | null;
+  cleanup: Array<() => void>;
 }
 
 interface ActiveDrag {
@@ -48,6 +50,7 @@ let currentLevel: LevelEntry | null = null;
 let currentDifficulty: DifficultyEntry | null = null;
 
 const hud = document.getElementById('hud')!;
+const globalBackBtn = document.getElementById('global-back-button')!;
 const globalSettingsBtn = document.getElementById('global-settings-button')!;
 const DEFAULT_HUD_HELP = isTouchDevice()
   ? 'Drag to move · Long-press to rotate'
@@ -78,6 +81,11 @@ const settingsModal = createSettingsModal();
 globalSettingsBtn.addEventListener('click', () => settingsModal.show());
 
 const completeScreen = createCompleteScreen(
+  () => void onPlayAgain(),
+  () => goToLevels(),
+);
+const pauseMenu = createPauseMenu(
+  () => resumeGameplay(),
   () => void onPlayAgain(),
   () => goToLevels(),
 );
@@ -125,10 +133,13 @@ function hideAllOverlays(): void {
   seriesList?.hide();
   levelsList?.hide();
   completeScreen.hide();
+  pauseMenu.hide();
 }
 
-function setGlobalGearVisible(v: boolean): void {
-  if (v) globalSettingsBtn.classList.remove('hidden');
+function setGlobalChrome(opts: { gear: boolean; back: boolean }): void {
+  if (opts.back) globalBackBtn.classList.remove('hidden');
+  else globalBackBtn.classList.add('hidden');
+  if (opts.gear) globalSettingsBtn.classList.remove('hidden');
   else globalSettingsBtn.classList.add('hidden');
 }
 
@@ -136,7 +147,7 @@ function goToMain(): void {
   teardownGameIfAny();
   hideAllOverlays();
   hud.classList.add('hidden');
-  setGlobalGearVisible(false);
+  setGlobalChrome({ gear: false, back: false });
   mainScreen?.show();
 }
 
@@ -144,7 +155,7 @@ function goToSeries(): void {
   teardownGameIfAny();
   hideAllOverlays();
   hud.classList.add('hidden');
-  setGlobalGearVisible(true);
+  setGlobalChrome({ gear: true, back: false });
   seriesList?.show();
 }
 
@@ -157,7 +168,7 @@ function goToLevels(series?: SeriesEntry): void {
   teardownGameIfAny();
   hideAllOverlays();
   hud.classList.add('hidden');
-  setGlobalGearVisible(true);
+  setGlobalChrome({ gear: true, back: false });
   levelsList?.show(currentSeries);
 }
 
@@ -182,7 +193,7 @@ async function onPlayAgain(): Promise<void> {
 async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promise<void> {
   hideAllOverlays();
   hud.classList.remove('hidden');
-  setGlobalGearVisible(true);
+  setGlobalChrome({ gear: true, back: true });
   preloadSfx();
 
   if (state) {
@@ -214,6 +225,7 @@ async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promi
     elapsedMs: 0,
     moves: 0,
     hudTimerId: null,
+    cleanup: [],
   };
   beginHudTicker(state);
   wireInteraction(state);
@@ -222,6 +234,8 @@ async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promi
 function teardown(s: GameState): void {
   if (s.pending) clearTimeout(s.pending.timer);
   if (s.hudTimerId !== null) window.clearInterval(s.hudTimerId);
+  for (const cleanup of s.cleanup) cleanup();
+  s.cleanup.length = 0;
   for (const v of s.views.values()) v.destroy();
   s.stage.destroy();
 }
@@ -239,11 +253,30 @@ function updateHud(s: GameState): void {
 
 function beginHudTicker(s: GameState): void {
   const tick = (): void => {
+    if (pauseMenu.isOpen()) return;
     s.elapsedMs = performance.now() - s.startedAt;
     updateHud(s);
   };
   tick();
   s.hudTimerId = window.setInterval(tick, 250);
+}
+
+function pauseGameplay(): void {
+  if (!state || pauseMenu.isOpen()) return;
+  if (state.hudTimerId !== null) {
+    window.clearInterval(state.hudTimerId);
+    state.hudTimerId = null;
+  }
+  state.elapsedMs = performance.now() - state.startedAt;
+  updateHud(state);
+  pauseMenu.show(currentLevel?.title ?? state.loaded.level.title);
+}
+
+function resumeGameplay(): void {
+  if (!state || !pauseMenu.isOpen()) return;
+  state.startedAt = performance.now() - state.elapsedMs;
+  pauseMenu.hide();
+  beginHudTicker(state);
 }
 
 function parseTablecloth(loaded: LoadedLevel): number {
@@ -294,7 +327,7 @@ function wireInteraction(s: GameState): void {
     });
   }
 
-  stage.app.stage.on('globalpointermove', (e: FederatedPointerEvent) => {
+  const onMove = (e: FederatedPointerEvent): void => {
     if (s.pending) {
       const cur = worldOf(s, e);
       const dx = cur[0] - s.pending.startWorld[0];
@@ -305,7 +338,8 @@ function wireInteraction(s: GameState): void {
       return;
     }
     if (s.activeDrag) updateDrag(s, e);
-  });
+  };
+  stage.app.stage.on('globalpointermove', onMove);
 
   const release = (): void => {
     if (s.pending) {
@@ -319,6 +353,20 @@ function wireInteraction(s: GameState): void {
   stage.app.stage.on('pointerupoutside', release);
   window.addEventListener('pointerup', release);
   window.addEventListener('blur', release);
+  const onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape' || !state) return;
+    e.preventDefault();
+    if (pauseMenu.isOpen()) resumeGameplay();
+    else pauseGameplay();
+  };
+  window.addEventListener('keydown', onKeyDown);
+
+  s.cleanup.push(() => stage.app.stage.off('globalpointermove', onMove));
+  s.cleanup.push(() => stage.app.stage.off('pointerup', release));
+  s.cleanup.push(() => stage.app.stage.off('pointerupoutside', release));
+  s.cleanup.push(() => window.removeEventListener('pointerup', release));
+  s.cleanup.push(() => window.removeEventListener('blur', release));
+  s.cleanup.push(() => window.removeEventListener('keydown', onKeyDown));
 }
 
 function worldOf(s: GameState, e: FederatedPointerEvent): Vec2 {
@@ -425,6 +473,7 @@ function checkComplete(s: GameState): void {
     playSfx('complete');
     setTimeout(() => {
       hud.classList.add('hidden');
+      setGlobalChrome({ gear: true, back: false });
       completeScreen.show({
         title: s.loaded.level.title,
         difficultyLabel: currentDifficulty?.label ? `Difficulty ${currentDifficulty.label}` : 'Puzzle',
@@ -434,3 +483,8 @@ function checkComplete(s: GameState): void {
     }, 350);
   }
 }
+
+globalBackBtn.addEventListener('click', () => {
+  if (pauseMenu.isOpen()) resumeGameplay();
+  else pauseGameplay();
+});
