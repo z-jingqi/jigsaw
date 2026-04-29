@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "level:create": "node tools/create-level.mjs",
+    "levels:check": "node tools/check-levels.mjs"
   },
   "dependencies": {
     "earcut": "^3.0.2",
