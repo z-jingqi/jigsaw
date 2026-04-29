@@ -62,6 +62,8 @@ function difficultyToOverrides(d: DifficultyEntry): Partial<LevelData> {
     cols: d.cols,
     rows: d.rows,
     knobs: d.knobs ?? false,
+    shapeStyle: d.shapeStyle,
+    seed: `${levelSeedBase()}|${d.label}|${d.cols}x${d.rows}|${d.shapeStyle ?? 'default'}`,
   };
   const difficulty: Partial<LevelData['difficulty']> = {};
   if (d.scatterRadius !== undefined) difficulty.scatterRadius = d.scatterRadius;
@@ -70,6 +72,10 @@ function difficultyToOverrides(d: DifficultyEntry): Partial<LevelData> {
     slice,
     ...(Object.keys(difficulty).length ? { difficulty: difficulty as LevelData['difficulty'] } : {}),
   };
+}
+
+function levelSeedBase(): string {
+  return currentLevel?.path ?? 'level';
 }
 
 function setHudCopy(): void {

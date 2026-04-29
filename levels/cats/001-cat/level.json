@@ -5,11 +5,11 @@
   "tablecloth": { "type": "color", "value": "#2b2b2b" },
   "difficulty": {
     "pieceCount": 9,
-    "shapeStyle": "grid",
+    "shapeStyle": "curve",
     "rotationEnabled": true,
     "scatterRadius": 350
   },
   "snap": { "positionTolerance": 11, "angleTolerance": 8 },
   "displayScale": 2.5,
-  "slice": { "mode": "grid", "cols": 3, "rows": 3 }
+  "slice": { "mode": "grid", "cols": 3, "rows": 3, "shapeStyle": "curve", "seed": "cats-001" }
 }

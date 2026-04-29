@@ -8,10 +8,10 @@
           "path": "cats/001-cat",
           "title": "Tabby",
           "difficulties": [
-            { "label": "1", "cols": 2, "rows": 2 },
-            { "label": "2", "cols": 3, "rows": 3 },
-            { "label": "3", "cols": 4, "rows": 4 },
-            { "label": "4", "cols": 5, "rows": 5 }
+            { "label": "1", "cols": 2, "rows": 2, "shapeStyle": "straight", "rotationEnabled": false, "scatterRadius": 260 },
+            { "label": "2", "cols": 3, "rows": 3, "shapeStyle": "curve", "scatterRadius": 320 },
+            { "label": "3", "cols": 4, "rows": 4, "shapeStyle": "mixed", "scatterRadius": 380 },
+            { "label": "4", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "scatterRadius": 430 }
           ]
         }
       ]
@@ -24,9 +24,9 @@
           "path": "dogs/001-dog",
           "title": "Pup",
           "difficulties": [
-            { "label": "1", "cols": 3, "rows": 3 },
-            { "label": "2", "cols": 4, "rows": 4 },
-            { "label": "3", "cols": 5, "rows": 5 }
+            { "label": "1", "cols": 3, "rows": 3, "shapeStyle": "curve", "rotationEnabled": false, "scatterRadius": 300 },
+            { "label": "2", "cols": 4, "rows": 4, "shapeStyle": "mixed", "scatterRadius": 380 },
+            { "label": "3", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "scatterRadius": 460 }
           ]
         }
       ]

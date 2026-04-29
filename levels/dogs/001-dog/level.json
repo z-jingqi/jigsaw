@@ -11,5 +11,5 @@
   },
   "snap": { "positionTolerance": 11, "angleTolerance": 8 },
   "displayScale": 0.7,
-  "slice": { "mode": "grid", "cols": 4, "rows": 4 }
+  "slice": { "mode": "grid", "cols": 4, "rows": 4, "shapeStyle": "classic-knob", "seed": "dogs-001" }
 }

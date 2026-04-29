@@ -94,10 +94,17 @@ const SHAPES: Array<(a: Vec2, b: Vec2, side: 1 | -1) => Vec2[]> = [
   (a, b, side) => arcCut(a, b, side),
 ];
 
+const CURVE_SHAPES = SHAPES.slice(1);
+
 /** Pick a uniformly-random shape from the palette with a random bump direction. */
-export function pickRandomCut(a: Vec2, b: Vec2): Vec2[] {
-  const idx = Math.floor(Math.random() * SHAPES.length);
-  return SHAPES[idx](a, b, randomSide());
+export function pickRandomCut(a: Vec2, b: Vec2, rng: () => number = Math.random): Vec2[] {
+  const idx = Math.floor(rng() * SHAPES.length);
+  return SHAPES[idx](a, b, randomSide(rng));
+}
+
+export function pickCurvedCut(a: Vec2, b: Vec2, rng: () => number = Math.random): Vec2[] {
+  const idx = Math.floor(rng() * CURVE_SHAPES.length);
+  return CURVE_SHAPES[idx](a, b, randomSide(rng));
 }
 
 function sampleCubic(a: Vec2, b: Vec2, c1: Vec2, c2: Vec2): Vec2[] {

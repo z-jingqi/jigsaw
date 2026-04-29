@@ -47,6 +47,6 @@ export function knobPolyline(a: Vec2, b: Vec2, side: 1 | -1): Vec2[] {
 }
 
 /** Pick a random side (+1 or -1) for a knob bump. */
-export function randomSide(): 1 | -1 {
-  return Math.random() < 0.5 ? 1 : -1;
+export function randomSide(rng: () => number = Math.random): 1 | -1 {
+  return rng() < 0.5 ? 1 : -1;
 }

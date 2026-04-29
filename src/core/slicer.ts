@@ -1,17 +1,19 @@
 import polygonClipping from 'polygon-clipping';
 import type { Pair, Polygon, Ring } from 'polygon-clipping';
-import type { NeighborRef, PieceData, Vec2 } from './types';
+import type { NeighborRef, PieceData, ShapeStyle, Vec2 } from './types';
 import type { Silhouette } from './silhouette';
 import { knobPolyline, randomSide } from './knob';
-import { pickRandomCut } from './cuts';
+import { pickCurvedCut, pickRandomCut, straightCut } from './cuts';
 import { pointSegSqDist } from './geometry';
 
 export interface GridSliceConfig {
   mode: 'grid';
   cols: number;
   rows: number;
-  /** When true (default), internal cuts are knob/socket curves. When false, straight lines. */
+  /** Legacy flag retained for old level data. */
   knobs?: boolean;
+  shapeStyle?: ShapeStyle;
+  seed?: string;
 }
 
 export type SliceConfig = GridSliceConfig;
@@ -30,9 +32,16 @@ export function sliceLevel(silhouette: Silhouette, cfg: SliceConfig): PieceData[
 function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
   const { bounds, outline, imageWidth, imageHeight } = silhouette;
   const { cols, rows } = cfg;
-  const useKnobs = cfg.knobs === true;
+  const shapeStyle = resolveShapeStyle(cfg);
   const debug = (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
   const skipped: string[] = [];
+  const rng = createSeededRng([
+    cfg.seed ?? '',
+    `${imageWidth}x${imageHeight}`,
+    `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`,
+    `${cols}x${rows}`,
+    shapeStyle,
+  ].join('|'));
 
   const xs: number[] = [];
   const ys: number[] = [];
@@ -42,10 +51,7 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
   // Build the polyline for one internal cut segment. Boundary segments
   // (top/bottom-most row, left/right-most column) are always straight because
   // they sit on the silhouette bbox and never produce visible cut edges.
-  const internalCut = (a: Vec2, b: Vec2): Vec2[] =>
-    useKnobs ? knobPolyline(a, b, randomSide()) : pickRandomCut(a, b);
-
-  const straightSeg = (a: Vec2, b: Vec2): Vec2[] => [a, b];
+  const internalCut = (a: Vec2, b: Vec2): Vec2[] => buildCut(a, b, shapeStyle, rng);
 
   // Pre-generate the polyline for each cut segment.
   // hCuts[r][c]: horizontal cut at y=ys[r] between xs[c] and xs[c+1].
@@ -58,7 +64,7 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
       const a: Vec2 = [xs[c], ys[r]];
       const b: Vec2 = [xs[c + 1], ys[r]];
       const isBoundary = r === 0 || r === rows;
-      hCuts[r].push(isBoundary ? straightSeg(a, b) : internalCut(a, b));
+      hCuts[r].push(isBoundary ? straightCut(a, b) : internalCut(a, b));
     }
   }
   for (let c = 0; c <= cols; c++) {
@@ -67,7 +73,7 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
       const a: Vec2 = [xs[c], ys[r]];
       const b: Vec2 = [xs[c], ys[r + 1]];
       const isBoundary = c === 0 || c === cols;
-      vCuts[c].push(isBoundary ? straightSeg(a, b) : internalCut(a, b));
+      vCuts[c].push(isBoundary ? straightCut(a, b) : internalCut(a, b));
     }
   }
 
@@ -237,12 +243,46 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
 
   if (debug) {
     console.info(
-      `[slicer] grid ${cols}x${rows}, knobs=${useKnobs}, produced ${pieces.length} pieces (${cols * rows} cells)` +
+      `[slicer] grid ${cols}x${rows}, produced ${pieces.length} pieces (${cols * rows} cells)` +
+        `, style=${shapeStyle}` +
         (skipped.length ? `; skipped: ${skipped.join(', ')}` : ''),
     );
   }
 
   return pieces;
+}
+
+function resolveShapeStyle(cfg: GridSliceConfig): ShapeStyle {
+  if (cfg.shapeStyle) return cfg.shapeStyle;
+  if (cfg.knobs === true) return 'classic-knob';
+  return 'mixed';
+}
+
+function buildCut(a: Vec2, b: Vec2, shapeStyle: ShapeStyle, rng: () => number): Vec2[] {
+  switch (shapeStyle) {
+    case 'straight':
+      return straightCut(a, b);
+    case 'curve':
+      return pickCurvedCut(a, b, rng);
+    case 'classic-knob':
+      return knobPolyline(a, b, randomSide(rng));
+    case 'mixed':
+      return rng() < 0.35 ? knobPolyline(a, b, randomSide(rng)) : pickRandomCut(a, b, rng);
+  }
+}
+
+function createSeededRng(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
 }
 
 /** Build a closed ring for cell (r, c) by walking top→right→bottom→left, splicing in cut polylines. */

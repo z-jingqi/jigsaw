@@ -33,11 +33,15 @@ export interface Tablecloth {
   value: string;
 }
 
+export type ShapeStyle = 'straight' | 'curve' | 'classic-knob' | 'mixed';
+
 export interface SliceConfig {
   mode: 'grid';
   cols: number;
   rows: number;
   knobs?: boolean;
+  shapeStyle?: ShapeStyle;
+  seed?: string;
 }
 
 export interface DifficultyEntry {
@@ -46,6 +50,7 @@ export interface DifficultyEntry {
   cols: number;
   rows: number;
   knobs?: boolean;
+  shapeStyle?: ShapeStyle;
   /** Optional per-difficulty overrides for runtime feel. */
   scatterRadius?: number;
   rotationEnabled?: boolean;
@@ -58,7 +63,7 @@ export interface LevelData {
   tablecloth: Tablecloth;
   difficulty: {
     pieceCount: number;
-    shapeStyle: string;
+    shapeStyle: ShapeStyle;
     rotationEnabled: boolean;
     scatterRadius: number;
   };
