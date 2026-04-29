@@ -131,6 +131,10 @@ async function boot(): Promise<void> {
         if (!currentLevel) return;
         await onStart(currentLevel, overrides);
       },
+      solveCurrent: () => {
+        if (!state) return;
+        autoSolveCurrent(state);
+      },
     });
   }
 }
@@ -492,6 +496,33 @@ function checkComplete(s: GameState): void {
       });
     }, 350);
   }
+}
+
+function autoSolveCurrent(s: GameState): void {
+  if (s.hudTimerId !== null) {
+    window.clearInterval(s.hudTimerId);
+    s.hudTimerId = null;
+  }
+  const center: Vec2 = [s.loaded.bounds.width / 2, s.loaded.bounds.height / 2];
+  for (const group of s.groups) {
+    const anchor = group.members[0]?.piece.homePosition;
+    if (!anchor) continue;
+    group.worldRotation = 0;
+    group.worldPosition = sub(anchor, center);
+    s.views.get(group.id)?.syncTransform();
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const group of [...s.groups]) {
+      if (!s.views.has(group.id)) continue;
+      const before = s.groups.length;
+      runSnap(s, group);
+      if (s.groups.length !== before) changed = true;
+    }
+  }
+  checkComplete(s);
 }
 
 globalBackBtn.addEventListener('click', () => {

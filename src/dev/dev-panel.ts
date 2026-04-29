@@ -6,6 +6,7 @@ export interface DevPanelDeps {
   getLevel: () => LevelData | null;
   /** Re-slice the *current* level with overrides merged into its level.json. */
   reslice: (overrides: Partial<LevelData>) => Promise<void>;
+  solveCurrent: () => void;
 }
 
 export function mountDevPanel(deps: DevPanelDeps): void {
@@ -44,6 +45,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
     <label>Tablecloth
       <input type="color" data-field="bg" />
     </label>
+    <button data-action="solve">Solve current puzzle</button>
     <button data-action="reslice">Re-slice current level</button>
   `;
   document.body.appendChild(root);
@@ -110,16 +112,19 @@ export function mountDevPanel(deps: DevPanelDeps): void {
   const rotIn = $<HTMLInputElement>('rotEnabled');
   const bgIn = $<HTMLInputElement>('bg');
   const currentLabel = $<HTMLSpanElement>('currentLabel');
+  const solveBtn = root.querySelector<HTMLButtonElement>('[data-action="solve"]')!;
   const resliceBtn = root.querySelector<HTMLButtonElement>('[data-action="reslice"]')!;
 
   const sync = (): void => {
     const lv = deps.getLevel();
     if (!lv) {
       currentLabel.textContent = '(no level)';
+      solveBtn.disabled = true;
       resliceBtn.disabled = true;
       return;
     }
     currentLabel.textContent = lv.id;
+    solveBtn.disabled = false;
     resliceBtn.disabled = false;
     colsIn.value = String(lv.slice?.cols ?? 3);
     rowsIn.value = String(lv.slice?.rows ?? 3);
@@ -159,6 +164,9 @@ export function mountDevPanel(deps: DevPanelDeps): void {
   });
 
   // Re-slice (full reload of CURRENT level with overrides).
+  solveBtn.addEventListener('click', () => {
+    deps.solveCurrent();
+  });
   resliceBtn.addEventListener('click', async () => {
     const lv = deps.getLevel();
     if (!lv) return;
