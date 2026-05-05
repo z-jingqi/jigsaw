@@ -1,6 +1,6 @@
 {
   "id": "cats/001-cat",
-  "title": "First Cat",
+  "title": "英国短尾猫",
   "source": "source.png",
   "tablecloth": { "type": "image", "value": "sakura-mat.png" },
   "difficulty": {
@@ -10,6 +10,6 @@
     "scatterRadius": 350
   },
   "snap": { "positionTolerance": 11, "angleTolerance": 8 },
-  "displayScale": 2.5,
+  "displayScale": 0.6,
   "slice": { "mode": "grid", "cols": 3, "rows": 3, "shapeStyle": "curve", "seed": "cats-001" }
 }

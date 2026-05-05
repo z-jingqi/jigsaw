@@ -1,9 +1,9 @@
 import polygonClipping from 'polygon-clipping';
 import type { Pair, Polygon, Ring } from 'polygon-clipping';
-import type { NeighborRef, PieceData, ShapeStyle, Vec2 } from './types';
+import type { NeighborRef, PieceData, ShapeStyle, SliceBoundsMode, Vec2 } from './types';
 import type { Silhouette } from './silhouette';
-import { knobPolyline, randomSide } from './knob';
-import { pickCurvedCut, pickRandomCut, straightCut } from './cuts';
+import { KNOB_RADIUS_RATIO, knobPolyline, randomSide } from './knob';
+import { pickCurvedCut, pickMixedCut, straightCut } from './cuts';
 import { pointSegSqDist } from './geometry';
 
 export interface GridSliceConfig {
@@ -13,6 +13,7 @@ export interface GridSliceConfig {
   /** Legacy flag retained for old level data. */
   knobs?: boolean;
   shapeStyle?: ShapeStyle;
+  bounds?: SliceBoundsMode;
   seed?: string;
 }
 
@@ -30,7 +31,14 @@ export function sliceLevel(silhouette: Silhouette, cfg: SliceConfig): PieceData[
 }
 
 function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
-  const { bounds, outline, imageWidth, imageHeight } = silhouette;
+  const { imageWidth, imageHeight } = silhouette;
+  const useRectBounds = cfg.bounds === 'rect' || cfg.bounds === 'image';
+  const bounds = cfg.bounds === 'image'
+    ? { x: 0, y: 0, width: imageWidth, height: imageHeight }
+    : silhouette.bounds;
+  const outline = useRectBounds
+    ? rectOutline(bounds.x, bounds.y, bounds.width, bounds.height)
+    : silhouette.outline;
   const { cols, rows } = cfg;
   const shapeStyle = resolveShapeStyle(cfg);
   const debug = (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
@@ -47,11 +55,12 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
   const ys: number[] = [];
   for (let i = 0; i <= cols; i++) xs.push(bounds.x + (bounds.width * i) / cols);
   for (let j = 0; j <= rows; j++) ys.push(bounds.y + (bounds.height * j) / rows);
+  const knobRadiusPx = Math.min(bounds.width / cols, bounds.height / rows) * KNOB_RADIUS_RATIO;
 
   // Build the polyline for one internal cut segment. Boundary segments
   // (top/bottom-most row, left/right-most column) are always straight because
   // they sit on the silhouette bbox and never produce visible cut edges.
-  const internalCut = (a: Vec2, b: Vec2): Vec2[] => buildCut(a, b, shapeStyle, rng);
+  const internalCut = (a: Vec2, b: Vec2): Vec2[] => buildCut(a, b, shapeStyle, rng, knobRadiusPx);
 
   // Pre-generate the polyline for each cut segment.
   // hCuts[r][c]: horizontal cut at y=ys[r] between xs[c] and xs[c+1].
@@ -87,7 +96,21 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
   // shared polylines instead of cell neighborship.
   const pieceCutKeys = new Map<string, Set<string>>();
 
-  for (let r = 0; r < rows; r++) {
+  if (useRectBounds) {
+    const merged = buildMergedRectPieces({
+      cols,
+      rows,
+      hCuts,
+      vCuts,
+      imageWidth,
+      imageHeight,
+      visibleOutline: cfg.bounds === 'image' ? outline : silhouette.outline,
+    });
+    allPieces.push(...merged.pieces);
+    for (const [id, keys] of merged.pieceCutKeys) pieceCutKeys.set(id, keys);
+    skipped.push(...merged.skipped);
+  } else {
+    for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cellRing = buildCellRing(r, c, cols, rows, hCuts, vCuts);
       const cell: Polygon = [cellRing];
@@ -150,6 +173,7 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
 
       if (blobIndex === 0) skipped.push(`p_${r}_${c}(no-valid-blobs)`);
     }
+  }
   }
 
   // Drop unmanageably tiny slivers — typically thin pieces produced where the silhouette
@@ -252,22 +276,178 @@ function sliceGrid(silhouette: Silhouette, cfg: GridSliceConfig): PieceData[] {
   return pieces;
 }
 
+function buildMergedRectPieces({
+  cols,
+  rows,
+  hCuts,
+  vCuts,
+  imageWidth,
+  imageHeight,
+  visibleOutline,
+}: {
+  cols: number;
+  rows: number;
+  hCuts: Vec2[][][];
+  vCuts: Vec2[][][];
+  imageWidth: number;
+  imageHeight: number;
+  visibleOutline: Vec2[];
+}): { pieces: PieceData[]; pieceCutKeys: Map<string, Set<string>>; skipped: string[] } {
+  const skipped: string[] = [];
+  const visibleSil: Polygon = [closeRing(visibleOutline.map(([x, y]) => [x, y] as Pair))];
+  const cells: Array<{ index: number; r: number; c: number; poly: Polygon; visibleArea: number }> = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const index = r * cols + c;
+      const poly: Polygon = [buildCellRing(r, c, cols, rows, hCuts, vCuts)];
+      let visibleArea = 0;
+      try {
+        visibleArea = multiPolygonArea(polygonClipping.intersection(visibleSil, poly));
+      } catch {
+        visibleArea = 0;
+      }
+      cells.push({ index, r, c, poly, visibleArea });
+    }
+  }
+
+  const visibleCells = cells.filter((cell) => cell.visibleArea > 0.5);
+  const avgVisibleArea = visibleCells.reduce((sum, cell) => sum + cell.visibleArea, 0) / Math.max(1, visibleCells.length);
+  const tinyVisibleArea = avgVisibleArea * 0.28;
+  const parent = cells.map((cell) => cell.index);
+  const find = (x: number): number => {
+    let p = parent[x];
+    while (p !== parent[p]) p = parent[p];
+    while (x !== p) {
+      const next = parent[x];
+      parent[x] = p;
+      x = next;
+    }
+    return p;
+  };
+  const union = (a: number, b: number): void => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+  const at = (r: number, c: number): number | null =>
+    r >= 0 && r < rows && c >= 0 && c < cols ? r * cols + c : null;
+
+  for (const cell of cells) {
+    if (cell.visibleArea >= tinyVisibleArea) continue;
+    const neighbors = [
+      at(cell.r - 1, cell.c),
+      at(cell.r + 1, cell.c),
+      at(cell.r, cell.c - 1),
+      at(cell.r, cell.c + 1),
+    ].filter((n): n is number => n !== null);
+    if (neighbors.length === 0) continue;
+    let best = neighbors[0];
+    for (const n of neighbors) {
+      if (cells[n].visibleArea > cells[best].visibleArea) best = n;
+    }
+    union(cell.index, best);
+    skipped.push(`p_${cell.r}_${cell.c}(merged-visible<${tinyVisibleArea.toFixed(1)}px²)`);
+  }
+
+  const byRoot = new Map<number, typeof cells>();
+  for (const cell of cells) {
+    const root = find(cell.index);
+    const group = byRoot.get(root);
+    if (group) group.push(cell);
+    else byRoot.set(root, [cell]);
+  }
+
+  const pieces: PieceData[] = [];
+  const pieceCutKeys = new Map<string, Set<string>>();
+  let groupIndex = 0;
+  for (const groupCells of byRoot.values()) {
+    const groupCutsByKey = new Map<string, Vec2[]>();
+    for (const cell of groupCells) {
+      for (const cut of cellCutsFor(cell.r, cell.c, rows, cols, hCuts, vCuts)) {
+        groupCutsByKey.set(cut.key, cut.poly);
+      }
+    }
+    const groupCuts = [...groupCutsByKey.entries()].map(([key, poly]) => ({ key, poly }));
+    const groupPolys = groupCells.map((cell) => cell.poly) as [Polygon, ...Polygon[]];
+    const unioned = polygonClipping.union(...groupPolys);
+    let blobIndex = 0;
+    for (const poly of unioned) {
+      const ring = poly[0];
+      if (Math.abs(signedArea(ring)) < 0.5) continue;
+      const open = openRing(ring);
+      if (open.length < 3) continue;
+      const polygon: Vec2[] = open.map(([x, y]) => [x, y]);
+      const uv: Vec2[] = polygon.map(([x, y]) => [x / imageWidth, y / imageHeight]);
+      const centroid = polygonCentroid(polygon);
+      const homePosition: Vec2 = [centroid[0], centroid[1]];
+      const edgeTypes: Array<'cut' | 'outline'> = [];
+      const usedKeys = new Set<string>();
+      for (let i = 0; i < polygon.length; i++) {
+        const a = polygon[i] as Pair;
+        const b = polygon[(i + 1) % polygon.length] as Pair;
+        const tag = classifyEdgeWithKey(a, b, groupCuts);
+        edgeTypes.push(tag.type);
+        if (tag.key) usedKeys.add(tag.key);
+      }
+      const id = `p_g${groupIndex}_${blobIndex++}`;
+      pieces.push({
+        id,
+        polygon,
+        uv,
+        centroid,
+        homePosition,
+        neighbors: [],
+        edgeTypes,
+      });
+      pieceCutKeys.set(id, usedKeys);
+    }
+    groupIndex++;
+  }
+
+  return { pieces, pieceCutKeys, skipped };
+}
+
+function cellCutsFor(
+  r: number,
+  c: number,
+  rows: number,
+  cols: number,
+  hCuts: Vec2[][][],
+  vCuts: Vec2[][][],
+): Array<{ poly: Vec2[]; key: string }> {
+  const cellCuts: Array<{ poly: Vec2[]; key: string }> = [];
+  if (r > 0) cellCuts.push({ poly: hCuts[r][c], key: `h:${r}:${c}` });
+  if (r < rows - 1) cellCuts.push({ poly: hCuts[r + 1][c], key: `h:${r + 1}:${c}` });
+  if (c > 0) cellCuts.push({ poly: vCuts[c][r], key: `v:${c}:${r}` });
+  if (c < cols - 1) cellCuts.push({ poly: vCuts[c + 1][r], key: `v:${c + 1}:${r}` });
+  return cellCuts;
+}
+
+function multiPolygonArea(polys: Polygon[]): number {
+  let total = 0;
+  for (const poly of polys) {
+    total += Math.abs(signedArea(poly[0]));
+  }
+  return total;
+}
+
 function resolveShapeStyle(cfg: GridSliceConfig): ShapeStyle {
   if (cfg.shapeStyle) return cfg.shapeStyle;
   if (cfg.knobs === true) return 'classic-knob';
   return 'mixed';
 }
 
-function buildCut(a: Vec2, b: Vec2, shapeStyle: ShapeStyle, rng: () => number): Vec2[] {
+function buildCut(a: Vec2, b: Vec2, shapeStyle: ShapeStyle, rng: () => number, knobRadiusPx: number): Vec2[] {
   switch (shapeStyle) {
     case 'straight':
       return straightCut(a, b);
     case 'curve':
       return pickCurvedCut(a, b, rng);
     case 'classic-knob':
-      return knobPolyline(a, b, randomSide(rng));
+      return knobPolyline(a, b, randomSide(rng), knobRadiusPx);
     case 'mixed':
-      return rng() < 0.35 ? knobPolyline(a, b, randomSide(rng)) : pickRandomCut(a, b, rng);
+      return pickMixedCut(a, b, rng);
   }
 }
 
@@ -346,6 +526,15 @@ function openRing(ring: Ring): Pair[] {
   const last = ring[ring.length - 1];
   if (first[0] === last[0] && first[1] === last[1]) return ring.slice(0, -1);
   return ring.slice();
+}
+
+function rectOutline(x: number, y: number, width: number, height: number): Vec2[] {
+  return [
+    [x, y],
+    [x + width, y],
+    [x + width, y + height],
+    [x, y + height],
+  ];
 }
 
 function signedArea(ring: Ring): number {

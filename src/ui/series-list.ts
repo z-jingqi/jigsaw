@@ -1,15 +1,19 @@
 import type { DifficultyEntry } from '../core/types';
 import { completedDifficultyCount } from '../core/progress';
+import seriesCatCoverUrl from '../../assets/ui/series-cat-cover.png';
+import seriesMasterpiecesCoverUrl from '../../assets/ui/series-masterpieces-cover.png';
 
 export interface LevelEntry {
   path: string;
   title: string;
+  silhouette?: string;
   difficulties: DifficultyEntry[];
 }
 
 export interface SeriesEntry {
   id: string;
   title: string;
+  cover?: string;
   levels: LevelEntry[];
 }
 
@@ -31,9 +35,11 @@ export async function loadLevelIndex(): Promise<LevelIndex> {
     series: raw.series.map((s) => ({
       id: s.id,
       title: s.title ?? s.id,
+      cover: s.cover,
       levels: (s.levels ?? []).map((l) => ({
         path: l.path,
         title: l.title ?? l.path,
+        silhouette: l.silhouette,
         difficulties:
           l.difficulties && l.difficulties.length > 0
             ? l.difficulties
@@ -62,9 +68,15 @@ export function createSeriesList(
       card.className = 'series-card';
       card.tabIndex = 0;
 
-      const cover = s.levels[0]?.path
-        ? `/${s.levels[0].path}/source.png`
-        : '';
+      const builtinCovers: Record<string, string> = {
+        'series-cat-cover.png': seriesCatCoverUrl,
+        '/assets/ui/series-cat-cover.png': seriesCatCoverUrl,
+        'series-masterpieces-cover.png': seriesMasterpiecesCoverUrl,
+        '/assets/ui/series-masterpieces-cover.png': seriesMasterpiecesCoverUrl,
+      };
+      const cover = s.cover
+        ? (builtinCovers[s.cover] ?? s.cover)
+        : (s.levels[0]?.path ? `/${s.levels[0].path}/source.png` : '');
       if (cover) {
         const img = document.createElement('img');
         img.className = 'thumb';

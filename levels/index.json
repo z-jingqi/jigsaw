@@ -2,30 +2,34 @@
   "series": [
     {
       "id": "cats",
-      "title": "Cats",
+      "title": "猫系列",
+      "cover": "series-cat-cover.png",
       "levels": [
         {
           "path": "cats/001-cat",
-          "title": "Tabby",
+          "title": "英国短尾猫",
+          "silhouette": "silhouette.png",
           "difficulties": [
-            { "label": "简单", "cols": 2, "rows": 2, "shapeStyle": "straight", "rotationEnabled": false, "scatterRadius": 300 },
-            { "label": "中等", "cols": 3, "rows": 3, "shapeStyle": "curve", "scatterRadius": 360 },
-            { "label": "困难", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "scatterRadius": 430 }
+            { "label": "简单", "cols": 4, "rows": 4, "shapeStyle": "mixed", "scatterRadius": 390 },
+            { "label": "困难", "cols": 6, "rows": 6, "shapeStyle": "mixed", "scatterRadius": 500 },
+            { "label": "拼块", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "bounds": "rect", "scatterRadius": 430 }
           ]
         }
       ]
     },
     {
-      "id": "dogs",
-      "title": "Dogs",
+      "id": "masterpieces",
+      "title": "名画系列",
+      "cover": "series-masterpieces-cover.png",
       "levels": [
         {
-          "path": "dogs/001-dog",
-          "title": "Pup",
+          "path": "masterpieces/001-mona-lisa",
+          "title": "蒙娜丽莎",
+          "silhouette": "silhouette.png",
           "difficulties": [
-            { "label": "简单", "cols": 3, "rows": 3, "shapeStyle": "curve", "rotationEnabled": false, "scatterRadius": 320 },
-            { "label": "中等", "cols": 4, "rows": 4, "shapeStyle": "mixed", "scatterRadius": 400 },
-            { "label": "困难", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "scatterRadius": 460 }
+            { "label": "简单", "cols": 4, "rows": 4, "shapeStyle": "mixed", "scatterRadius": 390 },
+            { "label": "困难", "cols": 6, "rows": 6, "shapeStyle": "mixed", "scatterRadius": 500 },
+            { "label": "拼块", "cols": 5, "rows": 5, "shapeStyle": "classic-knob", "bounds": "rect", "scatterRadius": 430 }
           ]
         }
       ]

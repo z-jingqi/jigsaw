@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "level:create": "node tools/create-level.mjs",
-    "levels:check": "node tools/check-levels.mjs"
+    "levels:check": "node tools/check-levels.mjs",
+    "sprite:video": "python tools/video_to_spritesheet.py"
   },
   "dependencies": {
     "earcut": "^3.0.2",

@@ -4,7 +4,7 @@ import { PieceGroup, resetGroupIds } from './core/group';
 import { trySnap } from './core/snap';
 import { normalizeAngle, rotateDeg, sub } from './core/geometry';
 import type { DifficultyEntry, LevelData, Vec2 } from './core/types';
-import { buttonOf, isTouchDevice, pointerKind } from './core/input';
+import { buttonOf, isTouchDevice } from './core/input';
 import { createStage, type StageHandles } from './render/stage';
 import { GroupView } from './render/piece-view';
 import { createMainScreen } from './ui/main-screen';
@@ -15,11 +15,20 @@ import { createPauseMenu } from './ui/pause-menu';
 import { createSettingsModal } from './ui/settings-modal';
 import { playSfx, preloadSfx } from './core/audio';
 import { saveCompletion } from './core/progress';
-import { getSettings } from './core/settings';
-import menuBgUrl from '../assets/ui/menu-bg.png';
+import mainBgUrl from '../assets/ui/main-bg.png';
+import titlePuzzleHouseUrl from '../assets/ui/title-puzzle-house.png';
+import btnStartHoverSpriteUrl from '../assets/ui/btn-start-hover-sprite.png';
+import btnStartHoverMeta from '../assets/ui/btn-start-hover-sprite.json';
+import btnSettingsHoverSpriteUrl from '../assets/ui/btn-settings-hover-sprite-v2.png';
+import btnSettingsHoverMeta from '../assets/ui/btn-settings-hover-sprite-v2.json';
+import settingsPanelUrl from '../assets/ui/settings-panel.png';
+import settingsCloseUrl from '../assets/ui/settings-close.png';
+import settingsGearUrl from '../assets/ui/settings-gear.png';
+import completePanelUrl from '../assets/ui/complete-panel.png';
+import seriesCatCoverUrl from '../assets/ui/series-cat-cover.png';
 import sakuraMatUrl from '../assets/tablecloths/sakura-mat.png';
 
-const LONG_PRESS_MOVE_THRESHOLD = 6;
+type AppView = 'main' | 'series' | 'levels' | 'game' | 'complete';
 
 interface GameState {
   stage: StageHandles;
@@ -27,7 +36,6 @@ interface GameState {
   groups: PieceGroup[];
   views: Map<number, GroupView>;
   activeDrag: ActiveDrag | null;
-  pending: PendingGesture | null;
   startedAt: number;
   elapsedMs: number;
   moves: number;
@@ -40,40 +48,49 @@ interface ActiveDrag {
   pointerOffset: Vec2;
 }
 
-interface PendingGesture {
-  group: PieceGroup;
-  startWorld: Vec2;
-  pointerOffset: Vec2;
-  timer: number;
-}
-
 let state: GameState | null = null;
 let currentSeries: SeriesEntry | null = null;
 let currentLevel: LevelEntry | null = null;
 let currentDifficulty: DifficultyEntry | null = null;
+let currentView: AppView = 'main';
 
 const hud = document.getElementById('hud')!;
 const globalBackBtn = document.getElementById('global-back-button')!;
 const globalSettingsBtn = document.getElementById('global-settings-button')!;
 const DEFAULT_HUD_HELP = isTouchDevice()
-  ? '拖动移动 · 长按旋转'
+  ? '拖动移动'
   : '左键拖动 · 右键旋转';
 
-document.documentElement.style.setProperty('--menu-bg-image', `url("${menuBgUrl}")`);
-document.documentElement.style.setProperty('--tablecloth-bg-image', `url("${sakuraMatUrl}")`);
+document.documentElement.style.setProperty('--main-bg-image', `url("${mainBgUrl}")`);
+document.documentElement.style.setProperty('--main-title-image', `url("${titlePuzzleHouseUrl}")`);
+document.documentElement.style.setProperty('--btn-start-image', `url("${btnStartHoverSpriteUrl}")`);
+document.documentElement.style.setProperty('--btn-start-frame-count', String(btnStartHoverMeta.frameCount));
+document.documentElement.style.setProperty('--btn-start-frame-steps', String(Math.max(1, btnStartHoverMeta.frameCount - 1)));
+document.documentElement.style.setProperty('--btn-start-sheet-size', `${btnStartHoverMeta.frameCount * 100}% 100%`);
+document.documentElement.style.setProperty('--btn-start-hover-duration', `${btnStartHoverMeta.duration}s`);
+document.documentElement.style.setProperty('--btn-settings-image', `url("${btnSettingsHoverSpriteUrl}")`);
+document.documentElement.style.setProperty('--btn-settings-frame-count', String(btnSettingsHoverMeta.frameCount));
+document.documentElement.style.setProperty('--btn-settings-frame-steps', String(Math.max(1, btnSettingsHoverMeta.frameCount - 1)));
+document.documentElement.style.setProperty('--btn-settings-sheet-size', `${btnSettingsHoverMeta.frameCount * 100}% 100%`);
+document.documentElement.style.setProperty('--btn-settings-hover-duration', `${btnSettingsHoverMeta.duration}s`);
+document.documentElement.style.setProperty('--settings-panel-image', `url("${settingsPanelUrl}")`);
+document.documentElement.style.setProperty('--settings-close-image', `url("${settingsCloseUrl}")`);
+document.documentElement.style.setProperty('--settings-gear-image', `url("${settingsGearUrl}")`);
+document.documentElement.style.setProperty('--complete-panel-image', `url("${completePanelUrl}")`);
+document.documentElement.style.setProperty('--series-cat-cover-image', `url("${seriesCatCoverUrl}")`);
 
 function difficultyToOverrides(d: DifficultyEntry): Partial<LevelData> {
   const slice: LevelData['slice'] = {
     mode: 'grid',
     cols: d.cols,
     rows: d.rows,
-    knobs: d.knobs ?? false,
-    shapeStyle: d.shapeStyle,
     seed: `${levelSeedBase()}|${d.label}|${d.cols}x${d.rows}|${d.shapeStyle ?? 'default'}`,
   };
+  if (d.knobs !== undefined) slice.knobs = d.knobs;
+  if (d.shapeStyle !== undefined) slice.shapeStyle = d.shapeStyle;
+  if (d.bounds !== undefined) slice.bounds = d.bounds;
   const difficulty: Partial<LevelData['difficulty']> = {};
   if (d.scatterRadius !== undefined) difficulty.scatterRadius = d.scatterRadius;
-  if (d.rotationEnabled !== undefined) difficulty.rotationEnabled = d.rotationEnabled;
   return {
     slice,
     ...(Object.keys(difficulty).length ? { difficulty: difficulty as LevelData['difficulty'] } : {}),
@@ -90,7 +107,7 @@ function setHudCopy(): void {
 setHudCopy();
 
 const settingsModal = createSettingsModal();
-globalSettingsBtn.addEventListener('click', () => settingsModal.show());
+globalSettingsBtn.addEventListener('click', () => openSettings());
 
 const completeScreen = createCompleteScreen(
   () => void onPlayAgain(),
@@ -113,7 +130,7 @@ async function boot(): Promise<void> {
 
   mainScreen = createMainScreen(
     () => goToSeries(),
-    () => settingsModal.show(),
+    () => openSettings(),
   );
   seriesList = createSeriesList(
     index,
@@ -153,13 +170,13 @@ function hideAllOverlays(): void {
 }
 
 function setGlobalChrome(opts: { gear: boolean; back: boolean }): void {
-  if (opts.back) globalBackBtn.classList.remove('hidden');
-  else globalBackBtn.classList.add('hidden');
+  globalBackBtn.classList.add('hidden');
   if (opts.gear) globalSettingsBtn.classList.remove('hidden');
   else globalSettingsBtn.classList.add('hidden');
 }
 
 function goToMain(): void {
+  currentView = 'main';
   teardownGameIfAny();
   hideAllOverlays();
   hud.classList.add('hidden');
@@ -168,6 +185,7 @@ function goToMain(): void {
 }
 
 function goToSeries(): void {
+  currentView = 'series';
   teardownGameIfAny();
   hideAllOverlays();
   hud.classList.add('hidden');
@@ -176,6 +194,7 @@ function goToSeries(): void {
 }
 
 function goToLevels(series?: SeriesEntry): void {
+  currentView = 'levels';
   if (series) currentSeries = series;
   if (!currentSeries) {
     goToSeries();
@@ -207,6 +226,7 @@ async function onPlayAgain(): Promise<void> {
 }
 
 async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promise<void> {
+  currentView = 'game';
   hideAllOverlays();
   hud.classList.remove('hidden');
   setGlobalChrome({ gear: true, back: true });
@@ -236,7 +256,6 @@ async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promi
     groups,
     views,
     activeDrag: null,
-    pending: null,
     startedAt: performance.now(),
     elapsedMs: 0,
     moves: 0,
@@ -248,7 +267,6 @@ async function onStart(level: LevelEntry, overrides?: Partial<LevelData>): Promi
 }
 
 function teardown(s: GameState): void {
-  if (s.pending) clearTimeout(s.pending.timer);
   if (s.hudTimerId !== null) window.clearInterval(s.hudTimerId);
   for (const cleanup of s.cleanup) cleanup();
   s.cleanup.length = 0;
@@ -303,10 +321,32 @@ function parseTablecloth(loaded: LoadedLevel): { color: number; imageUrl?: strin
   if (t.type === 'image') {
     return {
       color: 0xf2e3c8,
-      imageUrl: t.value === 'sakura-mat.png' ? sakuraMatUrl : undefined,
+      imageUrl: tableBackgroundUrl(t.value),
     };
   }
   return { color: 0xf2e3c8 };
+}
+
+function openSettings(): void {
+  const goBack = (): void => {
+    if (currentView === 'series') goToMain();
+    else if (currentView === 'levels') goToSeries();
+    else if (currentView === 'game' || currentView === 'complete') goToLevels();
+  };
+  settingsModal.setNavigation({
+    backLabel: '返回',
+    onBack: currentView === 'main' ? undefined : goBack,
+    showMain: currentView !== 'main' && currentView !== 'series',
+    onMain: goToMain,
+  });
+  settingsModal.show();
+}
+
+function tableBackgroundUrl(value: string): string | undefined {
+  const backgrounds: Record<string, string> = {
+    'sakura-mat.png': sakuraMatUrl,
+  };
+  return backgrounds[value];
 }
 
 function scatterPieces(loaded: LoadedLevel, stage: StageHandles): PieceGroup[] {
@@ -403,36 +443,17 @@ function wireInteraction(s: GameState): void {
         return;
       }
       if (btn !== 'left') return;
-      const settings = getSettings();
-      if (pointerKind(e) === 'touch' && settings.longPressEnabled) {
-        startGesture(s, view.group, e);
-      } else {
-        startDrag(s, view.group, e);
-      }
+      startDrag(s, view.group, e);
       e.stopPropagation();
     });
   }
 
   const onMove = (e: FederatedPointerEvent): void => {
-    if (s.pending) {
-      const cur = worldOf(s, e);
-      const dx = cur[0] - s.pending.startWorld[0];
-      const dy = cur[1] - s.pending.startWorld[1];
-      if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_THRESHOLD) {
-        promotePendingToDrag(s);
-      }
-      return;
-    }
     if (s.activeDrag) updateDrag(s, e);
   };
   stage.app.stage.on('globalpointermove', onMove);
 
   const release = (): void => {
-    if (s.pending) {
-      clearTimeout(s.pending.timer);
-      s.pending = null;
-      return;
-    }
     if (s.activeDrag) endDrag(s);
   };
   stage.app.stage.on('pointerup', release);
@@ -458,29 +479,6 @@ function wireInteraction(s: GameState): void {
 function worldOf(s: GameState, e: FederatedPointerEvent): Vec2 {
   const w = e.getLocalPosition(s.stage.world);
   return [w.x, w.y];
-}
-
-function startGesture(s: GameState, group: PieceGroup, e: FederatedPointerEvent): void {
-  const startWorld = worldOf(s, e);
-  const pointerOffset = sub(startWorld, group.worldPosition);
-  const ms = getSettings().longPressMs;
-  const timer = window.setTimeout(() => {
-    if (!s.pending || s.pending.group !== group) return;
-    const pivot = s.pending.startWorld;
-    s.pending = null;
-    rotateGroupAt(s, group, pivot);
-  }, ms);
-  s.pending = { group, startWorld, pointerOffset, timer };
-}
-
-function promotePendingToDrag(s: GameState): void {
-  if (!s.pending) return;
-  const { group, pointerOffset } = s.pending;
-  clearTimeout(s.pending.timer);
-  s.pending = null;
-  s.activeDrag = { group, pointerOffset };
-  s.stage.world.addChild(s.views.get(group.id)!.container);
-  s.views.get(group.id)!.setDragging(true);
 }
 
 function startDrag(s: GameState, group: PieceGroup, e: FederatedPointerEvent): void {
@@ -561,6 +559,7 @@ function checkComplete(s: GameState): void {
     }
     playSfx('complete');
     setTimeout(() => {
+      currentView = 'complete';
       hud.classList.add('hidden');
       setGlobalChrome({ gear: true, back: false });
       completeScreen.show({
@@ -568,6 +567,7 @@ function checkComplete(s: GameState): void {
         difficultyLabel: currentDifficulty?.label ? `难度 ${currentDifficulty.label}` : '拼图',
         elapsedMs: s.elapsedMs,
         moves: s.moves,
+        imageUrl: `/${currentLevel?.path ?? ''}/source.png`,
       });
     }, 350);
   }
@@ -601,6 +601,5 @@ function autoSolveCurrent(s: GameState): void {
 }
 
 globalBackBtn.addEventListener('click', () => {
-  if (pauseMenu.isOpen()) resumeGameplay();
-  else pauseGameplay();
+  pauseGameplay();
 });

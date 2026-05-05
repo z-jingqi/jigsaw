@@ -10,10 +10,10 @@ export function createMainScreen(
   const root = document.getElementById('main-screen');
   const startBtn = document.getElementById('main-start-button');
   const settingsBtn = document.getElementById('main-settings-button');
-  if (!root || !startBtn || !settingsBtn) throw new Error('main-screen markup missing');
+  if (!root) throw new Error('main-screen markup missing');
 
-  startBtn.addEventListener('click', () => onStart());
-  settingsBtn.addEventListener('click', () => onSettings());
+  startBtn?.addEventListener('click', () => onStart());
+  settingsBtn?.addEventListener('click', () => onSettings());
 
   return {
     show: () => root.classList.remove('hidden'),

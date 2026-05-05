@@ -13,6 +13,7 @@ import { randomSide } from './knob';
 const BEZIER_DEPTH = 0.18; // perpendicular bulge as fraction of cut length
 const SCURVE_DEPTH = 0.12; // each control's perpendicular offset
 const ARC_DEPTH = 0.20; // quadratic-bezier apex height
+const POLYGON_DEPTH = 0.13;
 const SAMPLE_POINTS = 16;
 
 interface Frame {
@@ -87,11 +88,29 @@ export function arcCut(a: Vec2, b: Vec2, side: 1 | -1): Vec2[] {
   return sampleQuadratic(a, b, c);
 }
 
+/** Low-poly cut with angled facets, used to keep the non-classic modes varied. */
+export function polygonCut(a: Vec2, b: Vec2, side: 1 | -1): Vec2[] {
+  const f = frame(a, b);
+  if (!f) return [[a[0], a[1]]];
+  const pts: Vec2[] = [[a[0], a[1]]];
+  const offsets = [0, POLYGON_DEPTH, -POLYGON_DEPTH * 0.75, POLYGON_DEPTH * 0.45, 0];
+  for (let i = 1; i < offsets.length - 1; i++) {
+    const t = i / (offsets.length - 1);
+    pts.push([
+      a[0] + f.L * (t * f.ux + offsets[i] * f.px * side),
+      a[1] + f.L * (t * f.uy + offsets[i] * f.py * side),
+    ]);
+  }
+  pts.push([b[0], b[1]]);
+  return pts;
+}
+
 const SHAPES: Array<(a: Vec2, b: Vec2, side: 1 | -1) => Vec2[]> = [
   (a, b) => straightCut(a, b),
   (a, b, side) => bezierCut(a, b, side),
   (a, b, side) => sCurveCut(a, b, side),
   (a, b, side) => arcCut(a, b, side),
+  (a, b, side) => polygonCut(a, b, side),
 ];
 
 const CURVE_SHAPES = SHAPES.slice(1);
@@ -105,6 +124,15 @@ export function pickRandomCut(a: Vec2, b: Vec2, rng: () => number = Math.random)
 export function pickCurvedCut(a: Vec2, b: Vec2, rng: () => number = Math.random): Vec2[] {
   const idx = Math.floor(rng() * CURVE_SHAPES.length);
   return CURVE_SHAPES[idx](a, b, randomSide(rng));
+}
+
+export function pickMixedCut(a: Vec2, b: Vec2, rng: () => number = Math.random): Vec2[] {
+  const roll = rng();
+  if (roll < 0.24) return straightCut(a, b);
+  if (roll < 0.46) return polygonCut(a, b, randomSide(rng));
+  if (roll < 0.64) return sCurveCut(a, b, randomSide(rng));
+  if (roll < 0.82) return bezierCut(a, b, randomSide(rng));
+  return arcCut(a, b, randomSide(rng));
 }
 
 function sampleCubic(a: Vec2, b: Vec2, c1: Vec2, c2: Vec2): Vec2[] {

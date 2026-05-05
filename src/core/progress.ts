@@ -11,7 +11,7 @@ interface ProgressData {
   completions: Record<string, CompletionRecord>;
 }
 
-const STORAGE_KEY = 'jigsaw.progress.v1';
+const STORAGE_KEY = 'jigsaw.progress.v2';
 
 let cached: ProgressData | null = null;
 

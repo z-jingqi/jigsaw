@@ -34,6 +34,7 @@ export interface Tablecloth {
 }
 
 export type ShapeStyle = 'straight' | 'curve' | 'classic-knob' | 'mixed';
+export type SliceBoundsMode = 'silhouette' | 'rect' | 'image';
 
 export interface SliceConfig {
   mode: 'grid';
@@ -41,6 +42,7 @@ export interface SliceConfig {
   rows: number;
   knobs?: boolean;
   shapeStyle?: ShapeStyle;
+  bounds?: SliceBoundsMode;
   seed?: string;
 }
 
@@ -51,6 +53,7 @@ export interface DifficultyEntry {
   rows: number;
   knobs?: boolean;
   shapeStyle?: ShapeStyle;
+  bounds?: SliceBoundsMode;
   /** Optional per-difficulty overrides for runtime feel. */
   scatterRadius?: number;
   rotationEnabled?: boolean;

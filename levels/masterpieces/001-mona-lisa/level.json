@@ -1,0 +1,15 @@
+{
+  "id": "masterpieces/001-mona-lisa",
+  "title": "蒙娜丽莎",
+  "source": "source.png",
+  "tablecloth": { "type": "image", "value": "sakura-mat.png" },
+  "difficulty": {
+    "pieceCount": 9,
+    "shapeStyle": "curve",
+    "rotationEnabled": true,
+    "scatterRadius": 350
+  },
+  "snap": { "positionTolerance": 11, "angleTolerance": 8 },
+  "displayScale": 0.55,
+  "slice": { "mode": "grid", "cols": 3, "rows": 3, "shapeStyle": "curve", "bounds": "image", "seed": "masterpieces-mona-lisa-001" }
+}

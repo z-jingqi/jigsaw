@@ -128,7 +128,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
     resliceBtn.disabled = false;
     colsIn.value = String(lv.slice?.cols ?? 3);
     rowsIn.value = String(lv.slice?.rows ?? 3);
-    knobsIn.checked = lv.slice?.knobs === true;
+    knobsIn.checked = lv.slice?.shapeStyle === 'classic-knob' || lv.slice?.knobs === true;
     displayScaleIn.value = String(lv.displayScale ?? 1);
     snapIn.value = String(lv.snap.positionTolerance);
     angleIn.value = String(lv.snap.angleTolerance);
@@ -186,6 +186,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
         cols: Number(colsIn.value) || 3,
         rows: Number(rowsIn.value) || 3,
         knobs: knobsIn.checked,
+        shapeStyle: knobsIn.checked ? 'classic-knob' : 'mixed',
       },
       tablecloth: { type: 'color', value: bgIn.value },
     };

@@ -1,23 +1,38 @@
 import type { Vec2 } from './types';
 
+const CIRCLE_CENTER_X = 0.5;
+const CIRCLE_CENTER_Y_RATIO = -0.561;
+export const KNOB_RADIUS_RATIO = 0.205;
+const ARC_SEGMENTS = 56;
+
 /**
- * Normalized template for a classic jigsaw knob.
- * x runs 0..1 along the cut. y is the perpendicular offset (negative = bump in -p direction).
- * Designed so straight runs flank the bump and the bump itself is symmetric.
+ * A classic jigsaw knob made from a real circular arc. Imagine a circle attached
+ * to the cut line, with the line trimming away the top slice of the circle.
  */
-const TEMPLATE: ReadonlyArray<readonly [number, number]> = [
-  [0.0, 0.0],
-  [0.30, 0.0],
-  [0.32, -0.02],
-  [0.34, -0.07],
-  [0.40, -0.16],
-  [0.50, -0.20],
-  [0.60, -0.16],
-  [0.66, -0.07],
-  [0.68, -0.02],
-  [0.70, 0.0],
-  [1.0, 0.0],
-];
+function buildTemplate(radiusRatio: number): Array<readonly [number, number]> {
+  const centerY = CIRCLE_CENTER_Y_RATIO * radiusRatio;
+  const chordHalfWidth = Math.sqrt(radiusRatio * radiusRatio - centerY * centerY);
+  const startX = CIRCLE_CENTER_X - chordHalfWidth;
+  const endX = CIRCLE_CENTER_X + chordHalfWidth;
+  const startAngle = Math.atan2(-centerY, startX - CIRCLE_CENTER_X);
+  const endAngle = Math.atan2(-centerY, endX - CIRCLE_CENTER_X) + Math.PI * 2;
+  const pts: Array<readonly [number, number]> = [
+    [0, 0],
+    [startX, 0],
+  ];
+
+  for (let i = 1; i < ARC_SEGMENTS; i++) {
+    const u = i / ARC_SEGMENTS;
+    const angle = startAngle + (endAngle - startAngle) * u;
+    pts.push([
+      CIRCLE_CENTER_X + Math.cos(angle) * radiusRatio,
+      centerY + Math.sin(angle) * radiusRatio,
+    ]);
+  }
+
+  pts.push([endX, 0], [1, 0]);
+  return pts;
+}
 
 /**
  * Build a polyline from `a` to `b` with a single tab/socket bump.
@@ -27,18 +42,20 @@ const TEMPLATE: ReadonlyArray<readonly [number, number]> = [
  * same way; one traverses the result forward, the other reversed. Same geometry, opposite
  * concave/convex roles for the two pieces.
  */
-export function knobPolyline(a: Vec2, b: Vec2, side: 1 | -1): Vec2[] {
+export function knobPolyline(a: Vec2, b: Vec2, side: 1 | -1, radiusPx?: number): Vec2[] {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const L = Math.hypot(dx, dy);
   if (L === 0) return [[a[0], a[1]]];
+  const radiusRatio = Math.min(0.32, Math.max(0.05, (radiusPx ?? L * KNOB_RADIUS_RATIO) / L));
+  const template = buildTemplate(radiusRatio);
   const ux = dx / L;
   const uy = dy / L;
   // Perpendicular: rotate (ux, uy) by 90°. In screen coords (y-down) this is (-uy, ux).
   const px = -uy;
   const py = ux;
   const out: Vec2[] = [];
-  for (const [t, n] of TEMPLATE) {
+  for (const [t, n] of template) {
     const ox = a[0] + L * (t * ux + n * px * side);
     const oy = a[1] + L * (t * uy + n * py * side);
     out.push([ox, oy]);

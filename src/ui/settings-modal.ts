@@ -1,8 +1,16 @@
-import { getSettings, updateSettings, type ResolutionId } from '../core/settings';
+import { getSettings, updateSettings } from '../core/settings';
 
 export interface SettingsModalHandle {
   show: () => void;
   hide: () => void;
+  setNavigation: (options: SettingsNavigation) => void;
+}
+
+export interface SettingsNavigation {
+  backLabel?: string;
+  onBack?: () => void;
+  showMain?: boolean;
+  onMain?: () => void;
 }
 
 export function createSettingsModal(): SettingsModalHandle {
@@ -10,29 +18,33 @@ export function createSettingsModal(): SettingsModalHandle {
   const closeBtn = document.getElementById('settings-close-button');
   const sfx = document.getElementById('settings-sfx') as HTMLInputElement | null;
   const sfxValue = document.getElementById('settings-sfx-value');
-  const longPressEnabled = document.getElementById('settings-longpress-enabled') as HTMLInputElement | null;
-  const longPressMs = document.getElementById('settings-longpress-ms') as HTMLInputElement | null;
-  const resolution = document.getElementById('settings-resolution') as HTMLSelectElement | null;
+  const nav = document.getElementById('settings-nav');
+  const mainBtn = document.getElementById('settings-main-button');
+  const backBtn = document.getElementById('settings-back-button');
   if (
     !root ||
     !closeBtn ||
     !sfx ||
     !sfxValue ||
-    !longPressEnabled ||
-    !longPressMs ||
-    !resolution
+    !nav ||
+    !mainBtn ||
+    !backBtn
   ) {
     throw new Error('settings-modal markup missing');
   }
+
+  let navigation: SettingsNavigation = {};
 
   const sync = (): void => {
     const s = getSettings();
     sfx.value = String(Math.round(s.sfxVolume * 100));
     sfxValue.textContent = `${Math.round(s.sfxVolume * 100)}%`;
-    longPressEnabled.checked = s.longPressEnabled;
-    longPressMs.value = String(s.longPressMs);
-    longPressMs.disabled = !s.longPressEnabled;
-    resolution.value = s.resolution;
+    const hasBack = Boolean(navigation.onBack);
+    const hasMain = Boolean(navigation.showMain && navigation.onMain);
+    nav.classList.toggle('hidden', !hasBack && !hasMain);
+    backBtn.classList.toggle('hidden', !hasBack);
+    mainBtn.classList.toggle('hidden', !hasMain);
+    backBtn.textContent = navigation.backLabel ?? '返回';
   };
 
   sfx.addEventListener('input', () => {
@@ -40,17 +52,13 @@ export function createSettingsModal(): SettingsModalHandle {
     updateSettings({ sfxVolume: v / 100 });
     sfxValue.textContent = `${v}%`;
   });
-  longPressEnabled.addEventListener('change', () => {
-    updateSettings({ longPressEnabled: longPressEnabled.checked });
-    longPressMs.disabled = !longPressEnabled.checked;
+  mainBtn.addEventListener('click', () => {
+    root.classList.add('hidden');
+    navigation.onMain?.();
   });
-  longPressMs.addEventListener('change', () => {
-    const v = Math.max(150, Math.min(2000, Number(longPressMs.value) || 450));
-    updateSettings({ longPressMs: v });
-    longPressMs.value = String(v);
-  });
-  resolution.addEventListener('change', () => {
-    updateSettings({ resolution: resolution.value as ResolutionId });
+  backBtn.addEventListener('click', () => {
+    root.classList.add('hidden');
+    navigation.onBack?.();
   });
   closeBtn.addEventListener('click', () => root.classList.add('hidden'));
 
@@ -60,6 +68,10 @@ export function createSettingsModal(): SettingsModalHandle {
   });
 
   return {
+    setNavigation: (options) => {
+      navigation = options;
+      sync();
+    },
     show: () => {
       sync();
       root.classList.remove('hidden');

@@ -8,6 +8,7 @@ export interface CompletionSummary {
   difficultyLabel: string;
   elapsedMs: number;
   moves: number;
+  imageUrl: string;
 }
 
 export function createCompleteScreen(
@@ -18,9 +19,10 @@ export function createCompleteScreen(
   const title = document.getElementById('complete-title');
   const subtitle = document.getElementById('complete-subtitle');
   const stats = document.getElementById('complete-stats');
+  const image = document.getElementById('complete-image') as HTMLImageElement | null;
   const restart = document.getElementById('restart-button');
   const back = document.getElementById('back-to-levels-button');
-  if (!root || !title || !subtitle || !stats || !restart || !back) {
+  if (!root || !title || !subtitle || !stats || !image || !restart || !back) {
     throw new Error('complete screen markup missing');
   }
 
@@ -38,7 +40,9 @@ export function createCompleteScreen(
     show: (summary) => {
       title.textContent = `${summary.title} 完成`;
       subtitle.textContent = `${summary.difficultyLabel} · ${formatMs(summary.elapsedMs)} · ${summary.moves} 步`;
-      stats.textContent = '做得漂亮。';
+      stats.textContent = '最佳记录已保存。';
+      image.src = summary.imageUrl;
+      image.alt = summary.title;
       root.classList.remove('hidden');
     },
     hide: () => root.classList.add('hidden'),

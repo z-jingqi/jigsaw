@@ -5,19 +5,10 @@ export type ResolutionId = '1280x720' | '1920x1080' | '2560x1440' | 'native';
 export interface Settings {
   /** SFX gain multiplier in [0, 1]. */
   sfxVolume: number;
-  /** Whether long-press triggers rotation on touch / left-click. */
-  longPressEnabled: boolean;
-  /** Long-press duration in ms when enabled. */
-  longPressMs: number;
-  /** Canvas resolution preset. `native` fits to window. */
-  resolution: ResolutionId;
 }
 
 const DEFAULTS: Settings = {
   sfxVolume: 0.6,
-  longPressEnabled: true,
-  longPressMs: 450,
-  resolution: '1920x1080',
 };
 
 const STORAGE_KEY = 'jigsaw.settings.v1';
@@ -60,17 +51,4 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 export function onSettingsChange(fn: (s: Settings) => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
-}
-
-export function resolutionDimensions(id: ResolutionId): { width: number; height: number } | null {
-  switch (id) {
-    case '1280x720':
-      return { width: 1280, height: 720 };
-    case '1920x1080':
-      return { width: 1920, height: 1080 };
-    case '2560x1440':
-      return { width: 2560, height: 1440 };
-    case 'native':
-      return null;
-  }
 }
