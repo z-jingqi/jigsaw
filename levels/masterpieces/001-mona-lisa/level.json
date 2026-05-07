@@ -2,7 +2,7 @@
   "id": "masterpieces/001-mona-lisa",
   "title": "蒙娜丽莎",
   "source": "source.png",
-  "tablecloth": { "type": "image", "value": "sakura-mat.png" },
+  "tablecloth": { "type": "color", "value": "#f2e3c8" },
   "difficulty": {
     "pieceCount": 9,
     "shapeStyle": "curve",

@@ -2,7 +2,7 @@
   "id": "cats/001-cat",
   "title": "英国短尾猫",
   "source": "source.png",
-  "tablecloth": { "type": "image", "value": "sakura-mat.png" },
+  "tablecloth": { "type": "color", "value": "#f2e3c8" },
   "difficulty": {
     "pieceCount": 9,
     "shapeStyle": "curve",
