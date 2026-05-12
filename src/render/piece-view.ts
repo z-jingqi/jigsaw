@@ -121,9 +121,24 @@ function buildOutlineFromPolygon(
   return g;
 }
 
+function buildHintOutlineFromPolygon(polygon: Vec2[], home: Vec2, label: string): Graphics {
+  const [hx, hy] = home;
+  const path: number[] = [];
+  for (const [x, y] of polygon) path.push(x - hx, y - hy);
+
+  const g = new Graphics();
+  g.label = label;
+  g.eventMode = 'none';
+  g.visible = false;
+  g.alpha = 0;
+  g.poly(path, true).stroke({ width: 5, color: 0xffc533, alpha: 1 });
+  return g;
+}
+
 interface MemberView {
   mesh: Mesh;
   outline: Graphics;
+  hint: Graphics;
 }
 
 /**
@@ -165,11 +180,14 @@ export class GroupView {
       m.piece.homePosition,
       `outline:${m.piece.id}`,
     );
+    const hint = buildHintOutlineFromPolygon(m.piece.polygon, m.piece.homePosition, `hint:${m.piece.id}`);
     mesh.position.set(m.localOffset[0], m.localOffset[1]);
     outline.position.set(m.localOffset[0], m.localOffset[1]);
+    hint.position.set(m.localOffset[0], m.localOffset[1]);
     this.container.addChild(mesh);
     this.container.addChild(outline);
-    this.memberViews.set(m.piece.id, { mesh, outline });
+    this.container.addChild(hint);
+    this.memberViews.set(m.piece.id, { mesh, outline, hint });
   }
 
   syncMembers(): void {
@@ -180,6 +198,7 @@ export class GroupView {
       } else {
         view.mesh.position.set(m.localOffset[0], m.localOffset[1]);
         view.outline.position.set(m.localOffset[0], m.localOffset[1]);
+        view.hint.position.set(m.localOffset[0], m.localOffset[1]);
       }
     }
   }
@@ -252,6 +271,21 @@ export class GroupView {
 
   pieceCenter(_pieceId: string): Vec2 {
     return [this.container.position.x, this.container.position.y];
+  }
+
+  setHint(pieceIds: Set<string>, alpha: number): void {
+    for (const [pieceId, view] of this.memberViews) {
+      const isVisible = pieceIds.has(pieceId);
+      view.hint.visible = isVisible;
+      view.hint.alpha = isVisible ? alpha : 0;
+    }
+  }
+
+  clearHint(): void {
+    for (const view of this.memberViews.values()) {
+      view.hint.visible = false;
+      view.hint.alpha = 0;
+    }
   }
 
   destroy(): void {

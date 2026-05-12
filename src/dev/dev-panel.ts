@@ -27,8 +27,8 @@ export function mountDevPanel(deps: DevPanelDeps): void {
     <label>Classic knobs only
       <input type="checkbox" data-field="knobs" />
     </label>
-    <label>Display scale
-      <input type="number" min="0.1" max="5" step="0.1" data-field="displayScale" />
+    <label>Long side
+      <input type="number" min="240" max="1200" step="20" data-field="displayLongSide" />
     </label>
     <label>Snap dist (px)
       <input type="number" min="0" step="1" data-field="snap" />
@@ -105,7 +105,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
   const colsIn = $<HTMLInputElement>('cols');
   const rowsIn = $<HTMLInputElement>('rows');
   const knobsIn = $<HTMLInputElement>('knobs');
-  const displayScaleIn = $<HTMLInputElement>('displayScale');
+  const displayLongSideIn = $<HTMLInputElement>('displayLongSide');
   const snapIn = $<HTMLInputElement>('snap');
   const angleIn = $<HTMLInputElement>('angle');
   const scatterIn = $<HTMLInputElement>('scatter');
@@ -129,7 +129,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
     colsIn.value = String(lv.slice?.cols ?? 3);
     rowsIn.value = String(lv.slice?.rows ?? 3);
     knobsIn.checked = lv.slice?.shapeStyle === 'classic-knob' || lv.slice?.knobs === true;
-    displayScaleIn.value = String(lv.displayScale ?? 1);
+    displayLongSideIn.value = String(lv.displayLongSide ?? 660);
     snapIn.value = String(lv.snap.positionTolerance);
     angleIn.value = String(lv.snap.angleTolerance);
     scatterIn.value = String(lv.difficulty.scatterRadius);
@@ -171,7 +171,7 @@ export function mountDevPanel(deps: DevPanelDeps): void {
     const lv = deps.getLevel();
     if (!lv) return;
     const overrides: Partial<LevelData> = {
-      displayScale: Number(displayScaleIn.value) || 1,
+      displayLongSide: Number(displayLongSideIn.value) || 660,
       difficulty: {
         ...lv.difficulty,
         rotationEnabled: rotIn.checked,

@@ -10,6 +10,5 @@
     "scatterRadius": 350
   },
   "snap": { "positionTolerance": 11, "angleTolerance": 8 },
-  "displayScale": 0.55,
   "slice": { "mode": "grid", "cols": 3, "rows": 3, "shapeStyle": "curve", "bounds": "image", "seed": "masterpieces-mona-lisa-001" }
 }

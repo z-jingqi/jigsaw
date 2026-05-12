@@ -10,7 +10,7 @@ This project now has two lightweight content tools:
 1. Prepare a transparent-background source image.
 2. Run `pnpm level:create cats 002-sleepy --title "Sleepy" --source /path/to/source.png`
 3. Open the generated `levels/<series>/<level>/level.json` and tune:
-   - `displayScale`
+   - `displayLongSide` only if the level needs a non-default displayed long edge
    - `difficulty.scatterRadius`
    - `slice.cols` / `slice.rows`
    - `slice.shapeStyle`

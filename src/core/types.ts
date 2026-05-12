@@ -74,7 +74,8 @@ export interface LevelData {
     positionTolerance: number;
     angleTolerance: number;
   };
-  displayScale?: number;
+  /** Target displayed long edge in CSS/game pixels. Preserves source aspect ratio. */
+  displayLongSide?: number;
   /** When present, pieces are generated at runtime from source.png + this config,
    *  bypassing pieces.json. */
   slice?: SliceConfig;

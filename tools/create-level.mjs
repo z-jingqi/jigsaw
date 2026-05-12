@@ -39,7 +39,6 @@ const levelJson = {
     scatterRadius: 320,
   },
   snap: { positionTolerance: 11, angleTolerance: 8 },
-  displayScale: 1,
   slice: { mode: 'grid', cols: 3, rows: 3, shapeStyle: 'curve', seed: `${seriesId}-${levelDirName}` },
 };
 

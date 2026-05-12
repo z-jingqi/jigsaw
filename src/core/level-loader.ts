@@ -4,6 +4,8 @@ import { scale as scaleVec } from './geometry';
 import { extractSilhouette } from './silhouette';
 import { sliceLevel } from './slicer';
 
+const DEFAULT_DISPLAY_LONG_SIDE = 660;
+
 export interface LoadedLevel {
   level: LevelData;
   pieces: PieceData[];
@@ -20,7 +22,6 @@ export async function loadLevel(basePath: string, overrides?: Partial<LevelData>
 
   const sourceUrl = `${basePath}/${level.source}`;
   const texture = (await Assets.load(sourceUrl)) as Texture;
-  const displayScale = level.displayScale ?? 1;
 
   let rawPieces: PieceData[];
   let bounds: { width: number; height: number };
@@ -36,6 +37,8 @@ export async function loadLevel(basePath: string, overrides?: Partial<LevelData>
     rawPieces = piecesData.pieces;
     bounds = piecesData.bounds;
   }
+
+  const displayScale = getDisplayScale(bounds, level.displayLongSide);
 
   const pieces: PieceData[] = rawPieces.map((p) => ({
     ...p,
@@ -54,6 +57,12 @@ export async function loadLevel(basePath: string, overrides?: Partial<LevelData>
     },
     displayScale,
   };
+}
+
+function getDisplayScale(bounds: { width: number; height: number }, displayLongSide?: number): number {
+  const longSide = Math.max(bounds.width, bounds.height);
+  if (longSide <= 0) return 1;
+  return (displayLongSide ?? DEFAULT_DISPLAY_LONG_SIDE) / longSide;
 }
 
 function mergeLevel(base: LevelData, over: Partial<LevelData>): LevelData {
