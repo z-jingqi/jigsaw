@@ -11,11 +11,14 @@ const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
 const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
+const LEVEL_CONFIG_PATH := "res://levels/cat_moon_01.json"
 const COLS := 3
 const ROWS := 3
 const PIECE_SIZE := 190.0
 const SNAP_TOLERANCE := 42.0
 const ROTATION_TOLERANCE := 3.0
+const HIT_ALPHA_RADIUS := 2
+const COMPONENT_MASK_RADIUS := 5
 const SAVE_PATH := "user://jigcat_progress.json"
 const LevelGeneratorScript := preload("res://scripts/LevelGenerator.gd")
 const PieceGroupScript := preload("res://scripts/PieceGroup.gd")
@@ -42,8 +45,11 @@ var icon_lightbulb: Texture2D
 var icon_pause: Texture2D
 var icon_rotate: Texture2D
 var icon_setting: Texture2D
+var source_image: Image
 var source_size := Vector2.ZERO
 var source_scale := 1.0
+var board_origin := Vector2.ZERO
+var active_level_config := {}
 var rng := RandomNumberGenerator.new()
 var board_layer: Node2D
 var ui_layer: CanvasLayer
@@ -80,6 +86,7 @@ func _ready() -> void:
 	icon_pause = load(ICON_PAUSE_PATH)
 	icon_rotate = load(ICON_ROTATE_PATH)
 	icon_setting = load(ICON_SETTING_PATH)
+	source_image = texture.get_image()
 	source_size = texture.get_size()
 	board_layer = Node2D.new()
 	add_child(board_layer)
@@ -129,13 +136,17 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _build_catalog() -> void:
+	var cat_config := _load_config_path(LEVEL_CONFIG_PATH)
+	var level_title := _config_string(cat_config, "title", "月亮小睡")
+	var level_description := _config_string(cat_config, "description", "小猫安静地靠在月亮上，像一段柔软的午后梦。")
 	topics = [{
 		"id": "cats",
 		"name": "猫",
 		"levels": [{
 			"id": "cat_moon_01",
-			"title": "月亮小睡",
-			"description": "小猫安静地靠在月亮上，像一段柔软的午后梦。"
+			"title": level_title,
+			"description": level_description,
+			"config_path": LEVEL_CONFIG_PATH,
 		}]
 	}]
 
@@ -232,6 +243,17 @@ func _pulse_node(node: Node2D) -> void:
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(node, "scale", Vector2(1.05, 1.05), 0.08)
 	tween.tween_property(node, "scale", Vector2.ONE, 0.12)
+
+
+func _hint_pulse_node(node: Node2D) -> void:
+	if not is_instance_valid(node):
+		return
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	for i in 2:
+		tween.tween_property(node, "scale", Vector2(1.08, 1.08), 0.24)
+		tween.tween_property(node, "scale", Vector2.ONE, 0.34)
 
 
 func _base_screen(bg_color: Color = Color("#F6EBD4"), use_menu_background := false) -> VBoxContainer:
@@ -601,14 +623,11 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	current_topic = topic
 	current_level = level
 	current_mode = play_mode
+	active_level_config = _load_level_config(current_level)
+	_apply_level_media(active_level_config)
 	_clear_ui()
 	_clear_board()
-	var bg := ColorRect.new()
-	bg.color = Color("#ead8bd")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.z_index = -100
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	board_layer.add_child(bg)
+	_add_level_background(active_level_config)
 	_start_play_session(play_mode)
 	_build_game_hud(level["title"])
 	if not _tutorial_seen():
@@ -650,8 +669,9 @@ func _build_game_hud(level_title: String) -> void:
 
 func _start_play_session(play_mode: String) -> void:
 	var generator_mode := "irregular" if play_mode == "polygon" else "classic"
-	var level := LevelGeneratorScript.generate(source_size, COLS, ROWS, PIECE_SIZE, generator_mode)
+	var level := LevelGeneratorScript.generate(source_size, COLS, ROWS, PIECE_SIZE, generator_mode, source_image, active_level_config)
 	source_scale = level["source_scale"]
+	board_origin = level["board_origin"]
 	for piece in level["pieces"]:
 		_create_group(piece)
 	preview_sprite = Sprite2D.new()
@@ -661,6 +681,80 @@ func _start_play_session(play_mode: String) -> void:
 	preview_sprite.modulate = Color(1, 1, 1, 0.82)
 	preview_sprite.visible = false
 	board_layer.add_child(preview_sprite)
+
+
+func _load_level_config(level: Dictionary) -> Dictionary:
+	var config_path: String = level.get("config_path", "")
+	return _load_config_path(config_path)
+
+
+func _load_config_path(config_path: String) -> Dictionary:
+	if config_path.is_empty() or not FileAccess.file_exists(config_path):
+		return {}
+	var file := FileAccess.open(config_path, FileAccess.READ)
+	if file == null:
+		return {}
+	var parsed = JSON.parse_string(file.get_as_text())
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+func _apply_level_media(level_config: Dictionary) -> void:
+	var image_path := _level_image_path(level_config)
+	var next_texture: Texture2D = load(image_path)
+	if next_texture == null:
+		next_texture = load(IMAGE_PATH)
+	texture = next_texture
+	source_image = texture.get_image()
+	source_size = texture.get_size()
+
+
+func _level_image_path(level_config: Dictionary) -> String:
+	if level_config.has("image") and typeof(level_config["image"]) == TYPE_STRING:
+		return level_config["image"]
+	if level_config.has("image") and typeof(level_config["image"]) == TYPE_DICTIONARY:
+		return str(level_config["image"].get("path", IMAGE_PATH))
+	return IMAGE_PATH
+
+
+func _level_background_color(level_config: Dictionary) -> Color:
+	if level_config.has("background") and typeof(level_config["background"]) == TYPE_DICTIONARY:
+		var bg: Dictionary = level_config["background"]
+		if str(bg.get("type", "color")) == "color":
+			return Color(str(bg.get("color", "#ead8bd")))
+	return Color("#ead8bd")
+
+
+func _add_level_background(level_config: Dictionary) -> void:
+	var bg := ColorRect.new()
+	bg.color = _level_background_color(level_config)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.z_index = -101
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	board_layer.add_child(bg)
+	if not level_config.has("background") or typeof(level_config["background"]) != TYPE_DICTIONARY:
+		return
+	var bg_config: Dictionary = level_config["background"]
+	if str(bg_config.get("type", "color")) != "image":
+		return
+	var bg_texture: Texture2D = load(str(bg_config.get("path", "")))
+	if bg_texture == null:
+		return
+	var bg_image := TextureRect.new()
+	bg_image.texture = bg_texture
+	bg_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg_image.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg_image.z_index = -100
+	bg_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	board_layer.add_child(bg_image)
+
+
+func _config_string(config: Dictionary, key: String, fallback: String) -> String:
+	if config.has(key):
+		return str(config[key])
+	if config.has("metadata") and typeof(config["metadata"]) == TYPE_DICTIONARY:
+		return str(config["metadata"].get(key, fallback))
+	return fallback
 
 
 func _create_group(piece: Dictionary) -> void:
@@ -680,17 +774,48 @@ func _create_piece_visual(piece: Dictionary) -> Node2D:
 	var node := Node2D.new()
 	node.name = piece["id"] + "_visual"
 	var poly := Polygon2D.new()
-	poly.texture = texture
+	poly.texture = _texture_for_piece(piece)
 	poly.polygon = piece["polygon"]
 	poly.uv = piece["uv"]
 	node.add_child(poly)
-	var line := Line2D.new()
-	line.width = 2.0
-	line.default_color = Color(0.15, 0.10, 0.06, 0.72)
-	line.closed = true
-	line.points = piece["polygon"]
-	node.add_child(line)
+	for cut_line in piece["cut_lines"]:
+		var line := Line2D.new()
+		line.width = 1.25
+		line.default_color = Color(0.15, 0.10, 0.06, 0.62)
+		line.closed = false
+		line.points = cut_line
+		node.add_child(line)
 	return node
+
+
+func _texture_for_piece(piece: Dictionary) -> Texture2D:
+	if not piece.has("component_samples") or piece["component_samples"].is_empty():
+		return texture
+	var image_size := source_image.get_size()
+	var masked := Image.create_empty(image_size.x, image_size.y, false, Image.FORMAT_RGBA8)
+	masked.fill(Color(1, 1, 1, 0))
+	var rect: Rect2 = piece["source_rect"]
+	var start_x := clampi(floori(rect.position.x), 0, image_size.x - 1)
+	var start_y := clampi(floori(rect.position.y), 0, image_size.y - 1)
+	var end_x := clampi(ceili(rect.end.x), start_x + 1, image_size.x)
+	var end_y := clampi(ceili(rect.end.y), start_y + 1, image_size.y)
+	var samples: Dictionary = piece["component_samples"]
+	for y in range(start_y, end_y):
+		for x in range(start_x, end_x):
+			var color := source_image.get_pixel(x, y)
+			if color.a <= 0.08:
+				continue
+			if _component_samples_contain_pixel(samples, Vector2i(x, y)):
+				masked.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(masked)
+
+
+func _component_samples_contain_pixel(samples: Dictionary, pixel: Vector2i) -> bool:
+	for y in range(pixel.y - COMPONENT_MASK_RADIUS, pixel.y + COMPONENT_MASK_RADIUS + 1):
+		for x in range(pixel.x - COMPONENT_MASK_RADIUS, pixel.x + COMPONENT_MASK_RADIUS + 1):
+			if samples.has(Vector2i(x, y)):
+				return true
+	return false
 
 
 func _scatter_position() -> Vector2:
@@ -724,9 +849,24 @@ func _group_at(screen_pos: Vector2):
 		var local_to_group: Vector2 = group.node.to_local(screen_pos)
 		for member in group.members:
 			var local_to_piece: Vector2 = local_to_group - member["visual"].position
-			if Geometry2D.is_point_in_polygon(local_to_piece, member["polygon"]):
+			if Geometry2D.is_point_in_polygon(local_to_piece, member["polygon"]) and _local_point_has_alpha(member, local_to_piece):
 				return group
 	return null
+
+
+func _local_point_has_alpha(member: Dictionary, local_point: Vector2) -> bool:
+	var source_point: Vector2 = (local_point + member["home"] - board_origin) / source_scale
+	var center := Vector2i(roundi(source_point.x), roundi(source_point.y))
+	var image_size := source_image.get_size()
+	for y in range(center.y - HIT_ALPHA_RADIUS, center.y + HIT_ALPHA_RADIUS + 1):
+		if y < 0 or y >= image_size.y:
+			continue
+		for x in range(center.x - HIT_ALPHA_RADIUS, center.x + HIT_ALPHA_RADIUS + 1):
+			if x < 0 or x >= image_size.x:
+				continue
+			if source_image.get_pixel(x, y).a > 0.08:
+				return true
+	return false
 
 
 func _select_group(group) -> void:
@@ -807,9 +947,30 @@ func _align_all() -> void:
 func _show_hint() -> void:
 	if groups.size() <= 1:
 		return
-	selected_group = groups[0]
-	_pulse_node(selected_group.node)
-	status_label.text = "提示：先从已选中的碎片附近找相邻边。"
+	var pair := _find_hint_pair()
+	if pair.is_empty():
+		status_label.text = "暂时没有可提示的相邻碎片。"
+		return
+	selected_group = pair[0]
+	_hint_pulse_node(pair[0].node)
+	_hint_pulse_node(pair[1].node)
+	status_label.text = "提示：这两个碎片可以拼接。"
+
+
+func _find_hint_pair() -> Array:
+	for i in groups.size():
+		for j in range(i + 1, groups.size()):
+			if _groups_are_neighbors(groups[i], groups[j]):
+				return [groups[i], groups[j]]
+	return []
+
+
+func _groups_are_neighbors(a, b) -> bool:
+	for am in a.members:
+		for bm in b.members:
+			if am["neighbors"].has(bm["id"]) or bm["neighbors"].has(am["id"]):
+				return true
+	return false
 
 
 func _toggle_preview() -> void:

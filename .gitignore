@@ -1,4 +1,12 @@
 .godot/
+.godot_user/
 *.tmp
 .DS_Store
 __pycache__/
+.venv/
+node_modules/
+dist/
+.vite/
+.pnpm-store/
+*.tsbuildinfo
+level-editor/*.log

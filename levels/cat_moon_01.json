@@ -1,0 +1,176 @@
+{
+	"background": {
+		"color": "#ead8bd",
+		"path": "",
+		"type": "color"
+	},
+	"component_overrides": {
+
+	},
+	"components": [
+		{
+			"action": "keep",
+			"cell": [
+				0,
+				0
+			],
+			"default_action": "keep",
+			"key": "0,0:0",
+			"rect": [
+				186,
+				158,
+				296,
+				260
+			],
+			"samples": 1924
+		},
+		{
+			"action": "drop",
+			"cell": [
+				0,
+				0
+			],
+			"default_action": "drop",
+			"key": "0,0:1",
+			"rect": [
+				390,
+				402,
+				36,
+				24
+			],
+			"samples": 12
+		},
+		{
+			"action": "keep",
+			"cell": [
+				1,
+				0
+			],
+			"default_action": "keep",
+			"key": "1,0:0",
+			"rect": [
+				412,
+				370,
+				152,
+				80
+			],
+			"samples": 373
+		},
+		{
+			"action": "keep",
+			"cell": [
+				0,
+				1
+			],
+			"default_action": "keep",
+			"key": "0,1:0",
+			"rect": [
+				130,
+				375,
+				296,
+				476
+			],
+			"samples": 6265
+		},
+		{
+			"action": "keep",
+			"cell": [
+				1,
+				1
+			],
+			"default_action": "keep",
+			"key": "1,1:0",
+			"rect": [
+				341,
+				415,
+				536,
+				428
+			],
+			"samples": 9034
+		},
+		{
+			"action": "keep",
+			"cell": [
+				2,
+				1
+			],
+			"default_action": "keep",
+			"key": "2,1:0",
+			"rect": [
+				834,
+				615,
+				324,
+				308
+			],
+			"samples": 2720
+		},
+		{
+			"action": "keep",
+			"cell": [
+				0,
+				2
+			],
+			"default_action": "keep",
+			"key": "0,2:0",
+			"rect": [
+				194,
+				789,
+				260,
+				252
+			],
+			"samples": 1935
+		},
+		{
+			"action": "keep",
+			"cell": [
+				1,
+				2
+			],
+			"default_action": "keep",
+			"key": "1,2:0",
+			"rect": [
+				413,
+				753,
+				452,
+				336
+			],
+			"samples": 6075
+		},
+		{
+			"action": "keep",
+			"cell": [
+				2,
+				2
+			],
+			"default_action": "keep",
+			"key": "2,2:0",
+			"rect": [
+				810,
+				830,
+				304,
+				268
+			],
+			"samples": 3186
+		}
+	],
+	"description": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
+	"editor": {
+		"cuts": [],
+		"shapes": []
+	},
+	"grid": {
+		"cols": 3.0,
+		"rows": 3.0
+	},
+	"id": "cat_moon_01",
+	"image": {
+		"height": 1254,
+		"name": "cat_moon.png",
+		"path": "res://assets/source/cat_moon.png",
+		"width": 1254
+	},
+	"schema": "jigsaw.level.v1",
+	"title": "月亮小睡",
+	"tool_notes": "Edit component_overrides values per component key: drop, keep, or merge_nearest. Re-run this tool after changing the source image or generator.",
+	"version": 1
+}
