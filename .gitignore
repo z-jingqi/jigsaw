@@ -1,8 +1,4 @@
-node_modules
-.venv
-dist
+.godot/
+*.tmp
 .DS_Store
-*.log
-.vite
 __pycache__/
-*.pyc
