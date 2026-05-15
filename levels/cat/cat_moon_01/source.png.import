@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boo7pr5n5wwyp"
-path="res://.godot/imported/cat_moon.png-54ca1a79f9c05747f730703698f64535.ctex"
+uid="uid://bux4te8c6xk7m"
+path="res://.godot/imported/source.png-b5221a35285e6973480fac365eb1d5c5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/source/cat_moon.png"
-dest_files=["res://.godot/imported/cat_moon.png-54ca1a79f9c05747f730703698f64535.ctex"]
+source_file="res://levels/cat/cat_moon_01/source.png"
+dest_files=["res://.godot/imported/source.png-b5221a35285e6973480fac365eb1d5c5.ctex"]
 
 [params]
 

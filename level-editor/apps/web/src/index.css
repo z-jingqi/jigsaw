@@ -43,6 +43,30 @@
     @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-[#9e3f35] transition hover:border-[#9e3f35];
   }
 
+  .iconBtn {
+    @apply relative inline-flex min-h-9 items-center justify-center rounded-md border border-stone-300 bg-white px-2 py-2 text-ink transition hover:border-clay disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-stone-300;
+  }
+
+  .iconBtnActive {
+    @apply relative inline-flex min-h-9 items-center justify-center rounded-md border border-moss bg-white px-2 py-2 text-ink shadow-[inset_0_0_0_1px_#3f7f72];
+  }
+
+  .iconBtnDanger {
+    @apply relative inline-flex min-h-9 items-center justify-center rounded-md border border-stone-300 bg-white px-2 py-2 text-[#9e3f35] transition hover:border-[#9e3f35];
+  }
+
+  .statusDot {
+    @apply absolute right-1.5 top-1.5 h-2 w-2 rounded-full;
+  }
+
+  .statusDot.done {
+    @apply bg-moss;
+  }
+
+  .statusDot.dirty {
+    @apply bg-clay;
+  }
+
   .fileButton {
     @apply flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-stone-300 bg-white px-3 py-2 text-sm text-ink transition hover:border-clay;
   }
@@ -53,6 +77,59 @@
 
   .objectActive {
     @apply flex items-center justify-between rounded-md border border-moss bg-white px-3 py-2 text-left text-sm shadow-[inset_0_0_0_1px_#3f7f72];
+  }
+
+  .selectTrigger {
+    @apply inline-flex min-h-10 w-full items-center justify-between gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-ink outline-none transition hover:border-clay focus:border-clay focus:ring-2 focus:ring-clay/20;
+  }
+
+  .selectContent {
+    @apply z-[60] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-stone-300 bg-paper text-ink shadow-xl;
+  }
+
+  .selectItem {
+    @apply relative flex cursor-pointer select-none items-center gap-2 rounded px-8 py-2 text-sm outline-none data-[highlighted]:bg-white data-[highlighted]:text-ink;
+  }
+
+  .selectItem [data-radix-select-item-indicator] {
+    @apply absolute left-2;
+  }
+
+  .selectItem span {
+    @apply flex min-w-0 flex-1 items-center justify-between gap-3;
+  }
+
+  .dialogOverlay {
+    @apply fixed inset-0 z-50 bg-black/35;
+  }
+
+  .dialogContent {
+    @apply fixed left-1/2 top-1/2 z-50 max-h-[82vh] w-[min(760px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl;
+  }
+
+  .sortRow,
+  .sortRowActive {
+    @apply flex min-h-10 cursor-grab touch-none items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm active:cursor-grabbing;
+  }
+
+  .sortRowActive {
+    @apply border-moss shadow-[inset_0_0_0_1px_#3f7f72];
+  }
+
+  .shapeButton {
+    @apply flex min-h-14 cursor-grab items-center justify-center rounded-md border border-stone-300 bg-white px-2 py-2 text-ink transition hover:border-clay active:cursor-grabbing;
+  }
+
+  .shapeButton svg {
+    @apply pointer-events-none;
+  }
+
+  .shapeButton path {
+    fill: rgba(217, 147, 63, 0.14);
+    stroke: #5a3a22;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 3;
   }
 }
 
@@ -75,10 +152,20 @@
 
 .pieceSelectable {
   cursor: pointer;
-  fill: rgba(63, 127, 114, 0.03);
-  stroke: rgba(63, 127, 114, 0.48);
+  fill: rgba(255, 246, 230, 0.03);
+  stroke: rgba(90, 58, 34, 0.58);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.resultCutPath {
+  fill: none;
+  stroke: rgba(90, 58, 34, 0.64);
+  stroke-linecap: round;
+  stroke-linejoin: round;
   stroke-width: 1.8;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
 .knobPreview {
@@ -95,19 +182,25 @@
   stroke-width: 3;
 }
 
+.smallPiece {
+  fill: rgba(158, 63, 53, 0.18);
+  stroke: #9e3f35;
+  stroke-width: 3;
+}
+
 .cutPath,
 .shapePath {
   cursor: grab;
   fill: none;
-  stroke: #3a1f12;
+  stroke: rgba(90, 58, 34, 0.5);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 4;
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .shapePath {
-  fill: rgba(191, 116, 48, 0.1);
+  fill: rgba(90, 58, 34, 0.025);
 }
 
 .selected .cutPath,

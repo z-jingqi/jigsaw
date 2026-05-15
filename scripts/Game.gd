@@ -1,6 +1,6 @@
 extends Node2D
 
-const IMAGE_PATH := "res://assets/source/cat_moon.png"
+const DEFAULT_LEVEL_IMAGE_PATH := "res://levels/cat/cat_moon_01/source.png"
 const MENU_BACKGROUND_PATH := "res://assets/source/menu_background.png"
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
 const START_BUTTON_IMAGE_PATH := "res://assets/ui/start-game.png"
@@ -76,7 +76,7 @@ var status_label: Label
 
 func _ready() -> void:
 	rng.seed = 7
-	texture = load(IMAGE_PATH)
+	texture = load(DEFAULT_LEVEL_IMAGE_PATH)
 	menu_background = load(MENU_BACKGROUND_PATH)
 	title_texture = load(TITLE_IMAGE_PATH)
 	start_button_texture = load(START_BUTTON_IMAGE_PATH)
@@ -871,7 +871,7 @@ func _apply_level_media(level_config: Dictionary) -> void:
 	var image_path := _level_image_path(level_config)
 	var next_texture: Texture2D = load(image_path)
 	if next_texture == null:
-		next_texture = load(IMAGE_PATH)
+		next_texture = load(DEFAULT_LEVEL_IMAGE_PATH)
 	texture = next_texture
 	source_image = texture.get_image()
 	source_size = texture.get_size()
@@ -881,8 +881,8 @@ func _level_image_path(level_config: Dictionary) -> String:
 	if level_config.has("image") and typeof(level_config["image"]) == TYPE_STRING:
 		return level_config["image"]
 	if level_config.has("image") and typeof(level_config["image"]) == TYPE_DICTIONARY:
-		return str(level_config["image"].get("path", IMAGE_PATH))
-	return IMAGE_PATH
+		return str(level_config["image"].get("path", DEFAULT_LEVEL_IMAGE_PATH))
+	return DEFAULT_LEVEL_IMAGE_PATH
 
 
 func _level_background_color(level_config: Dictionary) -> Color:

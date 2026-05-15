@@ -6,7 +6,7 @@ Jigsaw 是一个使用 Godot 从零重写的轮廓拼图游戏原型。当前版
 
 这是一个以“轮廓组装”为核心的拼图游戏。它不是把一张图片切成传统矩形拼图板，而是围绕透明背景的主体图像生成不规则碎片。玩家完成拼图后，最终图形会保留主体原本的自然外轮廓。
 
-当前 Godot 原型使用 `assets/source/cat_moon.png` 作为关卡原图，运行时生成 3x3 碎片。旧的 TypeScript、PixiJS、Web UI、关卡数据和旧美术资源都不再复用。
+当前 Godot 原型通过 `levels/catalog.json` 读取关卡目录，每个小关卡把原图和 `level.json` 放在自己的关卡文件夹下。旧的 TypeScript、PixiJS、Web UI、关卡数据和旧美术资源都不再复用。
 
 当前只保留 Python 工具，用于后续处理图片、透明背景、压缩资源或生成素材。
 
@@ -54,12 +54,12 @@ Jigsaw 是一个使用 Godot 从零重写的轮廓拼图游戏原型。当前版
 
 当前玩法逻辑已经从主场景脚本里拆出：
 
-- `scripts/LevelGenerator.gd`：生成 3x3 测试关卡、碎片边缘、正确位置和邻接关系。
+- `scripts/LevelGenerator.gd`：在关卡还没有预生成碎片时生成测试碎片、碎片边缘、正确位置和邻接关系。
 - `scripts/PieceGroup.gd`：管理一个可操作碎片组，以及吸附后的组合并。
 - `scripts/SnapSolver.gd`：判断两个碎片组是否满足旋转和距离条件，可以自动吸附。
 - `scripts/Game.gd`：负责输入、UI、节点创建和调用逻辑模块。
 
-后续正式关卡可以先替换 `LevelGenerator.gd` 的输出来源，从运行时生成改成读取预生成 JSON，`PieceGroup` 和 `SnapSolver` 不需要重写。
+正式关卡优先使用 level-editor 导出的预生成 JSON；`LevelGenerator.gd` 只作为缺少预生成数据时的兜底。
 
 当前 UI 是最小可用实现，用 Godot 原生控件搭建，重点是验证完整游戏流程。视觉细节、响应式布局、动画和图标可以在流程稳定后再统一优化。
 

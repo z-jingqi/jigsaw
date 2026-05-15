@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Download, FileJson, Magnet, Plus, Redo2, RefreshCcw, Save, Trash2, Undo2, Upload } from "lucide-react";
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Select from "@radix-ui/react-select";
+import { Check, ChevronDown, CircleAlert, Download, Eye, GripVertical, Hexagon, Magnet, Pencil, Plus, Puzzle, Redo2, RefreshCcw, Save, Trash2, Undo2, Upload, X } from "lucide-react";
 import {
   DEFAULT_BROWSER_IMAGE,
   DEFAULT_IMAGE_PATH,
@@ -11,6 +16,7 @@ import {
   generateKnobPieces,
   makeEmptyLevel,
   presetCut,
+  presetShapePoints,
   samplePath,
   serializePoints,
   snapPoint,
@@ -22,11 +28,14 @@ const snapThreshold = 18;
 const edgePrecision = 2;
 
 type EditMode = "polygon" | "knob";
+type PolygonViewMode = "result" | "edit" | "inspect";
 
 type LevelTarget = {
   topicId: string;
   levelId: string;
 };
+
+type CreateDialogKind = "topic" | "level" | null;
 
 type EditorSnapshot = {
   level: LevelConfig;
@@ -41,6 +50,12 @@ type DragState = {
   pointIndex: number | null;
   start: Point;
   original: CutLine;
+};
+
+type SelectOption = {
+  value: string;
+  label: string;
+  detail?: string;
 };
 
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
@@ -96,6 +111,16 @@ function polygonCenter(points: Point[]): Point {
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function translateCut(cut: CutLine, center: Point): CutLine {
+  const currentCenter = polygonCenter(cut.points);
+  const dx = center.x - currentCenter.x;
+  const dy = center.y - currentCenter.y;
+  return {
+    ...cut,
+    points: cut.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
   };
 }
 
@@ -200,16 +225,19 @@ function App() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [targetPieces, setTargetPieces] = useState(14);
   const [snapEnabled, setSnapEnabled] = useState(true);
-  const [showPieces, setShowPieces] = useState(true);
   const [showKnobPieces, setShowKnobPieces] = useState(true);
+  const [polygonView, setPolygonView] = useState<PolygonViewMode>("result");
   const [jsonText, setJsonText] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
     void loadCatalog();
@@ -220,6 +248,16 @@ function App() {
     () => currentTopic?.levels.find((item) => item.id === currentTarget.levelId),
     [currentTopic, currentTarget.levelId],
   );
+  const topicOptions = useMemo<SelectOption[]>(
+    () => catalog.topics.map((topic) => ({ value: topic.id, label: localized(topic.name_i18n, locale, topic.name), detail: `${topic.levels.length}` })),
+    [catalog.topics, locale],
+  );
+  const levelOptions = useMemo<SelectOption[]>(
+    () => (currentTopic?.levels || []).map((item) => ({ value: item.id, label: localized(item.title_i18n, locale, item.title), detail: item.id })),
+    [currentTopic, locale],
+  );
+  const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
+  const currentLevelName = localized(currentCatalogLevel?.title_i18n, locale, currentCatalogLevel?.title || level.title || currentTarget.levelId);
 
   async function loadCatalog() {
     try {
@@ -343,6 +381,12 @@ function App() {
     knob: knobPieces.length > 0,
   };
   const canSaveToGodot = completedModes.polygon && completedModes.knob && modeReady.polygon && modeReady.knob;
+
+  useEffect(() => {
+    if (!cuts.length || !actualPreview?.pieces.length) return;
+    setPieces(actualPreview.pieces);
+    setSelectedPieceIds((current) => current.filter((id) => actualPreview.pieces.some((piece) => piece.id === id)));
+  }, [actualPreview, cuts.length]);
   useEffect(() => {
     if (!knobPieces.length && generatedKnobPieces.length) setKnobPieces(generatedKnobPieces);
   }, [generatedKnobPieces, knobPieces.length]);
@@ -450,10 +494,64 @@ function App() {
     if (ok) await switchLevel(pendingTarget);
   }
 
-  function currentLevelPosition() {
-    const topicIndex = catalog.topics.findIndex((topic) => topic.id === currentTarget.topicId);
-    const levelIndex = topicIndex >= 0 ? catalog.topics[topicIndex].levels.findIndex((item) => item.id === currentTarget.levelId) : -1;
-    return { topicIndex, levelIndex };
+  async function saveCatalogOnly() {
+    setSaveStatus("保存目录...");
+    try {
+      const response = await fetch("/api/catalog", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(catalog),
+      });
+      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
+      if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      setSaveStatus(`目录已保存到 ${result.path}`);
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? `保存目录失败：${error.message}` : "保存目录失败");
+    }
+  }
+
+  function selectTopic(topicId: string) {
+    const topic = catalog.topics.find((item) => item.id === topicId);
+    const firstLevel = topic?.levels[0];
+    if (!topic || !firstLevel) return;
+    requestLevelChange({ topicId: topic.id, levelId: firstLevel.id });
+  }
+
+  function selectLevel(levelId: string) {
+    if (!currentTopic?.levels.some((item) => item.id === levelId)) return;
+    requestLevelChange({ topicId: currentTarget.topicId, levelId });
+  }
+
+  function onSortDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId.startsWith("topic:") && overId.startsWith("topic:")) {
+      const activeTopicId = activeId.replace("topic:", "");
+      const overTopicId = overId.replace("topic:", "");
+      setCatalog((current) => {
+        const oldIndex = current.topics.findIndex((topic) => topic.id === activeTopicId);
+        const newIndex = current.topics.findIndex((topic) => topic.id === overTopicId);
+        if (oldIndex < 0 || newIndex < 0) return current;
+        return { ...current, topics: normalizeOrder(arrayMove(current.topics, oldIndex, newIndex)) };
+      });
+      return;
+    }
+    if (activeId.startsWith("level:") && overId.startsWith("level:")) {
+      const activeLevelId = activeId.replace("level:", "");
+      const overLevelId = overId.replace("level:", "");
+      setCatalog((current) => ({
+        ...current,
+        topics: current.topics.map((topic) => {
+          if (topic.id !== currentTarget.topicId) return topic;
+          const oldIndex = topic.levels.findIndex((item) => item.id === activeLevelId);
+          const newIndex = topic.levels.findIndex((item) => item.id === overLevelId);
+          if (oldIndex < 0 || newIndex < 0) return topic;
+          return { ...topic, levels: normalizeOrder(arrayMove(topic.levels, oldIndex, newIndex)) };
+        }),
+      }));
+    }
   }
 
   function adjacentLevel(direction: 1 | -1): LevelTarget | null {
@@ -463,36 +561,19 @@ function App() {
     return flat[index + direction] || null;
   }
 
-  function moveCurrentLevel(direction: 1 | -1) {
-    const { topicIndex, levelIndex } = currentLevelPosition();
-    if (topicIndex < 0 || levelIndex < 0) return;
-    setCatalog((current) => {
-      const topics = [...current.topics];
-      const topic = topics[topicIndex];
-      const levels = [...topic.levels];
-      const nextIndex = levelIndex + direction;
-      if (nextIndex < 0 || nextIndex >= levels.length) return current;
-      [levels[levelIndex], levels[nextIndex]] = [levels[nextIndex], levels[levelIndex]];
-      topics[topicIndex] = { ...topic, levels: normalizeOrder(levels) };
-      return { ...current, topics };
-    });
-  }
-
-  function moveCurrentTopic(direction: 1 | -1) {
-    const { topicIndex } = currentLevelPosition();
-    const nextIndex = topicIndex + direction;
-    if (topicIndex < 0 || nextIndex < 0 || nextIndex >= catalog.topics.length) return;
-    setCatalog((current) => {
-      const topics = [...current.topics];
-      [topics[topicIndex], topics[nextIndex]] = [topics[nextIndex], topics[topicIndex]];
-      return { ...current, topics: normalizeOrder(topics) };
-    });
-  }
-
   function addTopic() {
-    const id = window.prompt("大关卡 ID（英文/数字/下划线）");
-    if (!id) return;
-    const name = window.prompt("大关卡名称", id) || id;
+    setCreateDialog("topic");
+  }
+
+  function createTopic(id: string, name: string) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      setSaveStatus("主题 ID 只能包含英文、数字、下划线或短横线。");
+      return false;
+    }
+    if (catalog.topics.some((topic) => topic.id === id)) {
+      setSaveStatus("主题 ID 已存在。");
+      return false;
+    }
     setCatalog((current) => ({
       ...current,
       topics: normalizeOrder([
@@ -507,36 +588,68 @@ function App() {
         },
       ]),
     }));
+    setSaveStatus(`已创建主题 ${name}`);
+    return true;
   }
 
   function addLevelToCurrentTopic() {
+    setCreateDialog("level");
+  }
+
+  function createLevelInCurrentTopic(id: string, title: string) {
     const topicId = currentTopic?.id;
-    if (!topicId) return;
-    const id = window.prompt("小关卡 ID（英文/数字/下划线）");
-    if (!id) return;
-    const title = window.prompt("小关卡名称", id) || id;
-    setCatalog((current) => ({
-      ...current,
-      topics: current.topics.map((topic) =>
-        topic.id === topicId
-          ? {
-              ...topic,
-              levels: normalizeOrder([
-                ...topic.levels,
-                {
-                  id,
-                  title,
-                  title_i18n: { [locale]: title },
-                  sort_order: topic.levels.length,
-                  path: `res://levels/${topic.id}/${id}/level.json`,
-                  source: `res://levels/${topic.id}/${id}/source.png`,
-                },
-              ]),
-            }
-          : topic,
-      ),
-    }));
-    requestLevelChange({ topicId, levelId: id });
+    if (!topicId) return false;
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      setSaveStatus("关卡 ID 只能包含英文、数字、下划线或短横线。");
+      return false;
+    }
+    if (currentTopic?.levels.some((item) => item.id === id)) {
+      setSaveStatus("当前主题下已存在这个关卡 ID。");
+      return false;
+    }
+    const nextTarget = { topicId, levelId: id };
+    setCatalog((current) => {
+      return {
+        ...current,
+        topics: current.topics.map((topic) =>
+          topic.id === topicId
+            ? {
+                ...topic,
+                levels: normalizeOrder([
+                  ...topic.levels,
+                  {
+                    id,
+                    title,
+                    title_i18n: { [locale]: title },
+                    sort_order: topic.levels.length,
+                    path: `res://levels/${topic.id}/${id}/level.json`,
+                    source: `res://levels/${topic.id}/${id}/source.png`,
+                  },
+                ]),
+              }
+            : topic,
+        ),
+      };
+    });
+    setCurrentTarget(nextTarget);
+    const blankLevel = makeEmptyLevel();
+    applyLoadedLevel(
+      {
+        ...blankLevel,
+        id,
+        topic_id: topicId,
+        title,
+        title_i18n: { [locale]: title },
+        image: {
+          ...blankLevel.image,
+          path: `res://levels/${topicId}/${id}/source.png`,
+        },
+      },
+      topicId,
+      id,
+    );
+    setSaveStatus(`已创建 ${title}，请上传 source 图并完成两种模式。`);
+    return true;
   }
 
   function markExported() {
@@ -640,6 +753,12 @@ function App() {
           height: next.naturalHeight,
         },
       }));
+    };
+    next.onerror = () => {
+      if (src !== DEFAULT_BROWSER_IMAGE) {
+        loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
+        setSaveStatus("当前关卡还没有 source 图，已临时使用示例图预览。");
+      }
     };
     next.src = src;
   }
@@ -767,10 +886,33 @@ function App() {
 
   function addPreset(template: CutTemplate) {
     if (!analysis.bounds) return;
+    addPresetAt(template, {
+      x: analysis.bounds.x + analysis.bounds.width * 0.5,
+      y: analysis.bounds.y + analysis.bounds.height * 0.5,
+    });
+  }
+
+  function addPresetAt(template: CutTemplate, center: Point) {
+    if (!analysis.bounds) return;
     recordEdit("polygon");
-    const next = presetCut(template, analysis.bounds);
+    const next = translateCut(presetCut(template, analysis.bounds), center);
     setCuts((current) => [...current, next]);
     setSelectedId(next.id);
+  }
+
+  function dropShape(event: React.DragEvent<SVGSVGElement>) {
+    const template = event.dataTransfer.getData("application/x-jigcat-shape") as CutTemplate;
+    if (!template) return;
+    event.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const [minX, minY, width, height] = viewBox.split(" ").map(Number);
+    addPresetAt(template, {
+      x: minX + ((event.clientX - rect.left) / rect.width) * width,
+      y: minY + ((event.clientY - rect.top) / rect.height) * height,
+    });
+    setPolygonView("edit");
   }
 
   function addBridgeCut() {
@@ -835,7 +977,7 @@ function App() {
         } else {
           next.points[drag.pointIndex] = { x: next.points[drag.pointIndex].x + dx, y: next.points[drag.pointIndex].y + dy };
         }
-        if (snapEnabled) {
+        if (snapEnabled && next.type !== "preset_shape") {
           next.points = next.points.map((point, index) => {
             const isEndpoint = index === 0 || index === next.points.length - 1;
             const canSnap = drag.pointIndex === null ? isEndpoint : drag.pointIndex === index;
@@ -984,7 +1126,7 @@ function App() {
     <div className="grid h-screen min-h-0 grid-cols-[320px_minmax(720px,1fr)_340px] overflow-hidden bg-linen text-ink max-xl:grid-cols-[290px_minmax(520px,1fr)]">
       <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
         <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
-          <FileJson className="mt-1 text-clay" size={22} />
+          <Hexagon className="mt-1 text-clay" size={22} />
           <div>
             <h1 className="text-xl font-semibold">关卡编辑器</h1>
             <p className="text-sm text-muted">TypeScript · Tailwind · 非网格切割</p>
@@ -993,54 +1135,27 @@ function App() {
 
         <section className="mt-5 grid gap-3">
           <PanelTitle>关卡导航</PanelTitle>
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-            <select className="input" value={locale} onChange={(event) => setLocale(event.target.value)}>
-              {catalog.locales.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2">
+            <SelectBox value={locale} options={catalog.locales.map((item) => ({ value: item, label: item }))} onValueChange={setLocale} placeholder="语言" />
             <button className="btn" onClick={addTopic}>
               主题
             </button>
             <button className="btn" onClick={addLevelToCurrentTopic}>
               关卡
             </button>
+            <button className="btn" onClick={() => setSortOpen(true)}>
+              <GripVertical size={16} />
+            </button>
           </div>
-          <Field label="当前主题名">
-            <input className="input" value={localized(currentTopic?.name_i18n, locale, currentTopic?.name || "")} onChange={(event) => updateTopicName(event.target.value)} />
+          <Field label="主题">
+            <SelectBox value={currentTarget.topicId} options={topicOptions} onValueChange={selectTopic} placeholder="选择主题" />
           </Field>
-          <div className="grid grid-cols-2 gap-2">
-            <button className="btn" onClick={() => moveCurrentTopic(-1)}>
-              <ArrowUp size={16} />
-              主题
-            </button>
-            <button className="btn" onClick={() => moveCurrentTopic(1)}>
-              <ArrowDown size={16} />
-              主题
-            </button>
-          </div>
-          <div className="grid max-h-40 gap-2 overflow-auto pr-1">
-            {catalog.topics.map((topic) => (
-              <div key={topic.id} className="rounded-md border border-stone-300 bg-white/70 p-2">
-                <button className={topic.id === currentTarget.topicId ? "objectActive w-full" : "object w-full"} onClick={() => topic.levels[0] && requestLevelChange({ topicId: topic.id, levelId: topic.levels[0].id })}>
-                  <span>{localized(topic.name_i18n, locale, topic.name)}</span>
-                  <small>{topic.levels.length}</small>
-                </button>
-                {topic.id === currentTarget.topicId && (
-                  <div className="mt-2 grid gap-1">
-                    {topic.levels.map((item) => (
-                      <button key={item.id} className={item.id === currentTarget.levelId ? "objectActive" : "object"} onClick={() => requestLevelChange({ topicId: topic.id, levelId: item.id })}>
-                        <span>{localized(item.title_i18n, locale, item.title)}</span>
-                        <small>{item.id}</small>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <Field label="关卡">
+            <SelectBox value={currentTarget.levelId} options={levelOptions} onValueChange={selectLevel} placeholder="选择关卡" />
+          </Field>
+          <Field label="当前主题名">
+            <Input value={localized(currentTopic?.name_i18n, locale, currentTopic?.name || "")} onChange={(event) => updateTopicName(event.target.value)} />
+          </Field>
           <div className="grid grid-cols-2 gap-2">
             <button className="btn" onClick={() => adjacentLevel(-1) && requestLevelChange(adjacentLevel(-1) as LevelTarget)}>
               上一关
@@ -1049,44 +1164,21 @@ function App() {
               下一关
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button className="btn" onClick={() => moveCurrentLevel(-1)}>
-              <ArrowUp size={16} />
-              排序
-            </button>
-            <button className="btn" onClick={() => moveCurrentLevel(1)}>
-              <ArrowDown size={16} />
-              排序
-            </button>
-          </div>
-        </section>
-
-        <section className="mt-5 grid gap-3">
-          <PanelTitle>编辑模式</PanelTitle>
-          <div className="grid grid-cols-2 gap-2">
-            <button className={activeMode === "polygon" ? "btnActive" : "btn"} onClick={() => requestModeChange("polygon")}>
-              多边形{completedModes.polygon ? " ✓" : dirtyModes.polygon ? " *" : ""}
-            </button>
-            <button className={activeMode === "knob" ? "btnActive" : "btn"} onClick={() => requestModeChange("knob")}>
-              凹凸{completedModes.knob ? " ✓" : dirtyModes.knob ? " *" : ""}
-            </button>
-          </div>
-          <button className="btnPrimary" onClick={markCurrentModeComplete}>
-            标记当前模式完成
-          </button>
-          <p className="text-sm text-muted">每次只编辑一个模式。* 表示有未完成修改，✓ 表示该模式已完成。</p>
         </section>
 
         <section className="mt-5 grid gap-3">
           <PanelTitle>关卡</PanelTitle>
+          <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-ink">
+            {currentTopicName} <span className="text-muted">-&gt;</span> {currentLevelName}
+          </div>
           <Field label="标题">
-            <input className="input" value={localized(level.title_i18n, locale, level.title)} onChange={(event) => updateLocalizedTitle(event.target.value)} />
+            <Input value={localized(level.title_i18n, locale, level.title)} onChange={(event) => updateLocalizedTitle(event.target.value)} />
           </Field>
           <Field label="介绍">
-            <textarea className="input min-h-24" value={localized(level.description_i18n, locale, level.description)} onChange={(event) => updateLocalizedDescription(event.target.value)} />
+            <Textarea className="min-h-24" value={localized(level.description_i18n, locale, level.description)} onChange={(event) => updateLocalizedDescription(event.target.value)} />
           </Field>
           <Field label="Godot 图片路径">
-            <input className="input" value={level.image.path} onChange={(event) => updateImagePath(event.target.value)} />
+            <Input value={level.image.path} onChange={(event) => updateImagePath(event.target.value)} />
           </Field>
           <label className="fileButton">
             <Upload size={16} />
@@ -1098,88 +1190,62 @@ function App() {
         <section className="mt-6 grid gap-3">
           <PanelTitle>背景</PanelTitle>
           <div className="grid grid-cols-[1fr_56px] gap-2">
-            <select className="input" value={level.background.type} onChange={(event) => updateBackground("type", event.target.value as "color" | "image")}>
-              <option value="color">纯色</option>
-              <option value="image">图片</option>
-            </select>
-            <input className="h-10 rounded-md border border-stone-300" type="color" value={level.background.color} onChange={(event) => updateBackground("color", event.target.value)} />
+            <SelectBox
+              value={level.background.type}
+              options={[
+                { value: "color", label: "纯色" },
+                { value: "image", label: "图片" },
+              ]}
+              onValueChange={(value) => updateBackground("type", value as "color" | "image")}
+              placeholder="背景"
+            />
+            <Input className="h-10 p-1" type="color" value={level.background.color} onChange={(event) => updateBackground("color", event.target.value)} />
           </div>
           <Field label="背景图片路径">
-            <input className="input" value={level.background.path} onChange={(event) => updateBackground("path", event.target.value)} />
+            <Input value={level.background.path} onChange={(event) => updateBackground("path", event.target.value)} />
           </Field>
         </section>
 
-        {activeMode === "knob" && (
-        <section className="mt-6 grid gap-3">
-          <PanelTitle>Godot 生成参数</PanelTitle>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="列数">
-              <input className="input" type="number" min="1" max="10" step="1" value={level.grid.cols} onChange={(event) => updateGrid("cols", Number(event.target.value))} />
-            </Field>
-            <Field label="行数">
-              <input className="input" type="number" min="1" max="10" step="1" value={level.grid.rows} onChange={(event) => updateGrid("rows", Number(event.target.value))} />
-            </Field>
-          </div>
-          <Field label="碎片显示尺寸">
-            <input className="input" type="number" min="80" max="320" step="10" value={level.grid.piece_size} onChange={(event) => updateGrid("piece_size", Number(event.target.value))} />
-          </Field>
-          <Field label={`凹凸凸耳大小：${level.modes.knob.knob_size.toFixed(2)}`}>
-            <input type="range" min="0.12" max="0.36" step="0.01" value={level.modes.knob.knob_size} onChange={(event) => updateKnobSize(Number(event.target.value))} />
-          </Field>
-          <p className="text-sm text-muted">凹凸模式会预生成 {knobPieces.length} 个可见碎片，并写入 JSON。Godot 会优先读取这些碎片。</p>
-        </section>
-        )}
-
-        {activeMode === "polygon" && (
-        <section className="mt-6 grid gap-3">
-          <PanelTitle>自动生成</PanelTitle>
-          <Field label={`目标碎片数：${targetPieces}`}>
-            <input type="range" min="6" max="36" value={targetPieces} onChange={(event) => setTargetPieces(Number(event.target.value))} />
-          </Field>
-          <button className="btnPrimary" onClick={autoGenerate}>
-            <RefreshCcw size={16} />
-            生成碎片切割线
-          </button>
-          <button className="btn" onClick={addBridgeCut}>
-            <Plus size={16} />
-            添加平滑切割线
-          </button>
-        </section>
-        )}
       </aside>
 
       <main className="grid min-h-0 min-w-0 grid-rows-[auto_1fr] overflow-hidden">
-        <div className="flex min-h-14 items-center gap-2 overflow-auto border-b border-stone-300 bg-[#f7efe2] px-3">
-          <button className="btn" disabled={!undoStack.length} onClick={undo}>
-            <Undo2 size={16} />
-            Undo
-          </button>
-          <button className="btn" disabled={!redoStack.length} onClick={redo}>
-            <Redo2 size={16} />
-            Redo
-          </button>
-          <button className="btnPrimary" onClick={mergeSelectedPieces}>
-            合并选中碎片
-          </button>
-          <button className={snapEnabled ? "btnActive" : "btn"} onClick={() => setSnapEnabled((value) => !value)}>
-            <Magnet size={16} />
-            边缘吸附
-          </button>
-          {activeMode === "polygon" && <button className={showPieces ? "btnActive" : "btn"} onClick={() => setShowPieces((value) => !value)}>
-            碎片预览
-          </button>}
-          {activeMode === "knob" && <button className={showKnobPieces ? "btnActive" : "btn"} onClick={() => setShowKnobPieces((value) => !value)}>
-            凹凸预览
-          </button>}
-          {activeMode === "polygon" && (["knob", "circle", "star", "blob", "zigzag", "crescent"] as CutTemplate[]).map((template) => (
-            <button key={template} className="btn" onClick={() => addPreset(template)}>
-              {templateName(template)}
+        <div className="flex min-h-14 items-center justify-between gap-3 overflow-auto border-b border-stone-300 bg-[#f7efe2] px-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="inline-flex shrink-0 gap-1 rounded-md border border-stone-300 bg-white p-1">
+              <button className={activeMode === "polygon" ? "iconBtnActive" : "iconBtn"} onClick={() => requestModeChange("polygon")} title="多边形">
+                <Hexagon size={18} />
+                {(completedModes.polygon || dirtyModes.polygon) && <span className={completedModes.polygon ? "statusDot done" : "statusDot dirty"} />}
+              </button>
+              <button className={activeMode === "knob" ? "iconBtnActive" : "iconBtn"} onClick={() => requestModeChange("knob")} title="凹凸">
+                <Puzzle size={18} />
+                {(completedModes.knob || dirtyModes.knob) && <span className={completedModes.knob ? "statusDot done" : "statusDot dirty"} />}
+              </button>
+            </div>
+            <div className="min-w-0 truncate text-sm text-ink">
+              {currentTopicName} <span className="text-muted">-&gt;</span> {currentLevelName}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="btnPrimary" onClick={markCurrentModeComplete}>
+              完成
             </button>
-          ))}
-          {activeMode === "polygon" && <button className="btnDanger" onClick={removeSelected}>
-            <Trash2 size={16} />
-          </button>
-          }
+            <button className="btn" onClick={downloadJson}>
+              <Download size={16} />
+              JSON
+            </button>
+            <label className="fileButton !min-h-9 !border-solid">
+              <Upload size={16} />
+              JSON
+              <input hidden type="file" accept="application/json,.json" onChange={(event) => importJson(event.target.files?.[0])} />
+            </label>
+            <button className="btnPrimary" disabled={!canSaveToGodot} onClick={saveJsonToGodot}>
+              <Save size={16} />
+              Godot
+            </button>
+            <button className="btn" onClick={saveCatalogOnly}>
+              目录
+            </button>
+          </div>
         </div>
 
         <div className="grid min-h-0 place-items-center overflow-hidden p-5" style={{ background: level.background.color }}>
@@ -1191,21 +1257,37 @@ function App() {
             onPointerUp={() => setDrag(null)}
             onPointerLeave={() => setDrag(null)}
             onPointerDown={() => setSelectedId("")}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={dropShape}
           >
             {image && <image href={imageUrl} x="0" y="0" width={image.naturalWidth} height={image.naturalHeight} preserveAspectRatio="xMidYMid meet" />}
-            {activeMode === "polygon" && showPieces && actualPreview?.dataUrl && (
+            {activeMode === "polygon" && polygonView !== "edit" && actualPreview?.dataUrl && (
               <image href={actualPreview.dataUrl} x="0" y="0" width={image?.naturalWidth || 0} height={image?.naturalHeight || 0} preserveAspectRatio="none" />
             )}
-            {activeMode === "polygon" &&
+            {activeMode === "polygon" && polygonView === "inspect" &&
               pieces.map((piece) => (
                 <path
                   key={piece.id}
-                  className={selectedPieceIds.includes(piece.id) ? "pieceSelectable selectedPiece" : "pieceSelectable"}
+                  className={[
+                    "pieceSelectable",
+                    selectedPieceIds.includes(piece.id) ? "selectedPiece" : "",
+                    polygonView === "inspect" && actualPreview?.smallPieceIds.includes(piece.id) ? "smallPiece" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   d={catmullRomPath(piece.points, 0.15, true)}
                   onPointerDown={(event) => {
                     event.stopPropagation();
                     togglePieceSelection(piece.id);
                   }}
+                />
+              ))}
+            {activeMode === "polygon" && polygonView === "result" &&
+              cuts.map((cut) => (
+                <path
+                  key={cut.id}
+                  className="resultCutPath"
+                  d={catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape")}
                 />
               ))}
             {activeMode === "knob" && showKnobPieces &&
@@ -1220,17 +1302,17 @@ function App() {
                   }}
                 />
               ))}
-            {activeMode === "polygon" && cutGaps.map((gap, index) => (
+            {activeMode === "polygon" && polygonView === "inspect" && cutGaps.map((gap, index) => (
               <g key={`${gap.cutId}_${index}`} className="gapWarning">
                 <line x1={gap.point.x} y1={gap.point.y} x2={gap.nearest.x} y2={gap.nearest.y} />
                 <circle cx={gap.point.x} cy={gap.point.y} r={12} />
               </g>
             ))}
-            {activeMode === "polygon" && cuts.map((cut) => (
+            {activeMode === "polygon" && polygonView !== "result" && cuts.map((cut) => (
               <g key={cut.id} className={cut.id === selectedId ? "selected" : ""}>
                 <path
                   className={cut.type === "preset_shape" ? "shapePath" : "cutPath"}
-                  d={catmullRomPath(cut.points, cut.type === "preset_shape" ? 0.25 : 0.9, cut.type === "preset_shape")}
+                  d={catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape")}
                   onPointerDown={(event) => beginDrag(event, cut.id, null)}
                 />
                 {cut.id === selectedId &&
@@ -1243,77 +1325,136 @@ function App() {
         </div>
       </main>
 
-      <aside className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-4 overflow-hidden border-l border-stone-300 bg-paper p-4 max-xl:col-span-2 max-xl:border-l-0 max-xl:border-t">
-        <section className="grid min-h-0 grid-rows-[auto_auto_auto_auto_minmax(0,1fr)_auto]">
-          <PanelTitle>对象</PanelTitle>
-          <div className="mb-3 rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
-            <p className="text-ink">当前模式：{activeMode === "polygon" ? "多边形" : "凹凸"}</p>
-            <p>已选中 {selectedPieceIds.length}/2 个碎片。只能合并两个相邻碎片，合并后删除内部边，只保留外轮廓。</p>
+      <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-l border-stone-300 bg-paper p-4 max-xl:col-span-2 max-xl:border-l-0 max-xl:border-t">
+        <section className="grid gap-3">
+          <PanelTitle>状态</PanelTitle>
+          <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
+            <p className="text-ink">{activeMode === "polygon" ? "多边形" : "凹凸"} · 选中 {selectedPieceIds.length}/2</p>
+            <p>多边形 {completedModes.polygon ? "完成" : "未完成"} · 凹凸 {completedModes.knob ? "完成" : "未完成"}</p>
+            {activeMode === "polygon" && <p>{pieces.length} 片 · 最小 {Math.round(actualPreview?.minArea || 0)}px²</p>}
+            {activeMode === "knob" && <p>{level.grid.cols} x {level.grid.rows} · {knobPieces.length} 片</p>}
+            {saveStatus && <p>{saveStatus}</p>}
           </div>
-          {activeMode === "polygon" && (
-          <div className="mb-3 rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
-            <p className="text-ink">实际碎片：{actualPreview?.count || 0}</p>
-            <p>按当前切割线做像素级连通检测。若有细小缺口，数量不会增加。</p>
-          </div>
-          )}
-          {activeMode === "knob" && (
-          <div className="mb-3 rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
-            <p className="text-ink">凹凸碎片：{knobPieces.length}</p>
-            <p>按当前行列和凸耳大小预生成，导出后 Godot 直接读取。</p>
-          </div>
-          )}
-          {activeMode === "polygon" && cutGaps.length > 0 && (
-            <div className="mb-3 rounded-md border border-[#d9933f]/50 bg-[#fff3de] px-3 py-2 text-sm text-muted">
-              <p className="font-medium text-ink">发现 {cutGaps.length} 个近距离未连接端点</p>
-              {cutGaps.slice(0, 4).map((gap, index) => (
-                <p key={`${gap.cutId}_${index}`}>距离 {gap.distance.toFixed(1)}px，靠近{gap.kind === "outline" ? "外边缘" : "另一条切割线"}</p>
-              ))}
-            </div>
-          )}
-          {activeMode === "polygon" && <div className="grid min-h-0 gap-2 overflow-auto pr-1">
-            {cuts.map((cut) => (
-              <button key={cut.id} className={cut.id === selectedId ? "objectActive" : "object"} onClick={() => setSelectedId(cut.id)}>
-                <span>{templateName(cut.template)}</span>
-                <small>{cut.type === "preset_shape" ? "预设图形" : "切割边"}</small>
-              </button>
-            ))}
-          </div>}
-          {activeMode === "polygon" && selected && <p className="mt-3 text-sm text-muted">选中：{selected.template}，拖拽整条线或白色节点，端点会吸附到外轮廓/其他分割线。</p>}
         </section>
 
         <section className="grid gap-3 border-t border-stone-300 pt-4">
-          <PanelTitle>导出</PanelTitle>
-          <div className="rounded-md bg-white/70 px-3 py-2 text-sm text-muted">
-            <p className="text-ink">Godot 导出状态</p>
-            <p>多边形：{completedModes.polygon ? "完成" : "未完成"} · 凹凸：{completedModes.knob ? "完成" : "未完成"}</p>
-            <p>{canSaveToGodot ? "可以保存到 Godot。" : "两个模式都标记完成后，才允许保存到 Godot。"}</p>
+          <PanelTitle>工具</PanelTitle>
+          <div className="grid grid-cols-5 gap-2">
+            <button className="iconBtn" disabled={!undoStack.length} onClick={undo} title="Undo">
+              <Undo2 size={18} />
+            </button>
+            <button className="iconBtn" disabled={!redoStack.length} onClick={redo} title="Redo">
+              <Redo2 size={18} />
+            </button>
+            <button className={snapEnabled ? "iconBtnActive" : "iconBtn"} onClick={() => setSnapEnabled((value) => !value)} title="吸附">
+              <Magnet size={18} />
+            </button>
+            <button className="iconBtnActive" onClick={mergeSelectedPieces} title="合并">
+              <Plus size={18} />
+            </button>
+            {activeMode === "polygon" && (
+              <button className="iconBtnDanger" onClick={removeSelected} title="删除">
+                <Trash2 size={18} />
+              </button>
+            )}
           </div>
-          <button className="btnPrimary" onClick={buildJson}>
-            <FileJson size={16} />
-            生成 JSON
-          </button>
-          <button className="btn" onClick={downloadJson}>
-            <Download size={16} />
-            下载 JSON
-          </button>
-          <button className="btnPrimary" disabled={!canSaveToGodot} onClick={saveJsonToGodot}>
-            <Save size={16} />
-            保存到 Godot
-          </button>
-          {saveStatus && <p className="rounded-md bg-white/60 px-3 py-2 text-sm text-muted">{saveStatus}</p>}
-          <label className="fileButton">
-            <Upload size={16} />
-            导入 JSON
-            <input hidden type="file" accept="application/json,.json" onChange={(event) => importJson(event.target.files?.[0])} />
-          </label>
-          <textarea className="input min-h-[340px] font-mono text-xs" value={jsonText} onChange={(event) => setJsonText(event.target.value)} spellCheck={false} />
         </section>
 
-        <section className="mt-6 border-t border-stone-300 pt-4 text-sm text-muted">
-          <PanelTitle>规则</PanelTitle>
-          <p>这里不做自由手绘。自动生成会创建非网格碎片边界；新增线条也是平滑曲线或预设图形，靠吸附来保证连接。</p>
-        </section>
+        {activeMode === "polygon" && (
+          <section className="grid gap-3 border-t border-stone-300 pt-4">
+            <PanelTitle>多边形</PanelTitle>
+            <div className="grid grid-cols-3 gap-2">
+              {(["result", "edit", "inspect"] as PolygonViewMode[]).map((view) => (
+                <button key={view} className={polygonView === view ? "iconBtnActive" : "iconBtn"} onClick={() => setPolygonView(view)} title={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
+                  {view === "result" ? <Eye size={18} /> : view === "edit" ? <Pencil size={18} /> : <CircleAlert size={18} />}
+                </button>
+              ))}
+            </div>
+            <Field label={`${targetPieces} 片`}>
+              <input type="range" min="6" max="36" value={targetPieces} onChange={(event) => setTargetPieces(Number(event.target.value))} />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="btnPrimary" onClick={autoGenerate}>
+                <RefreshCcw size={16} />
+                生成
+              </button>
+              <button className="btn" onClick={addBridgeCut}>
+                <Plus size={16} />
+                线
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(["knob", "circle", "star", "blob", "zigzag", "crescent"] as CutTemplate[]).map((template) => (
+                <ShapeButton key={template} template={template} onClick={() => addPreset(template)} />
+              ))}
+            </div>
+            {(actualPreview?.smallPieceIds.length || 0) > 0 && <p className="rounded-md bg-[#fff3de] px-3 py-2 text-sm text-[#9e3f35]">过小碎片：{actualPreview?.smallPieceIds.length}</p>}
+            {cutGaps.length > 0 && <p className="rounded-md bg-[#fff3de] px-3 py-2 text-sm text-muted">未连接端点：{cutGaps.length}</p>}
+            <div className="grid max-h-56 gap-2 overflow-auto pr-1">
+              {cuts.map((cut) => (
+                <button key={cut.id} className={cut.id === selectedId ? "objectActive" : "object"} onClick={() => setSelectedId(cut.id)}>
+                  <span>{templateName(cut.template)}</span>
+                  <small>{cut.type === "preset_shape" ? "形状" : "线"}</small>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeMode === "knob" && (
+          <section className="grid gap-3 border-t border-stone-300 pt-4">
+            <PanelTitle>凹凸</PanelTitle>
+            <button className={showKnobPieces ? "btnActive" : "btn"} onClick={() => setShowKnobPieces((value) => !value)}>
+              <Eye size={16} />
+              预览
+            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="列">
+                <Input type="number" min="1" max="12" step="1" value={level.grid.cols} onChange={(event) => updateGrid("cols", Number(event.target.value))} />
+              </Field>
+              <Field label="行">
+                <Input type="number" min="1" max="12" step="1" value={level.grid.rows} onChange={(event) => updateGrid("rows", Number(event.target.value))} />
+              </Field>
+            </div>
+            <Field label="尺寸">
+              <Input type="number" min="80" max="320" step="10" value={level.grid.piece_size} onChange={(event) => updateGrid("piece_size", Number(event.target.value))} />
+            </Field>
+            <Field label={`凸耳 ${level.modes.knob.knob_size.toFixed(2)}`}>
+              <input type="range" min="0.12" max="0.36" step="0.01" value={level.modes.knob.knob_size} onChange={(event) => updateKnobSize(Number(event.target.value))} />
+            </Field>
+          </section>
+        )}
       </aside>
+      <SortDialog
+        open={sortOpen}
+        onOpenChange={setSortOpen}
+        sensors={sensors}
+        catalog={catalog}
+        currentTopic={currentTopic}
+        locale={locale}
+        currentTarget={currentTarget}
+        onDragEnd={onSortDragEnd}
+        onSave={saveCatalogOnly}
+      />
+      <CreateItemDialog
+        open={createDialog === "topic"}
+        title="新建主题"
+        idLabel="主题 ID"
+        nameLabel="主题名"
+        defaultName="新主题"
+        onOpenChange={(open) => setCreateDialog(open ? "topic" : null)}
+        onSubmit={createTopic}
+      />
+      <CreateItemDialog
+        open={createDialog === "level"}
+        title="新建关卡"
+        idLabel="关卡 ID"
+        nameLabel="关卡名"
+        defaultName="新关卡"
+        description={currentTopicName ? `创建到 ${currentTopicName}` : undefined}
+        onOpenChange={(open) => setCreateDialog(open ? "level" : null)}
+        onSubmit={createLevelInCurrentTopic}
+      />
       {pendingMode && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
           <div className="w-full max-w-md rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
@@ -1360,6 +1501,246 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+
+function Input({ className = "", ...props }: InputProps) {
+  return <input className={`input ${className}`} {...props} />;
+}
+
+type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+function Textarea({ className = "", ...props }: TextareaProps) {
+  return <textarea className={`input ${className}`} {...props} />;
+}
+
+function SelectBox({ value, options, placeholder, onValueChange }: { value: string; options: SelectOption[]; placeholder: string; onValueChange: (value: string) => void }) {
+  return (
+    <Select.Root value={value} onValueChange={onValueChange}>
+      <Select.Trigger className="selectTrigger" aria-label={placeholder}>
+        <Select.Value placeholder={placeholder} />
+        <Select.Icon>
+          <ChevronDown size={16} />
+        </Select.Icon>
+      </Select.Trigger>
+      <Select.Portal>
+        <Select.Content className="selectContent" position="popper" sideOffset={6}>
+          <Select.Viewport className="p-1">
+            {options.map((option) => (
+              <Select.Item key={option.value} value={option.value} className="selectItem">
+                <Select.ItemText>
+                  <span>{option.label}</span>
+                  {option.detail && <small>{option.detail}</small>}
+                </Select.ItemText>
+                <Select.ItemIndicator>
+                  <Check size={14} />
+                </Select.ItemIndicator>
+              </Select.Item>
+            ))}
+          </Select.Viewport>
+        </Select.Content>
+      </Select.Portal>
+    </Select.Root>
+  );
+}
+
+function SortDialog({
+  open,
+  onOpenChange,
+  sensors,
+  catalog,
+  currentTopic,
+  locale,
+  currentTarget,
+  onDragEnd,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sensors: ReturnType<typeof useSensors>;
+  catalog: LevelCatalog;
+  currentTopic?: CatalogTopic;
+  locale: string;
+  currentTarget: LevelTarget;
+  onDragEnd: (event: DragEndEvent) => void;
+  onSave: () => void;
+}) {
+  const topicIds = catalog.topics.map((topic) => `topic:${topic.id}`);
+  const levelIds = (currentTopic?.levels || []).map((item) => `level:${item.id}`);
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialogOverlay" />
+        <Dialog.Content className="dialogContent">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Dialog.Title className="text-xl font-semibold text-ink">排序</Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm text-muted">拖拽调整主题和当前主题下的关卡顺序。</Dialog.Description>
+            </div>
+            <Dialog.Close className="iconBtn" aria-label="关闭">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <div className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1">
+              <section className="grid gap-2">
+                <PanelTitle>主题</PanelTitle>
+                <SortableContext items={topicIds} strategy={verticalListSortingStrategy}>
+                  {catalog.topics.map((topic) => (
+                    <SortableRow
+                      key={topic.id}
+                      id={`topic:${topic.id}`}
+                      label={localized(topic.name_i18n, locale, topic.name)}
+                      detail={`${topic.levels.length}`}
+                      active={topic.id === currentTarget.topicId}
+                    />
+                  ))}
+                </SortableContext>
+              </section>
+              <section className="grid gap-2">
+                <PanelTitle>关卡</PanelTitle>
+                <SortableContext items={levelIds} strategy={verticalListSortingStrategy}>
+                  {(currentTopic?.levels || []).map((item) => (
+                    <SortableRow
+                      key={item.id}
+                      id={`level:${item.id}`}
+                      label={localized(item.title_i18n, locale, item.title)}
+                      detail={item.id}
+                      active={item.id === currentTarget.levelId}
+                    />
+                  ))}
+                </SortableContext>
+              </section>
+            </div>
+          </DndContext>
+          <div className="mt-5 flex justify-end gap-2">
+            <button className="btn" onClick={onSave}>
+              保存目录
+            </button>
+            <Dialog.Close className="btnPrimary">完成</Dialog.Close>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function CreateItemDialog({
+  open,
+  title,
+  description,
+  idLabel,
+  nameLabel,
+  defaultName,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  title: string;
+  description?: string;
+  idLabel: string;
+  nameLabel: string;
+  defaultName: string;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (id: string, name: string) => boolean;
+}) {
+  const [id, setId] = useState("");
+  const [name, setName] = useState(defaultName);
+
+  useEffect(() => {
+    if (!open) return;
+    setId("");
+    setName(defaultName);
+  }, [defaultName, open]);
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const cleanId = id.trim();
+    const cleanName = name.trim() || cleanId;
+    if (!cleanId) return;
+    if (onSubmit(cleanId, cleanName)) onOpenChange(false);
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialogOverlay" />
+        <Dialog.Content className="dialogContent max-w-md">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Dialog.Title className="text-xl font-semibold text-ink">{title}</Dialog.Title>
+              {description && <Dialog.Description className="mt-1 text-sm text-muted">{description}</Dialog.Description>}
+            </div>
+            <Dialog.Close className="iconBtn" aria-label="关闭">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+          <form className="mt-5 grid gap-3" onSubmit={submit}>
+            <Field label={idLabel}>
+              <Input value={id} placeholder="english_id" autoFocus onChange={(event) => setId(event.target.value)} />
+            </Field>
+            <Field label={nameLabel}>
+              <Input value={name} onChange={(event) => setName(event.target.value)} />
+            </Field>
+            <p className="text-xs text-muted">ID 只能包含英文、数字、下划线或短横线。</p>
+            <div className="mt-2 flex justify-end gap-2">
+              <Dialog.Close className="btn" type="button">
+                取消
+              </Dialog.Close>
+              <button className="btnPrimary" type="submit">
+                创建
+              </button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function SortableRow({ id, label, detail, active }: { id: string; label: string; detail: string; active: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${active ? "sortRowActive" : "sortRow"} ${isDragging ? "opacity-70" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical size={16} />
+      <span className="min-w-0 truncate">{label}</span>
+      <small className="ml-auto text-muted">{detail}</small>
+    </div>
+  );
+}
+
+function ShapeButton({ template, onClick }: { template: CutTemplate; onClick: () => void }) {
+  return (
+    <button
+      className="shapeButton"
+      draggable
+      title={templateName(template)}
+      onClick={onClick}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/x-jigcat-shape", template);
+        event.dataTransfer.effectAllowed = "copy";
+      }}
+    >
+      <svg viewBox="0 0 64 64" className="h-10 w-full" aria-hidden="true">
+        <path d={shapeIconPath(template)} />
+      </svg>
+    </button>
+  );
+}
+
+function shapeIconPath(template: CutTemplate) {
+  return catmullRomPath(presetShapePoints(template, { x: 0, y: 0, width: 64, height: 64 }), shapeTension(template), true);
+}
+
+function shapeTension(template: CutTemplate) {
+  return template === "star" || template === "zigzag" || template === "knob" ? 0 : 0.25;
 }
 
 function PanelTitle({ children }: { children: React.ReactNode }) {

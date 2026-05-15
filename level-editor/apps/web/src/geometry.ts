@@ -33,8 +33,8 @@ export function makeEmptyLevel(): LevelConfig {
       path: "",
     },
     grid: {
-      cols: 3,
-      rows: 3,
+      cols: 8,
+      rows: 8,
       piece_size: 190,
     },
     component_overrides: {},
@@ -45,8 +45,8 @@ export function makeEmptyLevel(): LevelConfig {
       },
       knob: {
         source: "precomputed" as const,
-        cols: 3,
-        rows: 3,
+        cols: 8,
+        rows: 8,
         piece_size: 190,
         knob_size: 0.24,
         pieces: [],
@@ -477,23 +477,97 @@ export function generateFractureNetwork(outline: Point[], bounds: Bounds | null,
 }
 
 export function presetCut(template: CutTemplate, bounds: Bounds): CutLine {
+  return { id: uid("shape"), type: "preset_shape", template, points: presetShapePoints(template, bounds) };
+}
+
+export function presetShapePoints(template: CutTemplate, bounds: Bounds): Point[] {
   const cx = bounds.x + bounds.width * 0.5;
   const cy = bounds.y + bounds.height * 0.5;
   const radius = Math.min(bounds.width, bounds.height) * 0.18;
-  const count = template === "star" ? 11 : 24;
-  const points: Point[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
-    let r = radius;
-    if (template === "star") r *= i % 2 ? 0.45 : 1;
-    if (template === "blob") r *= 0.82 + Math.sin(i * 2.2) * 0.16 + Math.cos(i * 0.8) * 0.1;
-    if (template === "crescent") r *= 0.62 + Math.sin(angle) * 0.24;
-    if (template === "knob") r *= 0.86 + Math.sin(angle * 3) * 0.22;
-    if (template === "zigzag") r *= i % 2 ? 0.72 : 1.05;
-    points.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
+
+  if (template === "circle" || template === "round") {
+    return sampleArc(cx, cy, radius, -Math.PI / 2, Math.PI * 1.5, 40, false);
   }
-  points.push(points[0]);
-  return { id: uid("shape"), type: "preset_shape", template, points };
+
+  if (template === "star") {
+    return Array.from({ length: 10 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 10 - Math.PI / 2;
+      const r = index % 2 === 0 ? radius : radius * 0.46;
+      return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
+    });
+  }
+
+  if (template === "blob") {
+    return Array.from({ length: 36 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 36 - Math.PI / 2;
+      const wave = 0.92 + Math.sin(angle * 3 + 0.5) * 0.08 + Math.cos(angle * 5 - 0.4) * 0.05;
+      return { x: cx + Math.cos(angle) * radius * wave, y: cy + Math.sin(angle) * radius * wave };
+    });
+  }
+
+  if (template === "crescent") {
+    const outer = sampleArc(cx + radius * 0.02, cy, radius * 1.05, Math.PI * 0.64, Math.PI * 1.36, 22, true);
+    const inner = sampleArc(cx + radius * 0.38, cy, radius * 0.78, Math.PI * 1.36, Math.PI * 0.64, 22, true);
+    return [...outer, ...inner];
+  }
+
+  if (template === "zigzag") {
+    return scaleUnitShape(
+      [
+        [0.2, 0.14],
+        [0.62, 0.14],
+        [0.49, 0.39],
+        [0.78, 0.39],
+        [0.3, 0.86],
+        [0.43, 0.56],
+        [0.18, 0.56],
+      ],
+      cx,
+      cy,
+      radius * 2.1,
+    );
+  }
+
+  return knobShapePoints(cx, cy, radius);
+}
+
+function sampleArc(cx: number, cy: number, radius: number, start: number, end: number, steps: number, includeEnd = true): Point[] {
+  return Array.from({ length: includeEnd ? steps + 1 : steps }, (_, index) => {
+    const angle = start + ((end - start) * index) / steps;
+    return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+  });
+}
+
+function scaleUnitShape(points: [number, number][], cx: number, cy: number, size: number): Point[] {
+  return points.map(([x, y]) => ({
+    x: cx + (x - 0.5) * size,
+    y: cy + (y - 0.5) * size,
+  }));
+}
+
+function knobShapePoints(cx: number, cy: number, radius: number): Point[] {
+  const width = radius * 1.95;
+  const height = radius * 1.72;
+  const knob = radius * 0.26;
+  const left = cx - width * 0.5;
+  const right = cx + width * 0.5;
+  const top = cy - height * 0.5;
+  const bottom = cy + height * 0.5;
+
+  return [
+    { x: left, y: top },
+    { x: cx - knob, y: top },
+    ...sampleArc(cx, top, knob, Math.PI, Math.PI * 2, 8, true),
+    { x: right, y: top },
+    { x: right, y: cy - knob },
+    ...sampleArc(right, cy, knob, -Math.PI / 2, Math.PI / 2, 8, true),
+    { x: right, y: bottom },
+    { x: cx + knob, y: bottom },
+    ...sampleArc(cx, bottom, knob, 0, Math.PI, 8, true),
+    { x: left, y: bottom },
+    { x: left, y: cy + knob },
+    ...sampleArc(left, cy, knob, Math.PI / 2, Math.PI * 1.5, 8, true),
+  ];
 }
 
 type KnobPieceDraft = {
@@ -707,6 +781,9 @@ export type ActualPiecePreview = {
   dataUrl: string;
   width: number;
   height: number;
+  pieces: PieceCell[];
+  minArea: number;
+  smallPieceIds: string[];
 };
 
 export type CutGap = {
@@ -725,7 +802,7 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
   imageCanvas.width = width;
   imageCanvas.height = height;
   const imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
-  if (!imageCtx) return { count: 0, dataUrl: "", width, height };
+  if (!imageCtx) return { count: 0, dataUrl: "", width, height, pieces: [], minArea: 0, smallPieceIds: [] };
   imageCtx.clearRect(0, 0, width, height);
   imageCtx.drawImage(image, 0, 0, width, height);
   const imageData = imageCtx.getImageData(0, 0, width, height);
@@ -736,7 +813,7 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
   barrierCanvas.width = width;
   barrierCanvas.height = height;
   const barrierCtx = barrierCanvas.getContext("2d", { willReadFrequently: true });
-  if (!barrierCtx) return { count: 0, dataUrl: "", width, height };
+  if (!barrierCtx) return { count: 0, dataUrl: "", width, height, pieces: [], minArea: 0, smallPieceIds: [] };
   barrierCtx.clearRect(0, 0, width, height);
   barrierCtx.strokeStyle = "#fff";
   barrierCtx.lineCap = "round";
@@ -768,6 +845,9 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
     [199, 124, 46],
   ];
   let count = 0;
+  let minArea = Number.POSITIVE_INFINITY;
+  const pieces: PieceCell[] = [];
+  const smallPieceIds: string[] = [];
   const neighbors = [
     [1, 0],
     [-1, 0],
@@ -778,11 +858,14 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
   for (let start = 0; start < visible.length; start += 1) {
     if (!visible[start] || visited[start]) continue;
     const color = colors[count % colors.length];
+    const pieceId = `piece_${String(count + 1).padStart(2, "0")}`;
+    const componentPixels: number[] = [];
     count += 1;
     const stack = [start];
     visited[start] = 1;
     while (stack.length) {
       const index = stack.pop() as number;
+      componentPixels.push(index);
       preview.data[index * 4] = color[0];
       preview.data[index * 4 + 1] = color[1];
       preview.data[index * 4 + 2] = color[2];
@@ -799,10 +882,33 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
         stack.push(nextIndex);
       }
     }
+
+    const area = componentPixels.length / Math.max(1e-6, scale * scale);
+    minArea = Math.min(minArea, area);
+    if (area < 900) smallPieceIds.push(pieceId);
+
+    const componentMask = new Uint8Array(width * height);
+    for (const index of componentPixels) componentMask[index] = 1;
+    const loops = traceBoundaryLoops(componentMask, width, height);
+    const largestLoop = loops.sort((a, b) => Math.abs(polygonArea(b)) - Math.abs(polygonArea(a)))[0] || [];
+    if (largestLoop.length >= 4) {
+      const raw = largestLoop.map((point) => ({ x: point.x / scale, y: point.y / scale }));
+      const simplified = simplifyClosedPath(raw, Math.max(1.5, 2.2 / Math.max(scale, 1e-6)));
+      const sampled = samplePath([...simplified, simplified[0]], Math.min(96, Math.max(18, simplified.length)));
+      pieces.push({ id: pieceId, points: smoothClosedPath(sampled, 1) });
+    }
   }
 
   imageCtx.putImageData(preview, 0, 0);
-  return { count, dataUrl: imageCanvas.toDataURL("image/png"), width, height };
+  return {
+    count,
+    dataUrl: imageCanvas.toDataURL("image/png"),
+    width,
+    height,
+    pieces,
+    minArea: Number.isFinite(minArea) ? minArea : 0,
+    smallPieceIds,
+  };
 }
 
 export function findCutGaps(cuts: CutLine[], outlinePoints: Point[], connectedDistance = 1.5, warningDistance = 10): CutGap[] {
