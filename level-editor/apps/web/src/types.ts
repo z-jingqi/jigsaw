@@ -1,0 +1,132 @@
+export type Point = {
+  x: number;
+  y: number;
+};
+
+export type Bounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type CutKind = "fracture" | "preset_shape";
+
+export type CutTemplate = "knob" | "round" | "circle" | "star" | "blob" | "zigzag" | "crescent";
+
+export type CutLine = {
+  id: string;
+  type: CutKind;
+  template: CutTemplate;
+  points: Point[];
+};
+
+export type PieceCell = {
+  id: string;
+  points: Point[];
+};
+
+export type LevelPiece = {
+  id: string;
+  cell: number[];
+  home: number[];
+  points: number[][];
+  neighbors: string[];
+  cut_lines: number[][][];
+};
+
+export type LocaleCode = "zh-Hans" | "en" | string;
+
+export type CatalogLevel = {
+  id: string;
+  title: string;
+  title_i18n?: Record<LocaleCode, string>;
+  sort_order: number;
+  path: string;
+  source: string;
+};
+
+export type CatalogTopic = {
+  id: string;
+  name: string;
+  name_i18n?: Record<LocaleCode, string>;
+  sort_order: number;
+  cover: string;
+  levels: CatalogLevel[];
+};
+
+export type LevelCatalog = {
+  schema: "jigsaw.catalog.v1";
+  version: number;
+  default_locale: LocaleCode;
+  locales: LocaleCode[];
+  topics: CatalogTopic[];
+};
+
+export type OutlineAnalysis = {
+  outline: Point[];
+  edgePoints: Point[];
+  bounds: Bounds | null;
+};
+
+export type LevelConfig = {
+  schema: "jigsaw.level.v1";
+  version: number;
+  id: string;
+  topic_id?: string;
+  locale?: LocaleCode;
+  title: string;
+  description: string;
+  title_i18n?: Record<LocaleCode, string>;
+  description_i18n?: Record<LocaleCode, string>;
+  image: {
+    path: string;
+    name: string;
+    width: number;
+    height: number;
+  };
+  background: {
+    type: "color" | "image";
+    color: string;
+    path: string;
+  };
+  grid: {
+    cols: number;
+    rows: number;
+    piece_size: number;
+  };
+  component_overrides: Record<string, string>;
+  modes: {
+    polygon: {
+      source: "precomputed";
+      pieces: LevelPiece[];
+    };
+    knob: {
+      source: "precomputed";
+      rows: number;
+      cols: number;
+      piece_size: number;
+      knob_size: number;
+      pieces: LevelPiece[];
+    };
+  };
+  editor: {
+    outline: number[][];
+    cuts: Array<{
+      id: string;
+      type: CutKind;
+      template: CutTemplate;
+      points: number[][];
+    }>;
+    shapes: Array<{
+      id: string;
+      type: CutKind;
+      template: CutTemplate;
+      points: number[][];
+    }>;
+    pieces: Array<{
+      id: string;
+      points: number[][];
+    }>;
+  };
+};

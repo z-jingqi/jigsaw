@@ -11,7 +11,8 @@ const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
 const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
-const LEVEL_CONFIG_PATH := "res://levels/cat_moon_01.json"
+const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
+const LEVEL_CONFIG_PATH := "res://levels/cat/cat_moon_01/level.json"
 const COLS := 3
 const ROWS := 3
 const PIECE_SIZE := 190.0
@@ -61,7 +62,7 @@ var topics: Array[Dictionary] = []
 var progress := {}
 var current_topic: Dictionary = {}
 var current_level: Dictionary = {}
-var current_mode := "classic"
+var current_mode := "knob"
 var current_screen := "home"
 var modal_open := false
 
@@ -136,11 +137,47 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _build_catalog() -> void:
+	var catalog := _load_config_path(LEVEL_CATALOG_PATH)
+	if catalog.has("topics") and typeof(catalog["topics"]) == TYPE_ARRAY:
+		var next_topics: Array[Dictionary] = []
+		var catalog_topics: Array = catalog["topics"]
+		catalog_topics.sort_custom(func(a, b) -> bool:
+			return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+		)
+		for topic_data in catalog_topics:
+			if typeof(topic_data) != TYPE_DICTIONARY:
+				continue
+			var topic: Dictionary = topic_data
+			var levels: Array[Dictionary] = []
+			var catalog_levels: Array = topic.get("levels", [])
+			catalog_levels.sort_custom(func(a, b) -> bool:
+				return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+			)
+			for level_data in catalog_levels:
+				if typeof(level_data) != TYPE_DICTIONARY:
+					continue
+				var level_entry: Dictionary = level_data
+				var config_path := str(level_entry.get("path", ""))
+				var level_config := _load_config_path(config_path)
+				levels.append({
+					"id": str(level_entry.get("id", level_config.get("id", ""))),
+					"title": _config_string(level_config, "title", str(level_entry.get("title", ""))),
+					"description": _config_string(level_config, "description", ""),
+					"config_path": config_path,
+				})
+			next_topics.append({
+				"id": str(topic.get("id", "")),
+				"name": str(topic.get("name", topic.get("id", ""))),
+				"levels": levels,
+			})
+		if not next_topics.is_empty():
+			topics = next_topics
+			return
 	var cat_config := _load_config_path(LEVEL_CONFIG_PATH)
 	var level_title := _config_string(cat_config, "title", "月亮小睡")
 	var level_description := _config_string(cat_config, "description", "小猫安静地靠在月亮上，像一段柔软的午后梦。")
 	topics = [{
-		"id": "cats",
+		"id": "cat",
 		"name": "猫",
 		"levels": [{
 			"id": "cat_moon_01",
@@ -527,11 +564,11 @@ func _show_levels(topic: Dictionary) -> void:
 	center.add_child(grid)
 	for level in topic["levels"]:
 		var done_poly := _is_done(level["id"], "polygon")
-		var done_classic := _is_done(level["id"], "classic")
+		var done_knob := _is_done(level["id"], "knob")
 		var text := "%s\n⬡ %s   🧩 %s" % [
 			level["title"],
 			"完成" if done_poly else "未完成",
-			"完成" if done_classic else "未完成"
+			"完成" if done_knob else "未完成"
 		]
 		var card := _card_button(
 			text,
@@ -542,7 +579,7 @@ func _show_levels(topic: Dictionary) -> void:
 	var footer := Label.new()
 	footer.text = "⬡ %d/%d    🧩 %d/%d    全部 %d/%d" % [
 		_mode_done_count(topic, "polygon"), topic["levels"].size(),
-		_mode_done_count(topic, "classic"), topic["levels"].size(),
+		_mode_done_count(topic, "knob"), topic["levels"].size(),
 		_topic_done_count(topic), topic["levels"].size() * 2
 	]
 	footer.add_theme_color_override("font_color", brown)
@@ -603,7 +640,7 @@ func _show_mode_dialog(level: Dictionary) -> void:
 	title.add_theme_color_override("font_color", brown)
 	box.add_child(title)
 	box.add_child(_mode_button(level, "polygon", "⬡ 多边形模式"))
-	box.add_child(_mode_button(level, "classic", "🧩 经典拼图模式"))
+	box.add_child(_mode_button(level, "knob", "🧩 凹凸拼图模式"))
 	box.add_child(_button("关闭", _close_modal, false))
 
 
@@ -622,7 +659,7 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	current_screen = "game"
 	current_topic = topic
 	current_level = level
-	current_mode = play_mode
+	current_mode = _mode_key(play_mode)
 	active_level_config = _load_level_config(current_level)
 	_apply_level_media(active_level_config)
 	_clear_ui()
@@ -668,8 +705,12 @@ func _build_game_hud(level_title: String) -> void:
 
 
 func _start_play_session(play_mode: String) -> void:
-	var generator_mode := "irregular" if play_mode == "polygon" else "classic"
-	var level := LevelGeneratorScript.generate(source_size, COLS, ROWS, PIECE_SIZE, generator_mode, source_image, active_level_config)
+	var mode_key := _mode_key(play_mode)
+	var grid := _level_grid(active_level_config)
+	var level := _level_from_mode_pieces(mode_key, grid)
+	if level.is_empty():
+		var generator_mode := "irregular" if mode_key == "polygon" else "knob"
+		level = LevelGeneratorScript.generate(source_size, grid["cols"], grid["rows"], grid["piece_size"], generator_mode, source_image, active_level_config)
 	source_scale = level["source_scale"]
 	board_origin = level["board_origin"]
 	for piece in level["pieces"]:
@@ -696,6 +737,134 @@ func _load_config_path(config_path: String) -> Dictionary:
 		return {}
 	var parsed = JSON.parse_string(file.get_as_text())
 	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+func _mode_key(play_mode: String) -> String:
+	return "knob" if play_mode == "classic" else play_mode
+
+
+func _mode_config(level_config: Dictionary, play_mode: String) -> Dictionary:
+	var mode := _mode_key(play_mode)
+	if not level_config.has("modes") or typeof(level_config["modes"]) != TYPE_DICTIONARY:
+		return {}
+	var modes: Dictionary = level_config["modes"]
+	if not modes.has(mode) or typeof(modes[mode]) != TYPE_DICTIONARY:
+		return {}
+	return modes[mode]
+
+
+func _level_from_mode_pieces(play_mode: String, grid: Dictionary) -> Dictionary:
+	var config := _mode_config(active_level_config, play_mode)
+	if config.is_empty() or not config.has("pieces") or typeof(config["pieces"]) != TYPE_ARRAY:
+		return {}
+	if str(config.get("source", "")) != "precomputed":
+		return {}
+	var source_pieces: Array = config["pieces"]
+	if source_pieces.is_empty():
+		return {}
+	var cols := clampi(int(config.get("cols", grid["cols"])), 1, 10)
+	var piece_size := clampf(float(config.get("piece_size", grid["piece_size"])), 80.0, 320.0)
+	var mode_source_scale := (piece_size * float(cols)) / source_size.x
+	var board_size := source_size * mode_source_scale
+	var mode_board_origin := -board_size * 0.5
+	var pieces: Array[Dictionary] = []
+	for source_piece in source_pieces:
+		if typeof(source_piece) != TYPE_DICTIONARY:
+			continue
+		var piece_data: Dictionary = source_piece
+		var source_polygon := _json_points(piece_data.get("points", []))
+		if source_polygon.size() < 3:
+			continue
+		var home_source := _json_point(piece_data.get("home", _polygon_center(source_polygon)))
+		var home := mode_board_origin + home_source * mode_source_scale
+		var local_polygon := PackedVector2Array()
+		var uvs := PackedVector2Array()
+		for source_point in source_polygon:
+			var display_point := mode_board_origin + source_point * mode_source_scale
+			local_polygon.append(display_point - home)
+			uvs.append(source_point)
+		var cut_lines: Array[PackedVector2Array] = []
+		if piece_data.has("cut_lines") and typeof(piece_data["cut_lines"]) == TYPE_ARRAY:
+			for line_data in piece_data["cut_lines"]:
+				var source_line := _json_points(line_data)
+				if source_line.size() < 2:
+					continue
+				var local_line := PackedVector2Array()
+				for source_point in source_line:
+					local_line.append(mode_board_origin + source_point * mode_source_scale - home)
+				cut_lines.append(local_line)
+		pieces.append({
+			"id": str(piece_data.get("id", "piece_%d" % pieces.size())),
+			"cell": _json_cell(piece_data.get("cell", [0, 0])),
+			"home": home,
+			"polygon": local_polygon,
+			"uv": uvs,
+			"neighbors": piece_data.get("neighbors", []),
+			"source_rect": _source_rect_for_points(source_polygon),
+			"component_samples": {},
+			"cut_lines": cut_lines,
+		})
+	return {
+		"pieces": pieces,
+		"board_origin": mode_board_origin,
+		"board_size": board_size,
+		"source_scale": mode_source_scale,
+	}
+
+
+func _json_points(value) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	if typeof(value) != TYPE_ARRAY:
+		return points
+	for item in value:
+		points.append(_json_point(item))
+	return points
+
+
+func _json_point(value) -> Vector2:
+	if typeof(value) == TYPE_ARRAY and value.size() >= 2:
+		return Vector2(float(value[0]), float(value[1]))
+	if typeof(value) == TYPE_DICTIONARY:
+		return Vector2(float(value.get("x", 0.0)), float(value.get("y", 0.0)))
+	return Vector2.ZERO
+
+
+func _json_cell(value) -> Vector2i:
+	if typeof(value) == TYPE_ARRAY and value.size() >= 2:
+		return Vector2i(int(value[0]), int(value[1]))
+	return Vector2i.ZERO
+
+
+func _polygon_center(points: PackedVector2Array) -> Vector2:
+	var center := Vector2.ZERO
+	for point in points:
+		center += point
+	return center / float(max(points.size(), 1))
+
+
+func _source_rect_for_points(points: PackedVector2Array) -> Rect2:
+	if points.is_empty():
+		return Rect2()
+	var min_point := points[0]
+	var max_point := points[0]
+	for point in points:
+		min_point = min_point.min(point)
+		max_point = max_point.max(point)
+	return Rect2(min_point, max_point - min_point)
+
+
+func _level_grid(level_config: Dictionary) -> Dictionary:
+	var grid := {
+		"cols": COLS,
+		"rows": ROWS,
+		"piece_size": PIECE_SIZE,
+	}
+	if level_config.has("grid") and typeof(level_config["grid"]) == TYPE_DICTIONARY:
+		var config_grid: Dictionary = level_config["grid"]
+		grid["cols"] = clampi(int(config_grid.get("cols", COLS)), 1, 10)
+		grid["rows"] = clampi(int(config_grid.get("rows", ROWS)), 1, 10)
+		grid["piece_size"] = clampf(float(config_grid.get("piece_size", PIECE_SIZE)), 80.0, 320.0)
+	return grid
 
 
 func _apply_level_media(level_config: Dictionary) -> void:
@@ -1066,7 +1235,7 @@ func _show_complete_modal() -> void:
 	box.add_child(_button("下一个", _play_next_level))
 	box.add_child(_button("换个模式", func() -> void:
 		_close_modal()
-		_show_game(current_topic, current_level, "classic" if current_mode == "polygon" else "polygon")
+		_show_game(current_topic, current_level, "knob" if _mode_key(current_mode) == "polygon" else "polygon")
 	, false))
 	box.add_child(_button("返回关卡列表", func() -> void:
 		_close_modal()
@@ -1178,13 +1347,18 @@ func _close_modal() -> void:
 
 
 func _is_done(level_id: String, play_mode: String) -> bool:
-	return progress.has(level_id) and progress[level_id].get(play_mode, false)
+	var key := _mode_key(play_mode)
+	if not progress.has(level_id):
+		return false
+	if progress[level_id].get(key, false):
+		return true
+	return key == "knob" and progress[level_id].get("classic", false)
 
 
 func _mark_completed(level_id: String, play_mode: String) -> void:
 	if not progress.has(level_id):
 		progress[level_id] = {}
-	progress[level_id][play_mode] = true
+	progress[level_id][_mode_key(play_mode)] = true
 	_save_progress()
 
 
@@ -1201,8 +1375,8 @@ func _completed_modes(level_id: String) -> Array:
 	var modes := []
 	if _is_done(level_id, "polygon"):
 		modes.append("多边形")
-	if _is_done(level_id, "classic"):
-		modes.append("经典拼图")
+	if _is_done(level_id, "knob"):
+		modes.append("凹凸拼图")
 	return modes
 
 
@@ -1211,7 +1385,7 @@ func _topic_done_count(topic: Dictionary) -> int:
 	for level in topic["levels"]:
 		if _is_done(level["id"], "polygon"):
 			count += 1
-		if _is_done(level["id"], "classic"):
+		if _is_done(level["id"], "knob"):
 			count += 1
 	return count
 
@@ -1227,7 +1401,7 @@ func _mode_done_count(topic: Dictionary, play_mode: String) -> int:
 func _last_completed_level() -> Dictionary:
 	for topic in topics:
 		for level in topic["levels"]:
-			if _is_done(level["id"], "polygon") or _is_done(level["id"], "classic"):
+			if _is_done(level["id"], "polygon") or _is_done(level["id"], "knob"):
 				return { "topic": topic, "level": level }
 	return {}
 
@@ -1235,6 +1409,6 @@ func _last_completed_level() -> Dictionary:
 func _first_unfinished_level() -> Dictionary:
 	for topic in topics:
 		for level in topic["levels"]:
-			if not _is_done(level["id"], "polygon") or not _is_done(level["id"], "classic"):
+			if not _is_done(level["id"], "polygon") or not _is_done(level["id"], "knob"):
 				return { "topic": topic, "level": level }
 	return { "topic": topics[0], "level": topics[0]["levels"][0] }

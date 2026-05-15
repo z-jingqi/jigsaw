@@ -130,7 +130,7 @@ static func _create_edge_defs(cols: int, rows: int, piece_mode: String, piece_si
 
 
 static func _edge_sign(a: int, b: int, piece_mode: String) -> int:
-	var n := a * 31 + b * 17 + (3 if piece_mode == "classic" else 11)
+	var n := a * 31 + b * 17 + (3 if piece_mode == "knob" else 11)
 	return 1 if n % 2 == 0 else -1
 
 
@@ -144,7 +144,7 @@ static func _build_piece_polygon(edge_defs: Dictionary, col: int, row: int) -> P
 
 
 static func _build_edge_path(start: Vector2, end: Vector2, sign: int, piece_mode: String) -> PackedVector2Array:
-	return _classic_edge(start, end, sign) if piece_mode == "classic" else _irregular_edge(start, end, sign)
+	return _knob_edge(start, end, sign) if piece_mode == "knob" else _irregular_edge(start, end, sign)
 
 
 static func _piece_id(cell: Vector2i, component_index: int, component_count: int) -> String:
@@ -481,7 +481,7 @@ static func _has_alpha_near(source_point: Vector2, alpha_image: Image, radius: i
 	return false
 
 
-static func _classic_edge(start: Vector2, end: Vector2, sign: int) -> PackedVector2Array:
+static func _knob_edge(start: Vector2, end: Vector2, sign: int) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	var dir := end - start
 	var normal := Vector2(dir.y, -dir.x).normalized()

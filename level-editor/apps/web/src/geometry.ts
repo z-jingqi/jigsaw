@@ -1,16 +1,26 @@
 import { Delaunay } from "d3-delaunay";
-import type { Bounds, CutLine, CutTemplate, OutlineAnalysis, PieceCell, Point } from "./types";
+import type { Bounds, CutLine, CutTemplate, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point } from "./types";
 
-export const DEFAULT_IMAGE_PATH = "res://assets/source/cat_moon.png";
-export const DEFAULT_BROWSER_IMAGE = new URL("../../assets/source/cat_moon.png", import.meta.url).href;
+export const DEFAULT_IMAGE_PATH = "res://levels/cat/cat_moon_01/source.png";
+export const DEFAULT_BROWSER_IMAGE = "/api/levels/cat/cat_moon_01/source";
 
-export function makeEmptyLevel() {
+export function makeEmptyLevel(): LevelConfig {
   return {
     schema: "jigsaw.level.v1" as const,
     version: 1,
     id: "cat_moon_01",
+    topic_id: "cat",
+    locale: "zh-Hans",
     title: "月亮小睡",
     description: "小猫安静地靠在月亮上，像一段柔软的午后梦。",
+    title_i18n: {
+      "zh-Hans": "月亮小睡",
+      en: "Moon Nap",
+    },
+    description_i18n: {
+      "zh-Hans": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
+      en: "A quiet cat rests on a crescent moon like a soft afternoon dream.",
+    },
     image: {
       path: DEFAULT_IMAGE_PATH,
       name: "cat_moon.png",
@@ -22,7 +32,26 @@ export function makeEmptyLevel() {
       color: "#ead8bd",
       path: "",
     },
+    grid: {
+      cols: 3,
+      rows: 3,
+      piece_size: 190,
+    },
     component_overrides: {},
+    modes: {
+      polygon: {
+        source: "precomputed" as const,
+        pieces: [],
+      },
+      knob: {
+        source: "precomputed" as const,
+        cols: 3,
+        rows: 3,
+        piece_size: 190,
+        knob_size: 0.24,
+        pieces: [],
+      },
+    },
     editor: {
       outline: [],
       cuts: [],
@@ -437,7 +466,7 @@ export function generateFractureNetwork(outline: Point[], bounds: Bounds | null,
         cutsByKey.set(key, {
           id: uid("cut"),
           type: "fracture",
-          template: ["classic", "round", "star", "blob", "crescent"][cutsByKey.size % 5] as CutTemplate,
+          template: ["knob", "round", "star", "blob", "crescent"][cutsByKey.size % 5] as CutTemplate,
           points: trimmed,
         });
       }
@@ -459,12 +488,207 @@ export function presetCut(template: CutTemplate, bounds: Bounds): CutLine {
     if (template === "star") r *= i % 2 ? 0.45 : 1;
     if (template === "blob") r *= 0.82 + Math.sin(i * 2.2) * 0.16 + Math.cos(i * 0.8) * 0.1;
     if (template === "crescent") r *= 0.62 + Math.sin(angle) * 0.24;
-    if (template === "classic") r *= 0.86 + Math.sin(angle * 3) * 0.22;
+    if (template === "knob") r *= 0.86 + Math.sin(angle * 3) * 0.22;
     if (template === "zigzag") r *= i % 2 ? 0.72 : 1.05;
     points.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
   }
   points.push(points[0]);
   return { id: uid("shape"), type: "preset_shape", template, points };
+}
+
+type KnobPieceDraft = {
+  id: string;
+  cell: [number, number];
+  home: Point;
+  points: Point[];
+  neighbors: string[];
+  cutLines: Point[][];
+};
+
+export function generateKnobPieces(image: HTMLImageElement | null, cols: number, rows: number, knobSize: number): LevelPiece[] {
+  if (!image) return [];
+  const safeCols = Math.max(1, Math.round(cols));
+  const safeRows = Math.max(1, Math.round(rows));
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  const cellWidth = width / safeCols;
+  const cellHeight = height / safeRows;
+  const edgeDefs = createKnobEdgeDefs(width, height, safeCols, safeRows, knobSize);
+  const alpha = readAlphaMask(image);
+  const draftsByKey = new Map<string, KnobPieceDraft>();
+
+  for (let row = 0; row < safeRows; row += 1) {
+    for (let col = 0; col < safeCols; col += 1) {
+      const points = buildKnobPiecePolygon(edgeDefs, col, row);
+      if (!pieceHasVisibleAlpha(points, alpha)) continue;
+      const id = `k_${col}_${row}`;
+      draftsByKey.set(`${col},${row}`, {
+        id,
+        cell: [col, row],
+        home: { x: (col + 0.5) * cellWidth, y: (row + 0.5) * cellHeight },
+        points,
+        neighbors: [],
+        cutLines: [],
+      });
+    }
+  }
+
+  for (const draft of draftsByKey.values()) {
+    const [col, row] = draft.cell;
+    const neighborSpecs = [
+      { key: `${col},${row - 1}`, path: edgeDefs.h[row][col], reversed: false },
+      { key: `${col + 1},${row}`, path: edgeDefs.v[col + 1][row], reversed: false },
+      { key: `${col},${row + 1}`, path: edgeDefs.h[row + 1][col], reversed: true },
+      { key: `${col - 1},${row}`, path: edgeDefs.v[col][row], reversed: true },
+    ];
+    for (const spec of neighborSpecs) {
+      const neighbor = draftsByKey.get(spec.key);
+      if (!neighbor) continue;
+      draft.neighbors.push(neighbor.id);
+      draft.cutLines.push(spec.reversed ? [...spec.path].reverse() : spec.path);
+    }
+  }
+
+  return [...draftsByKey.values()].map((piece) => ({
+    id: piece.id,
+    cell: piece.cell,
+    home: serializePoint(piece.home),
+    points: serializePoints(piece.points),
+    neighbors: piece.neighbors,
+    cut_lines: piece.cutLines.map(serializePoints),
+  }));
+}
+
+function createKnobEdgeDefs(width: number, height: number, cols: number, rows: number, knobSize: number) {
+  const h: Point[][][] = [];
+  const v: Point[][][] = [];
+  const cellSize = Math.min(width / cols, height / rows);
+  for (let row = 0; row <= rows; row += 1) {
+    const line: Point[][] = [];
+    for (let col = 0; col < cols; col += 1) {
+      const start = { x: (width * col) / cols, y: (height * row) / rows };
+      const end = { x: (width * (col + 1)) / cols, y: (height * row) / rows };
+      const sign = row === 0 || row === rows ? 0 : edgeSign(col, row);
+      line.push(buildKnobEdge(start, end, sign, cellSize, knobSize));
+    }
+    h.push(line);
+  }
+  for (let col = 0; col <= cols; col += 1) {
+    const line: Point[][] = [];
+    for (let row = 0; row < rows; row += 1) {
+      const start = { x: (width * col) / cols, y: (height * row) / rows };
+      const end = { x: (width * col) / cols, y: (height * (row + 1)) / rows };
+      const sign = col === 0 || col === cols ? 0 : edgeSign(col, row);
+      line.push(buildKnobEdge(start, end, sign, cellSize, knobSize));
+    }
+    v.push(line);
+  }
+  return { h, v };
+}
+
+function edgeSign(a: number, b: number): number {
+  return (a * 31 + b * 17 + 5) % 2 === 0 ? 1 : -1;
+}
+
+function buildKnobEdge(start: Point, end: Point, sign: number, cellSize: number, knobSize: number): Point[] {
+  if (sign === 0) return samplePath([start, end], 9);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  const ux = dx / length;
+  const uy = dy / length;
+  const nx = uy;
+  const ny = -ux;
+  const radius = Math.min(length * 0.16, cellSize * clamp(knobSize, 0.12, 0.36));
+  const neckHalf = radius * 0.82;
+  const center = length * 0.5;
+  const left = center - neckHalf;
+  const right = center + neckHalf;
+  const neckOffset = radius * 0.52 * sign;
+  const arcCenterOffset = neckOffset;
+  const arcRadius = neckHalf;
+  const points: Point[] = [];
+  const push = (along: number, offset: number) => {
+    points.push({
+      x: start.x + ux * along + nx * offset,
+      y: start.y + uy * along + ny * offset,
+    });
+  };
+
+  for (let i = 0; i <= 5; i += 1) push((left * i) / 5, 0);
+  push(left, neckOffset);
+  for (let i = 0; i <= 14; i += 1) {
+    const angle = Math.PI - (Math.PI * i) / 14;
+    const along = center + Math.cos(angle) * arcRadius;
+    const offset = arcCenterOffset + Math.sin(angle) * radius * sign;
+    push(along, offset);
+  }
+  push(right, 0);
+  for (let i = 1; i <= 5; i += 1) push(right + ((length - right) * i) / 5, 0);
+  return points;
+}
+
+function buildKnobPiecePolygon(edgeDefs: ReturnType<typeof createKnobEdgeDefs>, col: number, row: number): Point[] {
+  const points: Point[] = [];
+  appendPath(points, edgeDefs.h[row][col], false);
+  appendPath(points, edgeDefs.v[col + 1][row], false);
+  appendPath(points, edgeDefs.h[row + 1][col], true);
+  appendPath(points, edgeDefs.v[col][row], true);
+  return points;
+}
+
+function appendPath(target: Point[], source: Point[], reversed: boolean) {
+  const points = reversed ? [...source].reverse() : source;
+  for (let i = 0; i < points.length; i += 1) {
+    if (target.length > 0 && i === 0) continue;
+    target.push(points[i]);
+  }
+}
+
+function readAlphaMask(image: HTMLImageElement) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, 0, 0);
+  return {
+    width: canvas.width,
+    height: canvas.height,
+    data: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+  };
+}
+
+function pieceHasVisibleAlpha(points: Point[], alpha: ReturnType<typeof readAlphaMask>): boolean {
+  if (!alpha) return true;
+  const bounds = boundsForPoints(points);
+  let samples = 0;
+  const step = Math.max(5, Math.round(Math.min(bounds.width, bounds.height) / 18));
+  for (let y = Math.max(0, Math.floor(bounds.y)); y < Math.min(alpha.height, Math.ceil(bounds.y + bounds.height)); y += step) {
+    for (let x = Math.max(0, Math.floor(bounds.x)); x < Math.min(alpha.width, Math.ceil(bounds.x + bounds.width)); x += step) {
+      if (!pointInPolygon({ x, y }, points)) continue;
+      if (alpha.data[(y * alpha.width + x) * 4 + 3] > 18) {
+        samples += 1;
+        if (samples >= 6) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function boundsForPoints(points: Point[]): Bounds {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 export function snapPoint(point: Point, outlinePoints: Point[], cuts: CutLine[], threshold: number, excludeId = "") {
@@ -478,6 +702,146 @@ export function snapPoint(point: Point, outlinePoints: Point[], cuts: CutLine[],
   return best;
 }
 
+export type ActualPiecePreview = {
+  count: number;
+  dataUrl: string;
+  width: number;
+  height: number;
+};
+
+export type CutGap = {
+  cutId: string;
+  point: Point;
+  nearest: Point;
+  distance: number;
+  kind: "outline" | "cut";
+};
+
+export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], maxSize = 1200): ActualPiecePreview {
+  const scale = Math.min(maxSize / image.naturalWidth, maxSize / image.naturalHeight, 1);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const imageCanvas = document.createElement("canvas");
+  imageCanvas.width = width;
+  imageCanvas.height = height;
+  const imageCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
+  if (!imageCtx) return { count: 0, dataUrl: "", width, height };
+  imageCtx.clearRect(0, 0, width, height);
+  imageCtx.drawImage(image, 0, 0, width, height);
+  const imageData = imageCtx.getImageData(0, 0, width, height);
+  const visible = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i += 1) visible[i] = imageData.data[i * 4 + 3] > 18 ? 1 : 0;
+
+  const barrierCanvas = document.createElement("canvas");
+  barrierCanvas.width = width;
+  barrierCanvas.height = height;
+  const barrierCtx = barrierCanvas.getContext("2d", { willReadFrequently: true });
+  if (!barrierCtx) return { count: 0, dataUrl: "", width, height };
+  barrierCtx.clearRect(0, 0, width, height);
+  barrierCtx.strokeStyle = "#fff";
+  barrierCtx.lineCap = "round";
+  barrierCtx.lineJoin = "round";
+  barrierCtx.lineWidth = Math.max(1, Math.round(scale * 1.2));
+  for (const cut of cuts) {
+    if (cut.points.length < 2) continue;
+    barrierCtx.beginPath();
+    barrierCtx.moveTo(cut.points[0].x * scale, cut.points[0].y * scale);
+    for (let i = 1; i < cut.points.length; i += 1) barrierCtx.lineTo(cut.points[i].x * scale, cut.points[i].y * scale);
+    if (cut.type === "preset_shape") barrierCtx.closePath();
+    barrierCtx.stroke();
+  }
+  const barrierData = barrierCtx.getImageData(0, 0, width, height).data;
+  for (let i = 0; i < width * height; i += 1) {
+    if (barrierData[i * 4 + 3] > 0) visible[i] = 0;
+  }
+
+  const preview = imageCtx.createImageData(width, height);
+  const visited = new Uint8Array(width * height);
+  const colors = [
+    [111, 157, 103],
+    [217, 147, 63],
+    [93, 141, 174],
+    [186, 114, 129],
+    [154, 132, 80],
+    [137, 116, 176],
+    [89, 152, 145],
+    [199, 124, 46],
+  ];
+  let count = 0;
+  const neighbors = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  for (let start = 0; start < visible.length; start += 1) {
+    if (!visible[start] || visited[start]) continue;
+    const color = colors[count % colors.length];
+    count += 1;
+    const stack = [start];
+    visited[start] = 1;
+    while (stack.length) {
+      const index = stack.pop() as number;
+      preview.data[index * 4] = color[0];
+      preview.data[index * 4 + 1] = color[1];
+      preview.data[index * 4 + 2] = color[2];
+      preview.data[index * 4 + 3] = 88;
+      const x = index % width;
+      const y = Math.floor(index / width);
+      for (const [dx, dy] of neighbors) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const nextIndex = ny * width + nx;
+        if (!visible[nextIndex] || visited[nextIndex]) continue;
+        visited[nextIndex] = 1;
+        stack.push(nextIndex);
+      }
+    }
+  }
+
+  imageCtx.putImageData(preview, 0, 0);
+  return { count, dataUrl: imageCanvas.toDataURL("image/png"), width, height };
+}
+
+export function findCutGaps(cuts: CutLine[], outlinePoints: Point[], connectedDistance = 1.5, warningDistance = 10): CutGap[] {
+  const gaps: CutGap[] = [];
+  for (const cut of cuts) {
+    if (cut.points.length < 2 || cut.type !== "fracture") continue;
+    const endpoints = [cut.points[0], cut.points[cut.points.length - 1]];
+    for (const point of endpoints) {
+      const outlineHit = nearestPoint(point, outlinePoints);
+      const cutHit = nearestOnPolyline(point, cuts, cut.id);
+      let best: null | CutGap = null;
+      if (outlineHit) {
+        best = {
+          cutId: cut.id,
+          point,
+          nearest: outlineHit.point,
+          distance: outlineHit.distance,
+          kind: "outline",
+        };
+      }
+      if (cutHit && (!best || cutHit.distance < best.distance)) {
+        best = {
+          cutId: cut.id,
+          point,
+          nearest: cutHit.closest,
+          distance: cutHit.distance,
+          kind: "cut",
+        };
+      }
+      if (best && best.distance > connectedDistance && best.distance <= warningDistance) gaps.push(best);
+    }
+  }
+  return gaps.sort((a, b) => a.distance - b.distance);
+}
+
 export function serializePoints(points: Point[]): number[][] {
   return points.map((point) => [Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100]);
+}
+
+function serializePoint(point: Point): number[] {
+  return [Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100];
 }

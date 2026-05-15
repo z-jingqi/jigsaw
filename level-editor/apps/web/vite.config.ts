@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     fs: {
-      allow: [".."],
+      allow: ["../../.."],
+    },
+    proxy: {
+      "/api": "http://127.0.0.1:5174",
     },
   },
 });

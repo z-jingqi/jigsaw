@@ -1,0 +1,34 @@
+{
+	"schema": "jigsaw.catalog.v1",
+	"version": 1,
+	"default_locale": "zh-Hans",
+	"locales": [
+		"zh-Hans",
+		"en"
+	],
+	"topics": [
+		{
+			"id": "cat",
+			"name": "猫",
+			"name_i18n": {
+				"zh-Hans": "猫",
+				"en": "Cats"
+			},
+			"sort_order": 0,
+			"cover": "res://levels/cat/cat_moon_01/source.png",
+			"levels": [
+				{
+					"id": "cat_moon_01",
+					"title": "月亮小睡",
+					"title_i18n": {
+						"zh-Hans": "月亮小睡",
+						"en": "Moon Nap"
+					},
+					"sort_order": 0,
+					"path": "res://levels/cat/cat_moon_01/level.json",
+					"source": "res://levels/cat/cat_moon_01/source.png"
+				}
+			]
+		}
+	]
+}

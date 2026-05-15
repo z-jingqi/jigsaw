@@ -164,8 +164,8 @@
 	"id": "cat_moon_01",
 	"image": {
 		"height": 1254,
-		"name": "cat_moon.png",
-		"path": "res://assets/source/cat_moon.png",
+		"name": "source.png",
+		"path": "res://levels/cat/cat_moon_01/source.png",
 		"width": 1254
 	},
 	"schema": "jigsaw.level.v1",
@@ -5350,5 +5350,15 @@
 				}
 			]
 		}
+	},
+	"topic_id": "cat",
+	"locale": "zh-Hans",
+	"title_i18n": {
+		"zh-Hans": "月亮小睡",
+		"en": "Moon Nap"
+	},
+	"description_i18n": {
+		"zh-Hans": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
+		"en": "A quiet cat rests on a crescent moon like a soft afternoon dream."
 	}
 }

@@ -1,26 +1,64 @@
-# Jigsaw Level Editor
+# Jigcat Level Editor
 
-独立于 Godot 主逻辑的关卡编辑器。
+`level-editor` 是一个 pnpm workspace + Turbo monorepo，用来编辑关卡并通过本地 API 直接保存到 Godot 项目的 `levels/` 目录。
+
+## 结构
+
+```text
+level-editor/
+  apps/
+    web/   React + Vite 编辑器
+    api/   Hono + TypeScript 本地保存服务
+```
 
 ## 启动
 
-```powershell
-cd D:\jigsaw\level-editor
+```bash
+cd level-editor
 pnpm install
 pnpm dev
 ```
 
-Vite 默认从 `http://127.0.0.1:5173` 开始，如果端口被占用会自动切到下一个端口。
+`pnpm dev` 会通过 Turbo 同时启动：
 
-## 功能
+- Web: `http://127.0.0.1:5173`
+- API: `http://127.0.0.1:5174`
 
-- TypeScript + React + Tailwind
-- 上传透明背景原图预览
-- 自动检测图片外轮廓
-- 使用 Voronoi/Delaunay 生成非网格碎片切割线
-- 拖拽切割线或控制点微调
-- 端点吸附到图片外轮廓和已有分割线
-- 添加经典凹凸、圆形、五角星、圆润块、折线、月牙预设
-- 导出 `jigsaw.level.v1` JSON
+也可以单独启动：
 
-当前 JSON 会保存 `editor.outline`、`editor.cuts`、`editor.shapes` 和 `editor.pieces`。Godot 已经能读取同一份关卡 JSON 的图片、背景、标题和介绍；下一步可以把这些编辑器切割数据接入 Godot 的正式碎片生成。
+```bash
+pnpm dev:web
+pnpm dev:api
+```
+
+## 保存关卡
+
+编辑器右侧导出区域包含：
+
+- `生成 JSON`：生成当前 JSON 文本。
+- `下载 JSON`：下载 JSON 文件。
+- `保存到 Godot`：调用 Hono API，把关卡写入 `../levels/<level.id>.json`。
+
+API endpoint:
+
+```text
+POST /api/levels
+```
+
+请求体：
+
+```json
+{
+  "level": {
+    "id": "cat_moon_01"
+  }
+}
+```
+
+## 构建
+
+```bash
+pnpm build
+```
+
+该命令会运行 Turbo，并分别构建 `apps/web` 和 `apps/api`。

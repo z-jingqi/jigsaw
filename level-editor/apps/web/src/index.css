@@ -27,6 +27,10 @@
     @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-ink transition hover:border-clay;
   }
 
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-45 hover:border-stone-300;
+  }
+
   .btnPrimary {
     @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-clay bg-clay px-3 py-2 text-sm text-white transition hover:bg-[#a95f25];
   }
@@ -69,6 +73,28 @@
   vector-effect: non-scaling-stroke;
 }
 
+.pieceSelectable {
+  cursor: pointer;
+  fill: rgba(63, 127, 114, 0.03);
+  stroke: rgba(63, 127, 114, 0.48);
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.knobPreview {
+  cursor: pointer;
+  fill: rgba(217, 147, 63, 0.045);
+  stroke: rgba(90, 58, 34, 0.45);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.selectedPiece {
+  fill: rgba(217, 147, 63, 0.18);
+  stroke: #c77c2e;
+  stroke-width: 3;
+}
+
 .cutPath,
 .shapePath {
   cursor: grab;
@@ -93,6 +119,21 @@
   cursor: move;
   fill: #fffaf0;
   stroke: #3f7f72;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.gapWarning line {
+  stroke: #c77c2e;
+  stroke-dasharray: 5 4;
+  stroke-linecap: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.gapWarning circle {
+  fill: rgba(217, 147, 63, 0.16);
+  stroke: #c77c2e;
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }

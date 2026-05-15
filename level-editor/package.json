@@ -1,28 +1,19 @@
 {
-  "name": "jigsaw-level-editor",
+  "name": "jigcat-level-editor-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.12.2",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
-    "d3-delaunay": "^6.0.4",
-    "lucide-react": "^0.468.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "vite": "^6.0.0"
+    "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=@jigcat/level-editor-web",
+    "dev:api": "turbo dev --filter=@jigcat/level-editor-api",
+    "build": "turbo build",
+    "check": "turbo check",
+    "preview": "turbo preview --filter=@jigcat/level-editor-web"
   },
   "devDependencies": {
-    "@types/d3-delaunay": "^6.0.4",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
+    "turbo": "^2.6.3",
     "typescript": "^5.7.2"
   }
 }
