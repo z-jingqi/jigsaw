@@ -54,14 +54,15 @@ Jigsaw 是一个使用 Godot 从零重写的轮廓拼图游戏原型。当前版
 
 当前玩法逻辑已经从主场景脚本里拆出：
 
-- `scripts/LevelGenerator.gd`：在关卡还没有预生成碎片时生成测试碎片、碎片边缘、正确位置和邻接关系。
 - `scripts/PieceGroup.gd`：管理一个可操作碎片组，以及吸附后的组合并。
 - `scripts/SnapSolver.gd`：判断两个碎片组是否满足旋转和距离条件，可以自动吸附。
 - `scripts/Game.gd`：负责输入、UI、节点创建和调用逻辑模块。
 
-正式关卡优先使用 level-editor 导出的预生成 JSON；`LevelGenerator.gd` 只作为缺少预生成数据时的兜底。
+正式关卡必须使用 level-editor 导出的预生成 JSON。游戏运行时不再生成碎片；如果某个模式缺少 `modes.<mode>.pieces`，该关卡会被视为配置不完整。
 
-当前 UI 是最小可用实现，用 Godot 原生控件搭建，重点是验证完整游戏流程。视觉细节、响应式布局、动画和图标可以在流程稳定后再统一优化。
+关卡 JSON 中的碎片坐标使用源图像素坐标。Godot 运行时会按实际移动端竖屏安全区域动态缩放，使完整图像能在不同手机和 iPad 视口内一次性完整显示，并保留周围操作间距。
+
+当前 UI 是最小可用实现，用 Godot 原生控件搭建，重点是验证完整游戏流程。项目只支持竖屏，设备旋转时不会切到横屏，不再优先适配桌面端。
 
 ## 运行方式
 
@@ -79,4 +80,4 @@ scenes/Main.tscn
 
 ## iOS
 
-当前原型已经加入触屏操作，优先按 iPhone/iPad 横屏版本推进。iOS 导出步骤和设备测试重点见 [IOS_BUILD.md](IOS_BUILD.md)。
+当前原型已经加入触屏操作，按 iPhone/iPad 竖屏版本推进。iOS 导出步骤和设备测试重点见 [IOS_BUILD.md](IOS_BUILD.md)。

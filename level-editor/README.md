@@ -39,6 +39,8 @@ pnpm dev:api
 - `下载 JSON`：下载 JSON 文件。
 - `保存到 Godot`：调用 Hono API，把关卡写入 `../levels/<level.id>.json`。
 
+导出的碎片坐标始终是源图像素坐标，不绑定编辑器或桌面分辨率。Godot 运行时读取 `runtime_layout`，按实际移动端竖屏安全区域把完整源图等比缩放到可操作区域内。
+
 API endpoint:
 
 ```text

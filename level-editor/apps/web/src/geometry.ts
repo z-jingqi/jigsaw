@@ -37,6 +37,15 @@ export function makeEmptyLevel(): LevelConfig {
       rows: 8,
       piece_size: 190,
     },
+    runtime_layout: {
+      coordinate_space: "source_pixels",
+      target: "mobile_portrait",
+      min_viewport: [360, 640],
+      board_margin_ratio: 0.92,
+      hud_height_ratio: 0.13,
+      side_margin_ratio: 0.055,
+      bottom_margin_ratio: 0.06,
+    },
     component_overrides: {},
     modes: {
       polygon: {
@@ -176,6 +185,19 @@ export function nearestPoint(point: Point, points: Point[]) {
   return best;
 }
 
+export function nearestOnPath(point: Point, points: Point[], closed = false) {
+  if (points.length < 2) return nearestPoint(point, points);
+  let best: null | { point: Point; distance: number; segmentIndex: number } = null;
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let i = 0; i < segmentCount; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const hit = pointToSegment(point, a, b);
+    if (!best || hit.distance < best.distance) best = { point: hit.closest, distance: hit.distance, segmentIndex: i };
+  }
+  return best;
+}
+
 type PixelComponent = {
   pixels: number[];
   minX: number;
@@ -282,7 +304,7 @@ function largestVisibleComponent(mask: Uint8Array, width: number, height: number
   return largest;
 }
 
-function traceBoundaryLoops(mask: Uint8Array, width: number, height: number): Point[][] {
+export function traceBoundaryLoops(mask: Uint8Array, width: number, height: number): Point[][] {
   const edgeMap = new Map<string, PixelEdge[]>();
   const used = new Set<string>();
   const visible = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height && mask[y * width + x] === 1;
@@ -342,7 +364,7 @@ function edgeKey(from: string, to: string): string {
   return `${from}->${to}`;
 }
 
-function polygonArea(points: Point[]): number {
+export function polygonArea(points: Point[]): number {
   let area = 0;
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
@@ -352,7 +374,7 @@ function polygonArea(points: Point[]): number {
   return area * 0.5;
 }
 
-function simplifyClosedPath(points: Point[], epsilon: number): Point[] {
+export function simplifyClosedPath(points: Point[], epsilon: number): Point[] {
   if (points.length < 4) return points;
   const open = points[0].x === points[points.length - 1].x && points[0].y === points[points.length - 1].y ? points.slice(0, -1) : points;
   const anchorIndex = open.reduce((best, point, index) => (point.x < open[best].x || (point.x === open[best].x && point.y < open[best].y) ? index : best), 0);
@@ -378,7 +400,7 @@ function ramerDouglasPeucker(points: Point[], epsilon: number): Point[] {
   return [...left.slice(0, -1), ...right];
 }
 
-function smoothClosedPath(points: Point[], iterations: number): Point[] {
+export function smoothClosedPath(points: Point[], iterations: number): Point[] {
   let result = points[0] && points[points.length - 1] && distance(points[0], points[points.length - 1]) < 0.001 ? points.slice(0, -1) : points;
   for (let pass = 0; pass < iterations; pass += 1) {
     result = result.map((point, index) => {
@@ -766,7 +788,7 @@ function boundsForPoints(points: Point[]): Bounds {
 }
 
 export function snapPoint(point: Point, outlinePoints: Point[], cuts: CutLine[], threshold: number, excludeId = "") {
-  const boundaryHit = nearestPoint(point, outlinePoints);
+  const boundaryHit = nearestOnPath(point, outlinePoints, true);
   const cutHit = nearestOnPolyline(point, cuts, excludeId);
   let best: null | { point: Point; distance: number; kind: string } = null;
   if (boundaryHit && boundaryHit.distance <= threshold) best = { point: boundaryHit.point, distance: boundaryHit.distance, kind: "outline" };
@@ -911,13 +933,13 @@ export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], ma
   };
 }
 
-export function findCutGaps(cuts: CutLine[], outlinePoints: Point[], connectedDistance = 1.5, warningDistance = 10): CutGap[] {
+export function findCutGaps(cuts: CutLine[], outlinePoints: Point[], connectedDistance = 1.5, warningDistance = 18): CutGap[] {
   const gaps: CutGap[] = [];
   for (const cut of cuts) {
     if (cut.points.length < 2 || cut.type !== "fracture") continue;
     const endpoints = [cut.points[0], cut.points[cut.points.length - 1]];
     for (const point of endpoints) {
-      const outlineHit = nearestPoint(point, outlinePoints);
+      const outlineHit = nearestOnPath(point, outlinePoints, true);
       const cutHit = nearestOnPolyline(point, cuts, cut.id);
       let best: null | CutGap = null;
       if (outlineHit) {

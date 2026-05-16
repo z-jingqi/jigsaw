@@ -234,25 +234,6 @@
 					"cut_lines": []
 				},
 				{
-					"id": "piece_03",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						217.36,
-						328.13
-					],
-					"points": [
-						[
-							217.36,
-							328.13
-						]
-					],
-					"neighbors": [],
-					"cut_lines": []
-				},
-				{
 					"id": "piece_04",
 					"cell": [
 						0,
@@ -769,63 +750,6 @@
 					"cut_lines": []
 				},
 				{
-					"id": "piece_08",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						420.09,
-						591.47
-					],
-					"points": [
-						[
-							420.09,
-							591.47
-						]
-					],
-					"neighbors": [],
-					"cut_lines": []
-				},
-				{
-					"id": "piece_09",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						765.99,
-						593.56
-					],
-					"points": [
-						[
-							765.99,
-							593.56
-						]
-					],
-					"neighbors": [],
-					"cut_lines": []
-				},
-				{
-					"id": "piece_10",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						824.5,
-						600.88
-					],
-					"points": [
-						[
-							824.5,
-							600.88
-						]
-					],
-					"neighbors": [],
-					"cut_lines": []
-				},
-				{
 					"id": "piece_11",
 					"cell": [
 						0,
@@ -908,25 +832,6 @@
 					"neighbors": [
 						"piece_21"
 					],
-					"cut_lines": []
-				},
-				{
-					"id": "piece_12",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						867.35,
-						614.46
-					],
-					"points": [
-						[
-							867.35,
-							614.46
-						]
-					],
-					"neighbors": [],
 					"cut_lines": []
 				},
 				{
@@ -1832,16 +1737,11 @@
 					"neighbors": [
 						"piece_01",
 						"piece_02",
-						"piece_03",
 						"piece_04",
 						"piece_05",
 						"piece_06",
 						"piece_07",
-						"piece_08",
-						"piece_09",
-						"piece_10",
 						"piece_11",
-						"piece_12",
 						"piece_13",
 						"piece_14",
 						"piece_15",
@@ -1849,28 +1749,8 @@
 						"piece_17",
 						"piece_18",
 						"piece_19",
-						"piece_20",
-						"piece_22"
+						"piece_20"
 					],
-					"cut_lines": []
-				},
-				{
-					"id": "piece_22",
-					"cell": [
-						0,
-						0
-					],
-					"home": [
-						489.06,
-						930.05
-					],
-					"points": [
-						[
-							489.06,
-							930.05
-						]
-					],
-					"neighbors": [],
 					"cut_lines": []
 				}
 			]
@@ -27159,15 +27039,6 @@
 				]
 			},
 			{
-				"id": "piece_03",
-				"points": [
-					[
-						217.36,
-						328.13
-					]
-				]
-			},
-			{
 				"id": "piece_04",
 				"points": [
 					[
@@ -27636,33 +27507,6 @@
 				]
 			},
 			{
-				"id": "piece_08",
-				"points": [
-					[
-						420.09,
-						591.47
-					]
-				]
-			},
-			{
-				"id": "piece_09",
-				"points": [
-					[
-						765.99,
-						593.56
-					]
-				]
-			},
-			{
-				"id": "piece_10",
-				"points": [
-					[
-						824.5,
-						600.88
-					]
-				]
-			},
-			{
 				"id": "piece_11",
 				"points": [
 					[
@@ -27732,15 +27576,6 @@
 					[
 						810.11,
 						716.3
-					]
-				]
-			},
-			{
-				"id": "piece_12",
-				"points": [
-					[
-						867.35,
-						614.46
 					]
 				]
 			},
@@ -28540,15 +28375,6 @@
 						925.81
 					]
 				]
-			},
-			{
-				"id": "piece_22",
-				"points": [
-					[
-						489.06,
-						930.05
-					]
-				]
 			}
 		]
 	},
@@ -28698,5 +28524,17 @@
 			"samples": 3186
 		}
 	],
-	"tool_notes": "Edit component_overrides values per component key: drop, keep, or merge_nearest. Re-run this tool after changing the source image or generator."
+	"tool_notes": "Edit component_overrides values per component key: drop, keep, or merge_nearest. Re-run this tool after changing the source image or generator.",
+	"runtime_layout": {
+		"coordinate_space": "source_pixels",
+		"target": "mobile_portrait",
+		"min_viewport": [
+			360,
+			640
+		],
+		"board_margin_ratio": 0.92,
+		"hud_height_ratio": 0.13,
+		"side_margin_ratio": 0.055,
+		"bottom_margin_ratio": 0.06
+	}
 }

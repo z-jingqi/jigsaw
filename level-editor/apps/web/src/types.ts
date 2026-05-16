@@ -95,6 +95,15 @@ export type LevelConfig = {
     rows: number;
     piece_size: number;
   };
+  runtime_layout?: {
+    coordinate_space: "source_pixels";
+    target: "mobile_portrait";
+    min_viewport: number[];
+    board_margin_ratio: number;
+    hud_height_ratio: number;
+    side_margin_ratio: number;
+    bottom_margin_ratio: number;
+  };
   component_overrides: Record<string, string>;
   modes: {
     polygon: {

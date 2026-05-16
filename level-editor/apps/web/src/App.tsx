@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -10,6 +10,7 @@ import {
   DEFAULT_IMAGE_PATH,
   analyzeActualPieces,
   catmullRomPath,
+  clamp,
   detectImageOutline,
   findCutGaps,
   generateFractureNetwork,
@@ -21,6 +22,7 @@ import {
   serializePoints,
   snapPoint,
   uid,
+  type ActualPiecePreview,
 } from "./geometry";
 import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point } from "./types";
 
@@ -57,6 +59,39 @@ type SelectOption = {
   label: string;
   detail?: string;
 };
+
+type DevicePreviewOption = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+};
+
+type RuntimePreviewLayout = {
+  hudHeight: number;
+  playArea: { x: number; y: number; width: number; height: number };
+  boardOrigin: Point;
+  boardSize: { width: number; height: number };
+  scale: number;
+};
+
+type AnalysisWorkerMessage =
+  | {
+      type: "imageReady";
+      requestId: number;
+    }
+  | {
+      type: "analysisResult";
+      requestId: number;
+      result: Omit<ActualPiecePreview, "dataUrl"> & { previewBuffer: ArrayBuffer };
+    };
+
+const mobilePreviewDevices: DevicePreviewOption[] = [
+  { id: "small", label: "小屏", width: 360, height: 640 },
+  { id: "iphone", label: "手机", width: 390, height: 844 },
+  { id: "large", label: "大屏", width: 430, height: 932 },
+  { id: "ipad", label: "iPad", width: 768, height: 1024 },
+];
 
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return structuredClone(snapshot);
@@ -192,8 +227,9 @@ function mergePolygons(a: Point[], b: Point[]): Point[] | null {
 }
 
 function cellsToLevelPieces(cells: PieceCell[]): LevelPiece[] {
-  return cells.map((piece) => {
-    const neighbors = cells
+  const validCells = cells.filter((piece) => piece.points.length >= 3);
+  return validCells.map((piece) => {
+    const neighbors = validCells
       .filter((candidate) => candidate.id !== piece.id && mergePolygons(piece.points, candidate.points))
       .map((candidate) => candidate.id);
     return {
@@ -205,6 +241,54 @@ function cellsToLevelPieces(cells: PieceCell[]): LevelPiece[] {
       cut_lines: [],
     };
   });
+}
+
+function iconButtonSizeForPreview(width: number): number {
+  const separation = width < 430 ? 6 : 8;
+  const availableWidth = Math.max(240, width - 32);
+  return clamp(Math.floor((availableWidth - separation * 4) / 5), 48, 64);
+}
+
+function mobileRuntimeLayout(level: LevelConfig, imageSize: { width: number; height: number }, device: DevicePreviewOption): RuntimePreviewLayout {
+  const runtime = level.runtime_layout;
+  const boardMarginRatio = clamp(runtime?.board_margin_ratio ?? 0.92, 0.72, 0.96);
+  const hudHeightRatio = clamp(runtime?.hud_height_ratio ?? 0.13, 0.1, 0.18);
+  const sideMarginRatio = clamp(runtime?.side_margin_ratio ?? 0.055, 0.03, 0.1);
+  const bottomMarginRatio = clamp(runtime?.bottom_margin_ratio ?? 0.06, 0.04, 0.12);
+  const iconSize = iconButtonSizeForPreview(device.width);
+  const hudHeight = clamp(Math.max(device.height * hudHeightRatio, iconSize + 32), 88, 136);
+  const sideMargin = clamp(device.width * sideMarginRatio, 24, 56);
+  const bottomMargin = clamp(device.height * bottomMarginRatio, 32, 64);
+  const playArea = {
+    x: sideMargin,
+    y: hudHeight,
+    width: Math.max(240, device.width - sideMargin * 2),
+    height: Math.max(220, device.height - hudHeight - bottomMargin),
+  };
+  const safeImageWidth = Math.max(1, imageSize.width);
+  const safeImageHeight = Math.max(1, imageSize.height);
+  const scale = Math.min(playArea.width / safeImageWidth, playArea.height / safeImageHeight) * boardMarginRatio;
+  const boardSize = { width: safeImageWidth * scale, height: safeImageHeight * scale };
+  return {
+    hudHeight,
+    playArea,
+    boardOrigin: {
+      x: playArea.x + (playArea.width - boardSize.width) * 0.5,
+      y: playArea.y + (playArea.height - boardSize.height) * 0.5,
+    },
+    boardSize,
+    scale,
+  };
+}
+
+function previewBufferToDataUrl(width: number, height: number, previewBuffer: ArrayBuffer): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(previewBuffer), width, height), 0, 0);
+  return canvas.toDataURL("image/png");
 }
 
 function App() {
@@ -220,6 +304,8 @@ function App() {
   const [cuts, setCuts] = useState<CutLine[]>([]);
   const [pieces, setPieces] = useState<PieceCell[]>([]);
   const [knobPieces, setKnobPieces] = useState<LevelPiece[]>([]);
+  const [analysisCuts, setAnalysisCuts] = useState<CutLine[]>([]);
+  const [actualPreview, setActualPreview] = useState<ActualPiecePreview | null>(null);
   const [selectedPieceIds, setSelectedPieceIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -231,16 +317,58 @@ function App() {
   const [saveStatus, setSaveStatus] = useState("");
   const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
+  const [previewDeviceId, setPreviewDeviceId] = useState("iphone");
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const cutPathCacheRef = useRef<WeakMap<CutLine, string>>(new WeakMap());
+  const piecePathCacheRef = useRef<WeakMap<PieceCell, string>>(new WeakMap());
+  const knobPiecePathCacheRef = useRef<WeakMap<LevelPiece, string>>(new WeakMap());
+  const dragFrameRef = useRef<number | null>(null);
+  const dragPointRef = useRef<Point | null>(null);
+  const analysisWorkerRef = useRef<Worker | null>(null);
+  const analysisRequestIdRef = useRef(0);
+  const imageRequestIdRef = useRef(0);
+  const [workerImageReady, setWorkerImageReady] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
     void loadCatalog();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const worker = new Worker(new URL("./actualPieces.worker.ts", import.meta.url), { type: "module" });
+      worker.onmessage = (event: MessageEvent<AnalysisWorkerMessage>) => {
+        const message = event.data;
+        if (message.type === "imageReady") {
+          if (message.requestId === imageRequestIdRef.current) setWorkerImageReady(true);
+          return;
+        }
+        if (message.requestId !== analysisRequestIdRef.current) return;
+        const { previewBuffer, ...result } = message.result;
+        setActualPreview({
+          ...result,
+          dataUrl: previewBufferToDataUrl(result.width, result.height, previewBuffer),
+        });
+      };
+      worker.onerror = () => {
+        worker.terminate();
+        if (analysisWorkerRef.current === worker) analysisWorkerRef.current = null;
+        setWorkerImageReady(false);
+      };
+      analysisWorkerRef.current = worker;
+      return () => {
+        worker.terminate();
+        if (analysisWorkerRef.current === worker) analysisWorkerRef.current = null;
+      };
+    } catch {
+      analysisWorkerRef.current = null;
+      return undefined;
+    }
   }, []);
 
   const currentTopic = useMemo(() => catalog.topics.find((topic) => topic.id === currentTarget.topicId), [catalog, currentTarget.topicId]);
@@ -258,6 +386,12 @@ function App() {
   );
   const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
   const currentLevelName = localized(currentCatalogLevel?.title_i18n, locale, currentCatalogLevel?.title || level.title || currentTarget.levelId);
+  const previewDevice = mobilePreviewDevices.find((device) => device.id === previewDeviceId) || mobilePreviewDevices[1];
+  const previewImageSize = {
+    width: image?.naturalWidth || level.image.width || 1,
+    height: image?.naturalHeight || level.image.height || 1,
+  };
+  const mobilePreviewLayout = useMemo(() => mobileRuntimeLayout(level, previewImageSize, previewDevice), [level, previewDevice, previewImageSize.width, previewImageSize.height]);
 
   async function loadCatalog() {
     try {
@@ -328,6 +462,7 @@ function App() {
       ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
     ];
     setCuts(importedCuts);
+    setAnalysisCuts(importedCuts);
     setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
     setKnobPieces(data.modes?.knob?.pieces || []);
     setSelectedId("");
@@ -360,6 +495,31 @@ function App() {
     }));
   }, [image]);
 
+  useEffect(() => {
+    setActualPreview(null);
+    setWorkerImageReady(false);
+    if (!image) return;
+    const worker = analysisWorkerRef.current;
+    if (!worker || !("createImageBitmap" in window)) return;
+    let cancelled = false;
+    const requestId = imageRequestIdRef.current + 1;
+    imageRequestIdRef.current = requestId;
+    void createImageBitmap(image)
+      .then((bitmap) => {
+        if (cancelled) {
+          bitmap.close();
+          return;
+        }
+        worker.postMessage({ type: "setImage", requestId, image: bitmap }, [bitmap]);
+      })
+      .catch(() => {
+        if (imageRequestIdRef.current === requestId) setWorkerImageReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [image]);
+
   const viewBox = useMemo(() => {
     if (!image) return "0 0 1024 1024";
     return `0 0 ${image.naturalWidth} ${image.naturalHeight}`;
@@ -370,8 +530,7 @@ function App() {
     if (!analysis.outline.length) return [];
     return samplePath([...analysis.outline, analysis.outline[0]], Math.min(300, Math.max(100, analysis.outline.length)));
   }, [analysis.outline]);
-  const actualPreview = useMemo(() => (image ? analyzeActualPieces(image, cuts) : null), [image, cuts]);
-  const cutGaps = useMemo(() => findCutGaps(cuts, snapPoints), [cuts, snapPoints]);
+  const cutGaps = useMemo(() => findCutGaps(analysisCuts, snapPoints, 1.5, snapThreshold), [analysisCuts, snapPoints]);
   const generatedKnobPieces = useMemo(
     () => generateKnobPieces(image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size),
     [image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size],
@@ -383,10 +542,36 @@ function App() {
   const canSaveToGodot = completedModes.polygon && completedModes.knob && modeReady.polygon && modeReady.knob;
 
   useEffect(() => {
-    if (!cuts.length || !actualPreview?.pieces.length) return;
+    if (!image) {
+      setActualPreview(null);
+      return;
+    }
+    const requestId = analysisRequestIdRef.current + 1;
+    analysisRequestIdRef.current = requestId;
+    const worker = analysisWorkerRef.current;
+    if (worker && workerImageReady) {
+      worker.postMessage({ type: "analyze", requestId, cuts: analysisCuts, maxSize: 840 });
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      if (requestId !== analysisRequestIdRef.current) return;
+      setActualPreview(analyzeActualPieces(image, analysisCuts, 840));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [image, analysisCuts, workerImageReady]);
+
+  useEffect(() => {
+    if (!analysisCuts.length || !actualPreview?.pieces.length) return;
     setPieces(actualPreview.pieces);
     setSelectedPieceIds((current) => current.filter((id) => actualPreview.pieces.some((piece) => piece.id === id)));
-  }, [actualPreview, cuts.length]);
+  }, [actualPreview, analysisCuts.length]);
+
+  useEffect(() => {
+    if (activeMode !== "polygon") return;
+    if (drag) return;
+    const timeout = window.setTimeout(() => setAnalysisCuts(structuredClone(cuts)), 180);
+    return () => window.clearTimeout(timeout);
+  }, [activeMode, cuts, drag]);
   useEffect(() => {
     if (!knobPieces.length && generatedKnobPieces.length) setKnobPieces(generatedKnobPieces);
   }, [generatedKnobPieces, knobPieces.length]);
@@ -416,6 +601,7 @@ function App() {
   function restoreSnapshot(next: EditorSnapshot) {
     setLevel(next.level);
     setCuts(next.cuts);
+    setAnalysisCuts(next.cuts);
     setPieces(next.pieces);
     setKnobPieces(next.knobPieces);
     setCompletedModes(next.completedModes || { polygon: false, knob: false });
@@ -880,6 +1066,7 @@ function App() {
     recordEdit("polygon");
     const result = generateFractureNetwork(analysis.outline, analysis.bounds, targetPieces);
     setCuts(result.cuts);
+    setAnalysisCuts(result.cuts);
     setPieces(result.pieces);
     setSelectedId(result.cuts[0]?.id || "");
   }
@@ -965,7 +1152,18 @@ function App() {
 
   function moveDrag(event: React.PointerEvent<SVGSVGElement>) {
     if (!drag) return;
-    const currentPoint = svgPoint(event);
+    dragPointRef.current = svgPoint(event);
+    if (dragFrameRef.current != null) return;
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      dragFrameRef.current = null;
+      const currentPoint = dragPointRef.current;
+      if (!currentPoint) return;
+      applyDragMove(currentPoint);
+    });
+  }
+
+  function applyDragMove(currentPoint: Point) {
+    if (!drag) return;
     const dx = currentPoint.x - drag.start.x;
     const dy = currentPoint.y - drag.start.y;
     setCuts((items) =>
@@ -974,26 +1172,75 @@ function App() {
         const next = structuredClone(drag.original);
         if (drag.pointIndex === null) {
           next.points = next.points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
+          if (snapEnabled && next.type !== "preset_shape") {
+            const endpoints = [
+              { index: 0, point: next.points[0] },
+              { index: next.points.length - 1, point: next.points[next.points.length - 1] },
+            ];
+            const hit = endpoints
+              .map((endpoint) => {
+                const snap = snapPoint(endpoint.point, snapPoints, cuts, snapThreshold, next.id);
+                return snap ? { ...snap, endpoint } : null;
+              })
+              .filter((item): item is NonNullable<typeof item> => Boolean(item))
+              .sort((a, b) => a.distance - b.distance)[0];
+            if (hit) {
+              const snapDx = hit.point.x - hit.endpoint.point.x;
+              const snapDy = hit.point.y - hit.endpoint.point.y;
+              next.points = next.points.map((point) => ({ x: point.x + snapDx, y: point.y + snapDy }));
+            }
+          }
         } else {
           next.points[drag.pointIndex] = { x: next.points[drag.pointIndex].x + dx, y: next.points[drag.pointIndex].y + dy };
-        }
-        if (snapEnabled && next.type !== "preset_shape") {
-          next.points = next.points.map((point, index) => {
-            const isEndpoint = index === 0 || index === next.points.length - 1;
-            const canSnap = drag.pointIndex === null ? isEndpoint : drag.pointIndex === index;
-            if (!canSnap) return point;
-            const hit = snapPoint(point, snapPoints, cuts, snapThreshold, next.id);
-            return hit ? { ...hit.point } : point;
-          });
+          if (snapEnabled && next.type !== "preset_shape") {
+            const hit = snapPoint(next.points[drag.pointIndex], snapPoints, cuts, snapThreshold, next.id);
+            if (hit) next.points[drag.pointIndex] = { ...hit.point };
+          }
         }
         return next;
       }),
     );
   }
 
+  function endDrag() {
+    if (dragFrameRef.current != null) {
+      window.cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    const finalPoint = dragPointRef.current;
+    if (finalPoint) applyDragMove(finalPoint);
+    dragPointRef.current = null;
+    setDrag(null);
+  }
+
+  function cutPathD(cut: CutLine): string {
+    const cached = cutPathCacheRef.current.get(cut);
+    if (cached) return cached;
+    const value = catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape");
+    cutPathCacheRef.current.set(cut, value);
+    return value;
+  }
+
+  function piecePathD(piece: PieceCell): string {
+    const cached = piecePathCacheRef.current.get(piece);
+    if (cached) return cached;
+    const value = catmullRomPath(piece.points, 0.15, true);
+    piecePathCacheRef.current.set(piece, value);
+    return value;
+  }
+
+  function knobPiecePathD(piece: LevelPiece): string {
+    const cached = knobPiecePathCacheRef.current.get(piece);
+    if (cached) return cached;
+    const value = catmullRomPath(piece.points.map(pointFromTuple), 0.15, true);
+    knobPiecePathCacheRef.current.set(piece, value);
+    return value;
+  }
+
   function buildJson() {
-    const polygonPieces = pieces.map((piece) => ({ id: piece.id, points: serializePoints(piece.points) }));
-    const polygonLevelPieces = cellsToLevelPieces(pieces);
+    const validPolygonPieces = pieces.filter((piece) => piece.points.length >= 3);
+    const polygonPieces = validPolygonPieces.map((piece) => ({ id: piece.id, points: serializePoints(piece.points) }));
+    const polygonLevelPieces = cellsToLevelPieces(validPolygonPieces);
     const data: LevelConfig = {
       ...level,
       id: currentTarget.levelId,
@@ -1106,6 +1353,7 @@ function App() {
         ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
       ];
       setCuts(importedCuts);
+      setAnalysisCuts(importedCuts);
       setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
       setKnobPieces(data.modes?.knob?.pieces || []);
       setSelectedId(importedCuts[0]?.id || "");
@@ -1254,8 +1502,8 @@ function App() {
             className="h-[min(calc(100vh-96px),760px)] w-full max-w-[1040px] border border-black/15 bg-white/20"
             viewBox={viewBox}
             onPointerMove={moveDrag}
-            onPointerUp={() => setDrag(null)}
-            onPointerLeave={() => setDrag(null)}
+            onPointerUp={endDrag}
+            onPointerLeave={endDrag}
             onPointerDown={() => setSelectedId("")}
             onDragOver={(event) => event.preventDefault()}
             onDrop={dropShape}
@@ -1275,7 +1523,7 @@ function App() {
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  d={catmullRomPath(piece.points, 0.15, true)}
+                  d={piecePathD(piece)}
                   onPointerDown={(event) => {
                     event.stopPropagation();
                     togglePieceSelection(piece.id);
@@ -1287,7 +1535,7 @@ function App() {
                 <path
                   key={cut.id}
                   className="resultCutPath"
-                  d={catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape")}
+                  d={cutPathD(cut)}
                 />
               ))}
             {activeMode === "knob" && showKnobPieces &&
@@ -1295,7 +1543,7 @@ function App() {
                 <path
                   key={piece.id}
                   className={selectedPieceIds.includes(piece.id) ? "knobPreview selectedPiece" : "knobPreview"}
-                  d={catmullRomPath(piece.points.map(pointFromTuple), 0.15, true)}
+                  d={knobPiecePathD(piece)}
                   onPointerDown={(event) => {
                     event.stopPropagation();
                     togglePieceSelection(piece.id);
@@ -1312,7 +1560,7 @@ function App() {
               <g key={cut.id} className={cut.id === selectedId ? "selected" : ""}>
                 <path
                   className={cut.type === "preset_shape" ? "shapePath" : "cutPath"}
-                  d={catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape")}
+                  d={cutPathD(cut)}
                   onPointerDown={(event) => beginDrag(event, cut.id, null)}
                 />
                 {cut.id === selectedId &&
@@ -1336,6 +1584,19 @@ function App() {
             {saveStatus && <p>{saveStatus}</p>}
           </div>
         </section>
+
+        <MobileDevicePreview
+          activeMode={activeMode}
+          backgroundColor={level.background.color}
+          device={previewDevice}
+          devices={mobilePreviewDevices}
+          imageUrl={imageUrl}
+          knobPieces={knobPieces}
+          layout={mobilePreviewLayout}
+          pieces={pieces}
+          selectedPieceIds={selectedPieceIds}
+          onDeviceChange={setPreviewDeviceId}
+        />
 
         <section className="grid gap-3 border-t border-stone-300 pt-4">
           <PanelTitle>工具</PanelTitle>
@@ -1544,6 +1805,80 @@ function SelectBox({ value, options, placeholder, onValueChange }: { value: stri
     </Select.Root>
   );
 }
+
+const MobileDevicePreview = memo(function MobileDevicePreview({
+  activeMode,
+  backgroundColor,
+  device,
+  devices,
+  imageUrl,
+  knobPieces,
+  layout,
+  pieces,
+  selectedPieceIds,
+  onDeviceChange,
+}: {
+  activeMode: EditMode;
+  backgroundColor: string;
+  device: DevicePreviewOption;
+  devices: DevicePreviewOption[];
+  imageUrl: string;
+  knobPieces: LevelPiece[];
+  layout: RuntimePreviewLayout;
+  pieces: PieceCell[];
+  selectedPieceIds: string[];
+  onDeviceChange: (deviceId: string) => void;
+}) {
+  const polygonPieces = pieces.filter((piece) => piece.points.length >= 3);
+  const pieceCount = activeMode === "polygon" ? polygonPieces.length : knobPieces.length;
+  const boardWidth = Math.round(layout.boardSize.width);
+  const boardHeight = Math.round(layout.boardSize.height);
+
+  return (
+    <section className="grid gap-3 border-t border-stone-300 pt-4">
+      <PanelTitle>移动端预览</PanelTitle>
+      <div className="grid grid-cols-4 gap-1">
+        {devices.map((item) => (
+          <button key={item.id} className={item.id === device.id ? "deviceBtnActive" : "deviceBtn"} onClick={() => onDeviceChange(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-md border border-stone-300 bg-white p-2">
+        <svg className="mobilePreviewSvg" viewBox={`0 0 ${device.width} ${device.height}`} aria-label="移动端比例预览">
+          <rect width={device.width} height={device.height} rx="18" className="mobileDeviceFrame" />
+          <rect x="0" y="0" width={device.width} height={layout.hudHeight} className="mobileHudPreview" />
+          <rect x={layout.playArea.x} y={layout.playArea.y} width={layout.playArea.width} height={layout.playArea.height} className="mobilePlayAreaPreview" />
+          <rect width={device.width} height={device.height} fill={backgroundColor} opacity="0.34" />
+          <image href={imageUrl} x={layout.boardOrigin.x} y={layout.boardOrigin.y} width={layout.boardSize.width} height={layout.boardSize.height} preserveAspectRatio="none" opacity="0.76" />
+          <g transform={`translate(${layout.boardOrigin.x} ${layout.boardOrigin.y}) scale(${layout.scale})`}>
+            {activeMode === "polygon" &&
+              polygonPieces.map((piece) => (
+                <path
+                  key={piece.id}
+                  className={selectedPieceIds.includes(piece.id) ? "mobilePreviewPiece selected" : "mobilePreviewPiece"}
+                  d={catmullRomPath(piece.points, 0.15, true)}
+                />
+              ))}
+            {activeMode === "knob" &&
+              knobPieces.map((piece) => (
+                <path
+                  key={piece.id}
+                  className={selectedPieceIds.includes(piece.id) ? "mobilePreviewPiece selected" : "mobilePreviewPiece"}
+                  d={catmullRomPath(piece.points.map(pointFromTuple), 0.15, true)}
+                />
+              ))}
+          </g>
+        </svg>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-xs text-muted">
+        <span>{device.width} x {device.height}</span>
+        <span>{boardWidth} x {boardHeight}</span>
+        <span>{pieceCount} 片</span>
+      </div>
+    </section>
+  );
+});
 
 function SortDialog({
   open,

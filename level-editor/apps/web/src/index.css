@@ -131,6 +131,55 @@
     stroke-linejoin: round;
     stroke-width: 3;
   }
+
+  .deviceBtn,
+  .deviceBtnActive {
+    @apply inline-flex min-h-8 items-center justify-center rounded border border-stone-300 bg-white px-2 text-xs text-ink transition hover:border-clay;
+  }
+
+  .deviceBtnActive {
+    @apply border-moss shadow-[inset_0_0_0_1px_#3f7f72];
+  }
+}
+
+.mobilePreviewSvg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: 320px;
+}
+
+.mobileDeviceFrame {
+  fill: #fffaf0;
+  stroke: rgba(90, 58, 34, 0.28);
+  stroke-width: 2;
+}
+
+.mobileHudPreview {
+  fill: rgba(255, 250, 240, 0.72);
+  stroke: rgba(90, 58, 34, 0.16);
+  stroke-width: 1;
+}
+
+.mobilePlayAreaPreview {
+  fill: rgba(63, 127, 114, 0.055);
+  stroke: rgba(63, 127, 114, 0.38);
+  stroke-dasharray: 7 5;
+  stroke-width: 2;
+}
+
+.mobilePreviewPiece {
+  fill: rgba(255, 246, 230, 0.03);
+  stroke: rgba(90, 58, 34, 0.44);
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.mobilePreviewPiece.selected {
+  fill: rgba(217, 147, 63, 0.16);
+  stroke: #c77c2e;
+  stroke-width: 4;
 }
 
 .outlinePath {

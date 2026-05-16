@@ -13,15 +13,19 @@ const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_CONFIG_PATH := "res://levels/cat/cat_moon_01/level.json"
-const COLS := 3
-const ROWS := 3
-const PIECE_SIZE := 190.0
 const SNAP_TOLERANCE := 42.0
 const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
-const COMPONENT_MASK_RADIUS := 5
 const SAVE_PATH := "user://jigcat_progress.json"
-const LevelGeneratorScript := preload("res://scripts/LevelGenerator.gd")
+const DEFAULT_BOARD_MARGIN_RATIO := 0.92
+const DEFAULT_HUD_HEIGHT_RATIO := 0.13
+const DEFAULT_SIDE_MARGIN_RATIO := 0.055
+const DEFAULT_BOTTOM_MARGIN_RATIO := 0.06
+const MIN_ICON_BUTTON_SIZE := 48.0
+const MAX_ICON_BUTTON_SIZE := 64.0
+const MIN_ICON_ART_SIZE := 28.0
+const MAX_ICON_ART_SIZE := 36.0
+const PIECE_DRAG_PADDING := 8.0
 const PieceGroupScript := preload("res://scripts/PieceGroup.gd")
 const SnapSolverScript := preload("res://scripts/SnapSolver.gd")
 
@@ -69,12 +73,14 @@ var modal_open := false
 var groups: Array = []
 var dragging = null
 var selected_group = null
+var hint_highlighted_groups: Array = []
 var active_touch_index := -1
 var drag_offset := Vector2.ZERO
 var status_label: Label
 
 
 func _ready() -> void:
+	_lock_portrait_orientation()
 	rng.seed = 7
 	texture = load(DEFAULT_LEVEL_IMAGE_PATH)
 	menu_background = load(MENU_BACKGROUND_PATH)
@@ -98,6 +104,10 @@ func _ready() -> void:
 	_show_topics()
 
 
+func _lock_portrait_orientation() -> void:
+	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if current_screen != "game" or modal_open:
 		return
@@ -115,7 +125,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_end_drag()
 	elif event is InputEventMouseMotion and dragging != null:
 		var motion := event as InputEventMouseMotion
-		dragging.node.position = motion.position + drag_offset
+		_move_group_to(dragging, motion.position + drag_offset)
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
@@ -133,7 +143,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag and dragging != null:
 		var drag_event := event as InputEventScreenDrag
 		if drag_event.index == active_touch_index:
-			dragging.node.position = drag_event.position + drag_offset
+			_move_group_to(dragging, drag_event.position + drag_offset)
 
 
 func _build_catalog() -> void:
@@ -222,6 +232,8 @@ func _clear_board() -> void:
 	groups.clear()
 	dragging = null
 	selected_group = null
+	hint_highlighted_groups.clear()
+	preview_sprite = null
 
 
 func _animate_screen_in(control: Control) -> void:
@@ -403,17 +415,37 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.tooltip_text = tooltip
-	button.custom_minimum_size = Vector2(76, 76)
-	button.icon = icon
-	button.expand_icon = true
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	var icon_size := _icon_button_size()
+	var art_size := _icon_art_size()
+	button.custom_minimum_size = Vector2(icon_size, icon_size)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var empty := StyleBoxEmpty.new()
 		button.add_theme_stylebox_override(state, empty)
-	button.add_theme_color_override("icon_normal_color", brown)
-	button.add_theme_color_override("icon_hover_color", deep_orange)
-	button.add_theme_color_override("icon_pressed_color", deep_orange)
+	var icon_rect := TextureRect.new()
+	icon_rect.texture = icon
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_rect.custom_minimum_size = Vector2(art_size, art_size)
+	icon_rect.set_anchors_preset(Control.PRESET_CENTER)
+	icon_rect.offset_left = -art_size * 0.5
+	icon_rect.offset_top = -art_size * 0.5
+	icon_rect.offset_right = art_size * 0.5
+	icon_rect.offset_bottom = art_size * 0.5
+	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_rect.modulate = soft_brown
+	button.add_child(icon_rect)
+	button.mouse_entered.connect(func() -> void:
+		icon_rect.modulate = deep_orange
+	)
+	button.mouse_exited.connect(func() -> void:
+		icon_rect.modulate = soft_brown
+	)
+	button.button_down.connect(func() -> void:
+		icon_rect.modulate = deep_orange
+	)
+	button.button_up.connect(func() -> void:
+		icon_rect.modulate = soft_brown
+	)
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
@@ -514,7 +546,7 @@ func _show_topics() -> void:
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -130
+	top_actions.offset_left = -150
 	top_actions.offset_top = 28
 	top_actions.offset_right = -36
 	top_actions.offset_bottom = 82
@@ -530,7 +562,7 @@ func _show_topics() -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = _wide_grid_columns(2, 1)
 	grid.add_theme_constant_override("h_separation", 28)
 	grid.add_theme_constant_override("v_separation", 24)
 	center.add_child(grid)
@@ -558,7 +590,7 @@ func _show_levels(topic: Dictionary) -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var grid := GridContainer.new()
-	grid.columns = 2
+	grid.columns = _wide_grid_columns(2, 1)
 	grid.add_theme_constant_override("h_separation", 28)
 	grid.add_theme_constant_override("v_separation", 24)
 	center.add_child(grid)
@@ -665,31 +697,38 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	_clear_ui()
 	_clear_board()
 	_add_level_background(active_level_config)
-	_start_play_session(play_mode)
+	var loaded := _start_play_session(play_mode)
 	_build_game_hud(level["title"])
-	if not _tutorial_seen():
+	if not loaded:
+		status_label.text = "关卡 JSON 缺少当前模式的预生成碎片。"
+	elif not _tutorial_seen():
 		_show_tutorial_modal()
 
 
 func _build_game_hud(level_title: String) -> void:
+	var viewport_size := get_viewport_rect().size
+	var button_separation := _hud_button_separation()
+	var row_width := minf(_hud_icons_width(), viewport_size.x - 24.0)
 	var title := Label.new()
 	title.text = level_title
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	title.offset_left = 20
 	title.offset_top = 18
-	title.offset_left = 360
-	title.offset_right = -360
+	title.offset_right = maxf(220.0, viewport_size.x - row_width - 38.0)
+	title.offset_bottom = 56
+	title.visible = viewport_size.x >= 560.0
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", brown)
 	screen_root.add_child(title)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_END
 	row.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	row.offset_left = -720
-	row.offset_top = 12
-	row.offset_right = -18
-	row.offset_bottom = 94
-	row.add_theme_constant_override("separation", 10)
+	row.offset_left = -row_width
+	row.offset_top = 8
+	row.offset_right = -16
+	row.offset_bottom = 80
+	row.add_theme_constant_override("separation", button_separation)
 	screen_root.add_child(row)
 	row.add_child(_icon_button(icon_rotate, _align_all, "转正"))
 	row.add_child(_icon_button(icon_lightbulb, _show_hint, "提示"))
@@ -698,27 +737,52 @@ func _build_game_hud(level_title: String) -> void:
 	row.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
 	status_label = Label.new()
 	status_label.text = "拖动碎片。双击碎片旋转。"
-	status_label.position = Vector2(20, 740)
+	status_label.position = Vector2(20, viewport_size.y - 42.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
 	_animate_screen_in(screen_root)
 
 
-func _start_play_session(play_mode: String) -> void:
+func _hud_icons_width() -> float:
+	return _icon_button_size() * 5.0 + _hud_button_separation() * 4.0
+
+
+func _hud_button_separation() -> float:
+	return 6.0 if get_viewport_rect().size.x < 430.0 else 8.0
+
+
+func _icon_button_size() -> float:
+	var viewport_width := get_viewport_rect().size.x
+	var available_width := maxf(240.0, viewport_width - 32.0)
+	var separation := 6.0 if viewport_width < 430.0 else 8.0
+	var fitting_size := floorf((available_width - separation * 4.0) / 5.0)
+	return clampf(fitting_size, MIN_ICON_BUTTON_SIZE, MAX_ICON_BUTTON_SIZE)
+
+
+func _icon_art_size() -> float:
+	return clampf(_icon_button_size() * 0.56, MIN_ICON_ART_SIZE, MAX_ICON_ART_SIZE)
+
+
+func _start_play_session(play_mode: String) -> bool:
 	var mode_key := _mode_key(play_mode)
-	var grid := _level_grid(active_level_config)
-	var level := _level_from_mode_pieces(mode_key, grid)
+	var level := _level_from_mode_pieces(mode_key)
 	if level.is_empty():
-		var generator_mode := "irregular" if mode_key == "polygon" else "knob"
-		level = LevelGeneratorScript.generate(source_size, grid["cols"], grid["rows"], grid["piece_size"], generator_mode, source_image, active_level_config)
+		return false
 	source_scale = level["source_scale"]
 	board_origin = level["board_origin"]
 	for piece in level["pieces"]:
 		_create_group(piece)
+	_add_preview_sprite(level["play_area"])
+	return true
+
+
+func _add_preview_sprite(play_area: Rect2) -> void:
 	preview_sprite = Sprite2D.new()
 	preview_sprite.texture = texture
-	preview_sprite.scale = Vector2.ONE * source_scale * 0.42
-	preview_sprite.position = Vector2(1050, 430)
+	var preview_max := Vector2(play_area.size.x * 0.24, play_area.size.y * 0.24)
+	var preview_scale := minf(preview_max.x / source_size.x, preview_max.y / source_size.y)
+	preview_sprite.scale = Vector2.ONE * preview_scale
+	preview_sprite.position = play_area.end - source_size * preview_scale * 0.5 - Vector2(16, 16)
 	preview_sprite.modulate = Color(1, 1, 1, 0.82)
 	preview_sprite.visible = false
 	board_layer.add_child(preview_sprite)
@@ -753,7 +817,7 @@ func _mode_config(level_config: Dictionary, play_mode: String) -> Dictionary:
 	return modes[mode]
 
 
-func _level_from_mode_pieces(play_mode: String, grid: Dictionary) -> Dictionary:
+func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 	var config := _mode_config(active_level_config, play_mode)
 	if config.is_empty() or not config.has("pieces") or typeof(config["pieces"]) != TYPE_ARRAY:
 		return {}
@@ -762,11 +826,10 @@ func _level_from_mode_pieces(play_mode: String, grid: Dictionary) -> Dictionary:
 	var source_pieces: Array = config["pieces"]
 	if source_pieces.is_empty():
 		return {}
-	var cols := clampi(int(config.get("cols", grid["cols"])), 1, 10)
-	var piece_size := clampf(float(config.get("piece_size", grid["piece_size"])), 80.0, 320.0)
-	var mode_source_scale := (piece_size * float(cols)) / source_size.x
-	var board_size := source_size * mode_source_scale
-	var mode_board_origin := -board_size * 0.5
+	var layout := _mobile_board_layout()
+	var mode_source_scale: float = layout["source_scale"]
+	var mode_board_origin: Vector2 = layout["board_origin"]
+	var board_size: Vector2 = layout["board_size"]
 	var pieces: Array[Dictionary] = []
 	for source_piece in source_pieces:
 		if typeof(source_piece) != TYPE_DICTIONARY:
@@ -801,7 +864,6 @@ func _level_from_mode_pieces(play_mode: String, grid: Dictionary) -> Dictionary:
 			"uv": uvs,
 			"neighbors": piece_data.get("neighbors", []),
 			"source_rect": _source_rect_for_points(source_polygon),
-			"component_samples": {},
 			"cut_lines": cut_lines,
 		})
 	return {
@@ -809,7 +871,49 @@ func _level_from_mode_pieces(play_mode: String, grid: Dictionary) -> Dictionary:
 		"board_origin": mode_board_origin,
 		"board_size": board_size,
 		"source_scale": mode_source_scale,
+		"play_area": layout["play_area"],
 	}
+
+
+func _mobile_board_layout() -> Dictionary:
+	var layout_config := _runtime_layout_config()
+	var viewport_size := get_viewport_rect().size
+	var min_hud_height := _icon_button_size() + 32.0
+	var hud_height := clampf(maxf(viewport_size.y * float(layout_config["hud_height_ratio"]), min_hud_height), 88.0, 136.0)
+	var side_margin := clampf(viewport_size.x * float(layout_config["side_margin_ratio"]), 24.0, 56.0)
+	var bottom_margin := clampf(viewport_size.y * float(layout_config["bottom_margin_ratio"]), 32.0, 64.0)
+	var play_area := Rect2(
+		Vector2(side_margin, hud_height),
+		Vector2(
+			maxf(240.0, viewport_size.x - side_margin * 2.0),
+			maxf(220.0, viewport_size.y - hud_height - bottom_margin)
+		)
+	)
+	var scale := minf(play_area.size.x / source_size.x, play_area.size.y / source_size.y) * float(layout_config["board_margin_ratio"])
+	var board_size := source_size * scale
+	var origin := play_area.position + (play_area.size - board_size) * 0.5
+	return {
+		"source_scale": scale,
+		"board_origin": origin,
+		"board_size": board_size,
+		"play_area": play_area,
+	}
+
+
+func _runtime_layout_config() -> Dictionary:
+	var config := {
+		"board_margin_ratio": DEFAULT_BOARD_MARGIN_RATIO,
+		"hud_height_ratio": DEFAULT_HUD_HEIGHT_RATIO,
+		"side_margin_ratio": DEFAULT_SIDE_MARGIN_RATIO,
+		"bottom_margin_ratio": DEFAULT_BOTTOM_MARGIN_RATIO,
+	}
+	if active_level_config.has("runtime_layout") and typeof(active_level_config["runtime_layout"]) == TYPE_DICTIONARY:
+		var source_config: Dictionary = active_level_config["runtime_layout"]
+		config["board_margin_ratio"] = clampf(float(source_config.get("board_margin_ratio", config["board_margin_ratio"])), 0.72, 0.96)
+		config["hud_height_ratio"] = clampf(float(source_config.get("hud_height_ratio", config["hud_height_ratio"])), 0.10, 0.18)
+		config["side_margin_ratio"] = clampf(float(source_config.get("side_margin_ratio", config["side_margin_ratio"])), 0.03, 0.10)
+		config["bottom_margin_ratio"] = clampf(float(source_config.get("bottom_margin_ratio", config["bottom_margin_ratio"])), 0.04, 0.12)
+	return config
 
 
 func _json_points(value) -> PackedVector2Array:
@@ -851,20 +955,6 @@ func _source_rect_for_points(points: PackedVector2Array) -> Rect2:
 		min_point = min_point.min(point)
 		max_point = max_point.max(point)
 	return Rect2(min_point, max_point - min_point)
-
-
-func _level_grid(level_config: Dictionary) -> Dictionary:
-	var grid := {
-		"cols": COLS,
-		"rows": ROWS,
-		"piece_size": PIECE_SIZE,
-	}
-	if level_config.has("grid") and typeof(level_config["grid"]) == TYPE_DICTIONARY:
-		var config_grid: Dictionary = level_config["grid"]
-		grid["cols"] = clampi(int(config_grid.get("cols", COLS)), 1, 10)
-		grid["rows"] = clampi(int(config_grid.get("rows", ROWS)), 1, 10)
-		grid["piece_size"] = clampf(float(config_grid.get("piece_size", PIECE_SIZE)), 80.0, 320.0)
-	return grid
 
 
 func _apply_level_media(level_config: Dictionary) -> void:
@@ -929,21 +1019,22 @@ func _config_string(config: Dictionary, key: String, fallback: String) -> String
 func _create_group(piece: Dictionary) -> void:
 	var group_node := Node2D.new()
 	group_node.name = piece["id"]
-	group_node.position = _scatter_position()
 	group_node.rotation_degrees = [0, 90, 180, 270][int(rng.randi_range(0, 3))]
 	group_node.z_index = groups.size()
 	board_layer.add_child(group_node)
 	var visual := _create_piece_visual(piece)
 	group_node.add_child(visual)
 	piece["visual"] = visual
-	groups.append(PieceGroupScript.new(group_node, piece))
+	var group = PieceGroupScript.new(group_node, piece)
+	groups.append(group)
+	_move_group_to(group, _scatter_position())
 
 
 func _create_piece_visual(piece: Dictionary) -> Node2D:
 	var node := Node2D.new()
 	node.name = piece["id"] + "_visual"
 	var poly := Polygon2D.new()
-	poly.texture = _texture_for_piece(piece)
+	poly.texture = texture
 	poly.polygon = piece["polygon"]
 	poly.uv = piece["uv"]
 	node.add_child(poly)
@@ -957,39 +1048,62 @@ func _create_piece_visual(piece: Dictionary) -> Node2D:
 	return node
 
 
-func _texture_for_piece(piece: Dictionary) -> Texture2D:
-	if not piece.has("component_samples") or piece["component_samples"].is_empty():
-		return texture
-	var image_size := source_image.get_size()
-	var masked := Image.create_empty(image_size.x, image_size.y, false, Image.FORMAT_RGBA8)
-	masked.fill(Color(1, 1, 1, 0))
-	var rect: Rect2 = piece["source_rect"]
-	var start_x := clampi(floori(rect.position.x), 0, image_size.x - 1)
-	var start_y := clampi(floori(rect.position.y), 0, image_size.y - 1)
-	var end_x := clampi(ceili(rect.end.x), start_x + 1, image_size.x)
-	var end_y := clampi(ceili(rect.end.y), start_y + 1, image_size.y)
-	var samples: Dictionary = piece["component_samples"]
-	for y in range(start_y, end_y):
-		for x in range(start_x, end_x):
-			var color := source_image.get_pixel(x, y)
-			if color.a <= 0.08:
-				continue
-			if _component_samples_contain_pixel(samples, Vector2i(x, y)):
-				masked.set_pixel(x, y, color)
-	return ImageTexture.create_from_image(masked)
-
-
-func _component_samples_contain_pixel(samples: Dictionary, pixel: Vector2i) -> bool:
-	for y in range(pixel.y - COMPONENT_MASK_RADIUS, pixel.y + COMPONENT_MASK_RADIUS + 1):
-		for x in range(pixel.x - COMPONENT_MASK_RADIUS, pixel.x + COMPONENT_MASK_RADIUS + 1):
-			if samples.has(Vector2i(x, y)):
-				return true
-	return false
-
-
 func _scatter_position() -> Vector2:
-	var margin := 90.0
-	return Vector2(rng.randf_range(margin, get_viewport_rect().size.x - margin), rng.randf_range(130.0, get_viewport_rect().size.y - margin))
+	var layout := _mobile_board_layout()
+	var play_area: Rect2 = layout["play_area"]
+	var margin := 72.0
+	return Vector2(
+		rng.randf_range(play_area.position.x + margin, play_area.end.x - margin),
+		rng.randf_range(play_area.position.y + margin, play_area.end.y - margin)
+	)
+
+
+func _move_group_to(group, target_position: Vector2) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	group.node.position = _clamped_group_position(group, target_position)
+
+
+func _clamped_group_position(group, target_position: Vector2) -> Vector2:
+	var bounds := _group_bounds_at(group, target_position)
+	var area := _piece_drag_area()
+	var delta := Vector2.ZERO
+	if bounds.size.x <= area.size.x:
+		if bounds.position.x < area.position.x:
+			delta.x = area.position.x - bounds.position.x
+		elif bounds.end.x > area.end.x:
+			delta.x = area.end.x - bounds.end.x
+	else:
+		delta.x = area.get_center().x - bounds.get_center().x
+	if bounds.size.y <= area.size.y:
+		if bounds.position.y < area.position.y:
+			delta.y = area.position.y - bounds.position.y
+		elif bounds.end.y > area.end.y:
+			delta.y = area.end.y - bounds.end.y
+	else:
+		delta.y = area.get_center().y - bounds.get_center().y
+	return target_position + delta
+
+
+func _piece_drag_area() -> Rect2:
+	var play_area: Rect2 = _mobile_board_layout()["play_area"]
+	return play_area.grow(-PIECE_DRAG_PADDING)
+
+
+func _group_bounds_at(group, target_position: Vector2) -> Rect2:
+	var has_point := false
+	var min_point := Vector2(INF, INF)
+	var max_point := Vector2(-INF, -INF)
+	for member in group.members:
+		var visual_position: Vector2 = member["visual"].position
+		for point in member["polygon"]:
+			var global_point: Vector2 = target_position + (visual_position + point).rotated(group.node.rotation)
+			min_point = min_point.min(global_point)
+			max_point = max_point.max(global_point)
+			has_point = true
+	if not has_point:
+		return Rect2(target_position, Vector2.ZERO)
+	return Rect2(min_point, max_point - min_point)
 
 
 func _begin_drag(screen_pos: Vector2) -> void:
@@ -998,6 +1112,7 @@ func _begin_drag(screen_pos: Vector2) -> void:
 		return
 	if group.is_animating:
 		return
+	_clear_hint_highlights()
 	_select_group(group)
 	dragging = group
 	drag_offset = group.node.position - screen_pos
@@ -1081,8 +1196,10 @@ func _try_snap_chain(active) -> void:
 		progressed = false
 		var other = SnapSolverScript.find_match(active, groups, SNAP_TOLERANCE, ROTATION_TOLERANCE)
 		if other != null:
+			_clear_hint_highlights()
 			active.absorb(other)
 			groups.erase(other)
+			_move_group_to(active, active.node.position)
 			if selected_group == other:
 				selected_group = active
 			_pulse_node(active.node)
@@ -1118,12 +1235,55 @@ func _show_hint() -> void:
 		return
 	var pair := _find_hint_pair()
 	if pair.is_empty():
+		_clear_hint_highlights()
 		status_label.text = "暂时没有可提示的相邻碎片。"
 		return
 	selected_group = pair[0]
+	_set_hint_highlights(pair)
 	_hint_pulse_node(pair[0].node)
 	_hint_pulse_node(pair[1].node)
 	status_label.text = "提示：这两个碎片可以拼接。"
+
+
+func _set_hint_highlights(pair: Array) -> void:
+	_clear_hint_highlights()
+	for group in pair:
+		_add_hint_highlight(group)
+		hint_highlighted_groups.append(group)
+
+
+func _add_hint_highlight(group) -> void:
+	if group == null:
+		return
+	for member in group.members:
+		var visual: Node2D = member["visual"]
+		if not is_instance_valid(visual):
+			continue
+		var line := Line2D.new()
+		line.name = "hint_highlight"
+		line.width = 5.0
+		line.default_color = Color(1.0, 0.73, 0.18, 0.92)
+		line.closed = true
+		line.joint_mode = Line2D.LINE_JOINT_ROUND
+		line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		line.end_cap_mode = Line2D.LINE_CAP_ROUND
+		line.z_index = 20
+		line.points = member["polygon"]
+		visual.add_child(line)
+
+
+func _clear_hint_highlights() -> void:
+	for group in hint_highlighted_groups:
+		if group == null:
+			continue
+		for member in group.members:
+			var visual: Node2D = member["visual"]
+			if not is_instance_valid(visual):
+				continue
+			var highlight := visual.get_node_or_null("hint_highlight")
+			if highlight != null:
+				highlight.queue_free()
+	hint_highlighted_groups.clear()
 
 
 func _find_hint_pair() -> Array:
@@ -1143,7 +1303,7 @@ func _groups_are_neighbors(a, b) -> bool:
 
 
 func _toggle_preview() -> void:
-	if preview_sprite:
+	if is_instance_valid(preview_sprite):
 		var show := not preview_sprite.visible
 		preview_sprite.visible = true
 		var target_alpha := 0.82 if show else 0.0
@@ -1263,7 +1423,7 @@ func _show_album() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_child(scroll)
 	var grid := GridContainer.new()
-	grid.columns = 3
+	grid.columns = _wide_grid_columns(3, 2)
 	grid.add_theme_constant_override("h_separation", 14)
 	grid.add_theme_constant_override("v_separation", 14)
 	scroll.add_child(grid)
@@ -1278,6 +1438,10 @@ func _show_album() -> void:
 				func(t: Dictionary = topic, l: Dictionary = level, m: Array = modes) -> void: _show_album_detail(t, l, m)
 			)
 			grid.add_child(card)
+
+
+func _wide_grid_columns(wide_columns: int, narrow_columns: int) -> int:
+	return narrow_columns if get_viewport_rect().size.x < 900.0 else wide_columns
 
 
 func _show_album_detail(topic: Dictionary, level: Dictionary, modes: Array) -> void:

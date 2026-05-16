@@ -1,6 +1,6 @@
 # iOS Build Notes
 
-This project is prepared as a Godot 4 mobile-first prototype for iPhone and iPad. The current game uses a landscape layout and supports touch input.
+This project is prepared as a Godot 4 mobile-first prototype for iPhone and iPad. The current game is portrait-only and supports touch input.
 
 ## Current iOS Controls
 
@@ -12,12 +12,12 @@ This project is prepared as a Godot 4 mobile-first prototype for iPhone and iPad
 
 Set these in Godot before exporting the first iOS build:
 
-- `Display > Window > Handheld > Orientation`: `Landscape`
+- `Display > Window > Handheld > Orientation`: `Portrait`
 - `Display > Window > Stretch > Mode`: `canvas_items`
 - `Display > Window > Stretch > Aspect`: `expand`
 - `Rendering > Renderer > Rendering Method`: `gl_compatibility`
 
-The prototype already uses a 1280x800 landscape viewport. That works as a development baseline for both iPhone and iPad, but the final game should add stronger responsive layout rules before production.
+The prototype uses a 768x1024 portrait viewport as the baseline, locks runtime orientation to portrait, and computes the active play area from the actual device viewport. Puzzle pieces are authored in source-image pixel coordinates, and the runtime fits the full source image into the available mobile play area with a fixed safety margin.
 
 ## Export Requirements
 
@@ -43,7 +43,7 @@ To export an iOS build, the local machine needs:
 
 ## Next iOS Work
 
-- Replace prototype UI sizing with safe-area-aware layout.
+- Replace remaining prototype menu sizing with fully safe-area-aware layout.
 - Add pinch zoom or camera panning if larger puzzles need more table space.
 - Add a dedicated rotate control near the selected piece for thumb-friendly play.
 - Save progress when the app is backgrounded.
