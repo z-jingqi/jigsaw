@@ -33,7 +33,18 @@ export type LevelPiece = {
   points: number[][];
   neighbors: string[];
   cut_lines: number[][][];
+  visible_bounds?: number[];
+  visible_bounds_list?: number[][];
 };
+
+export type LevelImageConfig =
+  | string
+  | {
+      path?: string;
+      name?: string;
+      width?: number;
+      height?: number;
+    };
 
 export type LocaleCode = "zh-Hans" | "en" | string;
 
@@ -108,10 +119,14 @@ export type LevelConfig = {
   modes: {
     polygon: {
       source: "precomputed";
+      image?: LevelImageConfig;
+      source_image?: LevelImageConfig;
       pieces: LevelPiece[];
     };
     knob: {
       source: "precomputed";
+      image?: LevelImageConfig;
+      source_image?: LevelImageConfig;
       rows: number;
       cols: number;
       piece_size: number;

@@ -132,54 +132,26 @@
     stroke-width: 3;
   }
 
-  .deviceBtn,
-  .deviceBtnActive {
-    @apply inline-flex min-h-8 items-center justify-center rounded border border-stone-300 bg-white px-2 text-xs text-ink transition hover:border-clay;
+  .toastViewport {
+    @apply fixed left-1/2 top-5 z-[70] w-[min(420px,calc(100vw-32px))] -translate-x-1/2;
   }
 
-  .deviceBtnActive {
-    @apply border-moss shadow-[inset_0_0_0_1px_#3f7f72];
+  .toastCard {
+    @apply flex min-h-12 items-center justify-between gap-3 rounded-md border border-stone-300 bg-[#2b1d15] px-4 py-3 text-sm text-white shadow-xl;
   }
-}
 
-.mobilePreviewSvg {
-  display: block;
-  width: 100%;
-  aspect-ratio: 9 / 16;
-  max-height: 320px;
-}
+  .toastClose {
+    @apply inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white/80 transition hover:bg-white/10 hover:text-white;
+  }
 
-.mobileDeviceFrame {
-  fill: #fffaf0;
-  stroke: rgba(90, 58, 34, 0.28);
-  stroke-width: 2;
-}
-
-.mobileHudPreview {
-  fill: rgba(255, 250, 240, 0.72);
-  stroke: rgba(90, 58, 34, 0.16);
-  stroke-width: 1;
-}
-
-.mobilePlayAreaPreview {
-  fill: rgba(63, 127, 114, 0.055);
-  stroke: rgba(63, 127, 114, 0.38);
-  stroke-dasharray: 7 5;
-  stroke-width: 2;
-}
-
-.mobilePreviewPiece {
-  fill: rgba(255, 246, 230, 0.03);
-  stroke: rgba(90, 58, 34, 0.44);
-  stroke-linejoin: round;
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-}
-
-.mobilePreviewPiece.selected {
-  fill: rgba(217, 147, 63, 0.16);
-  stroke: #c77c2e;
-  stroke-width: 4;
+  .canvasModeBadge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+    pointer-events: none;
+    @apply rounded-md border border-stone-300 bg-white/90 px-3 py-1.5 text-sm font-medium text-ink shadow-sm;
+  }
 }
 
 .outlinePath {
@@ -276,6 +248,23 @@
 .gapWarning circle {
   fill: rgba(217, 147, 63, 0.16);
   stroke: #c77c2e;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.drawingCutPreview path {
+  fill: none;
+  stroke: #3f7f72;
+  stroke-dasharray: 10 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.drawingCutPreview circle {
+  fill: #fffaf0;
+  stroke: #3f7f72;
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
 }

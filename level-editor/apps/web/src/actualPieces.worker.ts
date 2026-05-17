@@ -1,8 +1,6 @@
 import {
   polygonArea,
-  samplePath,
   simplifyClosedPath,
-  smoothClosedPath,
   traceBoundaryLoops,
   type ActualPiecePreview,
 } from "./geometry";
@@ -82,9 +80,9 @@ function analyzeActualPiecesInWorker(image: ImageBitmap, cuts: CutLine[], maxSiz
   if (!barrierCtx) return emptyResult();
   barrierCtx.clearRect(0, 0, width, height);
   barrierCtx.strokeStyle = "#fff";
-  barrierCtx.lineCap = "round";
-  barrierCtx.lineJoin = "round";
-  barrierCtx.lineWidth = Math.max(1, Math.round(scale * 1.2));
+  barrierCtx.lineCap = "butt";
+  barrierCtx.lineJoin = "miter";
+  barrierCtx.lineWidth = Math.max(1, Math.round(scale));
   for (const cut of cuts) {
     if (cut.points.length < 2) continue;
     barrierCtx.beginPath();
@@ -160,8 +158,7 @@ function analyzeActualPiecesInWorker(image: ImageBitmap, cuts: CutLine[], maxSiz
     if (largestLoop.length >= 4) {
       const raw = largestLoop.map((point) => ({ x: point.x / scale, y: point.y / scale }));
       const simplified = simplifyClosedPath(raw, Math.max(1.5, 2.2 / Math.max(scale, 1e-6)));
-      const sampled = samplePath([...simplified, simplified[0]], Math.min(96, Math.max(18, simplified.length)));
-      pieces.push({ id: pieceId, points: smoothClosedPath(sampled, 1) });
+      pieces.push({ id: pieceId, points: simplified });
     }
   }
 

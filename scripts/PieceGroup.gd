@@ -15,6 +15,8 @@ func _init(group_node: Node2D, piece: Dictionary) -> void:
 		"cell": piece["cell"],
 		"home": piece["home"],
 		"polygon": piece["polygon"],
+		"bounds_points": piece["bounds_points"],
+		"bounds_points_list": piece["bounds_points_list"],
 		"visual": piece["visual"],
 		"neighbors": piece["neighbors"],
 	}]

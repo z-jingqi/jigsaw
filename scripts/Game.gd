@@ -13,14 +13,16 @@ const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_CONFIG_PATH := "res://levels/cat/cat_moon_01/level.json"
-const SNAP_TOLERANCE := 42.0
+const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
 const SAVE_PATH := "user://jigcat_progress.json"
-const DEFAULT_BOARD_MARGIN_RATIO := 0.92
-const DEFAULT_HUD_HEIGHT_RATIO := 0.13
-const DEFAULT_SIDE_MARGIN_RATIO := 0.055
-const DEFAULT_BOTTOM_MARGIN_RATIO := 0.06
+const DEFAULT_BOARD_MARGIN_RATIO := 1.0
+const DEFAULT_HUD_HEIGHT_RATIO := 0.0
+const DEFAULT_SIDE_MARGIN_RATIO := 0.0
+const DEFAULT_BOTTOM_MARGIN_RATIO := 0.0
+const GAME_EDGE_MARGIN := 20.0
+const GAME_HEADER_MARGIN := 20.0
 const MIN_ICON_BUTTON_SIZE := 48.0
 const MAX_ICON_BUTTON_SIZE := 64.0
 const MIN_ICON_ART_SIZE := 28.0
@@ -40,6 +42,8 @@ var green := Color("#6f9d67")
 var muted := Color("#b7aa97")
 
 var texture: Texture2D
+var texture_cache: Dictionary = {}
+var source_image_cache: Dictionary = {}
 var menu_background: Texture2D
 var title_texture: Texture2D
 var start_button_texture: Texture2D
@@ -55,6 +59,7 @@ var source_size := Vector2.ZERO
 var source_scale := 1.0
 var board_origin := Vector2.ZERO
 var active_level_config := {}
+var config_cache: Dictionary = {}
 var rng := RandomNumberGenerator.new()
 var board_layer: Node2D
 var ui_layer: CanvasLayer
@@ -71,9 +76,11 @@ var current_screen := "home"
 var modal_open := false
 
 var groups: Array = []
+var spawn_bounds: Array[Rect2] = []
 var dragging = null
 var selected_group = null
 var hint_highlighted_groups: Array = []
+var hint_highlighted_lines: Array[Line2D] = []
 var active_touch_index := -1
 var drag_offset := Vector2.ZERO
 var status_label: Label
@@ -230,9 +237,11 @@ func _clear_board() -> void:
 	for child in board_layer.get_children():
 		child.queue_free()
 	groups.clear()
+	spawn_bounds.clear()
 	dragging = null
 	selected_group = null
 	hint_highlighted_groups.clear()
+	hint_highlighted_lines.clear()
 	preview_sprite = null
 
 
@@ -725,9 +734,9 @@ func _build_game_hud(level_title: String) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_END
 	row.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	row.offset_left = -row_width
-	row.offset_top = 8
-	row.offset_right = -16
-	row.offset_bottom = 80
+	row.offset_top = 4
+	row.offset_right = -8
+	row.offset_bottom = 4 + _icon_button_size() + 8
 	row.add_theme_constant_override("separation", button_separation)
 	screen_root.add_child(row)
 	row.add_child(_icon_button(icon_rotate, _align_all, "转正"))
@@ -770,7 +779,12 @@ func _start_play_session(play_mode: String) -> bool:
 		return false
 	source_scale = level["source_scale"]
 	board_origin = level["board_origin"]
-	for piece in level["pieces"]:
+	spawn_bounds.clear()
+	var sorted_pieces: Array = level["pieces"].duplicate()
+	sorted_pieces.sort_custom(func(a, b) -> bool:
+		return _points_bounds_area(a["bounds_points"]) > _points_bounds_area(b["bounds_points"])
+	)
+	for piece in sorted_pieces:
 		_create_group(piece)
 	_add_preview_sprite(level["play_area"])
 	return true
@@ -796,11 +810,16 @@ func _load_level_config(level: Dictionary) -> Dictionary:
 func _load_config_path(config_path: String) -> Dictionary:
 	if config_path.is_empty() or not FileAccess.file_exists(config_path):
 		return {}
+	if config_cache.has(config_path):
+		return config_cache[config_path]
 	var file := FileAccess.open(config_path, FileAccess.READ)
 	if file == null:
 		return {}
 	var parsed = JSON.parse_string(file.get_as_text())
-	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	var config: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	if not config.is_empty():
+		config_cache[config_path] = config
+	return config
 
 
 func _mode_key(play_mode: String) -> String:
@@ -846,16 +865,26 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 			var display_point := mode_board_origin + source_point * mode_source_scale
 			local_polygon.append(display_point - home)
 			uvs.append(source_point)
+		var visible_source_rect := _json_rect(
+			piece_data.get("visible_bounds", []),
+			Rect2()
+		)
+		if visible_source_rect.size.x <= 0.0 or visible_source_rect.size.y <= 0.0:
+			visible_source_rect = _visible_source_rect_for_polygon(source_polygon, _source_rect_for_points(source_polygon))
+		var visible_source_rects := _json_rects(piece_data.get("visible_bounds_list", []))
+		if visible_source_rects.is_empty():
+			visible_source_rects = [visible_source_rect]
+		var bounds_points_list: Array[PackedVector2Array] = []
+		for source_rect in visible_source_rects:
+			bounds_points_list.append(_local_rect_points(source_rect, home, mode_source_scale, mode_board_origin))
 		var cut_lines: Array[PackedVector2Array] = []
 		if piece_data.has("cut_lines") and typeof(piece_data["cut_lines"]) == TYPE_ARRAY:
 			for line_data in piece_data["cut_lines"]:
 				var source_line := _json_points(line_data)
 				if source_line.size() < 2:
 					continue
-				var local_line := PackedVector2Array()
-				for source_point in source_line:
-					local_line.append(mode_board_origin + source_point * mode_source_scale - home)
-				cut_lines.append(local_line)
+				for local_line in _visible_cut_line_segments(source_line, home, mode_source_scale, mode_board_origin):
+					cut_lines.append(local_line)
 		pieces.append({
 			"id": str(piece_data.get("id", "piece_%d" % pieces.size())),
 			"cell": _json_cell(piece_data.get("cell", [0, 0])),
@@ -864,6 +893,8 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 			"uv": uvs,
 			"neighbors": piece_data.get("neighbors", []),
 			"source_rect": _source_rect_for_points(source_polygon),
+			"bounds_points": _local_rect_points(visible_source_rect, home, mode_source_scale, mode_board_origin),
+			"bounds_points_list": bounds_points_list,
 			"cut_lines": cut_lines,
 		})
 	return {
@@ -878,10 +909,9 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 func _mobile_board_layout() -> Dictionary:
 	var layout_config := _runtime_layout_config()
 	var viewport_size := get_viewport_rect().size
-	var min_hud_height := _icon_button_size() + 32.0
-	var hud_height := clampf(maxf(viewport_size.y * float(layout_config["hud_height_ratio"]), min_hud_height), 88.0, 136.0)
-	var side_margin := clampf(viewport_size.x * float(layout_config["side_margin_ratio"]), 24.0, 56.0)
-	var bottom_margin := clampf(viewport_size.y * float(layout_config["bottom_margin_ratio"]), 32.0, 64.0)
+	var hud_height := _icon_button_size() + GAME_HEADER_MARGIN
+	var side_margin := GAME_EDGE_MARGIN
+	var bottom_margin := GAME_EDGE_MARGIN
 	var play_area := Rect2(
 		Vector2(side_margin, hud_height),
 		Vector2(
@@ -909,10 +939,10 @@ func _runtime_layout_config() -> Dictionary:
 	}
 	if active_level_config.has("runtime_layout") and typeof(active_level_config["runtime_layout"]) == TYPE_DICTIONARY:
 		var source_config: Dictionary = active_level_config["runtime_layout"]
-		config["board_margin_ratio"] = clampf(float(source_config.get("board_margin_ratio", config["board_margin_ratio"])), 0.72, 0.96)
-		config["hud_height_ratio"] = clampf(float(source_config.get("hud_height_ratio", config["hud_height_ratio"])), 0.10, 0.18)
-		config["side_margin_ratio"] = clampf(float(source_config.get("side_margin_ratio", config["side_margin_ratio"])), 0.03, 0.10)
-		config["bottom_margin_ratio"] = clampf(float(source_config.get("bottom_margin_ratio", config["bottom_margin_ratio"])), 0.04, 0.12)
+		config["board_margin_ratio"] = clampf(float(source_config.get("board_margin_ratio", config["board_margin_ratio"])), 0.98, 1.0)
+		config["hud_height_ratio"] = clampf(float(source_config.get("hud_height_ratio", config["hud_height_ratio"])), 0.0, 0.18)
+		config["side_margin_ratio"] = clampf(float(source_config.get("side_margin_ratio", config["side_margin_ratio"])), 0.0, 0.10)
+		config["bottom_margin_ratio"] = clampf(float(source_config.get("bottom_margin_ratio", config["bottom_margin_ratio"])), 0.0, 0.12)
 	return config
 
 
@@ -939,6 +969,39 @@ func _json_cell(value) -> Vector2i:
 	return Vector2i.ZERO
 
 
+func _json_rect(value, fallback: Rect2) -> Rect2:
+	if typeof(value) == TYPE_ARRAY and value.size() >= 4:
+		return Rect2(
+			Vector2(float(value[0]), float(value[1])),
+			Vector2(maxf(1.0, float(value[2])), maxf(1.0, float(value[3])))
+		)
+	return fallback
+
+
+func _json_rects(value) -> Array[Rect2]:
+	var rects: Array[Rect2] = []
+	if typeof(value) != TYPE_ARRAY:
+		return rects
+	for item in value:
+		var rect := _json_rect(item, Rect2())
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			rects.append(rect)
+	return rects
+
+
+func _local_rect_points(source_rect: Rect2, home: Vector2, scale: float, origin: Vector2) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var corners := [
+		source_rect.position,
+		Vector2(source_rect.end.x, source_rect.position.y),
+		source_rect.end,
+		Vector2(source_rect.position.x, source_rect.end.y),
+	]
+	for source_point in corners:
+		points.append(origin + source_point * scale - home)
+	return points
+
+
 func _polygon_center(points: PackedVector2Array) -> Vector2:
 	var center := Vector2.ZERO
 	for point in points:
@@ -957,22 +1020,83 @@ func _source_rect_for_points(points: PackedVector2Array) -> Rect2:
 	return Rect2(min_point, max_point - min_point)
 
 
+func _points_bounds_area(points: PackedVector2Array) -> float:
+	var bounds := _source_rect_for_points(points)
+	return bounds.size.x * bounds.size.y
+
+
+func _visible_source_rect_for_polygon(points: PackedVector2Array, fallback: Rect2) -> Rect2:
+	if points.is_empty() or source_image == null:
+		return fallback
+	var image_size: Vector2i = source_image.get_size()
+	var x0: int = max(0, floori(fallback.position.x))
+	var y0: int = max(0, floori(fallback.position.y))
+	var x1: int = min(image_size.x - 1, ceili(fallback.end.x))
+	var y1: int = min(image_size.y - 1, ceili(fallback.end.y))
+	var has_alpha := false
+	var min_point := Vector2(INF, INF)
+	var max_point := Vector2(-INF, -INF)
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			if source_image.get_pixel(x, y).a <= 0.08:
+				continue
+			var point := Vector2(x, y)
+			if not Geometry2D.is_point_in_polygon(point, points):
+				continue
+			has_alpha = true
+			min_point = min_point.min(point)
+			max_point = max_point.max(point)
+	if not has_alpha:
+		return fallback
+	return Rect2(min_point, Vector2(maxf(1.0, max_point.x - min_point.x + 1.0), maxf(1.0, max_point.y - min_point.y + 1.0)))
+
+
 func _apply_level_media(level_config: Dictionary) -> void:
-	var image_path := _level_image_path(level_config)
-	var next_texture: Texture2D = load(image_path)
+	var image_path := _level_image_path(level_config, current_mode)
+	var next_texture := _cached_texture(image_path)
 	if next_texture == null:
-		next_texture = load(DEFAULT_LEVEL_IMAGE_PATH)
+		image_path = DEFAULT_LEVEL_IMAGE_PATH
+		next_texture = _cached_texture(image_path)
 	texture = next_texture
-	source_image = texture.get_image()
+	source_image = _cached_source_image(image_path, texture)
 	source_size = texture.get_size()
 
 
-func _level_image_path(level_config: Dictionary) -> String:
-	if level_config.has("image") and typeof(level_config["image"]) == TYPE_STRING:
-		return level_config["image"]
-	if level_config.has("image") and typeof(level_config["image"]) == TYPE_DICTIONARY:
-		return str(level_config["image"].get("path", DEFAULT_LEVEL_IMAGE_PATH))
-	return DEFAULT_LEVEL_IMAGE_PATH
+func _cached_texture(path: String) -> Texture2D:
+	if texture_cache.has(path):
+		return texture_cache[path]
+	var loaded: Texture2D = load(path)
+	if loaded != null:
+		texture_cache[path] = loaded
+	return loaded
+
+
+func _cached_source_image(path: String, source_texture: Texture2D) -> Image:
+	if source_image_cache.has(path):
+		return source_image_cache[path]
+	var image := source_texture.get_image()
+	source_image_cache[path] = image
+	return image
+
+
+func _level_image_path(level_config: Dictionary, mode := "") -> String:
+	if not mode.is_empty():
+		var mode_config := _mode_config(level_config, mode)
+		var mode_image_path := _image_path_from_value(mode_config.get("image", null), "")
+		if not mode_image_path.is_empty():
+			return mode_image_path
+		mode_image_path = _image_path_from_value(mode_config.get("source_image", null), "")
+		if not mode_image_path.is_empty():
+			return mode_image_path
+	return _image_path_from_value(level_config.get("image", null), DEFAULT_LEVEL_IMAGE_PATH)
+
+
+func _image_path_from_value(value, fallback: String) -> String:
+	if typeof(value) == TYPE_STRING:
+		return str(value)
+	if typeof(value) == TYPE_DICTIONARY:
+		return str(value.get("path", fallback))
+	return fallback
 
 
 func _level_background_color(level_config: Dictionary) -> Color:
@@ -1027,7 +1151,8 @@ func _create_group(piece: Dictionary) -> void:
 	piece["visual"] = visual
 	var group = PieceGroupScript.new(group_node, piece)
 	groups.append(group)
-	_move_group_to(group, _scatter_position())
+	_move_group_to(group, _scatter_position_for_group(group))
+	spawn_bounds.append(_group_bounds_at(group, group.node.position).grow(8.0))
 
 
 func _create_piece_visual(piece: Dictionary) -> Node2D:
@@ -1048,14 +1173,60 @@ func _create_piece_visual(piece: Dictionary) -> Node2D:
 	return node
 
 
-func _scatter_position() -> Vector2:
-	var layout := _mobile_board_layout()
-	var play_area: Rect2 = layout["play_area"]
-	var margin := 72.0
+func _scatter_position_for_group(group) -> Vector2:
+	var area := _piece_drag_area()
+	var best_position := area.get_center()
+	var best_score := INF
+	var attempts := 96
+	for attempt in range(attempts):
+		var candidate := _spawn_candidate(area, attempt, attempts)
+		var clamped := _clamped_group_position(group, candidate)
+		var bounds := _group_bounds_at(group, clamped).grow(8.0)
+		var score := _spawn_overlap_score(bounds, area)
+		if score <= 0.001:
+			return clamped
+		if score < best_score:
+			best_score = score
+			best_position = clamped
+	return best_position
+
+
+func _spawn_candidate(area: Rect2, attempt: int, attempts: int) -> Vector2:
+	if attempt < 12:
+		var t := float(attempt) / 12.0
+		var angle := t * TAU
+		var radius := minf(area.size.x, area.size.y) * 0.36
+		return area.get_center() + Vector2(cos(angle), sin(angle)) * radius
+	if attempt < 28:
+		var side := (attempt - 12) % 4
+		var offset := float((attempt - 12) / 4 + 1) / 5.0
+		if side == 0:
+			return Vector2(lerpf(area.position.x, area.end.x, offset), area.position.y)
+		if side == 1:
+			return Vector2(area.end.x, lerpf(area.position.y, area.end.y, offset))
+		if side == 2:
+			return Vector2(lerpf(area.end.x, area.position.x, offset), area.end.y)
+		return Vector2(area.position.x, lerpf(area.end.y, area.position.y, offset))
 	return Vector2(
-		rng.randf_range(play_area.position.x + margin, play_area.end.x - margin),
-		rng.randf_range(play_area.position.y + margin, play_area.end.y - margin)
+		rng.randf_range(area.position.x, area.end.x),
+		rng.randf_range(area.position.y, area.end.y)
 	)
+
+
+func _spawn_overlap_score(bounds: Rect2, area: Rect2) -> float:
+	var score := 0.0
+	for existing in spawn_bounds:
+		score += _rect_overlap_area(bounds, existing) * 18.0
+	score += bounds.get_center().distance_squared_to(area.get_center()) * 0.002
+	return score
+
+
+func _rect_overlap_area(a: Rect2, b: Rect2) -> float:
+	var x0 := maxf(a.position.x, b.position.x)
+	var y0 := maxf(a.position.y, b.position.y)
+	var x1 := minf(a.end.x, b.end.x)
+	var y1 := minf(a.end.y, b.end.y)
+	return maxf(0.0, x1 - x0) * maxf(0.0, y1 - y0)
 
 
 func _move_group_to(group, target_position: Vector2) -> void:
@@ -1096,14 +1267,21 @@ func _group_bounds_at(group, target_position: Vector2) -> Rect2:
 	var max_point := Vector2(-INF, -INF)
 	for member in group.members:
 		var visual_position: Vector2 = member["visual"].position
-		for point in member["polygon"]:
-			var global_point: Vector2 = target_position + (visual_position + point).rotated(group.node.rotation)
-			min_point = min_point.min(global_point)
-			max_point = max_point.max(global_point)
-			has_point = true
+		for bounds_points in _member_bounds_points_list(member):
+			for point in bounds_points:
+				var global_point: Vector2 = target_position + (visual_position + point).rotated(group.node.rotation)
+				min_point = min_point.min(global_point)
+				max_point = max_point.max(global_point)
+				has_point = true
 	if not has_point:
 		return Rect2(target_position, Vector2.ZERO)
 	return Rect2(min_point, max_point - min_point)
+
+
+func _member_bounds_points_list(member: Dictionary) -> Array[PackedVector2Array]:
+	if member.has("bounds_points_list") and typeof(member["bounds_points_list"]) == TYPE_ARRAY and not member["bounds_points_list"].is_empty():
+		return member["bounds_points_list"]
+	return [member.get("bounds_points", member["polygon"])]
 
 
 func _begin_drag(screen_pos: Vector2) -> void:
@@ -1140,17 +1318,43 @@ func _group_at(screen_pos: Vector2):
 
 func _local_point_has_alpha(member: Dictionary, local_point: Vector2) -> bool:
 	var source_point: Vector2 = (local_point + member["home"] - board_origin) / source_scale
+	return _source_point_has_alpha(source_point, HIT_ALPHA_RADIUS)
+
+
+func _source_point_has_alpha(source_point: Vector2, radius := HIT_ALPHA_RADIUS) -> bool:
 	var center := Vector2i(roundi(source_point.x), roundi(source_point.y))
 	var image_size := source_image.get_size()
-	for y in range(center.y - HIT_ALPHA_RADIUS, center.y + HIT_ALPHA_RADIUS + 1):
+	for y in range(center.y - radius, center.y + radius + 1):
 		if y < 0 or y >= image_size.y:
 			continue
-		for x in range(center.x - HIT_ALPHA_RADIUS, center.x + HIT_ALPHA_RADIUS + 1):
+		for x in range(center.x - radius, center.x + radius + 1):
 			if x < 0 or x >= image_size.x:
 				continue
 			if source_image.get_pixel(x, y).a > 0.08:
 				return true
 	return false
+
+
+func _visible_cut_line_segments(source_line: PackedVector2Array, home: Vector2, scale: float, origin: Vector2) -> Array[PackedVector2Array]:
+	var segments: Array[PackedVector2Array] = []
+	var current := PackedVector2Array()
+	for index in range(source_line.size() - 1):
+		var a: Vector2 = source_line[index]
+		var b: Vector2 = source_line[index + 1]
+		var sample_count: int = max(2, ceili(a.distance_to(b) / 6.0))
+		for sample_index in range(sample_count + 1):
+			if index > 0 and sample_index == 0:
+				continue
+			var source_point: Vector2 = a.lerp(b, float(sample_index) / float(sample_count))
+			if _source_point_has_alpha(source_point, 3):
+				current.append(origin + source_point * scale - home)
+			else:
+				if current.size() >= 2:
+					segments.append(current)
+				current = PackedVector2Array()
+	if current.size() >= 2:
+		segments.append(current)
+	return segments
 
 
 func _select_group(group) -> void:
@@ -1194,7 +1398,7 @@ func _try_snap_chain(active) -> void:
 	var progressed := true
 	while progressed:
 		progressed = false
-		var other = SnapSolverScript.find_match(active, groups, SNAP_TOLERANCE, ROTATION_TOLERANCE)
+		var other = SnapSolverScript.find_match(active, groups, _snap_tolerance(), ROTATION_TOLERANCE)
 		if other != null:
 			_clear_hint_highlights()
 			active.absorb(other)
@@ -1204,6 +1408,10 @@ func _try_snap_chain(active) -> void:
 				selected_group = active
 			_pulse_node(active.node)
 			progressed = true
+
+
+func _snap_tolerance() -> float:
+	return clampf(SNAP_TOLERANCE * maxf(0.75, source_scale), 16.0, 24.0)
 
 
 func _check_complete() -> void:
@@ -1239,6 +1447,8 @@ func _show_hint() -> void:
 		status_label.text = "暂时没有可提示的相邻碎片。"
 		return
 	selected_group = pair[0]
+	_bring_to_front(pair[0])
+	_bring_to_front(pair[1])
 	_set_hint_highlights(pair)
 	_hint_pulse_node(pair[0].node)
 	_hint_pulse_node(pair[1].node)
@@ -1247,59 +1457,145 @@ func _show_hint() -> void:
 
 func _set_hint_highlights(pair: Array) -> void:
 	_clear_hint_highlights()
-	for group in pair:
-		_add_hint_highlight(group)
-		hint_highlighted_groups.append(group)
-
-
-func _add_hint_highlight(group) -> void:
-	if group == null:
+	if pair.size() < 4:
 		return
-	for member in group.members:
-		var visual: Node2D = member["visual"]
-		if not is_instance_valid(visual):
+	_add_hint_edge_highlights(pair[2], pair[3])
+	hint_highlighted_groups.append(pair[0])
+	hint_highlighted_groups.append(pair[1])
+
+
+func _add_hint_edge_highlights(a_member: Dictionary, b_member: Dictionary) -> void:
+	if a_member.is_empty() or b_member.is_empty():
+		return
+	var a_segments := _shared_edge_segments(a_member, b_member)
+	var b_segments := _shared_edge_segments(b_member, a_member)
+	if a_segments.is_empty() and b_segments.is_empty():
+		a_segments = _nearest_edge_segments(a_member, b_member)
+		b_segments = _nearest_edge_segments(b_member, a_member)
+	_add_hint_lines_to_member(a_member, a_segments)
+	_add_hint_lines_to_member(b_member, b_segments)
+
+
+func _shared_edge_segments(member: Dictionary, other_member: Dictionary) -> Array[PackedVector2Array]:
+	var segments: Array[PackedVector2Array] = []
+	var polygon: PackedVector2Array = member["polygon"]
+	var other_solved := _member_solved_polygon(other_member)
+	if polygon.size() < 2 or other_solved.size() < 2:
+		return segments
+	var tolerance := maxf(5.0, source_scale * 8.0)
+	for index in range(polygon.size()):
+		var a: Vector2 = polygon[index]
+		var b: Vector2 = polygon[(index + 1) % polygon.size()]
+		var edge_length := a.distance_to(b)
+		if edge_length < 1.0:
 			continue
+		var sample_count: int = max(3, ceili(edge_length / 8.0))
+		var current := PackedVector2Array()
+		for sample_index in range(sample_count + 1):
+			var t := float(sample_index) / float(sample_count)
+			var local_point := a.lerp(b, t)
+			var solved_point: Vector2 = member["home"] + local_point
+			if _point_to_polygon_boundary_distance(solved_point, other_solved) <= tolerance:
+				current.append(local_point)
+			else:
+				if current.size() >= 2:
+					segments.append(current)
+				current = PackedVector2Array()
+		if current.size() >= 2:
+			segments.append(current)
+	return segments
+
+
+func _nearest_edge_segments(member: Dictionary, other_member: Dictionary) -> Array[PackedVector2Array]:
+	var polygon: PackedVector2Array = member["polygon"]
+	var other_solved := _member_solved_polygon(other_member)
+	var best_edge := PackedVector2Array()
+	var best_distance := INF
+	for index in range(polygon.size()):
+		var a: Vector2 = polygon[index]
+		var b: Vector2 = polygon[(index + 1) % polygon.size()]
+		var midpoint := a.lerp(b, 0.5)
+		var solved_midpoint: Vector2 = member["home"] + midpoint
+		var distance := _point_to_polygon_boundary_distance(solved_midpoint, other_solved)
+		if distance < best_distance:
+			best_distance = distance
+			best_edge = PackedVector2Array([a, b])
+	return [best_edge] if best_edge.size() >= 2 else []
+
+
+func _add_hint_lines_to_member(member: Dictionary, segments: Array[PackedVector2Array]) -> void:
+	var visual: Node2D = member["visual"]
+	if not is_instance_valid(visual):
+		return
+	for segment in segments:
 		var line := Line2D.new()
 		line.name = "hint_highlight"
-		line.width = 5.0
-		line.default_color = Color(1.0, 0.73, 0.18, 0.92)
-		line.closed = true
+		line.width = 6.0
+		line.default_color = Color(1.0, 0.73, 0.18, 0.96)
+		line.closed = false
 		line.joint_mode = Line2D.LINE_JOINT_ROUND
 		line.begin_cap_mode = Line2D.LINE_CAP_ROUND
 		line.end_cap_mode = Line2D.LINE_CAP_ROUND
 		line.z_index = 20
-		line.points = member["polygon"]
+		line.points = segment
 		visual.add_child(line)
+		hint_highlighted_lines.append(line)
+
+
+func _member_solved_polygon(member: Dictionary) -> PackedVector2Array:
+	var solved := PackedVector2Array()
+	for point in member["polygon"]:
+		solved.append(member["home"] + point)
+	return solved
+
+
+func _point_to_polygon_boundary_distance(point: Vector2, polygon: PackedVector2Array) -> float:
+	var best := INF
+	for index in range(polygon.size()):
+		var a: Vector2 = polygon[index]
+		var b: Vector2 = polygon[(index + 1) % polygon.size()]
+		best = minf(best, _point_to_segment_distance(point, a, b))
+	return best
+
+
+func _point_to_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var length_squared := ab.length_squared()
+	if length_squared <= 0.0001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
+	return point.distance_to(a + ab * t)
 
 
 func _clear_hint_highlights() -> void:
-	for group in hint_highlighted_groups:
-		if group == null:
+	for line in hint_highlighted_lines:
+		if line == null:
 			continue
-		for member in group.members:
-			var visual: Node2D = member["visual"]
-			if not is_instance_valid(visual):
-				continue
-			var highlight := visual.get_node_or_null("hint_highlight")
-			if highlight != null:
-				highlight.queue_free()
+		if is_instance_valid(line):
+			line.queue_free()
 	hint_highlighted_groups.clear()
+	hint_highlighted_lines.clear()
 
 
 func _find_hint_pair() -> Array:
 	for i in groups.size():
 		for j in range(i + 1, groups.size()):
-			if _groups_are_neighbors(groups[i], groups[j]):
-				return [groups[i], groups[j]]
+			var member_pair := _neighbor_member_pair(groups[i], groups[j])
+			if not member_pair.is_empty():
+				return [groups[i], groups[j], member_pair[0], member_pair[1]]
 	return []
 
 
 func _groups_are_neighbors(a, b) -> bool:
+	return not _neighbor_member_pair(a, b).is_empty()
+
+
+func _neighbor_member_pair(a, b) -> Array:
 	for am in a.members:
 		for bm in b.members:
 			if am["neighbors"].has(bm["id"]) or bm["neighbors"].has(am["id"]):
-				return true
-	return false
+				return [am, bm]
+	return []
 
 
 func _toggle_preview() -> void:

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -10,24 +10,26 @@ import {
   DEFAULT_IMAGE_PATH,
   analyzeActualPieces,
   catmullRomPath,
-  clamp,
   detectImageOutline,
   findCutGaps,
   generateFractureNetwork,
   generateKnobPieces,
   makeEmptyLevel,
+  polygonArea,
   presetCut,
   presetShapePoints,
   samplePath,
   serializePoints,
+  simplifyClosedPath,
   snapPoint,
+  traceBoundaryLoops,
   uid,
   type ActualPiecePreview,
 } from "./geometry";
-import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point } from "./types";
+import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig } from "./types";
 
 const snapThreshold = 18;
-const edgePrecision = 2;
+const mergePolygonTolerance = 5;
 
 type EditMode = "polygon" | "knob";
 type PolygonViewMode = "result" | "edit" | "inspect";
@@ -54,25 +56,15 @@ type DragState = {
   original: CutLine;
 };
 
+type DrawingCutState = {
+  id: string;
+  points: Point[];
+};
+
 type SelectOption = {
   value: string;
   label: string;
   detail?: string;
-};
-
-type DevicePreviewOption = {
-  id: string;
-  label: string;
-  width: number;
-  height: number;
-};
-
-type RuntimePreviewLayout = {
-  hudHeight: number;
-  playArea: { x: number; y: number; width: number; height: number };
-  boardOrigin: Point;
-  boardSize: { width: number; height: number };
-  scale: number;
 };
 
 type AnalysisWorkerMessage =
@@ -86,15 +78,19 @@ type AnalysisWorkerMessage =
       result: Omit<ActualPiecePreview, "dataUrl"> & { previewBuffer: ArrayBuffer };
     };
 
-const mobilePreviewDevices: DevicePreviewOption[] = [
-  { id: "small", label: "小屏", width: 360, height: 640 },
-  { id: "iphone", label: "手机", width: 390, height: 844 },
-  { id: "large", label: "大屏", width: 430, height: 932 },
-  { id: "ipad", label: "iPad", width: 768, height: 1024 },
-];
+type ToastNotice = {
+  id: number;
+  message: string;
+};
 
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return structuredClone(snapshot);
+}
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
 }
 
 function makeDefaultCatalog(): LevelCatalog {
@@ -141,12 +137,59 @@ function tupleFromPoint(point: Point): number[] {
   return [Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100];
 }
 
+function imageConfigPath(value?: LevelImageConfig): string {
+  if (!value) return "";
+  return typeof value === "string" ? value : value.path || "";
+}
+
 function polygonCenter(points: Point[]): Point {
   if (!points.length) return { x: 0, y: 0 };
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
     y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
   };
+}
+
+function pointBounds(points: Point[]): { x: number; y: number; width: number; height: number } {
+  if (!points.length) return { x: 0, y: 0, width: 0, height: 0 };
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function tupleBounds(points: Point[]): number[] {
+  const bounds = pointBounds(points);
+  return [bounds.x, bounds.y, bounds.width, bounds.height].map((value) => Math.round(value * 100) / 100);
+}
+
+function unionTupleBounds(boundsList: Array<number[] | undefined>, fallbackPoints: Point[]): number[] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const bounds of boundsList) {
+    if (!bounds || bounds.length < 4) continue;
+    minX = Math.min(minX, bounds[0]);
+    minY = Math.min(minY, bounds[1]);
+    maxX = Math.max(maxX, bounds[0] + bounds[2]);
+    maxY = Math.max(maxY, bounds[1] + bounds[3]);
+  }
+  if (!Number.isFinite(minX)) return tupleBounds(fallbackPoints);
+  return [minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY)].map((value) => Math.round(value * 100) / 100);
+}
+
+function visibleBoundsList(piece?: LevelPiece): number[][] {
+  if (!piece) return [];
+  if (piece.visible_bounds_list?.length) return piece.visible_bounds_list;
+  return piece.visible_bounds ? [piece.visible_bounds] : [];
 }
 
 function translateCut(cut: CutLine, center: Point): CutLine {
@@ -159,17 +202,17 @@ function translateCut(cut: CutLine, center: Point): CutLine {
   };
 }
 
-function edgePointKey(point: Point): string {
-  return `${Math.round(point.x / edgePrecision)},${Math.round(point.y / edgePrecision)}`;
+function edgePointKey(point: Point, precision = 2): string {
+  return `${Math.round(point.x / precision)},${Math.round(point.y / precision)}`;
 }
 
-function edgeKey(a: Point, b: Point): string {
-  return `${edgePointKey(a)}>${edgePointKey(b)}`;
+function edgeKey(a: Point, b: Point, precision = 2): string {
+  return `${edgePointKey(a, precision)}>${edgePointKey(b, precision)}`;
 }
 
-function undirectedEdgeKey(a: Point, b: Point): string {
-  const ak = edgePointKey(a);
-  const bk = edgePointKey(b);
+function undirectedEdgeKey(a: Point, b: Point, precision = 2): string {
+  const ak = edgePointKey(a, precision);
+  const bk = edgePointKey(b, precision);
   return ak < bk ? `${ak}|${bk}` : `${bk}|${ak}`;
 }
 
@@ -177,7 +220,72 @@ function polygonEdges(points: Point[]) {
   return points.map((from, index) => ({ from, to: points[(index + 1) % points.length] }));
 }
 
-function mergePolygons(a: Point[], b: Point[]): Point[] | null {
+function polylinePath(points: Point[], closed = false): string {
+  if (!points.length) return "";
+  const commands = [`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`];
+  for (let i = 1; i < points.length; i += 1) {
+    commands.push(`L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`);
+  }
+  if (closed) commands.push("Z");
+  return commands.join(" ");
+}
+
+function pointToSegmentDistance(point: Point, a: Point, b: Point): number {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const wx = point.x - a.x;
+  const wy = point.y - a.y;
+  const len2 = vx * vx + vy * vy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2));
+  return Math.hypot(point.x - (a.x + vx * t), point.y - (a.y + vy * t));
+}
+
+function nearestBoundaryDistance(point: Point, points: Point[]): number {
+  return polygonEdges(points).reduce((best, edge) => Math.min(best, pointToSegmentDistance(point, edge.from, edge.to)), Infinity);
+}
+
+function sampleSegment(a: Point, b: Point, spacing: number): Point[] {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const count = Math.max(2, Math.ceil(length / spacing));
+  return Array.from({ length: count + 1 }, (_, index) => ({
+    x: a.x + ((b.x - a.x) * index) / count,
+    y: a.y + ((b.y - a.y) * index) / count,
+  }));
+}
+
+function sharedBoundaryLength(a: Point[], b: Point[], tolerance = 4): number {
+  let length = 0;
+  for (const edge of polygonEdges(a)) {
+    const edgeLength = Math.hypot(edge.to.x - edge.from.x, edge.to.y - edge.from.y);
+    if (edgeLength < 1) continue;
+    const samples = sampleSegment(edge.from, edge.to, 8);
+    let closeSamples = 0;
+    for (const point of samples) {
+      if (nearestBoundaryDistance(point, b) <= tolerance) closeSamples += 1;
+    }
+    if (closeSamples >= Math.max(2, samples.length * 0.45)) {
+      length += edgeLength * (closeSamples / samples.length);
+    }
+  }
+  return length;
+}
+
+function areNeighborPieces(a: Point[], b: Point[]): boolean {
+  return Math.max(sharedBoundaryLength(a, b), sharedBoundaryLength(b, a)) >= 16;
+}
+
+function edgeSharedWithPolygon(edge: { from: Point; to: Point }, polygon: Point[], tolerance = mergePolygonTolerance): boolean {
+  const edgeLength = Math.hypot(edge.to.x - edge.from.x, edge.to.y - edge.from.y);
+  if (edgeLength < 1) return false;
+  const samples = sampleSegment(edge.from, edge.to, 6);
+  let closeSamples = 0;
+  for (const point of samples) {
+    if (nearestBoundaryDistance(point, polygon) <= tolerance) closeSamples += 1;
+  }
+  return closeSamples >= Math.max(2, samples.length * 0.45);
+}
+
+function mergePolygonsByExactEdges(a: Point[], b: Point[]): Point[] | null {
   const allEdges = [...polygonEdges(a), ...polygonEdges(b)];
   const edgeCounts = new Map<string, number>();
   for (const edge of allEdges) {
@@ -226,11 +334,79 @@ function mergePolygons(a: Point[], b: Point[]): Point[] | null {
   return merged.length >= 3 ? merged : null;
 }
 
+function drawPolygonToMask(ctx: CanvasRenderingContext2D, points: Point[], bounds: { x: number; y: number }, padding: number, scale: number) {
+  if (points.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo((points[0].x - bounds.x + padding) * scale, (points[0].y - bounds.y + padding) * scale);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo((points[i].x - bounds.x + padding) * scale, (points[i].y - bounds.y + padding) * scale);
+  }
+  ctx.closePath();
+}
+
+function strokeSharedEdgesToMask(ctx: CanvasRenderingContext2D, edges: Array<{ from: Point; to: Point }>, bounds: { x: number; y: number }, padding: number, scale: number) {
+  for (const edge of edges) {
+    ctx.beginPath();
+    ctx.moveTo((edge.from.x - bounds.x + padding) * scale, (edge.from.y - bounds.y + padding) * scale);
+    ctx.lineTo((edge.to.x - bounds.x + padding) * scale, (edge.to.y - bounds.y + padding) * scale);
+    ctx.stroke();
+  }
+}
+
+function mergePolygonsByMask(a: Point[], b: Point[]): Point[] | null {
+  if (!areNeighborPieces(a, b)) return null;
+  const bounds = pointBounds([...a, ...b]);
+  const padding = mergePolygonTolerance * 4 + 8;
+  const rawWidth = Math.max(1, bounds.width + padding * 2);
+  const rawHeight = Math.max(1, bounds.height + padding * 2);
+  const scale = Math.min(1, 1400 / Math.max(rawWidth, rawHeight));
+  const width = Math.max(4, Math.ceil(rawWidth * scale));
+  const height = Math.max(4, Math.ceil(rawHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.fillStyle = "#fff";
+  drawPolygonToMask(ctx, a, bounds, padding, scale);
+  ctx.fill();
+  drawPolygonToMask(ctx, b, bounds, padding, scale);
+  ctx.fill();
+
+  const sharedEdges = [
+    ...polygonEdges(a).filter((edge) => edgeSharedWithPolygon(edge, b)),
+    ...polygonEdges(b).filter((edge) => edgeSharedWithPolygon(edge, a)),
+  ];
+  ctx.strokeStyle = "#fff";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(2, mergePolygonTolerance * 2.5 * scale);
+  strokeSharedEdgesToMask(ctx, sharedEdges, bounds, padding, scale);
+
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const mask = new Uint8Array(width * height);
+  for (let i = 0; i < width * height; i += 1) mask[i] = data[i * 4 + 3] > 0 ? 1 : 0;
+  const loops = traceBoundaryLoops(mask, width, height);
+  const largestLoop = loops.sort((left, right) => Math.abs(polygonArea(right)) - Math.abs(polygonArea(left)))[0] || [];
+  if (largestLoop.length < 4) return null;
+  const raw = largestLoop.map((point) => ({
+    x: point.x / scale + bounds.x - padding,
+    y: point.y / scale + bounds.y - padding,
+  }));
+  const simplified = simplifyClosedPath(raw, Math.max(1.2, 2.2 / Math.max(scale, 1e-6)));
+  return simplified.length >= 3 ? simplified : null;
+}
+
+function mergePolygons(a: Point[], b: Point[]): Point[] | null {
+  return mergePolygonsByExactEdges(a, b) || mergePolygonsByMask(a, b);
+}
+
 function cellsToLevelPieces(cells: PieceCell[]): LevelPiece[] {
   const validCells = cells.filter((piece) => piece.points.length >= 3);
   return validCells.map((piece) => {
     const neighbors = validCells
-      .filter((candidate) => candidate.id !== piece.id && mergePolygons(piece.points, candidate.points))
+      .filter((candidate) => candidate.id !== piece.id && areNeighborPieces(piece.points, candidate.points))
       .map((candidate) => candidate.id);
     return {
       id: piece.id,
@@ -239,46 +415,16 @@ function cellsToLevelPieces(cells: PieceCell[]): LevelPiece[] {
       points: piece.points.map(tupleFromPoint),
       neighbors,
       cut_lines: [],
+      visible_bounds: tupleBounds(piece.points),
+      visible_bounds_list: [tupleBounds(piece.points)],
     };
   });
 }
 
-function iconButtonSizeForPreview(width: number): number {
-  const separation = width < 430 ? 6 : 8;
-  const availableWidth = Math.max(240, width - 32);
-  return clamp(Math.floor((availableWidth - separation * 4) / 5), 48, 64);
-}
-
-function mobileRuntimeLayout(level: LevelConfig, imageSize: { width: number; height: number }, device: DevicePreviewOption): RuntimePreviewLayout {
-  const runtime = level.runtime_layout;
-  const boardMarginRatio = clamp(runtime?.board_margin_ratio ?? 0.92, 0.72, 0.96);
-  const hudHeightRatio = clamp(runtime?.hud_height_ratio ?? 0.13, 0.1, 0.18);
-  const sideMarginRatio = clamp(runtime?.side_margin_ratio ?? 0.055, 0.03, 0.1);
-  const bottomMarginRatio = clamp(runtime?.bottom_margin_ratio ?? 0.06, 0.04, 0.12);
-  const iconSize = iconButtonSizeForPreview(device.width);
-  const hudHeight = clamp(Math.max(device.height * hudHeightRatio, iconSize + 32), 88, 136);
-  const sideMargin = clamp(device.width * sideMarginRatio, 24, 56);
-  const bottomMargin = clamp(device.height * bottomMarginRatio, 32, 64);
-  const playArea = {
-    x: sideMargin,
-    y: hudHeight,
-    width: Math.max(240, device.width - sideMargin * 2),
-    height: Math.max(220, device.height - hudHeight - bottomMargin),
-  };
-  const safeImageWidth = Math.max(1, imageSize.width);
-  const safeImageHeight = Math.max(1, imageSize.height);
-  const scale = Math.min(playArea.width / safeImageWidth, playArea.height / safeImageHeight) * boardMarginRatio;
-  const boardSize = { width: safeImageWidth * scale, height: safeImageHeight * scale };
-  return {
-    hudHeight,
-    playArea,
-    boardOrigin: {
-      x: playArea.x + (playArea.width - boardSize.width) * 0.5,
-      y: playArea.y + (playArea.height - boardSize.height) * 0.5,
-    },
-    boardSize,
-    scale,
-  };
+function polygonViewLabel(view: PolygonViewMode): string {
+  if (view === "result") return "查看";
+  if (view === "edit") return "编辑";
+  return "检查";
 }
 
 function previewBufferToDataUrl(width: number, height: number, previewBuffer: ArrayBuffer): string {
@@ -313,11 +459,12 @@ function App() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showKnobPieces, setShowKnobPieces] = useState(true);
   const [polygonView, setPolygonView] = useState<PolygonViewMode>("result");
+  const [drawingCut, setDrawingCut] = useState<DrawingCutState | null>(null);
+  const [drawingHoverPoint, setDrawingHoverPoint] = useState<Point | null>(null);
   const [jsonText, setJsonText] = useState("");
-  const [saveStatus, setSaveStatus] = useState("");
+  const [toast, setToast] = useState<ToastNotice | null>(null);
   const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
-  const [previewDeviceId, setPreviewDeviceId] = useState("iphone");
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
@@ -338,6 +485,12 @@ function App() {
   useEffect(() => {
     void loadCatalog();
   }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timeout = window.setTimeout(() => setToast((current) => (current?.id === toast.id ? null : current)), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   useEffect(() => {
     try {
@@ -371,6 +524,10 @@ function App() {
     }
   }, []);
 
+  function showToast(message: string) {
+    setToast({ id: Date.now(), message });
+  }
+
   const currentTopic = useMemo(() => catalog.topics.find((topic) => topic.id === currentTarget.topicId), [catalog, currentTarget.topicId]);
   const currentCatalogLevel = useMemo(
     () => currentTopic?.levels.find((item) => item.id === currentTarget.levelId),
@@ -386,12 +543,6 @@ function App() {
   );
   const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
   const currentLevelName = localized(currentCatalogLevel?.title_i18n, locale, currentCatalogLevel?.title || level.title || currentTarget.levelId);
-  const previewDevice = mobilePreviewDevices.find((device) => device.id === previewDeviceId) || mobilePreviewDevices[1];
-  const previewImageSize = {
-    width: image?.naturalWidth || level.image.width || 1,
-    height: image?.naturalHeight || level.image.height || 1,
-  };
-  const mobilePreviewLayout = useMemo(() => mobileRuntimeLayout(level, previewImageSize, previewDevice), [level, previewDevice, previewImageSize.width, previewImageSize.height]);
 
   async function loadCatalog() {
     try {
@@ -410,7 +561,7 @@ function App() {
       if (firstTopic && firstLevel) await loadLevel(firstTopic.id, firstLevel.id, firstLevel);
       else loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
     } catch (error) {
-      setSaveStatus(error instanceof Error ? `加载 catalog 失败：${error.message}` : "加载 catalog 失败");
+      showToast(error instanceof Error ? `加载 catalog 失败：${error.message}` : "加载 catalog 失败");
       loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
     }
   }
@@ -540,6 +691,10 @@ function App() {
     knob: knobPieces.length > 0,
   };
   const canSaveToGodot = completedModes.polygon && completedModes.knob && modeReady.polygon && modeReady.knob;
+  const canvasModeLabel =
+    activeMode === "polygon"
+      ? `多边形 · ${drawingCut ? "添加线条" : polygonViewLabel(polygonView)}`
+      : `凹凸 · ${showKnobPieces ? "预览" : "编辑"}`;
 
   useEffect(() => {
     if (!image) {
@@ -608,6 +763,8 @@ function App() {
     setSelectedId("");
     setSelectedPieceIds([]);
     setDrag(null);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
   }
 
   function undo() {
@@ -631,6 +788,36 @@ function App() {
       return current.slice(0, -1);
     });
   }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (drawingCut && event.key === "Escape") {
+        event.preventDefault();
+        finishDrawingCut();
+        return;
+      }
+      if (isTextEditingTarget(event.target)) return;
+      const modKey = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (modKey && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (modKey && key === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (!modKey && activeMode === "polygon" && selectedId && (event.key === "Backspace" || event.key === "Delete")) {
+        event.preventDefault();
+        removeSelected();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeMode, drawingCut, redoStack.length, selectedId, undoStack.length]);
 
   function requestModeChange(mode: EditMode) {
     if (mode === activeMode) return;
@@ -673,7 +860,7 @@ function App() {
   async function saveAndSwitchLevel() {
     if (!pendingTarget) return;
     if (!canSaveToGodot) {
-      setSaveStatus("当前关卡两个模式都完成后，才能保存并切换。");
+      showToast("当前关卡两个模式都完成后，才能保存并切换。");
       return;
     }
     const ok = await saveJsonToGodot();
@@ -681,7 +868,7 @@ function App() {
   }
 
   async function saveCatalogOnly() {
-    setSaveStatus("保存目录...");
+    showToast("保存目录...");
     try {
       const response = await fetch("/api/catalog", {
         method: "POST",
@@ -690,9 +877,9 @@ function App() {
       });
       const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-      setSaveStatus(`目录已保存到 ${result.path}`);
+      showToast(`目录已保存到 ${result.path}`);
     } catch (error) {
-      setSaveStatus(error instanceof Error ? `保存目录失败：${error.message}` : "保存目录失败");
+      showToast(error instanceof Error ? `保存目录失败：${error.message}` : "保存目录失败");
     }
   }
 
@@ -753,11 +940,11 @@ function App() {
 
   function createTopic(id: string, name: string) {
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-      setSaveStatus("主题 ID 只能包含英文、数字、下划线或短横线。");
+      showToast("主题 ID 只能包含英文、数字、下划线或短横线。");
       return false;
     }
     if (catalog.topics.some((topic) => topic.id === id)) {
-      setSaveStatus("主题 ID 已存在。");
+      showToast("主题 ID 已存在。");
       return false;
     }
     setCatalog((current) => ({
@@ -774,7 +961,7 @@ function App() {
         },
       ]),
     }));
-    setSaveStatus(`已创建主题 ${name}`);
+    showToast(`已创建主题 ${name}`);
     return true;
   }
 
@@ -786,11 +973,11 @@ function App() {
     const topicId = currentTopic?.id;
     if (!topicId) return false;
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-      setSaveStatus("关卡 ID 只能包含英文、数字、下划线或短横线。");
+      showToast("关卡 ID 只能包含英文、数字、下划线或短横线。");
       return false;
     }
     if (currentTopic?.levels.some((item) => item.id === id)) {
-      setSaveStatus("当前主题下已存在这个关卡 ID。");
+      showToast("当前主题下已存在这个关卡 ID。");
       return false;
     }
     const nextTarget = { topicId, levelId: id };
@@ -834,7 +1021,7 @@ function App() {
       topicId,
       id,
     );
-    setSaveStatus(`已创建 ${title}，请上传 source 图并完成两种模式。`);
+    showToast(`已创建 ${title}，请上传 source 图并完成两种模式。`);
     return true;
   }
 
@@ -844,12 +1031,12 @@ function App() {
 
   function markCurrentModeComplete() {
     if (!modeReady[activeMode]) {
-      setSaveStatus(activeMode === "polygon" ? "多边形模式还没有生成可用碎片。" : "凹凸模式还没有可用碎片。");
+      showToast(activeMode === "polygon" ? "多边形模式还没有生成可用碎片。" : "凹凸模式还没有可用碎片。");
       return;
     }
     setCompletedModes((current) => ({ ...current, [activeMode]: true }));
     setDirtyModes((current) => ({ ...current, [activeMode]: false }));
-    setSaveStatus(`${activeMode === "polygon" ? "多边形" : "凹凸"}模式已标记完成。`);
+    showToast(`${activeMode === "polygon" ? "多边形" : "凹凸"}模式已标记完成。`);
   }
 
   function catalogForSave() {
@@ -872,7 +1059,7 @@ function App() {
 
   function mergeSelectedPieces() {
     if (selectedPieceIds.length !== 2) {
-      setSaveStatus("请选择两个相邻碎片。");
+      showToast("请选择两个相邻碎片。");
       return;
     }
     if (activeMode === "polygon") {
@@ -880,14 +1067,14 @@ function App() {
       if (!selectedPieces[0] || !selectedPieces[1]) return;
       const mergedPoints = mergePolygons(selectedPieces[0].points, selectedPieces[1].points);
       if (!mergedPoints) {
-        setSaveStatus("只能合并相邻碎片。");
+        showToast("只能合并相邻碎片。");
         return;
       }
       recordEdit("polygon");
       const merged: PieceCell = { id: `poly_merge_${Date.now().toString(36)}`, points: mergedPoints };
       setPieces((current) => [...current.filter((piece) => !selectedPieceIds.includes(piece.id)), merged]);
       setSelectedPieceIds([merged.id]);
-      setSaveStatus("已合并多边形碎片。");
+      showToast("已合并多边形碎片。");
       return;
     }
 
@@ -897,12 +1084,13 @@ function App() {
     const secondPoints = selectedKnobPieces[1].points.map(pointFromTuple);
     const mergedPoints = mergePolygons(firstPoints, secondPoints);
     if (!mergedPoints) {
-      setSaveStatus("只能合并相邻碎片。");
+      showToast("只能合并相邻碎片。");
       return;
     }
     recordEdit("knob");
     const mergedId = `knob_merge_${Date.now().toString(36)}`;
     const neighborIds = [...new Set([...selectedKnobPieces[0].neighbors, ...selectedKnobPieces[1].neighbors].filter((id) => !selectedPieceIds.includes(id)))];
+    const mergedVisibleBoundsList = selectedKnobPieces.flatMap(visibleBoundsList);
     const merged: LevelPiece = {
       id: mergedId,
       cell: selectedKnobPieces[0].cell,
@@ -910,6 +1098,8 @@ function App() {
       points: mergedPoints.map(tupleFromPoint),
       neighbors: neighborIds,
       cut_lines: [],
+      visible_bounds: unionTupleBounds(mergedVisibleBoundsList, mergedPoints),
+      visible_bounds_list: mergedVisibleBoundsList.length ? mergedVisibleBoundsList : [tupleBounds(mergedPoints)],
     };
     setKnobPieces((current) =>
       current
@@ -921,7 +1111,7 @@ function App() {
         .concat(merged),
     );
     setSelectedPieceIds([mergedId]);
-    setSaveStatus("已合并凹凸碎片。");
+    showToast("已合并凹凸碎片。");
   }
 
   function loadBrowserImage(src: string, name: string, godotPath: string) {
@@ -943,7 +1133,7 @@ function App() {
     next.onerror = () => {
       if (src !== DEFAULT_BROWSER_IMAGE) {
         loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
-        setSaveStatus("当前关卡还没有 source 图，已临时使用示例图预览。");
+        showToast("当前关卡还没有 source 图，已临时使用示例图预览。");
       }
     };
     next.src = src;
@@ -967,7 +1157,7 @@ function App() {
         })),
       );
     } catch (error) {
-      setSaveStatus(error instanceof Error ? `上传 source 失败：${error.message}` : "上传 source 失败");
+      showToast(error instanceof Error ? `上传 source 失败：${error.message}` : "上传 source 失败");
       loadBrowserImage(URL.createObjectURL(file), file.name, level.image.path || DEFAULT_IMAGE_PATH);
     }
   }
@@ -1018,6 +1208,24 @@ function App() {
   function updateImagePath(path: string) {
     recordEdit(activeMode);
     setLevel((current) => ({ ...current, image: { ...current.image, path } }));
+  }
+
+  function updateModeImagePath(mode: EditMode, path: string) {
+    recordEdit(mode);
+    setLevel((current) => {
+      const modeConfig = current.modes[mode];
+      const nextMode = { ...modeConfig };
+      if (path.trim()) nextMode.image = { path: path.trim() };
+      else delete nextMode.image;
+      delete nextMode.source_image;
+      return {
+        ...current,
+        modes: {
+          ...current.modes,
+          [mode]: nextMode,
+        },
+      };
+    });
   }
 
   function updateBackground<K extends keyof LevelConfig["background"]>(key: K, value: LevelConfig["background"][K]) {
@@ -1091,30 +1299,38 @@ function App() {
     const template = event.dataTransfer.getData("application/x-jigcat-shape") as CutTemplate;
     if (!template) return;
     event.preventDefault();
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const [minX, minY, width, height] = viewBox.split(" ").map(Number);
-    addPresetAt(template, {
-      x: minX + ((event.clientX - rect.left) / rect.width) * width,
-      y: minY + ((event.clientY - rect.top) / rect.height) * height,
-    });
+    addPresetAt(template, clientPointToSvg(event.clientX, event.clientY));
     setPolygonView("edit");
   }
 
   function addBridgeCut() {
     if (!analysis.outline.length) return;
+    setPolygonView("edit");
+    setSelectedId("");
+    setDrawingHoverPoint(null);
+    setDrawingCut({ id: uid("cut"), points: [] });
+    showToast("左键添加点，右键结束线条。");
+  }
+
+  function finishDrawingCut() {
+    if (!drawingCut) return;
+    if (drawingCut.points.length < 2) {
+      setDrawingCut(null);
+      setDrawingHoverPoint(null);
+      showToast("已取消添加线条。");
+      return;
+    }
     recordEdit("polygon");
-    const a = analysis.outline[Math.floor(analysis.outline.length * 0.12)];
-    const b = analysis.outline[Math.floor(analysis.outline.length * 0.62)];
     const next: CutLine = {
-      id: uid("cut"),
+      id: drawingCut.id,
       type: "fracture",
       template: "knob",
-      points: samplePath([a, b], 7),
+      points: drawingCut.points,
     };
     setCuts((current) => [...current, next]);
     setSelectedId(next.id);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
   }
 
   function removeSelected() {
@@ -1124,18 +1340,59 @@ function App() {
     setSelectedId("");
   }
 
-  function svgPoint(event: React.PointerEvent<SVGElement>): Point {
+  function clearAllCuts() {
+    if (!cuts.length) return;
+    recordEdit("polygon");
+    setCuts([]);
+    setAnalysisCuts([]);
+    setPieces([]);
+    setSelectedId("");
+    setSelectedPieceIds([]);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
+    showToast("已清空所有线条。");
+  }
+
+  function clientPointToSvg(clientX: number, clientY: number): Point {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
+    const ctm = svg.getScreenCTM();
+    if (ctm) {
+      const point = svg.createSVGPoint();
+      point.x = clientX;
+      point.y = clientY;
+      const transformed = point.matrixTransform(ctm.inverse());
+      return { x: transformed.x, y: transformed.y };
+    }
     const rect = svg.getBoundingClientRect();
     const [minX, minY, width, height] = viewBox.split(" ").map(Number);
-    return {
-      x: minX + ((event.clientX - rect.left) / rect.width) * width,
-      y: minY + ((event.clientY - rect.top) / rect.height) * height,
-    };
+    return { x: minX + ((clientX - rect.left) / rect.width) * width, y: minY + ((clientY - rect.top) / rect.height) * height };
+  }
+
+  function svgPoint(event: React.PointerEvent<SVGElement>): Point {
+    return clientPointToSvg(event.clientX, event.clientY);
+  }
+
+  function handleCanvasPointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (drawingCut) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const point = svgPoint(event);
+      setDrawingCut((current) => (current ? { ...current, points: [...current.points, point] } : current));
+      setDrawingHoverPoint(point);
+      return;
+    }
+    setSelectedId("");
+  }
+
+  function handleCanvasContextMenu(event: React.MouseEvent<SVGSVGElement>) {
+    if (!drawingCut) return;
+    event.preventDefault();
+    finishDrawingCut();
   }
 
   function beginDrag(event: React.PointerEvent<SVGElement>, cutId: string, pointIndex: number | null) {
+    if (drawingCut) return;
     event.stopPropagation();
     const cut = cuts.find((item) => item.id === cutId);
     if (!cut) return;
@@ -1151,6 +1408,10 @@ function App() {
   }
 
   function moveDrag(event: React.PointerEvent<SVGSVGElement>) {
+    if (drawingCut) {
+      setDrawingHoverPoint(svgPoint(event));
+      return;
+    }
     if (!drag) return;
     dragPointRef.current = svgPoint(event);
     if (dragFrameRef.current != null) return;
@@ -1216,7 +1477,7 @@ function App() {
   function cutPathD(cut: CutLine): string {
     const cached = cutPathCacheRef.current.get(cut);
     if (cached) return cached;
-    const value = catmullRomPath(cut.points, cut.type === "preset_shape" ? shapeTension(cut.template) : 0.9, cut.type === "preset_shape");
+    const value = cut.type === "preset_shape" ? catmullRomPath(cut.points, shapeTension(cut.template), true) : polylinePath(cut.points);
     cutPathCacheRef.current.set(cut, value);
     return value;
   }
@@ -1248,10 +1509,12 @@ function App() {
       locale,
       modes: {
         polygon: {
+          ...level.modes.polygon,
           source: "precomputed",
           pieces: polygonLevelPieces,
         },
         knob: {
+          ...level.modes.knob,
           source: "precomputed",
           rows: Math.max(1, Math.round(level.grid.rows)),
           cols: Math.max(1, Math.round(level.grid.cols)),
@@ -1295,15 +1558,16 @@ function App() {
     a.click();
     URL.revokeObjectURL(a.href);
     markExported();
+    showToast("JSON 已导出。");
   }
 
   async function saveJsonToGodot(): Promise<boolean> {
     if (!canSaveToGodot) {
-      setSaveStatus("需要先完成多边形和凹凸两个模式，才允许保存到 Godot。");
+      showToast("需要先完成多边形和凹凸两个模式，才允许保存到 Godot。");
       return false;
     }
     const text = buildJson();
-    setSaveStatus("保存中...");
+    showToast("保存中...");
     try {
       const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}`, {
         method: "POST",
@@ -1314,12 +1578,12 @@ function App() {
       if (!response.ok || !result.ok) {
         throw new Error(result.error || `HTTP ${response.status}`);
       }
-      setSaveStatus(`已保存到 ${result.path}`);
+      showToast(`已保存到 ${result.path}`);
       setCatalog(catalogForSave());
       markExported();
       return true;
     } catch (error) {
-      setSaveStatus(error instanceof Error ? `保存失败：${error.message}` : "保存失败");
+      showToast(error instanceof Error ? `保存失败：${error.message}` : "保存失败");
       return false;
     }
   }
@@ -1328,45 +1592,51 @@ function App() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const data = JSON.parse(String(reader.result)) as LevelConfig;
-      const defaults = makeEmptyLevel();
-      setLevel({
-        ...defaults,
-        ...data,
-        image: { ...defaults.image, ...data.image },
-        background: { ...defaults.background, ...data.background },
-        grid: { ...defaults.grid, ...data.grid },
-        modes: {
-          polygon: { ...defaults.modes.polygon, ...data.modes?.polygon },
-          knob: {
-            ...defaults.modes.knob,
-            ...(data.modes?.knob || {}),
-            cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
-            rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
-            piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
+      try {
+        const data = JSON.parse(String(reader.result)) as LevelConfig;
+        const defaults = makeEmptyLevel();
+        setLevel({
+          ...defaults,
+          ...data,
+          image: { ...defaults.image, ...data.image },
+          background: { ...defaults.background, ...data.background },
+          grid: { ...defaults.grid, ...data.grid },
+          modes: {
+            polygon: { ...defaults.modes.polygon, ...data.modes?.polygon },
+            knob: {
+              ...defaults.modes.knob,
+              ...(data.modes?.knob || {}),
+              cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
+              rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
+              piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
+            },
           },
-        },
-        editor: { ...defaults.editor, ...data.editor },
-      });
-      const importedCuts: CutLine[] = [
-        ...(data.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) })),
-        ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
-      ];
-      setCuts(importedCuts);
-      setAnalysisCuts(importedCuts);
-      setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
-      setKnobPieces(data.modes?.knob?.pieces || []);
-      setSelectedId(importedCuts[0]?.id || "");
-      setSelectedPieceIds([]);
-      setJsonText(JSON.stringify(data, null, 2));
-      setDirtyModes({ polygon: false, knob: false });
-      setCompletedModes({
-        polygon: Boolean(data.modes?.polygon?.pieces?.length),
-        knob: Boolean(data.modes?.knob?.pieces?.length),
-      });
-      setUndoStack([]);
-      setRedoStack([]);
+          editor: { ...defaults.editor, ...data.editor },
+        });
+        const importedCuts: CutLine[] = [
+          ...(data.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) })),
+          ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
+        ];
+        setCuts(importedCuts);
+        setAnalysisCuts(importedCuts);
+        setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
+        setKnobPieces(data.modes?.knob?.pieces || []);
+        setSelectedId(importedCuts[0]?.id || "");
+        setSelectedPieceIds([]);
+        setJsonText(JSON.stringify(data, null, 2));
+        setDirtyModes({ polygon: false, knob: false });
+        setCompletedModes({
+          polygon: Boolean(data.modes?.polygon?.pieces?.length),
+          knob: Boolean(data.modes?.knob?.pieces?.length),
+        });
+        setUndoStack([]);
+        setRedoStack([]);
+        showToast("JSON 已导入。");
+      } catch (error) {
+        showToast(error instanceof Error ? `导入 JSON 失败：${error.message}` : "导入 JSON 失败");
+      }
     };
+    reader.onerror = () => showToast("读取 JSON 失败");
     reader.readAsText(file);
   }
 
@@ -1427,6 +1697,20 @@ function App() {
           </Field>
           <Field label="Godot 图片路径">
             <Input value={level.image.path} onChange={(event) => updateImagePath(event.target.value)} />
+          </Field>
+          <Field label="多边形图片路径">
+            <Input
+              placeholder="留空则使用 Godot 图片路径"
+              value={imageConfigPath(level.modes.polygon.image || level.modes.polygon.source_image)}
+              onChange={(event) => updateModeImagePath("polygon", event.target.value)}
+            />
+          </Field>
+          <Field label="凹凸图片路径">
+            <Input
+              placeholder="留空则使用 Godot 图片路径"
+              value={imageConfigPath(level.modes.knob.image || level.modes.knob.source_image)}
+              onChange={(event) => updateModeImagePath("knob", event.target.value)}
+            />
           </Field>
           <label className="fileButton">
             <Upload size={16} />
@@ -1496,7 +1780,8 @@ function App() {
           </div>
         </div>
 
-        <div className="grid min-h-0 place-items-center overflow-hidden p-5" style={{ background: level.background.color }}>
+        <div className="relative grid min-h-0 place-items-center overflow-hidden p-5" style={{ background: level.background.color }}>
+          <div className="canvasModeBadge">{canvasModeLabel}</div>
           <svg
             ref={svgRef}
             className="h-[min(calc(100vh-96px),760px)] w-full max-w-[1040px] border border-black/15 bg-white/20"
@@ -1504,7 +1789,8 @@ function App() {
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
             onPointerLeave={endDrag}
-            onPointerDown={() => setSelectedId("")}
+            onPointerDown={handleCanvasPointerDown}
+            onContextMenu={handleCanvasContextMenu}
             onDragOver={(event) => event.preventDefault()}
             onDrop={dropShape}
           >
@@ -1569,42 +1855,28 @@ function App() {
                   ))}
               </g>
             ))}
+            {activeMode === "polygon" && drawingCut && (
+              <g className="drawingCutPreview">
+                {drawingCut.points.length > 0 && (
+                  <path d={polylinePath(drawingHoverPoint ? [...drawingCut.points, drawingHoverPoint] : drawingCut.points)} />
+                )}
+                {drawingCut.points.map((point, index) => (
+                  <circle key={`${drawingCut.id}_${index}`} cx={point.x} cy={point.y} r={8} />
+                ))}
+              </g>
+            )}
           </svg>
         </div>
       </main>
 
       <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-l border-stone-300 bg-paper p-4 max-xl:col-span-2 max-xl:border-l-0 max-xl:border-t">
         <section className="grid gap-3">
-          <PanelTitle>状态</PanelTitle>
-          <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
-            <p className="text-ink">{activeMode === "polygon" ? "多边形" : "凹凸"} · 选中 {selectedPieceIds.length}/2</p>
-            <p>多边形 {completedModes.polygon ? "完成" : "未完成"} · 凹凸 {completedModes.knob ? "完成" : "未完成"}</p>
-            {activeMode === "polygon" && <p>{pieces.length} 片 · 最小 {Math.round(actualPreview?.minArea || 0)}px²</p>}
-            {activeMode === "knob" && <p>{level.grid.cols} x {level.grid.rows} · {knobPieces.length} 片</p>}
-            {saveStatus && <p>{saveStatus}</p>}
-          </div>
-        </section>
-
-        <MobileDevicePreview
-          activeMode={activeMode}
-          backgroundColor={level.background.color}
-          device={previewDevice}
-          devices={mobilePreviewDevices}
-          imageUrl={imageUrl}
-          knobPieces={knobPieces}
-          layout={mobilePreviewLayout}
-          pieces={pieces}
-          selectedPieceIds={selectedPieceIds}
-          onDeviceChange={setPreviewDeviceId}
-        />
-
-        <section className="grid gap-3 border-t border-stone-300 pt-4">
           <PanelTitle>工具</PanelTitle>
-          <div className="grid grid-cols-5 gap-2">
-            <button className="iconBtn" disabled={!undoStack.length} onClick={undo} title="Undo">
+          <div className="grid grid-cols-6 gap-2">
+            <button className="iconBtn" disabled={!undoStack.length} onClick={undo} title="撤销 (Cmd/Ctrl+Z)">
               <Undo2 size={18} />
             </button>
-            <button className="iconBtn" disabled={!redoStack.length} onClick={redo} title="Redo">
+            <button className="iconBtn" disabled={!redoStack.length} onClick={redo} title="重做 (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)">
               <Redo2 size={18} />
             </button>
             <button className={snapEnabled ? "iconBtnActive" : "iconBtn"} onClick={() => setSnapEnabled((value) => !value)} title="吸附">
@@ -1614,8 +1886,13 @@ function App() {
               <Plus size={18} />
             </button>
             {activeMode === "polygon" && (
-              <button className="iconBtnDanger" onClick={removeSelected} title="删除">
+              <button className="iconBtnDanger" disabled={!selectedId} onClick={removeSelected} title="删除选中线条 (Backspace)">
                 <Trash2 size={18} />
+              </button>
+            )}
+            {activeMode === "polygon" && (
+              <button className="iconBtnDanger" disabled={!cuts.length} onClick={clearAllCuts} title="清空线条">
+                <X size={18} />
               </button>
             )}
           </div>
@@ -1639,9 +1916,9 @@ function App() {
                 <RefreshCcw size={16} />
                 生成
               </button>
-              <button className="btn" onClick={addBridgeCut}>
+              <button className={drawingCut ? "btnActive" : "btn"} onClick={drawingCut ? finishDrawingCut : addBridgeCut}>
                 <Plus size={16} />
-                线
+                {drawingCut ? "结束" : "线"}
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -1686,6 +1963,16 @@ function App() {
           </section>
         )}
       </aside>
+      {toast && (
+        <div className="toastViewport" role="status" aria-live="polite">
+          <div className="toastCard">
+            <span>{toast.message}</span>
+            <button className="toastClose" onClick={() => setToast(null)} aria-label="关闭提示">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
       <SortDialog
         open={sortOpen}
         onOpenChange={setSortOpen}
@@ -1805,80 +2092,6 @@ function SelectBox({ value, options, placeholder, onValueChange }: { value: stri
     </Select.Root>
   );
 }
-
-const MobileDevicePreview = memo(function MobileDevicePreview({
-  activeMode,
-  backgroundColor,
-  device,
-  devices,
-  imageUrl,
-  knobPieces,
-  layout,
-  pieces,
-  selectedPieceIds,
-  onDeviceChange,
-}: {
-  activeMode: EditMode;
-  backgroundColor: string;
-  device: DevicePreviewOption;
-  devices: DevicePreviewOption[];
-  imageUrl: string;
-  knobPieces: LevelPiece[];
-  layout: RuntimePreviewLayout;
-  pieces: PieceCell[];
-  selectedPieceIds: string[];
-  onDeviceChange: (deviceId: string) => void;
-}) {
-  const polygonPieces = pieces.filter((piece) => piece.points.length >= 3);
-  const pieceCount = activeMode === "polygon" ? polygonPieces.length : knobPieces.length;
-  const boardWidth = Math.round(layout.boardSize.width);
-  const boardHeight = Math.round(layout.boardSize.height);
-
-  return (
-    <section className="grid gap-3 border-t border-stone-300 pt-4">
-      <PanelTitle>移动端预览</PanelTitle>
-      <div className="grid grid-cols-4 gap-1">
-        {devices.map((item) => (
-          <button key={item.id} className={item.id === device.id ? "deviceBtnActive" : "deviceBtn"} onClick={() => onDeviceChange(item.id)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="rounded-md border border-stone-300 bg-white p-2">
-        <svg className="mobilePreviewSvg" viewBox={`0 0 ${device.width} ${device.height}`} aria-label="移动端比例预览">
-          <rect width={device.width} height={device.height} rx="18" className="mobileDeviceFrame" />
-          <rect x="0" y="0" width={device.width} height={layout.hudHeight} className="mobileHudPreview" />
-          <rect x={layout.playArea.x} y={layout.playArea.y} width={layout.playArea.width} height={layout.playArea.height} className="mobilePlayAreaPreview" />
-          <rect width={device.width} height={device.height} fill={backgroundColor} opacity="0.34" />
-          <image href={imageUrl} x={layout.boardOrigin.x} y={layout.boardOrigin.y} width={layout.boardSize.width} height={layout.boardSize.height} preserveAspectRatio="none" opacity="0.76" />
-          <g transform={`translate(${layout.boardOrigin.x} ${layout.boardOrigin.y}) scale(${layout.scale})`}>
-            {activeMode === "polygon" &&
-              polygonPieces.map((piece) => (
-                <path
-                  key={piece.id}
-                  className={selectedPieceIds.includes(piece.id) ? "mobilePreviewPiece selected" : "mobilePreviewPiece"}
-                  d={catmullRomPath(piece.points, 0.15, true)}
-                />
-              ))}
-            {activeMode === "knob" &&
-              knobPieces.map((piece) => (
-                <path
-                  key={piece.id}
-                  className={selectedPieceIds.includes(piece.id) ? "mobilePreviewPiece selected" : "mobilePreviewPiece"}
-                  d={catmullRomPath(piece.points.map(pointFromTuple), 0.15, true)}
-                />
-              ))}
-          </g>
-        </svg>
-      </div>
-      <div className="grid grid-cols-3 gap-2 text-xs text-muted">
-        <span>{device.width} x {device.height}</span>
-        <span>{boardWidth} x {boardHeight}</span>
-        <span>{pieceCount} 片</span>
-      </div>
-    </section>
-  );
-});
 
 function SortDialog({
   open,
