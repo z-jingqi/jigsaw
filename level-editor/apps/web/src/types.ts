@@ -40,11 +40,22 @@ export type LevelPiece = {
 export type LevelImageConfig =
   | string
   | {
+      use?: "default";
       path?: string;
       name?: string;
       width?: number;
       height?: number;
     };
+
+export type LevelAssets = {
+  default_image: {
+    path: string;
+    name: string;
+    width: number;
+    height: number;
+  };
+  cover?: LevelImageConfig;
+};
 
 export type LocaleCode = "zh-Hans" | "en" | string;
 
@@ -96,6 +107,7 @@ export type LevelConfig = {
     width: number;
     height: number;
   };
+  assets?: LevelAssets;
   background: {
     type: "color" | "image";
     color: string;

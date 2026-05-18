@@ -39,6 +39,25 @@ type LevelTarget = {
   levelId: string;
 };
 
+type ImageTarget = "default" | EditMode;
+
+type ProcessStepType = "remove_background" | "trim_transparent" | "convert_jpg";
+
+type ProcessStep = {
+  id: string;
+  type: ProcessStepType;
+  tolerance: number;
+  padding: number;
+  quality: number;
+  background: string;
+};
+
+type PendingImage = {
+  pendingId: string;
+  name: string;
+  url: string;
+} | null;
+
 type CreateDialogKind = "topic" | "level" | null;
 
 type EditorSnapshot = {
@@ -113,6 +132,110 @@ function normalizeOrder<T extends { sort_order: number }>(items: T[]): T[] {
 
 function sourceUrl(topicId: string, levelId: string) {
   return `/api/levels/${topicId}/${levelId}/source?mtime=${Date.now()}`;
+}
+
+function modeSourceUrl(topicId: string, levelId: string, mode: EditMode) {
+  return `/api/levels/${topicId}/${levelId}/source/${mode}?mtime=${Date.now()}`;
+}
+
+function defaultImageConfig(level: LevelConfig) {
+  return level.assets?.default_image || level.image;
+}
+
+function isDefaultImageConfig(value?: LevelImageConfig): boolean {
+  return !value || (typeof value !== "string" && value.use === "default" && !value.path);
+}
+
+function modeUsesDefaultImage(level: LevelConfig, mode: EditMode): boolean {
+  return isDefaultImageConfig(level.modes[mode].image || level.modes[mode].source_image);
+}
+
+function modeImageConfig(level: LevelConfig, mode: EditMode): LevelImageConfig {
+  const configured = level.modes[mode].image || level.modes[mode].source_image;
+  if (!isDefaultImageConfig(configured)) return configured as LevelImageConfig;
+  return defaultImageConfig(level);
+}
+
+function modeImagePath(level: LevelConfig, mode: EditMode): string {
+  return imageConfigPath(modeImageConfig(level, mode)) || imageConfigPath(defaultImageConfig(level));
+}
+
+function modeImageTarget(level: LevelConfig, mode: EditMode): ImageTarget {
+  return modeUsesDefaultImage(level, mode) ? "default" : mode;
+}
+
+function godotAssetFileName(target: LevelTarget, godotPath: string): string {
+  const prefix = `res://levels/${target.topicId}/${target.levelId}/`;
+  if (!godotPath.startsWith(prefix)) return "";
+  return godotPath.slice(prefix.length).split(/[?#]/)[0];
+}
+
+function browserUrlForGodotImage(target: LevelTarget, godotPath: string, mode: EditMode): string {
+  if (!godotPath) return DEFAULT_BROWSER_IMAGE;
+  if (/^(https?:|data:|blob:)/.test(godotPath)) return godotPath;
+  const fileName = godotAssetFileName(target, godotPath);
+  if (!fileName) return DEFAULT_BROWSER_IMAGE;
+  if (fileName === "source.png") return sourceUrl(target.topicId, target.levelId);
+  if (fileName === `${mode}_source.png`) return modeSourceUrl(target.topicId, target.levelId, mode);
+  return `/api/levels/${target.topicId}/${target.levelId}/assets/${encodeURIComponent(fileName)}?mtime=${Date.now()}`;
+}
+
+function imageNameFromPath(godotPath: string, fallback: string) {
+  return godotPath.split("/").pop()?.split(/[?#]/)[0] || fallback;
+}
+
+function processStepLabel(type: ProcessStepType) {
+  if (type === "remove_background") return "去背景";
+  if (type === "trim_transparent") return "裁透明边";
+  return "转 JPG";
+}
+
+function createProcessStep(type: ProcessStepType): ProcessStep {
+  return {
+    id: uid("process"),
+    type,
+    tolerance: 35,
+    padding: 0,
+    quality: 88,
+    background: "#F6EBD4",
+  };
+}
+
+function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, levelId?: string): LevelConfig {
+  const defaults = makeEmptyLevel();
+  const defaultPath = `res://levels/${topicId || data.topic_id || defaults.topic_id}/${levelId || data.id || defaults.id}/source.png`;
+  const legacyImage = { ...defaults.image, path: defaultPath, ...(data.image || {}) };
+  const defaultImage = { ...legacyImage, ...(data.assets?.default_image || {}) };
+  return {
+    ...defaults,
+    ...data,
+    id: levelId || data.id || defaults.id,
+    topic_id: topicId || data.topic_id || defaults.topic_id,
+    image: defaultImage,
+    assets: {
+      ...(defaults.assets || {}),
+      ...(data.assets || {}),
+      default_image: defaultImage,
+    },
+    background: { ...defaults.background, ...data.background },
+    grid: { ...defaults.grid, ...data.grid },
+    modes: {
+      polygon: {
+        ...defaults.modes.polygon,
+        ...(data.modes?.polygon || {}),
+        image: data.modes?.polygon?.image || data.modes?.polygon?.source_image || defaults.modes.polygon.image,
+      },
+      knob: {
+        ...defaults.modes.knob,
+        ...(data.modes?.knob || {}),
+        image: data.modes?.knob?.image || data.modes?.knob?.source_image || defaults.modes.knob.image,
+        cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
+        rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
+        piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
+      },
+    },
+    editor: { ...defaults.editor, ...data.editor },
+  };
 }
 
 function updateCatalogLevel(catalog: LevelCatalog, target: LevelTarget, update: (level: CatalogLevel) => CatalogLevel): LevelCatalog {
@@ -470,6 +593,12 @@ function App() {
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
+  const [pendingImage, setPendingImage] = useState<PendingImage>(null);
+  const [processingSteps, setProcessingSteps] = useState<ProcessStep[]>([
+    createProcessStep("trim_transparent"),
+    createProcessStep("convert_jpg"),
+  ]);
+  const [processing, setProcessing] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const cutPathCacheRef = useRef<WeakMap<CutLine, string>>(new WeakMap());
   const piecePathCacheRef = useRef<WeakMap<PieceCell, string>>(new WeakMap());
@@ -543,6 +672,18 @@ function App() {
   );
   const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
   const currentLevelName = localized(currentCatalogLevel?.title_i18n, locale, currentCatalogLevel?.title || level.title || currentTarget.levelId);
+  const activeImagePath = modeImagePath(level, activeMode);
+  const activeImageTarget = modeImageTarget(level, activeMode);
+
+  useEffect(() => {
+    loadEditorImage(
+      browserUrlForGodotImage(currentTarget, activeImagePath, activeMode),
+      imageNameFromPath(activeImagePath, activeImageTarget === "default" ? "source.png" : `${activeMode}_source.png`),
+      activeImagePath,
+      activeImageTarget,
+      false,
+    );
+  }, [activeImagePath, activeImageTarget, activeMode, currentTarget.topicId, currentTarget.levelId]);
 
   async function loadCatalog() {
     try {
@@ -559,10 +700,10 @@ function App() {
       const firstTopic = normalized.topics[0];
       const firstLevel = firstTopic?.levels[0];
       if (firstTopic && firstLevel) await loadLevel(firstTopic.id, firstLevel.id, firstLevel);
-      else loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
+      else loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default");
     } catch (error) {
       showToast(error instanceof Error ? `加载 catalog 失败：${error.message}` : "加载 catalog 失败");
-      loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
+      loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default");
     }
   }
 
@@ -572,7 +713,6 @@ function App() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as LevelConfig;
       applyLoadedLevel(data, topicId, levelId);
-      loadBrowserImage(sourceUrl(topicId, levelId), "source.png", `res://levels/${topicId}/${levelId}/source.png`);
     } catch (error) {
       const fallback = makeEmptyLevel();
       fallback.id = levelId;
@@ -581,33 +721,13 @@ function App() {
       fallback.title_i18n = catalogLevel?.title_i18n || { [locale]: fallback.title };
       fallback.image.path = `res://levels/${topicId}/${levelId}/source.png`;
       applyLoadedLevel(fallback, topicId, levelId);
-      loadBrowserImage(sourceUrl(topicId, levelId), "source.png", fallback.image.path);
     }
   }
 
   function applyLoadedLevel(data: LevelConfig, topicId: string, levelId: string) {
-    const defaults = makeEmptyLevel();
+    const nextLevel = normalizeLevelConfig(data, topicId, levelId);
     setCurrentTarget({ topicId, levelId });
-    setLevel({
-      ...defaults,
-      ...data,
-      id: levelId,
-      topic_id: topicId,
-      image: { ...defaults.image, ...data.image },
-      background: { ...defaults.background, ...data.background },
-      grid: { ...defaults.grid, ...data.grid },
-      modes: {
-        polygon: { ...defaults.modes.polygon, ...data.modes?.polygon },
-        knob: {
-          ...defaults.modes.knob,
-          ...(data.modes?.knob || {}),
-          cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
-          rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
-          piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
-        },
-      },
-      editor: { ...defaults.editor, ...data.editor },
-    });
+    setLevel(nextLevel);
     const importedCuts: CutLine[] = [
       ...(data.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) })),
       ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
@@ -618,7 +738,7 @@ function App() {
     setKnobPieces(data.modes?.knob?.pieces || []);
     setSelectedId("");
     setSelectedPieceIds([]);
-    setJsonText(JSON.stringify(data, null, 2));
+    setJsonText(JSON.stringify(nextLevel, null, 2));
     setDirtyModes({ polygon: false, knob: false });
     setCompletedModes({
       polygon: Boolean(data.modes?.polygon?.pieces?.length),
@@ -632,13 +752,9 @@ function App() {
     if (!image) return;
     const nextAnalysis = detectImageOutline(image);
     setAnalysis(nextAnalysis);
+    setActiveImageDimensions(image.naturalWidth, image.naturalHeight);
     setLevel((current) => ({
       ...current,
-      image: {
-        ...current.image,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      },
       editor: {
         ...current.editor,
         outline: serializePoints(nextAnalysis.outline),
@@ -683,8 +799,8 @@ function App() {
   }, [analysis.outline]);
   const cutGaps = useMemo(() => findCutGaps(analysisCuts, snapPoints, 1.5, snapThreshold), [analysisCuts, snapPoints]);
   const generatedKnobPieces = useMemo(
-    () => generateKnobPieces(image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size),
-    [image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size],
+    () => (activeMode === "knob" ? generateKnobPieces(image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size) : []),
+    [activeMode, image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size],
   );
   const modeReady = {
     polygon: pieces.length > 0,
@@ -728,8 +844,8 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [activeMode, cuts, drag]);
   useEffect(() => {
-    if (!knobPieces.length && generatedKnobPieces.length) setKnobPieces(generatedKnobPieces);
-  }, [generatedKnobPieces, knobPieces.length]);
+    if (activeMode === "knob" && !knobPieces.length && generatedKnobPieces.length) setKnobPieces(generatedKnobPieces);
+  }, [activeMode, generatedKnobPieces, knobPieces.length]);
 
   useEffect(() => {
     const hasDirtyMode = dirtyModes.polygon || dirtyModes.knob;
@@ -1045,7 +1161,7 @@ function App() {
       title: level.title,
       title_i18n: level.title_i18n || item.title_i18n,
       path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
-      source: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/source.png`,
+      source: imageConfigPath(defaultImageConfig(level)) || `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/source.png`,
     }));
   }
 
@@ -1114,51 +1230,215 @@ function App() {
     showToast("已合并凹凸碎片。");
   }
 
-  function loadBrowserImage(src: string, name: string, godotPath: string) {
+  function setActiveImageDimensions(width: number, height: number) {
+    setLevel((current) => {
+      if (activeImageTarget === "default") {
+        const nextImage = { ...defaultImageConfig(current), width, height };
+        return {
+          ...current,
+          image: nextImage,
+          assets: {
+            ...(current.assets || {}),
+            default_image: nextImage,
+          },
+        };
+      }
+      const modeConfig = current.modes[activeImageTarget];
+      const imageConfig = typeof modeConfig.image === "string" ? { path: modeConfig.image } : { ...(modeConfig.image || {}) };
+      return {
+        ...current,
+        modes: {
+          ...current.modes,
+          [activeImageTarget]: {
+            ...modeConfig,
+            image: {
+              ...imageConfig,
+              width,
+              height,
+            },
+          },
+        },
+      };
+    });
+  }
+
+  function loadEditorImage(src: string, name: string, godotPath: string, target: ImageTarget, updateConfig = true) {
     const next = new Image();
     next.onload = () => {
       setImage(next);
       setImageUrl(src);
-      setLevel((current) => ({
-        ...current,
-        image: {
-          ...current.image,
-          name,
-          path: godotPath || current.image.path,
-          width: next.naturalWidth,
-          height: next.naturalHeight,
-        },
-      }));
+      if (!updateConfig) return;
+      setLevel((current) => {
+        if (target === "default") {
+          const nextImage = {
+            ...defaultImageConfig(current),
+            name,
+            path: godotPath || imageConfigPath(defaultImageConfig(current)),
+            width: next.naturalWidth,
+            height: next.naturalHeight,
+          };
+          return {
+            ...current,
+            image: nextImage,
+            assets: {
+              ...(current.assets || {}),
+              default_image: nextImage,
+            },
+          };
+        }
+        const modeConfig = current.modes[target];
+        return {
+          ...current,
+          modes: {
+            ...current.modes,
+            [target]: {
+              ...modeConfig,
+              image: {
+                path: godotPath,
+                name,
+                width: next.naturalWidth,
+                height: next.naturalHeight,
+              },
+            },
+          },
+        };
+      });
     };
     next.onerror = () => {
       if (src !== DEFAULT_BROWSER_IMAGE) {
-        loadBrowserImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH);
+        loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default", false);
         showToast("当前关卡还没有 source 图，已临时使用示例图预览。");
       }
     };
     next.src = src;
   }
 
-  async function onUploadImage(file?: File) {
+  function recordImageEdit(target: ImageTarget) {
+    setUndoStack((current) => [...current.slice(-49), snapshot()]);
+    setRedoStack([]);
+    const affectedModes: EditMode[] =
+      target === "default"
+        ? (["polygon", "knob"] as EditMode[]).filter((mode) => modeUsesDefaultImage(level, mode))
+        : [target];
+    setDirtyModes((current) => affectedModes.reduce((next, mode) => ({ ...next, [mode]: true }), current));
+    setCompletedModes((current) => affectedModes.reduce((next, mode) => ({ ...next, [mode]: false }), current));
+  }
+
+  async function onUploadImage(file?: File, target: ImageTarget = activeImageTarget) {
     if (!file) return;
-    recordEdit(activeMode);
+    recordImageEdit(target);
     const form = new FormData();
     form.append("source", file);
     try {
-      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source`, { method: "POST", body: form });
+      const endpoint =
+        target === "default"
+          ? `/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source`
+          : `/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source/${target}`;
+      const response = await fetch(endpoint, { method: "POST", body: form });
       const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-      loadBrowserImage(result.url || URL.createObjectURL(file), file.name, result.godotPath || level.image.path || DEFAULT_IMAGE_PATH);
-      setCatalog((current) =>
-        updateCatalogLevel(current, currentTarget, (item) => ({
-          ...item,
-          source: result.godotPath || item.source,
-          path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
-        })),
+      loadEditorImage(
+        result.url || URL.createObjectURL(file),
+        file.name,
+        result.godotPath || (target === "default" ? imageConfigPath(defaultImageConfig(level)) : modeImagePath(level, target)) || DEFAULT_IMAGE_PATH,
+        target,
       );
+      if (target === "default") {
+        setCatalog((current) =>
+          updateCatalogLevel(current, currentTarget, (item) => ({
+            ...item,
+            source: result.godotPath || item.source,
+            path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
+          })),
+        );
+      }
     } catch (error) {
       showToast(error instanceof Error ? `上传 source 失败：${error.message}` : "上传 source 失败");
-      loadBrowserImage(URL.createObjectURL(file), file.name, level.image.path || DEFAULT_IMAGE_PATH);
+      loadEditorImage(
+        URL.createObjectURL(file),
+        file.name,
+        target === "default" ? imageConfigPath(defaultImageConfig(level)) || DEFAULT_IMAGE_PATH : modeImagePath(level, target),
+        target,
+      );
+    }
+  }
+
+  async function onUploadPendingImage(file?: File) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("source", file);
+    try {
+      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/pending-image`, { method: "POST", body: form });
+      const result = (await response.json()) as { ok?: boolean; pendingId?: string; name?: string; url?: string; error?: string };
+      if (!response.ok || !result.ok || !result.pendingId || !result.url) throw new Error(result.error || `HTTP ${response.status}`);
+      setPendingImage({ pendingId: result.pendingId, name: result.name || file.name, url: result.url });
+      showToast("待处理图片已上传。");
+    } catch (error) {
+      showToast(error instanceof Error ? `上传待处理图片失败：${error.message}` : "上传待处理图片失败");
+    }
+  }
+
+  function addProcessingStep(type: ProcessStepType) {
+    setProcessingSteps((current) => [...current, createProcessStep(type)]);
+  }
+
+  function updateProcessingStep(id: string, patch: Partial<ProcessStep>) {
+    setProcessingSteps((current) => current.map((step) => (step.id === id ? { ...step, ...patch } : step)));
+  }
+
+  function removeProcessingStep(id: string) {
+    setProcessingSteps((current) => current.filter((step) => step.id !== id));
+  }
+
+  function onProcessStepDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setProcessingSteps((current) => {
+      const oldIndex = current.findIndex((step) => step.id === active.id);
+      const newIndex = current.findIndex((step) => step.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return arrayMove(current, oldIndex, newIndex);
+    });
+  }
+
+  async function applyProcessingPipeline(target: ImageTarget) {
+    if (!pendingImage) {
+      showToast("请先上传待处理图片。");
+      return;
+    }
+    if (!processingSteps.length) {
+      showToast("请先添加至少一个处理步骤。");
+      return;
+    }
+    recordImageEdit(target);
+    setProcessing(true);
+    try {
+      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/process-image`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pendingId: pendingImage.pendingId,
+          target,
+          steps: processingSteps.map(({ id: _id, ...step }) => step),
+        }),
+      });
+      const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
+      if (!response.ok || !result.ok || !result.godotPath || !result.url) throw new Error(result.error || `HTTP ${response.status}`);
+      loadEditorImage(result.url, imageNameFromPath(result.godotPath, target === "default" ? "source.png" : `${target}_source.png`), result.godotPath, target);
+      if (target === "default") {
+        setCatalog((current) =>
+          updateCatalogLevel(current, currentTarget, (item) => ({
+            ...item,
+            source: result.godotPath || item.source,
+            path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
+          })),
+        );
+      }
+      showToast("图片处理完成。");
+    } catch (error) {
+      showToast(error instanceof Error ? `图片处理失败：${error.message}` : "图片处理失败");
+    } finally {
+      setProcessing(false);
     }
   }
 
@@ -1206,8 +1486,18 @@ function App() {
   }
 
   function updateImagePath(path: string) {
-    recordEdit(activeMode);
-    setLevel((current) => ({ ...current, image: { ...current.image, path } }));
+    recordImageEdit("default");
+    setLevel((current) => {
+      const nextImage = { ...defaultImageConfig(current), path };
+      return {
+        ...current,
+        image: nextImage,
+        assets: {
+          ...(current.assets || {}),
+          default_image: nextImage,
+        },
+      };
+    });
   }
 
   function updateModeImagePath(mode: EditMode, path: string) {
@@ -1216,7 +1506,7 @@ function App() {
       const modeConfig = current.modes[mode];
       const nextMode = { ...modeConfig };
       if (path.trim()) nextMode.image = { path: path.trim() };
-      else delete nextMode.image;
+      else nextMode.image = { use: "default" };
       delete nextMode.source_image;
       return {
         ...current,
@@ -1502,8 +1792,9 @@ function App() {
     const validPolygonPieces = pieces.filter((piece) => piece.points.length >= 3);
     const polygonPieces = validPolygonPieces.map((piece) => ({ id: piece.id, points: serializePoints(piece.points) }));
     const polygonLevelPieces = cellsToLevelPieces(validPolygonPieces);
+    const normalizedLevel = normalizeLevelConfig(level, currentTarget.topicId, currentTarget.levelId);
     const data: LevelConfig = {
-      ...level,
+      ...normalizedLevel,
       id: currentTarget.levelId,
       topic_id: currentTarget.topicId,
       locale,
@@ -1594,25 +1885,8 @@ function App() {
     reader.onload = () => {
       try {
         const data = JSON.parse(String(reader.result)) as LevelConfig;
-        const defaults = makeEmptyLevel();
-        setLevel({
-          ...defaults,
-          ...data,
-          image: { ...defaults.image, ...data.image },
-          background: { ...defaults.background, ...data.background },
-          grid: { ...defaults.grid, ...data.grid },
-          modes: {
-            polygon: { ...defaults.modes.polygon, ...data.modes?.polygon },
-            knob: {
-              ...defaults.modes.knob,
-              ...(data.modes?.knob || {}),
-              cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
-              rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
-              piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
-            },
-          },
-          editor: { ...defaults.editor, ...data.editor },
-        });
+        const nextLevel = normalizeLevelConfig(data, currentTarget.topicId, currentTarget.levelId);
+        setLevel(nextLevel);
         const importedCuts: CutLine[] = [
           ...(data.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) })),
           ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
@@ -1623,7 +1897,7 @@ function App() {
         setKnobPieces(data.modes?.knob?.pieces || []);
         setSelectedId(importedCuts[0]?.id || "");
         setSelectedPieceIds([]);
-        setJsonText(JSON.stringify(data, null, 2));
+        setJsonText(JSON.stringify(nextLevel, null, 2));
         setDirtyModes({ polygon: false, knob: false });
         setCompletedModes({
           polygon: Boolean(data.modes?.polygon?.pieces?.length),
@@ -1695,28 +1969,84 @@ function App() {
           <Field label="介绍">
             <Textarea className="min-h-24" value={localized(level.description_i18n, locale, level.description)} onChange={(event) => updateLocalizedDescription(event.target.value)} />
           </Field>
-          <Field label="Godot 图片路径">
-            <Input value={level.image.path} onChange={(event) => updateImagePath(event.target.value)} />
+          <Field label="公共图片路径">
+            <Input value={imageConfigPath(defaultImageConfig(level))} onChange={(event) => updateImagePath(event.target.value)} />
           </Field>
           <Field label="多边形图片路径">
             <Input
-              placeholder="留空则使用 Godot 图片路径"
+              placeholder="留空则使用公共图片"
               value={imageConfigPath(level.modes.polygon.image || level.modes.polygon.source_image)}
               onChange={(event) => updateModeImagePath("polygon", event.target.value)}
             />
           </Field>
           <Field label="凹凸图片路径">
             <Input
-              placeholder="留空则使用 Godot 图片路径"
+              placeholder="留空则使用公共图片"
               value={imageConfigPath(level.modes.knob.image || level.modes.knob.source_image)}
               onChange={(event) => updateModeImagePath("knob", event.target.value)}
             />
           </Field>
-          <label className="fileButton">
-            <Upload size={16} />
-            上传原图预览
-            <input hidden type="file" accept="image/*" onChange={(event) => onUploadImage(event.target.files?.[0])} />
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="fileButton">
+              <Upload size={16} />
+              上传公共图
+              <input hidden type="file" accept="image/*" onChange={(event) => onUploadImage(event.target.files?.[0], "default")} />
+            </label>
+            <label className="fileButton">
+              <Upload size={16} />
+              上传当前模式图
+              <input hidden type="file" accept="image/*" onChange={(event) => onUploadImage(event.target.files?.[0], activeMode)} />
+            </label>
+          </div>
+          <div className="rounded-md border border-stone-300 bg-white/70 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <PanelTitle>图片处理链</PanelTitle>
+              <label className="btn !min-h-8 cursor-pointer !px-2 !py-1">
+                <Upload size={14} />
+                待处理图
+                <input hidden type="file" accept="image/*" onChange={(event) => onUploadPendingImage(event.target.files?.[0])} />
+              </label>
+            </div>
+            {pendingImage && (
+              <div className="mt-3 grid gap-2">
+                <img src={pendingImage.url} alt={pendingImage.name} className="max-h-36 w-full rounded-md border border-stone-200 bg-white object-contain" />
+                <div className="truncate text-xs text-muted">{pendingImage.name}</div>
+              </div>
+            )}
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <button className="btn !px-2" onClick={() => addProcessingStep("remove_background")}>
+                去背景
+              </button>
+              <button className="btn !px-2" onClick={() => addProcessingStep("trim_transparent")}>
+                裁边
+              </button>
+              <button className="btn !px-2" onClick={() => addProcessingStep("convert_jpg")}>
+                JPG
+              </button>
+            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onProcessStepDragEnd}>
+              <SortableContext items={processingSteps.map((step) => step.id)} strategy={verticalListSortingStrategy}>
+                <div className="mt-3 grid gap-2">
+                  {processingSteps.map((step) => (
+                    <ProcessStepRow
+                      key={step.id}
+                      step={step}
+                      onUpdate={(patch) => updateProcessingStep(step.id, patch)}
+                      onRemove={() => removeProcessingStep(step.id)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button className="btnPrimary" disabled={processing || !pendingImage || !processingSteps.length} onClick={() => applyProcessingPipeline("default")}>
+                应用到公共图
+              </button>
+              <button className="btn" disabled={processing || !pendingImage || !processingSteps.length} onClick={() => applyProcessingPipeline(activeMode)}>
+                应用到当前模式
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="mt-6 grid gap-3">
@@ -2260,6 +2590,55 @@ function SortableRow({ id, label, detail, active }: { id: string; label: string;
       <GripVertical size={16} />
       <span className="min-w-0 truncate">{label}</span>
       <small className="ml-auto text-muted">{detail}</small>
+    </div>
+  );
+}
+
+function ProcessStepRow({
+  step,
+  onUpdate,
+  onRemove,
+}: {
+  step: ProcessStep;
+  onUpdate: (patch: Partial<ProcessStep>) => void;
+  onRemove: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-md border border-stone-300 bg-white p-2 text-sm ${isDragging ? "opacity-70" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <div className="flex items-center gap-2">
+        <button className="iconBtn !min-h-8 !px-2" type="button" {...attributes} {...listeners} aria-label="拖拽排序">
+          <GripVertical size={15} />
+        </button>
+        <div className="min-w-0 flex-1 font-medium text-ink">{processStepLabel(step.type)}</div>
+        <button className="iconBtnDanger !min-h-8 !px-2" type="button" onClick={onRemove} aria-label="删除步骤">
+          <Trash2 size={15} />
+        </button>
+      </div>
+      {step.type === "remove_background" && (
+        <Field label="容差">
+          <Input type="number" min="0" max="441" value={step.tolerance} onChange={(event) => onUpdate({ tolerance: Number(event.target.value) })} />
+        </Field>
+      )}
+      {step.type === "trim_transparent" && (
+        <Field label="留边">
+          <Input type="number" min="0" max="256" value={step.padding} onChange={(event) => onUpdate({ padding: Number(event.target.value) })} />
+        </Field>
+      )}
+      {step.type === "convert_jpg" && (
+        <div className="mt-2 grid grid-cols-[1fr_56px] gap-2">
+          <Field label="质量">
+            <Input type="number" min="1" max="100" value={step.quality} onChange={(event) => onUpdate({ quality: Number(event.target.value) })} />
+          </Field>
+          <Field label="底色">
+            <Input className="h-10 p-1" type="color" value={step.background} onChange={(event) => onUpdate({ background: event.target.value })} />
+          </Field>
+        </div>
+      )}
     </div>
   );
 }

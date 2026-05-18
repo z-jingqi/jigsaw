@@ -5,12 +5,18 @@ const MENU_BACKGROUND_PATH := "res://assets/source/menu_background.png"
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
 const START_BUTTON_IMAGE_PATH := "res://assets/ui/start-game.png"
 const CHOOSE_LEVEL_PANEL_PATH := "res://assets/ui/choose-level.png"
+const COMPLETE_RIBBON_PATH := "res://assets/ui/complete_ribbon.png"
 const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
 const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
 const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
+const ICON_CAT_PAW_PATH := "res://assets/icons/status/cat_paw.png"
+const ICON_MODE_PUZZLE_DONE_PATH := "res://assets/icons/status/mode_puzzle_done.png"
+const ICON_MODE_PUZZLE_TODO_PATH := "res://assets/icons/status/mode_puzzle_todo.png"
+const ICON_MODE_POLYGON_DONE_PATH := "res://assets/icons/status/mode_polygon_done.png"
+const ICON_MODE_POLYGON_TODO_PATH := "res://assets/icons/status/mode_polygon_todo.png"
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_CONFIG_PATH := "res://levels/cat/cat_moon_01/level.json"
 const SNAP_TOLERANCE := 22.0
@@ -48,12 +54,18 @@ var menu_background: Texture2D
 var title_texture: Texture2D
 var start_button_texture: Texture2D
 var choose_level_panel_texture: Texture2D
+var complete_ribbon_texture: Texture2D
 var icon_album: Texture2D
 var icon_left_arrow: Texture2D
 var icon_lightbulb: Texture2D
 var icon_pause: Texture2D
 var icon_rotate: Texture2D
 var icon_setting: Texture2D
+var icon_cat_paw: Texture2D
+var icon_mode_puzzle_done: Texture2D
+var icon_mode_puzzle_todo: Texture2D
+var icon_mode_polygon_done: Texture2D
+var icon_mode_polygon_todo: Texture2D
 var source_image: Image
 var source_size := Vector2.ZERO
 var source_scale := 1.0
@@ -89,17 +101,23 @@ var status_label: Label
 func _ready() -> void:
 	_lock_portrait_orientation()
 	rng.seed = 7
-	texture = load(DEFAULT_LEVEL_IMAGE_PATH)
+	texture = _cached_texture(DEFAULT_LEVEL_IMAGE_PATH)
 	menu_background = load(MENU_BACKGROUND_PATH)
 	title_texture = load(TITLE_IMAGE_PATH)
 	start_button_texture = load(START_BUTTON_IMAGE_PATH)
 	choose_level_panel_texture = load(CHOOSE_LEVEL_PANEL_PATH)
+	complete_ribbon_texture = _cached_texture(COMPLETE_RIBBON_PATH)
 	icon_album = load(ICON_ALBUM_PATH)
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
 	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
 	icon_pause = load(ICON_PAUSE_PATH)
 	icon_rotate = load(ICON_ROTATE_PATH)
 	icon_setting = load(ICON_SETTING_PATH)
+	icon_cat_paw = _cached_texture(ICON_CAT_PAW_PATH)
+	icon_mode_puzzle_done = _cached_texture(ICON_MODE_PUZZLE_DONE_PATH)
+	icon_mode_puzzle_todo = _cached_texture(ICON_MODE_PUZZLE_TODO_PATH)
+	icon_mode_polygon_done = _cached_texture(ICON_MODE_POLYGON_DONE_PATH)
+	icon_mode_polygon_todo = _cached_texture(ICON_MODE_POLYGON_TODO_PATH)
 	source_image = texture.get_image()
 	source_size = texture.get_size()
 	board_layer = Node2D.new()
@@ -108,7 +126,7 @@ func _ready() -> void:
 	add_child(ui_layer)
 	_build_catalog()
 	_load_progress()
-	_show_topics()
+	_show_last_topic_levels()
 
 
 func _lock_portrait_orientation() -> void:
@@ -395,10 +413,10 @@ func _root_title(parent: VBoxContainer) -> void:
 	row.add_child(title)
 
 
-func _button(text: String, action: Callable, primary := true) -> Button:
+func _button(text: String, action: Callable, primary := true, min_size := Vector2(120, 42)) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(120, 42)
+	button.custom_minimum_size = min_size
 	button.add_theme_color_override("font_color", Color.WHITE if primary else brown)
 	button.add_theme_color_override("font_hover_color", Color.WHITE if primary else deep_orange)
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
@@ -544,8 +562,19 @@ func _show_home() -> void:
 
 
 func _start_from_home() -> void:
-	var target := _first_unfinished_level()
-	_show_game(target["topic"], target["level"], "polygon")
+	var target := _resume_target()
+	if target.is_empty() or target["level"].is_empty():
+		_show_topics()
+		return
+	_show_game(target["topic"], target["level"], target["mode"])
+
+
+func _show_last_topic_levels() -> void:
+	var topic := _last_topic_or_first()
+	if topic.is_empty():
+		_show_topics()
+		return
+	_show_levels(topic, _focus_level_id(topic))
 
 
 func _show_topics() -> void:
@@ -581,12 +610,12 @@ func _show_topics() -> void:
 		var card := _card_button(
 			"%s\n%d/%d" % [topic["name"], done, total],
 			Vector2(360, 260),
-			func(t: Dictionary = topic) -> void: _show_levels(t)
+			func(t: Dictionary = topic) -> void: _show_levels(t, _focus_level_id(t))
 		)
 		grid.add_child(card)
 
 
-func _show_levels(topic: Dictionary) -> void:
+func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	current_screen = "levels"
 	current_topic = topic
 	var wrap := _base_screen(cream, true)
@@ -603,29 +632,65 @@ func _show_levels(topic: Dictionary) -> void:
 	grid.add_theme_constant_override("h_separation", 28)
 	grid.add_theme_constant_override("v_separation", 24)
 	center.add_child(grid)
+	var focus_card: Control = null
 	for level in topic["levels"]:
-		var done_poly := _is_done(level["id"], "polygon")
-		var done_knob := _is_done(level["id"], "knob")
-		var text := "%s\n⬡ %s   🧩 %s" % [
-			level["title"],
-			"完成" if done_poly else "未完成",
-			"完成" if done_knob else "未完成"
-		]
-		var card := _card_button(
-			text,
-			Vector2(360, 260),
+		var card := _level_card_button(
+			level,
 			func(l: Dictionary = level) -> void: _show_mode_dialog(l)
 		)
 		grid.add_child(card)
-	var footer := Label.new()
-	footer.text = "⬡ %d/%d    🧩 %d/%d    全部 %d/%d" % [
-		_mode_done_count(topic, "polygon"), topic["levels"].size(),
-		_mode_done_count(topic, "knob"), topic["levels"].size(),
-		_topic_done_count(topic), topic["levels"].size() * 2
-	]
-	footer.add_theme_color_override("font_color", brown)
-	footer.add_theme_color_override("font_shadow_color", Color(1, 0.96, 0.88, 0.7))
+		if str(level.get("id", "")) == focus_level_id:
+			focus_card = card
+	var footer := HBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_CENTER
+	footer.add_theme_constant_override("separation", 18)
+	footer.add_child(_summary_item(icon_mode_polygon_done, "%d/%d" % [_mode_done_count(topic, "polygon"), topic["levels"].size()]))
+	footer.add_child(_summary_item(icon_mode_puzzle_done, "%d/%d" % [_mode_done_count(topic, "knob"), topic["levels"].size()]))
+	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [_topic_done_count(topic), topic["levels"].size() * 2]))
 	wrap.add_child(footer)
+	if focus_card != null:
+		call_deferred("_scroll_level_card_into_view", scroll, focus_card)
+
+
+func _level_card_button(level: Dictionary, action: Callable) -> Button:
+	var card := Button.new()
+	card.text = ""
+	card.custom_minimum_size = Vector2(360, 260)
+	_apply_card_style(card)
+	var content := VBoxContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = 18
+	content.offset_top = 16
+	content.offset_right = -18
+	content.offset_bottom = -14
+	content.add_theme_constant_override("separation", 8)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(content)
+	var preview := TextureRect.new()
+	preview.texture = _level_thumbnail(level)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	preview.custom_minimum_size = Vector2(300, 142)
+	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(preview)
+	var title := Label.new()
+	title.text = str(level["title"])
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", brown)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(title)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(row)
+	row.add_child(_status_icon("polygon", _is_done(level["id"], "polygon"), 42))
+	row.add_child(_status_icon("knob", _is_done(level["id"], "knob"), 42))
+	card.pressed.connect(action)
+	_wire_button_animation(card)
+	return card
 
 
 func _card_button(text: String, size: Vector2, action: Callable) -> Button:
@@ -640,6 +705,13 @@ func _card_button(text: String, size: Vector2, action: Callable) -> Button:
 	card.add_theme_color_override("font_color", brown)
 	card.add_theme_color_override("font_hover_color", deep_orange)
 	card.add_theme_color_override("font_pressed_color", brown)
+	_apply_card_style(card)
+	card.pressed.connect(action)
+	_wire_button_animation(card)
+	return card
+
+
+func _apply_card_style(card: Button) -> void:
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = paper
 	normal.border_color = Color(0.73, 0.50, 0.28, 0.35)
@@ -664,36 +736,241 @@ func _card_button(text: String, size: Vector2, action: Callable) -> Button:
 	pressed.bg_color = soft_beige
 	pressed.border_color = deep_orange
 	card.add_theme_stylebox_override("pressed", pressed)
-	card.pressed.connect(action)
-	_wire_button_animation(card)
-	return card
+
+
+func _level_thumbnail(level: Dictionary) -> Texture2D:
+	var level_config := _load_level_config(level)
+	var image_path := _level_image_path(level_config)
+	var thumbnail := _cached_texture(image_path)
+	return thumbnail if thumbnail != null else texture
+
+
+func _status_icon(mode: String, done: bool, size: float) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.texture = _mode_icon_texture(mode, done)
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.custom_minimum_size = Vector2(size, size)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
+
+
+func _mode_icon_texture(mode: String, done: bool) -> Texture2D:
+	var key := _mode_key(mode)
+	if key == "polygon":
+		return icon_mode_polygon_done if done else icon_mode_polygon_todo
+	return icon_mode_puzzle_done if done else icon_mode_puzzle_todo
+
+
+func _mode_label(mode: String) -> String:
+	return "多边形模式" if _mode_key(mode) == "polygon" else "凹凸拼图模式"
+
+
+func _summary_item(icon: Texture2D, text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var image := TextureRect.new()
+	image.texture = icon
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	image.custom_minimum_size = Vector2(30, 30)
+	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(image)
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", brown)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	return row
 
 
 func _show_mode_dialog(level: Dictionary) -> void:
 	current_level = level
+	_mark_last_played(current_topic, level, _preferred_mode(level))
 	_show_modal()
-	var box := _modal_box(Vector2(480, 560))
-	box.add_child(_image_rect(Vector2(420, 230)))
+	var box := _mode_modal_box(Vector2(560, 690))
+	box.add_child(_mode_dialog_image(level))
+	box.add_child(_mode_title_block(str(level["title"])))
+	box.add_child(_mode_choice_card(level, "polygon"))
+	box.add_child(_mode_choice_card(level, "knob"))
+
+
+func _mode_title_block(text: String) -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(472, 70)
 	var title := Label.new()
-	title.text = level["title"]
+	title.text = text
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", brown)
-	box.add_child(title)
-	box.add_child(_mode_button(level, "polygon", "⬡ 多边形模式"))
-	box.add_child(_mode_button(level, "knob", "🧩 凹凸拼图模式"))
-	box.add_child(_button("关闭", _close_modal, false))
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.offset_top = 2
+	title.offset_bottom = 44
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(title)
+	var line := Line2D.new()
+	line.width = 2.0
+	line.default_color = Color(0.73, 0.50, 0.28, 0.32)
+	line.points = PackedVector2Array([Vector2(114, 58), Vector2(358, 58)])
+	holder.add_child(line)
+	var left_paw := _decor_paw(Vector2(96, 49), 22, -0.22)
+	var right_paw := _decor_paw(Vector2(376, 49), 22, 0.22)
+	holder.add_child(left_paw)
+	holder.add_child(right_paw)
+	return holder
 
 
-func _mode_button(level: Dictionary, play_mode: String, label: String) -> Button:
+func _decor_paw(position: Vector2, size: float, rotation_value: float) -> TextureRect:
+	var paw := TextureRect.new()
+	paw.texture = icon_cat_paw
+	paw.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	paw.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	paw.custom_minimum_size = Vector2(size, size)
+	paw.position = position
+	paw.rotation = rotation_value
+	paw.modulate = Color(0.72, 0.44, 0.20, 0.48)
+	paw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return paw
+
+
+func _mode_dialog_image(level: Dictionary) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.texture = _level_thumbnail(level)
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.custom_minimum_size = Vector2(472, 210)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return rect
+
+
+func _mode_choice_card(level: Dictionary, play_mode: String) -> Panel:
 	var done := _is_done(level["id"], play_mode)
-	var text := "%s\n%s · %s" % [label, "已完成 ✓" if done else "未完成", "再玩一次" if done else "开始"]
-	var button := _button(text, func() -> void:
+	var accent := _mode_accent_color(play_mode)
+	var card := Panel.new()
+	card.custom_minimum_size = Vector2(472, 104)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1, 0.985, 0.93, 0.96)
+	style.border_color = Color(0.78, 0.52, 0.28, 0.28)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	style.shadow_color = Color(0.42, 0.25, 0.08, 0.10)
+	style.shadow_size = 4
+	style.shadow_offset = Vector2(0, 2)
+	card.add_theme_stylebox_override("panel", style)
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 22
+	row.offset_top = 16
+	row.offset_right = -22
+	row.offset_bottom = -16
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+	row.add_child(_status_icon(play_mode, done, 66))
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_box)
+	var name := Label.new()
+	name.text = _mode_label(play_mode)
+	name.add_theme_font_size_override("font_size", 25)
+	name.add_theme_color_override("font_color", brown)
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(name)
+	var status := Label.new()
+	status.text = "已完成" if done else "未完成"
+	status.add_theme_font_size_override("font_size", 18)
+	status.add_theme_color_override("font_color", Color("#6f9d67") if done else orange)
+	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(status)
+	row.add_child(_mode_action_button("再玩一次" if done else "开始", play_mode, func() -> void:
 		_close_modal()
 		_show_game(current_topic, level, play_mode)
-	, false)
-	button.custom_minimum_size = Vector2(420, 82)
+	))
+	if done:
+		card.add_child(_complete_check_badge())
+	return card
+
+
+func _mode_action_button(text: String, play_mode: String, action: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = Vector2(140, 50)
+	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_color_override("font_color", Color.WHITE)
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE)
+	var accent := _mode_accent_color(play_mode)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = accent if text == "再玩一次" else Color(1, 0.95, 0.84, 0.94)
+	normal.border_color = accent
+	normal.border_width_left = 2
+	normal.border_width_top = 2
+	normal.border_width_right = 2
+	normal.border_width_bottom = 2
+	normal.corner_radius_top_left = 20
+	normal.corner_radius_top_right = 20
+	normal.corner_radius_bottom_left = 20
+	normal.corner_radius_bottom_right = 20
+	normal.shadow_color = Color(0.42, 0.25, 0.08, 0.12)
+	normal.shadow_size = 4
+	normal.shadow_offset = Vector2(0, 2)
+	button.add_theme_stylebox_override("normal", normal)
+	if text != "再玩一次":
+		button.add_theme_color_override("font_color", brown)
+		button.add_theme_color_override("font_hover_color", brown)
+		button.add_theme_color_override("font_pressed_color", brown)
+	var hover := normal.duplicate()
+	hover.bg_color = accent.lightened(0.08) if text == "再玩一次" else Color(1, 0.91, 0.76, 0.98)
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate()
+	pressed.bg_color = accent.darkened(0.08)
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.pressed.connect(action)
+	_wire_button_animation(button)
 	return button
+
+
+func _complete_check_badge() -> Panel:
+	var badge := Panel.new()
+	badge.custom_minimum_size = Vector2(42, 42)
+	badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	badge.offset_left = -52
+	badge.offset_top = -12
+	badge.offset_right = -10
+	badge.offset_bottom = 30
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#6f9d67")
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_left = 12
+	style.corner_radius_bottom_right = 12
+	badge.add_theme_stylebox_override("panel", style)
+	var check := Label.new()
+	check.text = "✓"
+	check.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	check.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	check.add_theme_font_size_override("font_size", 30)
+	check.add_theme_color_override("font_color", Color.WHITE)
+	check.set_anchors_preset(Control.PRESET_FULL_RECT)
+	check.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(check)
+	return badge
+
+
+func _mode_accent_color(mode: String) -> Color:
+	return Color("#6f9d67") if _mode_key(mode) == "polygon" else orange
 
 
 func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
@@ -701,6 +978,7 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	current_topic = topic
 	current_level = level
 	current_mode = _mode_key(play_mode)
+	_mark_last_played(topic, level, current_mode)
 	active_level_config = _load_level_config(current_level)
 	_apply_level_media(active_level_config)
 	_clear_ui()
@@ -1068,6 +1346,12 @@ func _cached_texture(path: String) -> Texture2D:
 	var loaded: Texture2D = load(path)
 	if loaded != null:
 		texture_cache[path] = loaded
+		return loaded
+	var image := Image.new()
+	if image.load(path) == OK:
+		var image_texture := ImageTexture.create_from_image(image)
+		texture_cache[path] = image_texture
+		return image_texture
 	return loaded
 
 
@@ -1088,6 +1372,15 @@ func _level_image_path(level_config: Dictionary, mode := "") -> String:
 		mode_image_path = _image_path_from_value(mode_config.get("source_image", null), "")
 		if not mode_image_path.is_empty():
 			return mode_image_path
+	return _default_level_image_path(level_config)
+
+
+func _default_level_image_path(level_config: Dictionary) -> String:
+	if level_config.has("assets") and typeof(level_config["assets"]) == TYPE_DICTIONARY:
+		var assets: Dictionary = level_config["assets"]
+		var default_image_path := _image_path_from_value(assets.get("default_image", null), "")
+		if not default_image_path.is_empty():
+			return default_image_path
 	return _image_path_from_value(level_config.get("image", null), DEFAULT_LEVEL_IMAGE_PATH)
 
 
@@ -1624,7 +1917,7 @@ func _show_pause_modal() -> void:
 	box.add_child(_button("重新开始", _show_restart_confirm, false))
 	box.add_child(_button("返回关卡列表", func() -> void:
 		_close_modal()
-		_show_levels(current_topic)
+		_show_levels(current_topic, str(current_level.get("id", "")))
 	, false))
 	box.add_child(_button("返回主题选择", func() -> void:
 		_close_modal()
@@ -1674,29 +1967,92 @@ func _show_tutorial_modal() -> void:
 
 func _show_complete_modal() -> void:
 	_show_modal()
-	var box := _modal_box(Vector2(500, 610))
-	var ribbon := Label.new()
-	ribbon.text = "恭喜完成！"
-	ribbon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ribbon.add_theme_font_size_override("font_size", 30)
-	ribbon.add_theme_color_override("font_color", orange)
-	box.add_child(ribbon)
-	box.add_child(_image_rect(Vector2(420, 300)))
+	var box := _complete_modal_box(Vector2(560, 640))
+	box.add_theme_constant_override("separation", 16)
+	box.add_child(_complete_ribbon("恭喜完成！"))
+	var top_spacer := Control.new()
+	top_spacer.custom_minimum_size.y = 16
+	box.add_child(top_spacer)
+	box.add_child(_image_rect(Vector2(460, 260)))
 	box.add_child(_modal_title(current_level["title"]))
 	var desc := Label.new()
 	desc.text = current_level["description"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc.add_theme_font_size_override("font_size", 18)
 	desc.add_theme_color_override("font_color", brown)
 	box.add_child(desc)
-	box.add_child(_button("下一个", _play_next_level))
-	box.add_child(_button("换个模式", func() -> void:
+	box.add_child(_complete_actions())
+
+
+func _complete_ribbon(text: String) -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(500, 86)
+	holder.clip_contents = false
+	var ribbon := TextureRect.new()
+	ribbon.texture = complete_ribbon_texture
+	ribbon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ribbon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	ribbon.offset_left = -260
+	ribbon.offset_top = -86
+	ribbon.offset_right = 260
+	ribbon.offset_bottom = 92
+	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(ribbon)
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 34)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_shadow_color", Color(0.48, 0.24, 0.06, 0.46))
+	label.add_theme_constant_override("shadow_offset_x", 0)
+	label.add_theme_constant_override("shadow_offset_y", 3)
+	label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	label.offset_left = -190
+	label.offset_top = -40
+	label.offset_right = 190
+	label.offset_bottom = 42
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(label)
+	return holder
+
+
+func _complete_actions() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	row.add_child(_button("下一个", _play_next_level, true, Vector2(138, 48)))
+	row.add_child(_button("换个模式", func() -> void:
 		_close_modal()
 		_show_game(current_topic, current_level, "knob" if _mode_key(current_mode) == "polygon" else "polygon")
-	, false))
-	box.add_child(_button("返回关卡列表", func() -> void:
+	, false, Vector2(138, 48)))
+	row.add_child(_button("返回关卡列表", func() -> void:
 		_close_modal()
-		_show_levels(current_topic)
-	, false))
+		_show_levels(current_topic, str(current_level.get("id", "")))
+	, false, Vector2(154, 48)))
+	return row
+
+
+func _add_complete_paw_marks(panel: Control) -> void:
+	var marks := [
+		{ "pos": Vector2(34, 110), "size": 34.0, "rot": -0.25, "alpha": 0.16 },
+		{ "pos": Vector2(492, 112), "size": 30.0, "rot": 0.22, "alpha": 0.14 },
+		{ "pos": Vector2(62, 480), "size": 28.0, "rot": 0.18, "alpha": 0.12 },
+		{ "pos": Vector2(462, 448), "size": 36.0, "rot": -0.16, "alpha": 0.12 },
+	]
+	for item in marks:
+		var paw := TextureRect.new()
+		paw.texture = icon_cat_paw
+		paw.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		paw.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		paw.custom_minimum_size = Vector2(item["size"], item["size"])
+		paw.position = item["pos"]
+		paw.rotation = item["rot"]
+		paw.modulate = Color(0.82, 0.50, 0.22, item["alpha"])
+		paw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(paw)
 
 
 func _play_next_level() -> void:
@@ -1751,6 +2107,17 @@ func _show_album_detail(topic: Dictionary, level: Dictionary, modes: Array) -> v
 	wrap.add_child(desc)
 
 
+func _scroll_level_card_into_view(scroll: ScrollContainer, card: Control) -> void:
+	if not is_instance_valid(scroll) or not is_instance_valid(card):
+		return
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_instance_valid(scroll) or not is_instance_valid(card):
+		return
+	var target := card.global_position.y - scroll.global_position.y + float(scroll.scroll_vertical) - 24.0
+	scroll.scroll_vertical = max(0, int(target))
+
+
 func _show_modal() -> void:
 	for child in modal_root.get_children():
 		child.queue_free()
@@ -1767,7 +2134,7 @@ func _show_modal() -> void:
 	tween.tween_property(shade, "modulate:a", 1.0, 0.14)
 
 
-func _modal_box(size: Vector2) -> VBoxContainer:
+func _modal_box(size: Vector2, bg_color := Color("#FFF6E6")) -> VBoxContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = size
 	panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1776,7 +2143,7 @@ func _modal_box(size: Vector2) -> VBoxContainer:
 	panel.offset_right = size.x * 0.5
 	panel.offset_bottom = size.y * 0.5
 	var style := StyleBoxFlat.new()
-	style.bg_color = paper
+	style.bg_color = bg_color
 	style.corner_radius_top_left = 18
 	style.corner_radius_top_right = 18
 	style.corner_radius_bottom_left = 18
@@ -1786,6 +2153,105 @@ func _modal_box(size: Vector2) -> VBoxContainer:
 	_animate_modal_panel(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	return box
+
+
+func _mode_modal_box(size: Vector2) -> VBoxContainer:
+	var panel := Panel.new()
+	panel.custom_minimum_size = size
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -size.x * 0.5
+	panel.offset_top = -size.y * 0.5
+	panel.offset_right = size.x * 0.5
+	panel.offset_bottom = size.y * 0.5
+	var style := StyleBoxFlat.new()
+	style.bg_color = paper
+	style.border_color = Color(0.78, 0.52, 0.28, 0.55)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 28
+	style.corner_radius_top_right = 28
+	style.corner_radius_bottom_left = 28
+	style.corner_radius_bottom_right = 28
+	panel.add_theme_stylebox_override("panel", style)
+	modal_root.add_child(panel)
+	_animate_modal_panel(panel)
+	var close := _mode_close_button()
+	panel.add_child(close)
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 44
+	box.offset_top = 64
+	box.offset_right = -44
+	box.offset_bottom = -36
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	return box
+
+
+func _mode_close_button() -> Button:
+	var button := Button.new()
+	button.text = "×"
+	button.custom_minimum_size = Vector2(52, 52)
+	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	button.offset_left = -72
+	button.offset_top = 20
+	button.offset_right = -20
+	button.offset_bottom = 72
+	button.add_theme_font_size_override("font_size", 34)
+	button.add_theme_color_override("font_color", brown)
+	button.add_theme_color_override("font_hover_color", deep_orange)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(1, 0.96, 0.88, 0.92)
+	normal.border_color = Color(0.78, 0.52, 0.28, 0.35)
+	normal.border_width_left = 2
+	normal.border_width_top = 2
+	normal.border_width_right = 2
+	normal.border_width_bottom = 2
+	normal.corner_radius_top_left = 26
+	normal.corner_radius_top_right = 26
+	normal.corner_radius_bottom_left = 26
+	normal.corner_radius_bottom_right = 26
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = paper
+	hover.border_color = orange
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.pressed.connect(_close_modal)
+	_wire_button_animation(button)
+	return button
+
+
+func _complete_modal_box(size: Vector2) -> VBoxContainer:
+	var panel := Panel.new()
+	panel.custom_minimum_size = size
+	panel.clip_contents = false
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -size.x * 0.5
+	panel.offset_top = -size.y * 0.5
+	panel.offset_right = size.x * 0.5
+	panel.offset_bottom = size.y * 0.5
+	var style := StyleBoxFlat.new()
+	style.bg_color = cream
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	panel.add_theme_stylebox_override("panel", style)
+	modal_root.add_child(panel)
+	_animate_modal_panel(panel)
+	_add_complete_paw_marks(panel)
+	var box := VBoxContainer.new()
+	box.clip_contents = false
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 32
+	box.offset_top = 0
+	box.offset_right = -32
+	box.offset_bottom = -28
 	panel.add_child(box)
 	return box
 
@@ -1810,15 +2276,24 @@ func _is_done(level_id: String, play_mode: String) -> bool:
 	var key := _mode_key(play_mode)
 	if not progress.has(level_id):
 		return false
+	if typeof(progress[level_id]) != TYPE_DICTIONARY:
+		return false
 	if progress[level_id].get(key, false):
 		return true
 	return key == "knob" and progress[level_id].get("classic", false)
 
 
 func _mark_completed(level_id: String, play_mode: String) -> void:
-	if not progress.has(level_id):
+	if not progress.has(level_id) or typeof(progress[level_id]) != TYPE_DICTIONARY:
 		progress[level_id] = {}
 	progress[level_id][_mode_key(play_mode)] = true
+	_save_progress()
+
+
+func _mark_last_played(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
+	progress["_last_topic_id"] = str(topic.get("id", ""))
+	progress["_last_level_id"] = str(level.get("id", ""))
+	progress["_last_mode"] = _mode_key(play_mode)
 	_save_progress()
 
 
@@ -1856,6 +2331,80 @@ func _mode_done_count(topic: Dictionary, play_mode: String) -> int:
 		if _is_done(level["id"], play_mode):
 			count += 1
 	return count
+
+
+func _last_topic_or_first() -> Dictionary:
+	var last_topic := _topic_by_id(str(progress.get("_last_topic_id", "")))
+	if not last_topic.is_empty():
+		return last_topic
+	return topics[0] if not topics.is_empty() else {}
+
+
+func _topic_by_id(topic_id: String) -> Dictionary:
+	if topic_id.is_empty():
+		return {}
+	for topic in topics:
+		if str(topic.get("id", "")) == topic_id:
+			return topic
+	return {}
+
+
+func _level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
+	if topic.is_empty() or level_id.is_empty():
+		return {}
+	for level in topic.get("levels", []):
+		if str(level.get("id", "")) == level_id:
+			return level
+	return {}
+
+
+func _focus_level_id(topic: Dictionary) -> String:
+	var level := _focus_level(topic)
+	return str(level.get("id", "")) if not level.is_empty() else ""
+
+
+func _focus_level(topic: Dictionary) -> Dictionary:
+	if topic.is_empty():
+		return {}
+	var last_level := _level_by_id(topic, str(progress.get("_last_level_id", "")))
+	if not last_level.is_empty() and _level_has_unfinished_mode(last_level):
+		return last_level
+	for level in topic.get("levels", []):
+		if _level_has_unfinished_mode(level):
+			return level
+	if not last_level.is_empty():
+		return last_level
+	var levels: Array = topic.get("levels", [])
+	return levels[0] if not levels.is_empty() else {}
+
+
+func _level_has_unfinished_mode(level: Dictionary) -> bool:
+	var level_id := str(level.get("id", ""))
+	return not _is_done(level_id, "polygon") or not _is_done(level_id, "knob")
+
+
+func _preferred_mode(level: Dictionary) -> String:
+	var level_id := str(level.get("id", ""))
+	var last_mode := _mode_key(str(progress.get("_last_mode", "polygon")))
+	if last_mode in ["polygon", "knob"] and not _is_done(level_id, last_mode):
+		return last_mode
+	if not _is_done(level_id, "polygon"):
+		return "polygon"
+	if not _is_done(level_id, "knob"):
+		return "knob"
+	return last_mode if last_mode in ["polygon", "knob"] else "polygon"
+
+
+func _resume_target() -> Dictionary:
+	var topic := _last_topic_or_first()
+	if topic.is_empty():
+		return {}
+	var level := _focus_level(topic)
+	return {
+		"topic": topic,
+		"level": level,
+		"mode": _preferred_mode(level),
+	}
 
 
 func _last_completed_level() -> Dictionary:
