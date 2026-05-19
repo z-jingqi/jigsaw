@@ -8,6 +8,7 @@ onto a configurable background color before saving.
 from __future__ import annotations
 
 import argparse
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -121,6 +122,12 @@ def convert_one(
     dst = output_path_for(input_file, output_dir, suffix)
     if dst.exists() and not overwrite:
         return Result(src, dst, None, None, None, None, "skipped", "destination exists; pass --overwrite to replace it")
+    if src.suffix.lower() in {".jpg", ".jpeg"}:
+        before_bytes = src.stat().st_size
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+        return Result(src, dst, None, None, before_bytes, before_bytes, "kept", "already JPEG; skipped conversion")
 
     try:
         before_bytes = src.stat().st_size

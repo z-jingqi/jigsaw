@@ -35,12 +35,24 @@
     @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-clay bg-clay px-3 py-2 text-sm text-white transition hover:bg-[#a95f25];
   }
 
+  .btnPrimary:disabled {
+    @apply cursor-not-allowed opacity-45 hover:bg-clay;
+  }
+
   .btnActive {
-    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-moss bg-white px-3 py-2 text-sm text-ink shadow-[inset_0_0_0_1px_#3f7f72];
+    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-clay bg-white px-3 py-2 text-sm text-ink shadow-[inset_0_0_0_1px_#c77c2e];
+  }
+
+  .btnActive:disabled {
+    @apply cursor-not-allowed opacity-45;
   }
 
   .btnDanger {
     @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-[#9e3f35] transition hover:border-[#9e3f35];
+  }
+
+  .btnDanger:disabled {
+    @apply cursor-not-allowed opacity-45 hover:border-stone-300;
   }
 
   .iconBtn {
@@ -48,7 +60,7 @@
   }
 
   .iconBtnActive {
-    @apply relative inline-flex min-h-9 items-center justify-center rounded-md border border-moss bg-white px-2 py-2 text-ink shadow-[inset_0_0_0_1px_#3f7f72];
+    @apply relative inline-flex min-h-9 items-center justify-center rounded-md border border-clay bg-white px-2 py-2 text-ink shadow-[inset_0_0_0_1px_#c77c2e];
   }
 
   .iconBtnDanger {
@@ -67,16 +79,42 @@
     @apply bg-clay;
   }
 
+  .statusBadge {
+    @apply pointer-events-none select-none rounded px-2 py-1 text-xs font-medium;
+  }
+
+  .statusBadgePending {
+    @apply bg-amber-100 text-amber-700;
+  }
+
+  .statusBadgeDone {
+    @apply bg-emerald-100 text-emerald-700;
+  }
+
   .fileButton {
     @apply flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-stone-300 bg-white px-3 py-2 text-sm text-ink transition hover:border-clay;
   }
 
   .object {
-    @apply flex items-center justify-between rounded-md border border-stone-300 bg-white px-3 py-2 text-left text-sm transition hover:border-clay;
+    @apply flex items-center gap-4 rounded-md border border-stone-300 bg-white px-3 py-2 text-left text-sm transition hover:border-clay;
   }
 
   .objectActive {
-    @apply flex items-center justify-between rounded-md border border-moss bg-white px-3 py-2 text-left text-sm shadow-[inset_0_0_0_1px_#3f7f72];
+    @apply flex items-center gap-4 rounded-md border border-clay bg-white px-3 py-2 text-left text-sm shadow-[inset_0_0_0_1px_#c77c2e];
+  }
+
+  .object small,
+  .objectActive small {
+    @apply ml-auto;
+  }
+
+  .editReveal {
+    @apply opacity-0;
+  }
+
+  .group\/rename:hover .editReveal,
+  .editReveal:focus-visible {
+    @apply opacity-100;
   }
 
   .selectTrigger {
@@ -113,7 +151,7 @@
   }
 
   .sortRowActive {
-    @apply border-moss shadow-[inset_0_0_0_1px_#3f7f72];
+    @apply border-clay shadow-[inset_0_0_0_1px_#c77c2e];
   }
 
   .shapeButton {

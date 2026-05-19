@@ -625,6 +625,146 @@ export function presetShapePoints(template: CutTemplate, bounds: Bounds): Point[
     return [...outer, ...inner];
   }
 
+  if (template === "rectangle") {
+    return scaleUnitShape(
+      [
+        [0.18, 0.22],
+        [0.82, 0.22],
+        [0.82, 0.78],
+        [0.18, 0.78],
+      ],
+      cx,
+      cy,
+      radius * 2.2,
+    );
+  }
+
+  if (template === "trapezoid") {
+    return scaleUnitShape(
+      [
+        [0.32, 0.18],
+        [0.72, 0.18],
+        [0.88, 0.82],
+        [0.12, 0.82],
+      ],
+      cx,
+      cy,
+      radius * 2.2,
+    );
+  }
+
+  if (template === "triangle") {
+    return regularPolygon(cx, cy, radius * 1.12, 3, -Math.PI / 2);
+  }
+
+  if (template === "diamond") {
+    return regularPolygon(cx, cy, radius * 1.12, 4, -Math.PI / 2);
+  }
+
+  if (template === "pentagon") {
+    return regularPolygon(cx, cy, radius * 1.08, 5, -Math.PI / 2);
+  }
+
+  if (template === "hexagon") {
+    return regularPolygon(cx, cy, radius * 1.08, 6, Math.PI / 6);
+  }
+
+  if (template === "octagon") {
+    return regularPolygon(cx, cy, radius * 1.08, 8, Math.PI / 8);
+  }
+
+  if (template === "parallelogram") {
+    return scaleUnitShape(
+      [
+        [0.3, 0.18],
+        [0.86, 0.18],
+        [0.7, 0.82],
+        [0.14, 0.82],
+      ],
+      cx,
+      cy,
+      radius * 2.2,
+    );
+  }
+
+  if (template === "sector") {
+    return [{ x: cx, y: cy }, ...sampleArc(cx, cy, radius * 1.18, -Math.PI * 0.72, Math.PI * 0.12, 24, true)];
+  }
+
+  if (template === "semicircle") {
+    return [...sampleArc(cx, cy + radius * 0.22, radius * 1.05, Math.PI, Math.PI * 2, 28, true), { x: cx - radius * 1.05, y: cy + radius * 0.22 }];
+  }
+
+  if (template === "heart") {
+    return Array.from({ length: 48 }, (_, index) => {
+      const t = (Math.PI * 2 * index) / 48;
+      const x = 16 * Math.sin(t) ** 3;
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      return { x: cx + (x / 18) * radius, y: cy + (y / 18) * radius };
+    });
+  }
+
+  if (template === "arrow") {
+    return scaleUnitShape(
+      [
+        [0.16, 0.38],
+        [0.55, 0.38],
+        [0.55, 0.18],
+        [0.88, 0.5],
+        [0.55, 0.82],
+        [0.55, 0.62],
+        [0.16, 0.62],
+      ],
+      cx,
+      cy,
+      radius * 2.25,
+    );
+  }
+
+  if (template === "cross") {
+    return scaleUnitShape(
+      [
+        [0.38, 0.12],
+        [0.62, 0.12],
+        [0.62, 0.38],
+        [0.88, 0.38],
+        [0.88, 0.62],
+        [0.62, 0.62],
+        [0.62, 0.88],
+        [0.38, 0.88],
+        [0.38, 0.62],
+        [0.12, 0.62],
+        [0.12, 0.38],
+        [0.38, 0.38],
+      ],
+      cx,
+      cy,
+      radius * 2.15,
+    );
+  }
+
+  if (template === "shield") {
+    return scaleUnitShape(
+      [
+        [0.5, 0.1],
+        [0.84, 0.24],
+        [0.78, 0.68],
+        [0.5, 0.9],
+        [0.22, 0.68],
+        [0.16, 0.24],
+      ],
+      cx,
+      cy,
+      radius * 2.15,
+    );
+  }
+
+  if (template === "leaf") {
+    const left = sampleArc(cx + radius * 0.1, cy, radius * 1.0, Math.PI * 0.78, Math.PI * 1.42, 24, true);
+    const right = sampleArc(cx - radius * 0.1, cy, radius * 1.0, -Math.PI * 0.42, Math.PI * 0.22, 24, true);
+    return [...left, ...right];
+  }
+
   if (template === "zigzag") {
     return scaleUnitShape(
       [
@@ -643,6 +783,13 @@ export function presetShapePoints(template: CutTemplate, bounds: Bounds): Point[
   }
 
   return knobShapePoints(cx, cy, radius);
+}
+
+function regularPolygon(cx: number, cy: number, radius: number, sides: number, startAngle: number): Point[] {
+  return Array.from({ length: sides }, (_, index) => {
+    const angle = startAngle + (Math.PI * 2 * index) / sides;
+    return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+  });
 }
 
 function sampleArc(cx: number, cy: number, radius: number, start: number, end: number, steps: number, includeEnd = true): Point[] {

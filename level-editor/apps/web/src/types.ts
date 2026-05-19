@@ -12,7 +12,29 @@ export type Bounds = {
 
 export type CutKind = "fracture" | "preset_shape";
 
-export type CutTemplate = "knob" | "round" | "circle" | "star" | "blob" | "zigzag" | "crescent";
+export type CutTemplate =
+  | "knob"
+  | "round"
+  | "circle"
+  | "star"
+  | "blob"
+  | "zigzag"
+  | "crescent"
+  | "rectangle"
+  | "trapezoid"
+  | "sector"
+  | "heart"
+  | "triangle"
+  | "diamond"
+  | "pentagon"
+  | "hexagon"
+  | "octagon"
+  | "parallelogram"
+  | "arrow"
+  | "cross"
+  | "shield"
+  | "leaf"
+  | "semicircle";
 
 export type CutLine = {
   id: string;
@@ -83,6 +105,55 @@ export type LevelCatalog = {
   default_locale: LocaleCode;
   locales: LocaleCode[];
   topics: CatalogTopic[];
+};
+
+export type ImageTarget = "default" | "polygon" | "knob";
+
+export type ProcessStepType = "convert_jpg" | "remove_background" | "trim_transparent" | "compress";
+
+export type PendingImageKind = "image" | "tablecloth";
+
+export type ImageInfo = {
+  format: string;
+  width: number;
+  height: number;
+  bytes: number;
+};
+
+export type ProcessStep = {
+  id: string;
+  type: ProcessStepType;
+  tolerance: number;
+  padding: number;
+  quality: number;
+  background: string;
+};
+
+export type PendingImageItem = {
+  id: string;
+  name: string;
+  kind: PendingImageKind;
+  path: string;
+  url: string;
+  source_info: ImageInfo;
+  processed: boolean;
+  processed_path?: string;
+  processed_url?: string;
+  processed_info?: ImageInfo;
+  processed_at?: string;
+  applied_step_types?: ProcessStepType[];
+  pending_step_types?: ProcessStepType[];
+  compression_stable?: boolean;
+  folder?: string;
+  created_at: string;
+};
+
+export type PythonTool = {
+  name: string;
+  label: string;
+  supported: boolean;
+  description: string;
+  stepType?: ProcessStepType;
 };
 
 export type OutlineAnalysis = {
