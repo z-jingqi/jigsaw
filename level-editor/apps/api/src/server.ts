@@ -17,6 +17,7 @@ const pendingImagesIndexPath = path.join(levelsDir, "_pending", "images.json");
 const toolsDir = path.join(projectRoot, "tools");
 const port = Number(process.env.LEVEL_EDITOR_API_PORT || 5174);
 const execFileAsync = promisify(execFile);
+const googleDriveFolderMime = "application/vnd.google-apps.folder";
 
 const app = new Hono();
 
@@ -142,6 +143,15 @@ app.get("/api/pending-images", async (c) => {
 	return c.json({ ok: true, items, folders });
 });
 
+app.get("/api/google-drive/status", (c) => {
+	return c.json({
+		ok: true,
+		enabled: true,
+		mode: "access_token",
+		message: "使用 Google OAuth access token 导入 Drive 图片或文件夹；文件会进入待处理图片池。",
+	});
+});
+
 app.post("/api/pending-images", async (c) => {
 	const body = await c.req.parseBody({ all: true });
 	const kind = safePendingImageKind(body.kind);
@@ -185,6 +195,99 @@ app.post("/api/pending-images", async (c) => {
 	const items = [...created, ...existingData.items.filter((existing) => !created.some((item) => item.id === existing.id))];
 	await writePendingData(items, uniqueStrings([...(existingData.folders || []), ...created.map((item) => item.folder || "")]));
 	return c.json({ ok: true, item: created[0], items: created, skipped, skipped_count: skipped.length });
+});
+
+app.post("/api/google-drive/import", async (c) => {
+	const payload = await c.req.json();
+	const accessToken = String(payload.accessToken || "").trim();
+	const kind = safePendingImageKind(payload.kind);
+	const files = Array.isArray(payload.files) ? payload.files : [];
+	if (!accessToken) return c.json({ ok: false, error: "Google Drive access token is required" }, 400);
+	if (!files.length) return c.json({ ok: false, error: "files are required" }, 400);
+
+	const existingData = await readPendingData();
+	const usedNames = new Set(existingData.items.map((item) => pendingNameKey(item.folder || "", item.name)));
+	const created: PendingImageItem[] = [];
+	const skipped: Array<{ name: string; folder: string; reason: string }> = [];
+	const candidates: Array<{ id: string; name: string; folder: string; mimeType?: string }> = [];
+
+	for (const [index, file] of files.entries()) {
+		const fileId = String(file?.id || "").trim();
+		const fallbackName = file?.name || `drive-${index}.png`;
+		const metadata = fileId ? await driveFileMetadata(accessToken, fileId).catch(() => null) : null;
+		const name = safeDriveFileName(metadata?.name || fallbackName);
+		let folder = safeFolderName(file?.folder || "");
+		if (!fileId) {
+			skipped.push({ name, folder, reason: "missing_file_id" });
+			continue;
+		}
+		if (metadata?.mimeType === googleDriveFolderMime) {
+			const folderName = safeFolderName(metadata.name || fallbackName);
+			const children = await driveFolderImageFiles(accessToken, fileId).catch(() => []);
+			if (!children.length) {
+				skipped.push({ name: folderName || fallbackName, folder: folderName, reason: "folder_has_no_images" });
+				continue;
+			}
+			for (const child of children) {
+				candidates.push({
+					id: String(child.id || ""),
+					name: safeDriveFileName(child.name || "drive-image.png"),
+					folder: folderName,
+					mimeType: child.mimeType,
+				});
+			}
+			continue;
+		}
+		if (!isDriveImageMime(metadata?.mimeType)) {
+			skipped.push({ name, folder, reason: "unsupported_mime" });
+			continue;
+		}
+		if (!folder && metadata?.parents?.[0]) {
+			const parent = await driveFileMetadata(accessToken, metadata.parents[0], "id,name").catch(() => null);
+			folder = safeFolderName(parent?.name || "");
+		}
+		candidates.push({ id: fileId, name, folder, mimeType: metadata?.mimeType });
+	}
+
+	for (const [index, file] of candidates.entries()) {
+		const fileId = file.id;
+		const name = file.name;
+		const folder = file.folder;
+		const nameKey = pendingNameKey(folder, name);
+		if (usedNames.has(nameKey)) {
+			skipped.push({ name, folder, reason: "duplicate_name" });
+			continue;
+		}
+		usedNames.add(nameKey);
+		const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+		if (!response.ok) {
+			skipped.push({ name, folder, reason: `drive_http_${response.status}` });
+			continue;
+		}
+		const bytes = Buffer.from(await response.arrayBuffer());
+		const extension = imageExtension(name);
+		const id = `${Date.now()}-${index}-${safeStem(name)}`;
+		const target = globalPendingImagePath(id, `original${extension}`);
+		await mkdir(path.dirname(target), { recursive: true });
+		await writeFile(target, bytes);
+		created.push({
+			id,
+			name,
+			kind,
+			path: path.relative(projectRoot, target),
+			url: `/api/pending-images/${id}/source?mtime=${Date.now()}`,
+			source_info: await imageInfoForPath(target),
+			processed: false,
+			folder,
+			created_at: new Date().toISOString(),
+		});
+	}
+
+	const items = [...created, ...existingData.items.filter((existing) => !created.some((item) => item.id === existing.id))];
+	await writePendingData(items, uniqueStrings([...(existingData.folders || []), ...created.map((item) => item.folder || "")]));
+	return c.json({ ok: true, items: created, skipped, skipped_count: skipped.length });
 });
 
 app.post("/api/pending-folders", async (c) => {
@@ -433,6 +536,55 @@ app.post("/api/pending-images/:pendingId/create-level", async (c) => {
 		topicId,
 		levelId,
 		godotPath: `res://levels/${topicId}/${levelId}/${finalName}`,
+		url: `/api/levels/${topicId}/${levelId}/assets/${finalName}?mtime=${Date.now()}`,
+	});
+});
+
+app.post("/api/editor/save-mode", async (c) => {
+	const payload = await c.req.json();
+	const topicId = safeId(payload.topicId);
+	const levelId = safeId(payload.levelId);
+	const mode = safeMode(payload.mode);
+	const imageId = safeFileName(payload.imageId);
+	const title = String(payload.title || levelId).trim() || levelId;
+	const description = String(payload.description || "").trim();
+	const incomingLevel = payload.level || {};
+	const items = await readPendingImages();
+	const imageItem = items.find((candidate) => candidate.id === imageId);
+	if (!imageItem) return c.json({ ok: false, error: "pending image not found" }, 404);
+	if (imageItem.kind === "tablecloth") return c.json({ ok: false, error: "tablecloth cannot be used as a puzzle image" }, 400);
+	if (imageItem.processed_path) return c.json({ ok: false, error: "confirm processed image first" }, 400);
+
+	const input = path.resolve(projectRoot, imageItem.path);
+	const extension = normalizedExtension(input);
+	const finalName = targetImageFileName(mode, extension);
+	const finalPath = levelAssetPath(topicId, levelId, finalName);
+	await mkdir(path.dirname(finalPath), { recursive: true });
+	await copyFile(input, finalPath);
+	const imageInfo = await imageInfoForPath(finalPath);
+	const modeImage = {
+		path: `res://levels/${topicId}/${levelId}/${finalName}`,
+		name: finalName,
+		width: imageInfo.width,
+		height: imageInfo.height,
+	};
+
+	const existingLevel = await readJson<any>(levelPath(topicId, levelId), makeLevelJson(topicId, levelId, title, description, finalName));
+	normalizeLevelImageModes(existingLevel, topicId, levelId);
+	const nextLevel = normalizeLevelForModeSave(existingLevel, incomingLevel, topicId, levelId, mode, modeImage, title, description);
+	await writeJson(levelPath(topicId, levelId), nextLevel);
+
+	const catalog = upsertCatalogLevel(await readJson(catalogPath, makeEmptyCatalog()), topicId, levelId, title, finalName);
+	await writeJson(catalogPath, catalog);
+	return c.json({
+		ok: true,
+		level: nextLevel,
+		catalog,
+		topicId,
+		levelId,
+		image: modeImage,
+		path: path.relative(projectRoot, levelPath(topicId, levelId)),
+		godotPath: modeImage.path,
 		url: `/api/levels/${topicId}/${levelId}/assets/${finalName}?mtime=${Date.now()}`,
 	});
 });
@@ -737,6 +889,14 @@ function safeFileName(value: unknown) {
 		throw new Error("file name must contain only letters, numbers, dash, underscore, or dot");
 	}
 	return fileName;
+}
+
+function safeDriveFileName(value: unknown) {
+	const fileName = path.basename(String(value || "drive-image.png").trim());
+	const parsed = path.parse(fileName);
+	const stem = parsed.name.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "drive-image";
+	const ext = imageExtension(fileName);
+	return `${stem}${ext}`;
 }
 
 function safeStem(value: unknown) {
@@ -1059,6 +1219,42 @@ async function execPython(args: string[]) {
 	throw lastError || new Error("python executable not found");
 }
 
+async function driveFileMetadata(accessToken: string, fileId: string, fields = "id,name,parents,mimeType") {
+	const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=${encodeURIComponent(fields)}`, {
+		headers: { authorization: `Bearer ${accessToken}` },
+	});
+	if (!response.ok) throw new Error(`Drive metadata HTTP ${response.status}`);
+	return (await response.json()) as { id?: string; name?: string; parents?: string[]; mimeType?: string };
+}
+
+async function driveFolderImageFiles(accessToken: string, folderId: string) {
+	const files: Array<{ id?: string; name?: string; parents?: string[]; mimeType?: string }> = [];
+	let pageToken = "";
+	do {
+		const params = new URLSearchParams({
+			fields: "nextPageToken,files(id,name,parents,mimeType)",
+			pageSize: "1000",
+			q: `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false and mimeType contains 'image/'`,
+		});
+		if (pageToken) params.set("pageToken", pageToken);
+		const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+			headers: { authorization: `Bearer ${accessToken}` },
+		});
+		if (!response.ok) throw new Error(`Drive folder HTTP ${response.status}`);
+		const data = (await response.json()) as {
+			nextPageToken?: string;
+			files?: Array<{ id?: string; name?: string; parents?: string[]; mimeType?: string }>;
+		};
+		files.push(...(data.files || []).filter((file) => file.id && isDriveImageMime(file.mimeType)));
+		pageToken = data.nextPageToken || "";
+	} while (pageToken);
+	return files;
+}
+
+function isDriveImageMime(mimeType: unknown) {
+	return String(mimeType || "").startsWith("image/");
+}
+
 async function outputOrCopied(input: string, output: string) {
 	const target = path.resolve(output);
 	try {
@@ -1094,10 +1290,54 @@ function normalizeLevelImageModes(level: any, topicId: string, levelId: string) 
 		const configuredPath = typeof configured === "string" ? configured : configured?.path || "";
 		level.modes[mode] = {
 			...modeData,
-			image: configuredPath ? configured : { use: "default" },
+			image: configuredPath ? configured : defaultImage,
 		};
 		delete level.modes[mode].source_image;
 	}
+}
+
+function normalizeLevelForModeSave(
+	existingLevel: any,
+	incomingLevel: any,
+	topicId: string,
+	levelId: string,
+	mode: "polygon" | "knob",
+	modeImage: { path: string; name: string; width: number; height: number },
+	title: string,
+	description: string,
+) {
+	const base = {
+		...existingLevel,
+		id: levelId,
+		topic_id: topicId,
+		locale: String(incomingLevel.locale || existingLevel.locale || "zh-Hans"),
+		title,
+		description,
+		title_i18n: { ...(existingLevel.title_i18n || {}), ...(incomingLevel.title_i18n || {}), "zh-Hans": title },
+		description_i18n: { ...(existingLevel.description_i18n || {}), ...(incomingLevel.description_i18n || {}), "zh-Hans": description },
+		background: { ...(existingLevel.background || {}), ...(incomingLevel.background || {}) },
+		grid: { ...(existingLevel.grid || {}), ...(incomingLevel.grid || {}) },
+		runtime_layout: { ...(existingLevel.runtime_layout || {}), ...(incomingLevel.runtime_layout || {}) },
+		component_overrides: { ...(existingLevel.component_overrides || {}), ...(incomingLevel.component_overrides || {}) },
+		modes: {
+			...(existingLevel.modes || {}),
+			[mode]: {
+				...(existingLevel.modes?.[mode] || {}),
+				...(incomingLevel.modes?.[mode] || {}),
+				source: "precomputed",
+				image: modeImage,
+			},
+		},
+	};
+	base.image = modeImage;
+	base.assets = { ...(base.assets || {}), default_image: modeImage };
+	if (mode === "polygon") {
+		base.editor = { ...(existingLevel.editor || {}), ...(incomingLevel.editor || {}) };
+	} else {
+		base.editor = existingLevel.editor || incomingLevel.editor || { outline: [], cuts: [], shapes: [], pieces: [] };
+	}
+	normalizeLevelImageModes(base, topicId, levelId);
+	return base;
 }
 
 type PendingImageItem = {
@@ -1212,8 +1452,8 @@ function makeLevelJson(topicId: string, levelId: string, title: string, descript
 		},
 		component_overrides: {},
 		modes: {
-			polygon: { source: "precomputed", image: { use: "default" }, pieces: [] },
-			knob: { source: "precomputed", image: { use: "default" }, cols: 8, rows: 8, piece_size: 190, knob_size: 0.24, pieces: [] },
+			polygon: { source: "precomputed", image, pieces: [] },
+			knob: { source: "precomputed", image, cols: 8, rows: 8, piece_size: 190, knob_size: 0.24, pieces: [] },
 		},
 		editor: { outline: [], cuts: [], shapes: [], pieces: [] },
 	};

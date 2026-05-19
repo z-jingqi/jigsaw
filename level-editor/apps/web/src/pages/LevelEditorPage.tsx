@@ -27,7 +27,7 @@ import {
   uid,
   type ActualPiecePreview,
 } from "../geometry";
-import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig } from "../types";
+import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig, PendingImageItem } from "../types";
 
 const snapThreshold = 18;
 const mergePolygonTolerance = 5;
@@ -61,7 +61,7 @@ type LevelTarget = {
   levelId: string;
 };
 
-type ImageTarget = "default" | EditMode;
+type ImageTarget = EditMode;
 
 type ProcessStepType = "remove_background" | "trim_transparent" | "convert_jpg";
 
@@ -80,7 +80,19 @@ type PendingImage = {
   url: string;
 } | null;
 
+type Props = {
+  onUnsavedChange?: (dirty: boolean) => void;
+};
+
 type CreateDialogKind = "topic" | "level" | null;
+
+type SaveModeDialogState = {
+  open: boolean;
+  topicId: string;
+  levelId: string;
+  title: string;
+  description: string;
+};
 
 type EditorSnapshot = {
   level: LevelConfig;
@@ -161,58 +173,20 @@ function nextSequentialId(prefix: string, existingIds: string[]): string {
   return `${prefix}_${Date.now().toString(36)}`;
 }
 
-function sourceUrl(topicId: string, levelId: string) {
-  return `/api/levels/${topicId}/${levelId}/source?mtime=${Date.now()}`;
-}
-
-function modeSourceUrl(topicId: string, levelId: string, mode: EditMode) {
-  return `/api/levels/${topicId}/${levelId}/source/${mode}?mtime=${Date.now()}`;
-}
-
-function defaultImageConfig(level: LevelConfig) {
-  return level.assets?.default_image || level.image;
-}
-
-function isDefaultImageConfig(value?: LevelImageConfig): boolean {
-  return !value || (typeof value !== "string" && value.use === "default" && !value.path);
-}
-
-function modeUsesDefaultImage(level: LevelConfig, mode: EditMode): boolean {
-  return isDefaultImageConfig(level.modes[mode].image || level.modes[mode].source_image);
-}
-
 function modeImageConfig(level: LevelConfig, mode: EditMode): LevelImageConfig {
-  const configured = level.modes[mode].image || level.modes[mode].source_image;
-  if (!isDefaultImageConfig(configured)) return configured as LevelImageConfig;
-  return defaultImageConfig(level);
+  return level.modes[mode].image as LevelImageConfig;
 }
 
 function modeImagePath(level: LevelConfig, mode: EditMode): string {
-  return imageConfigPath(modeImageConfig(level, mode)) || imageConfigPath(defaultImageConfig(level));
-}
-
-function modeImageTarget(level: LevelConfig, mode: EditMode): ImageTarget {
-  return modeUsesDefaultImage(level, mode) ? "default" : mode;
-}
-
-function godotAssetFileName(target: LevelTarget, godotPath: string): string {
-  const prefix = `res://levels/${target.topicId}/${target.levelId}/`;
-  if (!godotPath.startsWith(prefix)) return "";
-  return godotPath.slice(prefix.length).split(/[?#]/)[0];
-}
-
-function browserUrlForGodotImage(target: LevelTarget, godotPath: string, mode: EditMode): string {
-  if (!godotPath) return DEFAULT_BROWSER_IMAGE;
-  if (/^(https?:|data:|blob:)/.test(godotPath)) return godotPath;
-  const fileName = godotAssetFileName(target, godotPath);
-  if (!fileName) return DEFAULT_BROWSER_IMAGE;
-  if (fileName === "source.png") return sourceUrl(target.topicId, target.levelId);
-  if (fileName === `${mode}_source.png`) return modeSourceUrl(target.topicId, target.levelId, mode);
-  return `/api/levels/${target.topicId}/${target.levelId}/assets/${encodeURIComponent(fileName)}?mtime=${Date.now()}`;
+  return imageConfigPath(modeImageConfig(level, mode));
 }
 
 function imageNameFromPath(godotPath: string, fallback: string) {
   return godotPath.split("/").pop()?.split(/[?#]/)[0] || fallback;
+}
+
+function displayPendingImageName(item: PendingImageItem) {
+  return item.name.replace(/\.[^.]+$/, "");
 }
 
 function processStepLabel(type: ProcessStepType) {
@@ -234,19 +208,15 @@ function createProcessStep(type: ProcessStepType): ProcessStep {
 
 function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, levelId?: string): LevelConfig {
   const defaults = makeEmptyLevel();
-  const defaultPath = `res://levels/${topicId || data.topic_id || defaults.topic_id}/${levelId || data.id || defaults.id}/source.png`;
-  const legacyImage = { ...defaults.image, path: defaultPath, ...(data.image || {}) };
-  const defaultImage = { ...legacyImage, ...(data.assets?.default_image || {}) };
   return {
     ...defaults,
     ...data,
     id: levelId || data.id || defaults.id,
     topic_id: topicId || data.topic_id || defaults.topic_id,
-    image: defaultImage,
+    image: { ...defaults.image, ...(data.image || {}) },
     assets: {
       ...(defaults.assets || {}),
       ...(data.assets || {}),
-      default_image: defaultImage,
     },
     background: { ...defaults.background, ...data.background },
     grid: { ...defaults.grid, ...data.grid },
@@ -254,12 +224,12 @@ function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, leve
       polygon: {
         ...defaults.modes.polygon,
         ...(data.modes?.polygon || {}),
-        image: data.modes?.polygon?.image || data.modes?.polygon?.source_image || defaults.modes.polygon.image,
+        image: data.modes?.polygon?.image || defaults.modes.polygon.image,
       },
       knob: {
         ...defaults.modes.knob,
         ...(data.modes?.knob || {}),
-        image: data.modes?.knob?.image || data.modes?.knob?.source_image || defaults.modes.knob.image,
+        image: data.modes?.knob?.image || defaults.modes.knob.image,
         cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
         rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
         piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
@@ -591,12 +561,21 @@ function previewBufferToDataUrl(width: number, height: number, previewBuffer: Ar
   return canvas.toDataURL("image/png");
 }
 
-function App() {
+function App({ onUnsavedChange }: Props) {
   const [catalog, setCatalog] = useState<LevelCatalog>(() => makeDefaultCatalog());
   const [locale, setLocale] = useState("zh-Hans");
   const [currentTarget, setCurrentTarget] = useState<LevelTarget>({ topicId: "cat", levelId: "cat_moon_01" });
   const [pendingTarget, setPendingTarget] = useState<LevelTarget | null>(null);
   const [level, setLevel] = useState<LevelConfig>(() => makeEmptyLevel());
+  const [pendingImages, setPendingImages] = useState<PendingImageItem[]>([]);
+  const [selectedImages, setSelectedImages] = useState<Record<EditMode, PendingImageItem | null>>({ polygon: null, knob: null });
+  const [saveDialog, setSaveDialog] = useState<SaveModeDialogState>({
+    open: false,
+    topicId: "cat",
+    levelId: "cat_moon_01",
+    title: "月亮小睡",
+    description: "",
+  });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageUrl, setImageUrl] = useState(DEFAULT_BROWSER_IMAGE);
   const [analysis, setAnalysis] = useState<OutlineAnalysis>({ outline: [], edgePoints: [], bounds: null });
@@ -646,6 +625,8 @@ function App() {
   useEffect(() => {
     void loadCatalog();
   }, []);
+
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -702,20 +683,34 @@ function App() {
     () => (currentTopic?.levels || []).map((item) => ({ value: item.id, label: localized(item.title_i18n, locale, item.title) })),
     [currentTopic, locale],
   );
+  const saveTopic = useMemo(() => catalog.topics.find((topic) => topic.id === saveDialog.topicId) || catalog.topics[0], [catalog.topics, saveDialog.topicId]);
+  const saveLevelOptions = useMemo<SelectOption[]>(
+    () => (saveTopic?.levels || []).map((item) => ({ value: item.id, label: localized(item.title_i18n, locale, item.title), detail: item.id })),
+    [locale, saveTopic],
+  );
   const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
   const currentLevelName = localized(currentCatalogLevel?.title_i18n, locale, currentCatalogLevel?.title || level.title || currentTarget.levelId);
-  const activeImagePath = modeImagePath(level, activeMode);
-  const activeImageTarget = modeImageTarget(level, activeMode);
+  const imageOptions = useMemo<SelectOption[]>(
+    () =>
+      pendingImages
+        .filter((item) => item.kind === "image" && !item.processed_path)
+        .map((item) => ({
+          value: item.id,
+          label: displayPendingImageName(item),
+          detail: item.folder || (item.processed ? "已处理" : "未处理"),
+        })),
+    [pendingImages],
+  );
+  const activePendingImage = selectedImages[activeMode];
+  const otherMode: EditMode = activeMode === "polygon" ? "knob" : "polygon";
 
   useEffect(() => {
-    loadEditorImage(
-      browserUrlForGodotImage(currentTarget, activeImagePath, activeMode),
-      imageNameFromPath(activeImagePath, activeImageTarget === "default" ? "source.png" : `${activeMode}_source.png`),
-      activeImagePath,
-      activeImageTarget,
-      false,
-    );
-  }, [activeImagePath, activeImageTarget, activeMode, currentTarget.topicId, currentTarget.levelId]);
+    if (!activePendingImage) {
+      loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, activeMode, false);
+      return;
+    }
+    loadEditorImage(activePendingImage.url, activePendingImage.name, activePendingImage.path, activeMode);
+  }, [activeMode, activePendingImage?.id, activePendingImage?.url]);
 
   async function loadCatalog() {
     try {
@@ -730,15 +725,41 @@ function App() {
       setCatalog(normalized);
       setLocale(normalized.default_locale || normalized.locales[0] || "zh-Hans");
       const params = new URLSearchParams(window.location.search);
-      const requestedTopicId = params.get("topic") || "";
-      const requestedLevelId = params.get("level") || "";
-      const firstTopic = normalized.topics.find((topic) => topic.id === requestedTopicId) || normalized.topics[0];
-      const firstLevel = firstTopic?.levels.find((item) => item.id === requestedLevelId) || firstTopic?.levels[0];
-      if (firstTopic && firstLevel) await loadLevel(firstTopic.id, firstLevel.id, firstLevel);
-      else loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default");
+      const firstTopic = normalized.topics[0];
+      const firstLevel = firstTopic?.levels[0];
+      if (firstTopic && firstLevel) {
+        setCurrentTarget({ topicId: firstTopic.id, levelId: firstLevel.id });
+        setSaveDialog((current) => ({
+          ...current,
+          topicId: firstTopic.id,
+          levelId: firstLevel.id,
+          title: firstLevel.title,
+        }));
+      }
+      await loadPendingImages(params.get("image") || "");
+      const requestedMode = params.get("mode");
+      if (requestedMode === "polygon" || requestedMode === "knob") setActiveMode(requestedMode);
     } catch (error) {
       showToast(error instanceof Error ? `加载 catalog 失败：${error.message}` : "加载 catalog 失败");
-      loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default");
+      await loadPendingImages(new URLSearchParams(window.location.search).get("image") || "");
+    }
+  }
+
+  async function loadPendingImages(preferredId = "") {
+    try {
+      const response = await fetch("/api/pending-images");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[] };
+      const items = (data.items || []).filter((item) => item.kind === "image" && !item.processed_path);
+      setPendingImages(items);
+      const preferred = items.find((item) => item.id === preferredId) || items.find((item) => item.processed) || items[0] || null;
+      if (preferred) {
+        setSelectedImages({ polygon: preferred, knob: preferred });
+        applyPendingImageToMode("polygon", preferred);
+        applyPendingImageToMode("knob", preferred);
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? `加载图片池失败：${error.message}` : "加载图片池失败");
     }
   }
 
@@ -757,6 +778,42 @@ function App() {
       fallback.image.path = `res://levels/${topicId}/${levelId}/source.png`;
       applyLoadedLevel(fallback, topicId, levelId);
     }
+  }
+
+  function applyPendingImageToMode(mode: EditMode, item: PendingImageItem) {
+    const nextImage = {
+      path: item.path,
+      name: item.name,
+      width: item.source_info.width,
+      height: item.source_info.height,
+    };
+    setLevel((current) => ({
+      ...current,
+      modes: {
+        ...current.modes,
+        [mode]: {
+          ...current.modes[mode],
+          image: nextImage,
+        },
+      },
+    }));
+  }
+
+  function selectImageForMode(mode: EditMode, imageId: string) {
+    const item = pendingImages.find((candidate) => candidate.id === imageId) || null;
+    if (!item) return;
+    recordImageEdit(mode);
+    setSelectedImages((current) => ({ ...current, [mode]: item }));
+    applyPendingImageToMode(mode, item);
+  }
+
+  function useActiveImageForOtherMode() {
+    if (!activePendingImage) {
+      showToast("请先为当前模式选择图片。");
+      return;
+    }
+    selectImageForMode(otherMode, activePendingImage.id);
+    showToast(`${otherMode === "polygon" ? "多边形" : "凹凸"}模式已使用当前图片。`);
   }
 
   function applyLoadedLevel(data: LevelConfig, topicId: string, levelId: string) {
@@ -841,7 +898,8 @@ function App() {
     polygon: pieces.length > 0,
     knob: knobPieces.length > 0,
   };
-  const canSaveToGodot = completedModes.polygon && completedModes.knob && modeReady.polygon && modeReady.knob;
+  const canSaveCurrentMode = Boolean(activePendingImage && modeReady[activeMode]);
+  const canSaveToGodot = canSaveCurrentMode;
   const canvasModeLabel =
     activeMode === "polygon"
       ? `多边形 · ${drawingCut ? "添加线条" : polygonViewLabel(polygonView)}`
@@ -884,6 +942,7 @@ function App() {
 
   useEffect(() => {
     const hasDirtyMode = dirtyModes.polygon || dirtyModes.knob;
+    onUnsavedChange?.(hasDirtyMode);
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasDirtyMode) return;
       event.preventDefault();
@@ -891,7 +950,7 @@ function App() {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirtyModes]);
+  }, [dirtyModes, onUnsavedChange]);
 
   function snapshot(): EditorSnapshot {
     return cloneSnapshot({ level, cuts, pieces, knobPieces, completedModes });
@@ -1023,7 +1082,7 @@ function App() {
   }
 
   async function persistCatalog(nextCatalog: LevelCatalog, announce = false) {
-    if (announce) showToast("保存目录...");
+    if (announce) showToast("保存关卡...");
     try {
       const response = await fetch("/api/catalog", {
         method: "POST",
@@ -1032,10 +1091,10 @@ function App() {
       });
       const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-      if (announce) showToast(`目录已保存到 ${result.path}`);
+      if (announce) showToast(`关卡已保存到 ${result.path}`);
       return true;
     } catch (error) {
-      showToast(error instanceof Error ? `保存目录失败：${error.message}` : "保存目录失败");
+      showToast(error instanceof Error ? `保存关卡失败：${error.message}` : "保存关卡失败");
       return false;
     }
   }
@@ -1196,7 +1255,7 @@ function App() {
       title: level.title,
       title_i18n: level.title_i18n || item.title_i18n,
       path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
-      source: imageConfigPath(defaultImageConfig(level)) || `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/source.png`,
+      source: modeImagePath(level, activeMode) || item.source,
     }));
   }
 
@@ -1267,24 +1326,13 @@ function App() {
 
   function setActiveImageDimensions(width: number, height: number) {
     setLevel((current) => {
-      if (activeImageTarget === "default") {
-        const nextImage = { ...defaultImageConfig(current), width, height };
-        return {
-          ...current,
-          image: nextImage,
-          assets: {
-            ...(current.assets || {}),
-            default_image: nextImage,
-          },
-        };
-      }
-      const modeConfig = current.modes[activeImageTarget];
+      const modeConfig = current.modes[activeMode];
       const imageConfig = typeof modeConfig.image === "string" ? { path: modeConfig.image } : { ...(modeConfig.image || {}) };
       return {
         ...current,
         modes: {
           ...current.modes,
-          [activeImageTarget]: {
+          [activeMode]: {
             ...modeConfig,
             image: {
               ...imageConfig,
@@ -1304,23 +1352,6 @@ function App() {
       setImageUrl(src);
       if (!updateConfig) return;
       setLevel((current) => {
-        if (target === "default") {
-          const nextImage = {
-            ...defaultImageConfig(current),
-            name,
-            path: godotPath || imageConfigPath(defaultImageConfig(current)),
-            width: next.naturalWidth,
-            height: next.naturalHeight,
-          };
-          return {
-            ...current,
-            image: nextImage,
-            assets: {
-              ...(current.assets || {}),
-              default_image: nextImage,
-            },
-          };
-        }
         const modeConfig = current.modes[target];
         return {
           ...current,
@@ -1341,8 +1372,8 @@ function App() {
     };
     next.onerror = () => {
       if (src !== DEFAULT_BROWSER_IMAGE) {
-        loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, "default", false);
-        showToast("当前关卡还没有 source 图，已临时使用示例图预览。");
+        loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, target, false);
+        showToast("当前图片无法加载，已临时使用示例图预览。");
       }
     };
     next.src = src;
@@ -1351,48 +1382,31 @@ function App() {
   function recordImageEdit(target: ImageTarget) {
     setUndoStack((current) => [...current.slice(-49), snapshot()]);
     setRedoStack([]);
-    const affectedModes: EditMode[] =
-      target === "default"
-        ? (["polygon", "knob"] as EditMode[]).filter((mode) => modeUsesDefaultImage(level, mode))
-        : [target];
-    setDirtyModes((current) => affectedModes.reduce((next, mode) => ({ ...next, [mode]: true }), current));
-    setCompletedModes((current) => affectedModes.reduce((next, mode) => ({ ...next, [mode]: false }), current));
+    setDirtyModes((current) => ({ ...current, [target]: true }));
+    setCompletedModes((current) => ({ ...current, [target]: false }));
   }
 
-  async function onUploadImage(file?: File, target: ImageTarget = activeImageTarget) {
+  async function onUploadImage(file?: File, target: ImageTarget = activeMode) {
     if (!file) return;
     recordImageEdit(target);
     const form = new FormData();
     form.append("source", file);
     try {
-      const endpoint =
-        target === "default"
-          ? `/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source`
-          : `/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source/${target}`;
-      const response = await fetch(endpoint, { method: "POST", body: form });
+      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source/${target}`, { method: "POST", body: form });
       const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
       loadEditorImage(
         result.url || URL.createObjectURL(file),
         file.name,
-        result.godotPath || (target === "default" ? imageConfigPath(defaultImageConfig(level)) : modeImagePath(level, target)) || DEFAULT_IMAGE_PATH,
+        result.godotPath || modeImagePath(level, target) || DEFAULT_IMAGE_PATH,
         target,
       );
-      if (target === "default") {
-        setCatalog((current) =>
-          updateCatalogLevel(current, currentTarget, (item) => ({
-            ...item,
-            source: result.godotPath || item.source,
-            path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
-          })),
-        );
-      }
     } catch (error) {
       showToast(error instanceof Error ? `上传 source 失败：${error.message}` : "上传 source 失败");
       loadEditorImage(
         URL.createObjectURL(file),
         file.name,
-        target === "default" ? imageConfigPath(defaultImageConfig(level)) || DEFAULT_IMAGE_PATH : modeImagePath(level, target),
+        modeImagePath(level, target) || DEFAULT_IMAGE_PATH,
         target,
       );
     }
@@ -1459,16 +1473,7 @@ function App() {
       });
       const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
       if (!response.ok || !result.ok || !result.godotPath || !result.url) throw new Error(result.error || `HTTP ${response.status}`);
-      loadEditorImage(result.url, imageNameFromPath(result.godotPath, target === "default" ? "source.png" : `${target}_source.png`), result.godotPath, target);
-      if (target === "default") {
-        setCatalog((current) =>
-          updateCatalogLevel(current, currentTarget, (item) => ({
-            ...item,
-            source: result.godotPath || item.source,
-            path: `res://levels/${currentTarget.topicId}/${currentTarget.levelId}/level.json`,
-          })),
-        );
-      }
+      loadEditorImage(result.url, imageNameFromPath(result.godotPath, `${target}_source.png`), result.godotPath, target);
       showToast("图片处理完成。");
     } catch (error) {
       showToast(error instanceof Error ? `图片处理失败：${error.message}` : "图片处理失败");
@@ -1521,33 +1526,25 @@ function App() {
   }
 
   function updateImagePath(path: string) {
-    recordImageEdit("default");
-    setLevel((current) => {
-      const nextImage = { ...defaultImageConfig(current), path };
-      return {
-        ...current,
-        image: nextImage,
-        assets: {
-          ...(current.assets || {}),
-          default_image: nextImage,
-        },
-      };
-    });
+    updateModeImagePath(activeMode, path);
   }
 
   function updateModeImagePath(mode: EditMode, path: string) {
     recordEdit(mode);
     setLevel((current) => {
       const modeConfig = current.modes[mode];
-      const nextMode = { ...modeConfig };
-      if (path.trim()) nextMode.image = { path: path.trim() };
-      else nextMode.image = { use: "default" };
-      delete nextMode.source_image;
+      const imageConfig = typeof modeConfig.image === "string" ? { path: modeConfig.image } : { ...(modeConfig.image || {}) };
       return {
         ...current,
         modes: {
           ...current.modes,
-          [mode]: nextMode,
+          [mode]: {
+            ...modeConfig,
+            image: {
+              ...imageConfig,
+              path: path.trim(),
+            },
+          },
         },
       };
     });
@@ -1887,26 +1884,54 @@ function App() {
     showToast("JSON 已导出。");
   }
 
-  async function saveJsonToGodot(): Promise<boolean> {
+  function openSaveDialog() {
     if (!canSaveToGodot) {
-      showToast("需要先完成多边形和凹凸两个模式，才允许保存到 Godot。");
+      showToast("请先为当前模式选择图片并生成可用碎片。");
+      return;
+    }
+    const topic = catalog.topics.find((item) => item.id === saveDialog.topicId) || catalog.topics[0];
+    const levelItem = topic?.levels.find((item) => item.id === saveDialog.levelId) || topic?.levels[0];
+    setSaveDialog((current) => ({
+      ...current,
+      open: true,
+      topicId: topic?.id || current.topicId,
+      levelId: levelItem?.id || current.levelId,
+      title: current.title || level.title || levelItem?.title || "",
+      description: current.description || level.description || "",
+    }));
+  }
+
+  async function saveJsonToGodot(): Promise<boolean> {
+    if (!canSaveToGodot || !activePendingImage) {
+      showToast("请先为当前模式选择图片并生成可用碎片。");
       return false;
     }
     const text = buildJson();
     showToast("保存中...");
     try {
-      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}`, {
+      const response = await fetch("/api/editor/save-mode", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ level: JSON.parse(text), catalog: catalogForSave() }),
+        body: JSON.stringify({
+          topicId: saveDialog.topicId,
+          levelId: saveDialog.levelId,
+          mode: activeMode,
+          imageId: activePendingImage.id,
+          title: saveDialog.title || level.title || saveDialog.levelId,
+          description: saveDialog.description || level.description || "",
+          level: JSON.parse(text),
+        }),
       });
-      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
+      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string; catalog?: LevelCatalog; topicId?: string; levelId?: string };
       if (!response.ok || !result.ok) {
         throw new Error(result.error || `HTTP ${response.status}`);
       }
       showToast(`已保存到 ${result.path}`);
-      setCatalog(catalogForSave());
-      markExported();
+      if (result.catalog) setCatalog(result.catalog);
+      setCurrentTarget({ topicId: result.topicId || saveDialog.topicId, levelId: result.levelId || saveDialog.levelId });
+      setDirtyModes((current) => ({ ...current, [activeMode]: false }));
+      setCompletedModes((current) => ({ ...current, [activeMode]: true }));
+      setSaveDialog((current) => ({ ...current, open: false }));
       return true;
     } catch (error) {
       showToast(error instanceof Error ? `保存失败：${error.message}` : "保存失败");
@@ -1950,7 +1975,7 @@ function App() {
   }
 
   return (
-    <div className="grid h-screen min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
+    <div className="grid h-full min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
       <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
         <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
           <Hexagon className="mt-1 text-clay" size={22} />
@@ -1961,22 +1986,25 @@ function App() {
         </div>
 
         <section className="mt-5 grid gap-3">
-          <PanelTitle>关卡导航</PanelTitle>
-          <div className="grid gap-2">
-            <SelectBox value={locale} options={catalog.locales.map((item) => ({ value: item, label: item }))} onValueChange={setLocale} placeholder="语言" />
+          <PanelTitle>当前编辑</PanelTitle>
+          <div className="rounded-md border border-stone-300 bg-white/70 p-3 text-sm text-muted">
+            editor 只编辑当前模式和当前图片。保存时再选择主题、关卡和写入模式。
           </div>
-          <Field label="主题">
-            <SelectBox value={currentTarget.topicId} options={topicOptions} onValueChange={selectTopic} placeholder="选择主题" />
+          <Field label={activeMode === "polygon" ? "多边形图片" : "凹凸图片"}>
+            <SelectBox value={activePendingImage?.id || ""} options={imageOptions} onValueChange={(id) => selectImageForMode(activeMode, id)} placeholder="选择已处理图片" />
           </Field>
-          <Field label="关卡">
-            <SelectBox value={currentTarget.levelId} options={levelOptions} onValueChange={selectLevel} placeholder="选择关卡" />
-          </Field>
+          <button className="btn" disabled={!activePendingImage} onClick={useActiveImageForOtherMode}>
+            另一模式也使用这张图
+          </button>
+          <button className="btn" onClick={() => void loadPendingImages(activePendingImage?.id || "")}>
+            刷新图片池
+          </button>
         </section>
 
         <section className="mt-5 grid gap-3">
-          <PanelTitle>关卡</PanelTitle>
-          <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-ink">
-            {currentTopicName} <span className="text-muted">-&gt;</span> {currentLevelName}
+          <PanelTitle>文本草稿</PanelTitle>
+          <div className="grid gap-2">
+            <SelectBox value={locale} options={catalog.locales.map((item) => ({ value: item, label: item }))} onValueChange={setLocale} placeholder="语言" />
           </div>
           <Field label="标题">
             <Input value={localized(level.title_i18n, locale, level.title)} onChange={(event) => updateLocalizedTitle(event.target.value)} />
@@ -1984,9 +2012,6 @@ function App() {
           <Field label="介绍">
             <Textarea className="min-h-24" value={localized(level.description_i18n, locale, level.description)} onChange={(event) => updateLocalizedDescription(event.target.value)} />
           </Field>
-          <div className="rounded-md border border-stone-300 bg-white/70 p-3 text-sm text-muted">
-            关卡图片只能从图片处理页面创建并带入；这里专注调整切割数据和关卡文本。
-          </div>
         </section>
 
         <section className="mt-6 grid gap-3">
@@ -2023,16 +2048,16 @@ function App() {
               </button>
             </div>
             <div className="min-w-0 truncate text-sm text-ink">
-              {currentTopicName} <span className="text-muted">-&gt;</span> {currentLevelName}
+              {activePendingImage ? displayPendingImageName(activePendingImage) : "请选择图片"} <span className="text-muted">/</span> {activeMode === "polygon" ? "多边形" : "凹凸"}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button className="btnPrimary" onClick={markCurrentModeComplete}>
               完成
             </button>
-            <button className="btnPrimary" disabled={!canSaveToGodot} onClick={saveJsonToGodot}>
+            <button className="btnPrimary" disabled={!canSaveToGodot} onClick={openSaveDialog}>
               <Save size={16} />
-              保存到 Godot
+              保存模式
             </button>
           </div>
         </div>
@@ -2232,6 +2257,68 @@ function App() {
           </div>
         </div>
       )}
+      {saveDialog.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
+          <div className="w-full max-w-lg rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold">保存当前模式</h2>
+                <p className="mt-1 text-sm text-muted">选择要写入的主题、关卡和模式。当前图片会复制到目标关卡文件夹。</p>
+              </div>
+              <button className="iconBtn" onClick={() => setSaveDialog((current) => ({ ...current, open: false }))} aria-label="关闭">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3">
+              <Field label="主题">
+                <SelectBox
+                  value={saveDialog.topicId}
+                  options={topicOptions}
+                  onValueChange={(topicId) => {
+                    const topic = catalog.topics.find((item) => item.id === topicId);
+                    const firstLevel = topic?.levels[0];
+                    setSaveDialog((current) => ({
+                      ...current,
+                      topicId,
+                      levelId: firstLevel?.id || current.levelId,
+                      title: firstLevel?.title || current.title,
+                    }));
+                  }}
+                  placeholder="选择主题"
+                />
+              </Field>
+              <Field label="关卡">
+                <SelectBox
+                  value={saveDialog.levelId}
+                  options={saveLevelOptions}
+                  onValueChange={(levelId) => {
+                    const levelItem = saveTopic?.levels.find((item) => item.id === levelId);
+                    setSaveDialog((current) => ({ ...current, levelId, title: levelItem?.title || current.title }));
+                  }}
+                  placeholder="选择关卡"
+                />
+              </Field>
+              <Field label="标题">
+                <Input value={saveDialog.title} onChange={(event) => setSaveDialog((current) => ({ ...current, title: event.target.value }))} />
+              </Field>
+              <Field label="介绍">
+                <Textarea className="min-h-20" value={saveDialog.description} onChange={(event) => setSaveDialog((current) => ({ ...current, description: event.target.value }))} />
+              </Field>
+              <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
+                写入模式：{activeMode === "polygon" ? "多边形" : "凹凸"}；图片：{activePendingImage ? displayPendingImageName(activePendingImage) : "未选择"}
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setSaveDialog((current) => ({ ...current, open: false }))}>
+                取消
+              </button>
+              <button className="btnPrimary" onClick={() => void saveJsonToGodot()}>
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {pendingMode && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
           <div className="w-full max-w-md rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
@@ -2243,25 +2330,6 @@ function App() {
               </button>
               <button className="btnPrimary" onClick={() => switchMode(pendingMode)}>
                 切换模式
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {pendingTarget && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
-          <div className="w-full max-w-md rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
-            <h2 className="text-xl font-semibold">当前关卡有未保存修改</h2>
-            <p className="mt-2 text-sm text-muted">切换关卡前可以先保存。保存到 Godot 需要两个模式都标记完成。</p>
-            <div className="mt-5 grid gap-2">
-              <button className="btnPrimary" disabled={!canSaveToGodot} onClick={saveAndSwitchLevel}>
-                保存并切换
-              </button>
-              <button className="btn" onClick={() => switchLevel(pendingTarget)}>
-                不保存，直接切换
-              </button>
-              <button className="btn" onClick={() => setPendingTarget(null)}>
-                取消
               </button>
             </div>
           </div>
@@ -2393,7 +2461,7 @@ function SortDialog({
           </DndContext>
           <div className="mt-5 flex justify-end gap-2">
             <button className="btn" onClick={onSave}>
-              保存目录
+              保存关卡
             </button>
             <Dialog.Close className="btnPrimary">完成</Dialog.Close>
           </div>

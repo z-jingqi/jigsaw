@@ -9,6 +9,10 @@ import type { CatalogLevel, CatalogTopic, LevelCatalog, LevelConfig, ProcessStep
 const defaultLocale = "zh-Hans";
 const defaultStepTypes: ProcessStepType[] = ["convert_jpg", "remove_background", "trim_transparent", "compress"];
 
+type Props = {
+  onUnsavedChange?: (dirty: boolean) => void;
+};
+
 function makeDefaultCatalog(): LevelCatalog {
   return { schema: "jigsaw.catalog.v1", version: 1, default_locale: defaultLocale, locales: [defaultLocale, "en"], topics: [] };
 }
@@ -114,7 +118,7 @@ function moveLevelDraft(drafts: Record<string, LevelConfig>, activeTopicId: stri
     ...draft,
     topic_id: overTopicId,
     image: { ...draft.image, path: retargetGodotPath(draft.image.path, activeTopicId, activeLevelId, overTopicId) },
-    assets: draft.assets
+    assets: draft.assets?.default_image
       ? {
           ...draft.assets,
           default_image: {
@@ -128,7 +132,7 @@ function moveLevelDraft(drafts: Record<string, LevelConfig>, activeTopicId: stri
   return { ...rest, [nextKey]: nextDraft };
 }
 
-function CatalogManagementPage() {
+function CatalogManagementPage({ onUnsavedChange }: Props) {
   const [catalog, setCatalog] = useState<LevelCatalog>(() => makeDefaultCatalog());
   const [locale, setLocale] = useState(defaultLocale);
   const [selectedTopicId, setSelectedTopicId] = useState("");
@@ -150,6 +154,7 @@ function CatalogManagementPage() {
   const [saving, setSaving] = useState(false);
   const [processingCover, setProcessingCover] = useState(false);
   const [message, setMessage] = useState("");
+  const [dirty, setDirty] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const selectedTopic = useMemo(() => catalog.topics.find((topic) => topic.id === selectedTopicId), [catalog.topics, selectedTopicId]);
@@ -161,6 +166,19 @@ function CatalogManagementPage() {
     void resetFromGodot();
     void loadPythonTools();
   }, []);
+
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+
+  useEffect(() => {
+    onUnsavedChange?.(dirty);
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty, onUnsavedChange]);
 
   useEffect(() => {
     if (!selectedTopicId && catalog.topics[0]) setSelectedTopicId(catalog.topics[0].id);
@@ -197,7 +215,8 @@ function CatalogManagementPage() {
       setSelectedTopicId(nextCatalog.topics[0]?.id || "");
       setSelectedLevelId(nextCatalog.topics[0]?.levels[0]?.id || "");
       setLevelDrafts({});
-      setMessage("已从 Godot 目录重置。");
+      setDirty(false);
+      setMessage("已从 Godot 关卡重置。");
     } catch (error) {
       setMessage(error instanceof Error ? `重置失败：${error.message}` : "重置失败");
     }
@@ -228,6 +247,7 @@ function CatalogManagementPage() {
 
   function updateSelectedTopic(patch: Partial<CatalogTopic>) {
     if (!selectedTopic) return;
+    setDirty(true);
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((topic) => (topic.id === selectedTopic.id ? { ...topic, ...patch } : topic)),
@@ -236,6 +256,7 @@ function CatalogManagementPage() {
 
   function updateSelectedLevel(patch: Partial<CatalogLevel>) {
     if (!selectedTopic || !selectedLevel) return;
+    setDirty(true);
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((topic) =>
@@ -248,6 +269,7 @@ function CatalogManagementPage() {
 
   function updateSelectedLevelDraft(patch: Partial<LevelConfig>) {
     if (!selectedTopic || !selectedLevel) return;
+    setDirty(true);
     const key = levelKey(selectedTopic.id, selectedLevel.id);
     setLevelDrafts((current) => {
       const existing = current[key] || makeLevel(selectedTopic.id, selectedLevel.id, selectedLevel.title);
@@ -261,6 +283,7 @@ function CatalogManagementPage() {
       setEditingTopicId("");
       return;
     }
+    setDirty(true);
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((topic) =>
@@ -276,6 +299,7 @@ function CatalogManagementPage() {
       setEditingLevelKey("");
       return;
     }
+    setDirty(true);
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((topic) =>
@@ -336,6 +360,7 @@ function CatalogManagementPage() {
   function deleteSelectedTreeItems() {
     if (!hasTreeSelection) return;
     if (!window.confirm("删除选中的主题和关卡？")) return;
+    setDirty(true);
     const removedTopicIds = new Set(selectedTopicIds);
     const removedLevelKeys = new Set(selectedLevelKeys);
     setLevelDrafts((current) =>
@@ -378,6 +403,7 @@ function CatalogManagementPage() {
     const name = newTopicName.trim() || "新主题";
     const id = nextSequentialId("topic", catalog.topics.map((topic) => topic.id));
     const topic: CatalogTopic = { id, name, name_i18n: { [locale]: name }, sort_order: catalog.topics.length, cover: "", levels: [] };
+    setDirty(true);
     setCatalog((current) => ({ ...current, topics: normalizeOrder([...current.topics, topic]) }));
     setSelectedTopicId(id);
     setSelectedLevelId("");
@@ -398,6 +424,7 @@ function CatalogManagementPage() {
       path: `res://levels/${topic.id}/${id}/level.json`,
       source: `res://levels/${topic.id}/${id}/source.png`,
     };
+    setDirty(true);
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((candidate) => (candidate.id === topic.id ? { ...candidate, levels: normalizeOrder([...candidate.levels, level]) } : candidate)),
@@ -415,7 +442,8 @@ function CatalogManagementPage() {
 
   function deleteSelectedTopic() {
     if (!selectedTopic) return;
-    if (!window.confirm(`删除主题「${localized(selectedTopic.name_i18n, locale, selectedTopic.name)}」？主题下的关卡也会从目录移除。`)) return;
+    if (!window.confirm(`删除主题「${localized(selectedTopic.name_i18n, locale, selectedTopic.name)}」？主题下的关卡也会移除。`)) return;
+    setDirty(true);
     const removedKeys = new Set(selectedTopic.levels.map((level) => levelKey(selectedTopic.id, level.id)));
     setLevelDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !removedKeys.has(key))));
     setCatalog((current) => {
@@ -431,6 +459,7 @@ function CatalogManagementPage() {
   function deleteSelectedLevel() {
     if (!selectedTopic || !selectedLevel) return;
     if (!window.confirm(`删除关卡「${localized(selectedLevel.title_i18n, locale, selectedLevel.title)}」？`)) return;
+    setDirty(true);
     setLevelDrafts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== levelKey(selectedTopic.id, selectedLevel.id))));
     setCatalog((current) => ({
       ...current,
@@ -469,6 +498,7 @@ function CatalogManagementPage() {
     if (activeId.startsWith("topic:") && overId.startsWith("topic:")) {
       const activeTopic = activeId.slice(6);
       const overTopic = overId.slice(6);
+      setDirty(true);
       setCatalog((current) => {
         const oldIndex = current.topics.findIndex((topic) => topic.id === activeTopic);
         const newIndex = current.topics.findIndex((topic) => topic.id === overTopic);
@@ -483,6 +513,7 @@ function CatalogManagementPage() {
       const overTopic = overParts[0] === "topic" ? overParts[1] : overParts[1];
       const overLevel = overParts[0] === "level" ? overParts[2] : "";
       if (!overTopic) return;
+      setDirty(true);
       setCatalog((current) => ({
         ...current,
         topics: moveLevelInCatalog(current.topics, activeTopic, activeLevel, overTopic, overLevel),
@@ -524,6 +555,7 @@ function CatalogManagementPage() {
       const data = (await response.json()) as { ok?: boolean; godotPath?: string; error?: string };
       if (!response.ok || !data.ok || !data.godotPath) throw new Error(data.error || `HTTP ${response.status}`);
       updateSelectedTopic({ cover: data.godotPath });
+      setDirty(true);
       setMessage("封面已上传。");
     } catch (error) {
       setMessage(error instanceof Error ? `上传封面失败：${error.message}` : "上传封面失败");
@@ -545,6 +577,7 @@ function CatalogManagementPage() {
       const data = (await response.json()) as { ok?: boolean; godotPath?: string; error?: string };
       if (!response.ok || !data.ok || !data.godotPath) throw new Error(data.error || `HTTP ${response.status}`);
       updateSelectedTopic({ cover: data.godotPath });
+      setDirty(true);
       setMessage("封面处理完成。");
     } catch (error) {
       setMessage(error instanceof Error ? `处理封面失败：${error.message}` : "处理封面失败");
@@ -573,7 +606,8 @@ function CatalogManagementPage() {
         const data = (await response.json()) as { ok?: boolean; error?: string };
         if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
       }
-      setMessage("目录与关卡信息已保存到 Godot。");
+      setDirty(false);
+      setMessage("关卡信息已保存到 Godot。");
     } catch (error) {
       setMessage(error instanceof Error ? `保存失败：${error.message}` : "保存失败");
     } finally {
@@ -582,23 +616,23 @@ function CatalogManagementPage() {
   }
 
   return (
-    <div className="grid h-screen min-h-0 grid-cols-[360px_1fr_360px] overflow-hidden bg-linen text-ink">
+    <div className="grid h-full min-h-0 grid-cols-[360px_1fr_360px] overflow-hidden bg-linen text-ink">
       <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
         <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
           <Layers className="mt-1 text-clay" size={22} />
           <div>
-            <h1 className="text-xl font-semibold">目录管理</h1>
+            <h1 className="text-xl font-semibold">关卡管理</h1>
             <p className="text-sm text-muted">主题 / 关卡 / 封面</p>
           </div>
         </div>
         <section className="mt-5 grid gap-3">
           <div className="flex items-center justify-between gap-2">
-            <PanelTitle>目录树</PanelTitle>
+            <PanelTitle>关卡树</PanelTitle>
             <div className="flex items-center gap-2">
               <button className="iconBtn" onClick={() => void resetFromGodot()} title="从 Godot 重置">
                 <RotateCcw size={16} />
               </button>
-              <button className={treeEditMode ? "iconBtnActive" : "iconBtn"} onClick={() => setTreeEditMode((current) => !current)} title={treeEditMode ? "退出编辑模式" : "编辑目录树"}>
+              <button className={treeEditMode ? "iconBtnActive" : "iconBtn"} onClick={() => setTreeEditMode((current) => !current)} title={treeEditMode ? "退出编辑模式" : "编辑关卡树"}>
                 <Pencil size={16} />
               </button>
               {treeEditMode && hasTreeSelection && (

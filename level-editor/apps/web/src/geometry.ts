@@ -27,14 +27,7 @@ export function makeEmptyLevel(): LevelConfig {
       width: 0,
       height: 0,
     },
-    assets: {
-      default_image: {
-        path: DEFAULT_IMAGE_PATH,
-        name: "cat_moon.png",
-        width: 0,
-        height: 0,
-      },
-    },
+    assets: {},
     background: {
       type: "color" as const,
       color: "#ead8bd",
@@ -58,12 +51,22 @@ export function makeEmptyLevel(): LevelConfig {
     modes: {
       polygon: {
         source: "precomputed" as const,
-        image: { use: "default" as const },
+        image: {
+          path: DEFAULT_IMAGE_PATH,
+          name: "cat_moon.png",
+          width: 0,
+          height: 0,
+        },
         pieces: [],
       },
       knob: {
         source: "precomputed" as const,
-        image: { use: "default" as const },
+        image: {
+          path: DEFAULT_IMAGE_PATH,
+          name: "cat_moon.png",
+          width: 0,
+          height: 0,
+        },
         cols: 8,
         rows: 8,
         piece_size: 190,

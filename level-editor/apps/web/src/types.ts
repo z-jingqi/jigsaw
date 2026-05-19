@@ -62,7 +62,6 @@ export type LevelPiece = {
 export type LevelImageConfig =
   | string
   | {
-      use?: "default";
       path?: string;
       name?: string;
       width?: number;
@@ -70,7 +69,7 @@ export type LevelImageConfig =
     };
 
 export type LevelAssets = {
-  default_image: {
+  default_image?: {
     path: string;
     name: string;
     width: number;
@@ -107,7 +106,7 @@ export type LevelCatalog = {
   topics: CatalogTopic[];
 };
 
-export type ImageTarget = "default" | "polygon" | "knob";
+export type ImageTarget = "polygon" | "knob";
 
 export type ProcessStepType = "convert_jpg" | "remove_background" | "trim_transparent" | "compress";
 
@@ -203,13 +202,11 @@ export type LevelConfig = {
     polygon: {
       source: "precomputed";
       image?: LevelImageConfig;
-      source_image?: LevelImageConfig;
       pieces: LevelPiece[];
     };
     knob: {
       source: "precomputed";
       image?: LevelImageConfig;
-      source_image?: LevelImageConfig;
       rows: number;
       cols: number;
       piece_size: number;

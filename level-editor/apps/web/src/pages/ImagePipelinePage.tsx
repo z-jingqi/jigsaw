@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Crosshair, FolderPlus, Image as ImageIcon, Pencil, RotateCcw, Trash2, Upload, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Cloud, Crosshair, FolderPlus, Image as ImageIcon, Pencil, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { useResizableColumns } from "../components/useResizableColumns";
 import { uid } from "../geometry";
 import type { ImageInfo, PendingImageItem, PendingImageKind, ProcessStep, ProcessStepType, PythonTool } from "../types";
@@ -59,7 +59,19 @@ type DataTransferItemWithEntry = DataTransferItem & {
   webkitGetAsEntry?: () => unknown;
 };
 
+declare global {
+  interface Window {
+    gapi?: any;
+    google?: any;
+  }
+}
+
 const defaultStepTypes: ProcessStepType[] = ["convert_jpg", "remove_background", "trim_transparent", "compress"];
+const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env || {};
+const googleClientId = viteEnv.VITE_GOOGLE_CLIENT_ID;
+const googleApiKey = viteEnv.VITE_GOOGLE_API_KEY;
+const googleDriveFolderMime = "application/vnd.google-apps.folder";
+const drivePickerMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml", googleDriveFolderMime].join(",");
 const portraitDeviceSizes = [
   { label: "iPhone SE", width: 375, height: 667 },
   { label: "iPhone 13/14/15", width: 390, height: 844 },
@@ -134,6 +146,25 @@ function nameWithExistingExtension(previousName: string, nextDisplayName: string
 
 function pendingImageRowId(id: string) {
   return `pending-image-${id}`;
+}
+
+function loadScriptOnce(src: string) {
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
+    if (existing?.dataset.loaded === "true") {
+      resolve();
+      return;
+    }
+    const script = existing || document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`failed to load ${src}`));
+    if (!existing) document.head.appendChild(script);
+  });
 }
 
 function cleanFolderName(value: string) {
@@ -214,6 +245,7 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
   const [editingImageId, setEditingImageId] = useState("");
   const [editingFolder, setEditingFolder] = useState("");
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [driveImporting, setDriveImporting] = useState(false);
   const [pythonTools, setPythonTools] = useState<PythonTool[]>([]);
   const [selectedPendingId, setSelectedPendingId] = useState("");
   const [steps, setSteps] = useState<ProcessStep[]>(() => defaultStepTypes.map(createProcessStep));
@@ -360,6 +392,92 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
       }
     } catch (error) {
       setMessage(error instanceof Error ? `上传失败：${error.message}` : "上传失败");
+    }
+  }
+
+  async function importGoogleDriveFiles(accessToken: string, files: Array<{ id: string; name?: string }>, kind: PendingImageKind = "image") {
+    if (!files.length) {
+      setMessage("没有选择 Drive 图片。");
+      return;
+    }
+    setDriveImporting(true);
+    try {
+      const response = await fetch("/api/google-drive/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ accessToken, kind, files }),
+      });
+      const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[]; skipped_count?: number; error?: string };
+      if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      await loadPendingImages(data.items?.[0]?.id);
+      setMessage(`已从 Google Drive 导入 ${data.items?.length || 0} 张图片，跳过 ${data.skipped_count || 0} 张。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? `Google Drive 导入失败：${error.message}` : "Google Drive 导入失败");
+    } finally {
+      setDriveImporting(false);
+    }
+  }
+
+  async function openGooglePicker() {
+    if (!googleClientId || !googleApiKey) {
+      setMessage("请先配置 VITE_GOOGLE_CLIENT_ID 和 VITE_GOOGLE_API_KEY。");
+      return;
+    }
+    setDriveImporting(true);
+    try {
+      await Promise.all([
+        loadScriptOnce("https://apis.google.com/js/api.js"),
+        loadScriptOnce("https://accounts.google.com/gsi/client"),
+      ]);
+      await new Promise<void>((resolve, reject) => {
+        if (!window.gapi) {
+          reject(new Error("Google API 未加载"));
+          return;
+        }
+        window.gapi.load("picker", { callback: resolve });
+      });
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: "https://www.googleapis.com/auth/drive.readonly",
+        callback: (tokenResponse: { access_token?: string; error?: string }) => {
+          if (tokenResponse.error || !tokenResponse.access_token) {
+            setDriveImporting(false);
+            setMessage(tokenResponse.error || "Google 授权失败。");
+            return;
+          }
+          const docsView = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
+            .setIncludeFolders(true)
+            .setSelectFolderEnabled(true)
+            .setMimeTypes(drivePickerMimeTypes);
+          const picker = new window.google.picker.PickerBuilder()
+            .setDeveloperKey(googleApiKey)
+            .setOAuthToken(tokenResponse.access_token)
+            .addView(docsView)
+            .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+            .setCallback((data: any) => {
+              if (data.action === window.google.picker.Action.CANCEL) {
+                setDriveImporting(false);
+                return;
+              }
+              if (data.action !== window.google.picker.Action.PICKED) return;
+              const files = (data.docs || [])
+                .map((doc: any) => ({
+                  id: String(doc.id || ""),
+                  name: String(doc.name || doc.title || ""),
+                  mimeType: String(doc.mimeType || ""),
+                }))
+                .filter((file: { id: string }) => file.id);
+              setMessage(`已选择 ${files.length} 个 Drive 项目，正在导入...`);
+              void importGoogleDriveFiles(tokenResponse.access_token as string, files, "image");
+            })
+            .build();
+          picker.setVisible(true);
+        },
+      });
+      tokenClient.requestAccessToken({ prompt: "" });
+    } catch (error) {
+      setDriveImporting(false);
+      setMessage(error instanceof Error ? `Google Picker 加载失败：${error.message}` : "Google Picker 加载失败");
     }
   }
 
@@ -700,7 +818,7 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
   }
 
   return (
-    <div className="grid h-screen min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
+    <div className="grid h-full min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
       <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
         <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
           <ImageIcon className="mt-1 text-clay" size={22} />
@@ -714,6 +832,15 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
           <PanelTitle>上传</PanelTitle>
           <UploadButton label="批量上传关卡图片" kind="image" onFiles={uploadFromFileList} onDropFiles={uploadFromDrop} />
           <UploadButton label="批量上传桌布图片" kind="tablecloth" onFiles={uploadFromFileList} onDropFiles={uploadFromDrop} />
+        </section>
+
+        <section className="mt-5 grid gap-3">
+          <PanelTitle>Google Drive</PanelTitle>
+          <button className="btnPrimary" disabled={driveImporting} onClick={() => void openGooglePicker()}>
+            <Cloud size={16} />
+            {driveImporting ? "连接中..." : "选择 Drive 图片/文件夹"}
+          </button>
+          <p className="text-xs leading-relaxed text-muted">需要在 `.env.local` 配置 Google Client ID 和 API Key。可以选择图片，也可以选择文件夹；文件夹只导入其中的直接图片。</p>
         </section>
 
         <section className="mt-5 grid gap-3">

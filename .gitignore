@@ -1,6 +1,9 @@
 .godot/
 .godot_user/
 *.tmp
+.env
+.env.*
+!.env.example
 .DS_Store
 __pycache__/
 .venv/
@@ -13,3 +16,4 @@ dist/
 level-editor/*.log
 level-editor/apps/*/dist/
 level-editor/apps/*/.turbo/
+levels/_pending/
