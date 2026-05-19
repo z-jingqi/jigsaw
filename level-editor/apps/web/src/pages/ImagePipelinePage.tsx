@@ -1,62 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Cloud, Crosshair, FolderPlus, Image as ImageIcon, Pencil, RotateCcw, Trash2, Upload, X } from "lucide-react";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { Check, Cloud, Crosshair, FolderPlus, Image as ImageIcon, Pencil, RotateCcw, Trash2, Upload, X } from "lucide-react";
+import { toast } from "sonner";
 import { useResizableColumns } from "../components/useResizableColumns";
-import { uid } from "../geometry";
-import type { ImageInfo, PendingImageItem, PendingImageKind, ProcessStep, ProcessStepType, PythonTool } from "../types";
-
-export type ImagePipelineSelectionState = {
-  id: string;
-  name: string;
-  kind: PendingImageKind;
-  status: "未处理" | "已处理" | "待确认";
-  hasUnconfirmed: boolean;
-};
+import type { PendingImageItem, PendingImageKind, ProcessStep, ProcessStepType, PythonTool } from "../types";
+import { PanelTitle } from "../shared/ui/PanelTitle";
+import { defaultStepTypes, createProcessStep, fallbackPythonTool } from "../shared/lib/processSteps";
+import { ExpandedImageModal } from "../features/image-pipeline/components/ExpandedImageModal";
+import { FolderGroup } from "../features/image-pipeline/components/FolderGroup";
+import { ImageKindSection } from "../features/image-pipeline/components/ImageKindSection";
+import { ImagePreviewCard } from "../features/image-pipeline/components/ImagePreviewCard";
+import { ProcessStepRow } from "../features/image-pipeline/components/ProcessStepRow";
+import { PythonToolRow } from "../features/image-pipeline/components/PythonToolRow";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { WithTooltip } from "../components/ui/tooltip";
+import { googleApiKey, googleClientId, drivePickerMimeTypes } from "../features/image-pipeline/constants";
+import { driveSkipMessage, loadScriptOnce } from "../features/image-pipeline/lib/drive";
+import { displayName, fileBaseName, kindLabel, nameWithExistingExtension, pendingImageRowId } from "../features/image-pipeline/lib/display";
+import { candidatesFromDataTransfer, cleanFolderName, folderFromPath, isImageFile } from "../features/image-pipeline/lib/upload";
+import type { ExpandedImage, ExpandedImageItem, FileWithRelativePath, ImagePipelineSelectionState, UploadCandidate } from "../features/image-pipeline/types";
+export type { ImagePipelineSelectionState } from "../features/image-pipeline/types";
 
 type Props = {
   onSelectionStateChange?: (state: ImagePipelineSelectionState | null) => void;
-};
-
-type ExpandedImageItem = {
-  url: string;
-  title: string;
-  info?: ImageInfo;
-};
-
-type ExpandedImage = {
-  images: ExpandedImageItem[];
-  index: number;
-};
-
-type UploadCandidate = {
-  file: File;
-  folder: string;
-};
-
-type FileWithRelativePath = File & {
-  webkitRelativePath?: string;
-};
-
-type WebkitEntry = {
-  isFile: boolean;
-  isDirectory: boolean;
-  name: string;
-};
-
-type WebkitFileEntry = WebkitEntry & {
-  file: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
-};
-
-type WebkitDirectoryEntry = WebkitEntry & {
-  createReader: () => {
-    readEntries: (success: (entries: WebkitEntry[]) => void, error?: (error: DOMException) => void) => void;
-  };
-};
-
-type DataTransferItemWithEntry = DataTransferItem & {
-  webkitGetAsEntry?: () => unknown;
 };
 
 declare global {
@@ -64,159 +31,6 @@ declare global {
     gapi?: any;
     google?: any;
   }
-}
-
-const defaultStepTypes: ProcessStepType[] = ["convert_jpg", "remove_background", "trim_transparent", "compress"];
-const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env || {};
-const googleClientId = viteEnv.VITE_GOOGLE_CLIENT_ID;
-const googleApiKey = viteEnv.VITE_GOOGLE_API_KEY;
-const googleDriveFolderMime = "application/vnd.google-apps.folder";
-const drivePickerMimeTypes = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml", googleDriveFolderMime].join(",");
-const portraitDeviceSizes = [
-  { label: "iPhone SE", width: 375, height: 667 },
-  { label: "iPhone 13/14/15", width: 390, height: 844 },
-  { label: "iPhone Plus/Max", width: 430, height: 932 },
-  { label: "iPad mini", width: 744, height: 1133 },
-  { label: "iPad", width: 820, height: 1180 },
-  { label: "iPad Air / Pro 11", width: 834, height: 1194 },
-  { label: "iPad Pro 12.9", width: 1024, height: 1366 },
-];
-
-function createProcessStep(type: ProcessStepType): ProcessStep {
-  return {
-    id: uid("process"),
-    type,
-    tolerance: 35,
-    padding: 0,
-    quality: 88,
-    background: "#F6EBD4",
-  };
-}
-
-function processStepLabel(type: ProcessStepType) {
-  if (type === "convert_jpg") return "转 JPG";
-  if (type === "remove_background") return "去背景";
-  if (type === "trim_transparent") return "裁透明边";
-  return "压缩图片";
-}
-
-function fallbackPythonTool(type: ProcessStepType): PythonTool {
-  return {
-    name: `${type}.py`,
-    label: processStepLabel(type),
-    supported: true,
-    description: "已接入图片链式处理。",
-    stepType: type,
-  };
-}
-
-function formatBytes(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let index = 0;
-  while (value >= 1024 && index < units.length - 1) {
-    value /= 1024;
-    index += 1;
-  }
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
-function imageInfoText(info?: ImageInfo) {
-  if (!info) return "未知格式 / 未知尺寸 / 0 B";
-  const size = info.width && info.height ? `${info.width} x ${info.height}` : "未知尺寸";
-  return `${info.format} / ${size} / ${formatBytes(info.bytes)}`;
-}
-
-function kindLabel(kind: PendingImageKind) {
-  return kind === "tablecloth" ? "桌布" : "关卡图片";
-}
-
-function displayName(name: string) {
-  return name.replace(/\.[^.]+$/, "");
-}
-
-function nameWithExistingExtension(previousName: string, nextDisplayName: string) {
-  const cleanName = nextDisplayName.trim();
-  if (!cleanName) return previousName;
-  if (/\.[^.\\/]+$/.test(cleanName)) return cleanName;
-  const extension = previousName.match(/(\.[^.\\/]+)$/)?.[1] || "";
-  return `${cleanName}${extension}`;
-}
-
-function pendingImageRowId(id: string) {
-  return `pending-image-${id}`;
-}
-
-function loadScriptOnce(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
-    if (existing?.dataset.loaded === "true") {
-      resolve();
-      return;
-    }
-    const script = existing || document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-      script.dataset.loaded = "true";
-      resolve();
-    };
-    script.onerror = () => reject(new Error(`failed to load ${src}`));
-    if (!existing) document.head.appendChild(script);
-  });
-}
-
-function cleanFolderName(value: string) {
-  return value.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "").replace(/\s+/g, " ").slice(0, 64);
-}
-
-function folderFromPath(pathValue?: string) {
-  if (!pathValue) return "";
-  const parts = pathValue.split(/[\\/]/).filter(Boolean);
-  if (parts.length <= 1) return "";
-  return cleanFolderName(parts[parts.length - 2]);
-}
-
-function isImageFile(file: File) {
-  return file.type.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|avif|svg)$/i.test(file.name);
-}
-
-async function candidatesFromDataTransfer(dataTransfer: DataTransfer): Promise<UploadCandidate[]> {
-  const itemEntries = Array.from(dataTransfer.items || [])
-    .map((item) => (item as DataTransferItemWithEntry).webkitGetAsEntry?.() as WebkitEntry | null | undefined)
-    .filter((entry): entry is WebkitEntry => Boolean(entry));
-  const candidates = itemEntries.length
-    ? (await Promise.all(itemEntries.map((entry) => candidatesFromEntry(entry, [])))).flat()
-    : Array.from(dataTransfer.files || []).map((file) => ({ file, folder: folderFromPath((file as FileWithRelativePath).webkitRelativePath) }));
-  return candidates.filter(({ file }) => isImageFile(file));
-}
-
-async function candidatesFromEntry(entry: WebkitEntry, ancestors: string[]): Promise<UploadCandidate[]> {
-  if (entry.isFile) {
-    const file = await fileFromEntry(entry as WebkitFileEntry);
-    return isImageFile(file) ? [{ file, folder: cleanFolderName(ancestors[ancestors.length - 1] || "") }] : [];
-  }
-  if (!entry.isDirectory) return [];
-  const nextAncestors = [...ancestors, entry.name];
-  const entries = await entriesFromDirectory(entry as WebkitDirectoryEntry);
-  const nested = await Promise.all(entries.map((child) => candidatesFromEntry(child, nextAncestors)));
-  return nested.flat();
-}
-
-function fileFromEntry(entry: WebkitFileEntry) {
-  return new Promise<File>((resolve, reject) => entry.file(resolve, reject));
-}
-
-async function entriesFromDirectory(entry: WebkitDirectoryEntry) {
-  const reader = entry.createReader();
-  const entries: WebkitEntry[] = [];
-  for (;;) {
-    const batch = await new Promise<WebkitEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
-    if (!batch.length) break;
-    entries.push(...batch);
-  }
-  return entries;
 }
 
 function canUseStep(type: ProcessStepType, item?: PendingImageItem) {
@@ -240,23 +54,33 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(() => new Set());
   const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [createFolderKind, setCreateFolderKind] = useState<PendingImageKind>("image");
+  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
   const [treeEditMode, setTreeEditMode] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
   const [editingImageId, setEditingImageId] = useState("");
   const [editingFolder, setEditingFolder] = useState("");
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [driveImporting, setDriveImporting] = useState(false);
+  const [driveKind, setDriveKind] = useState<PendingImageKind>("image");
+  const [uploadKind, setUploadKind] = useState<PendingImageKind>("image");
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [driveMenuOpen, setDriveMenuOpen] = useState(false);
   const [pythonTools, setPythonTools] = useState<PythonTool[]>([]);
   const [selectedPendingId, setSelectedPendingId] = useState("");
   const [steps, setSteps] = useState<ProcessStep[]>(() => defaultStepTypes.map(createProcessStep));
   const [processing, setProcessing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [rejecting, setRejecting] = useState(false);
-  const [message, setMessage] = useState("");
   const [expandedImage, setExpandedImage] = useState<ExpandedImage | null>(null);
   const [pendingSelectionId, setPendingSelectionId] = useState("");
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const columns = useResizableColumns({ initialLeft: 360, initialRight: 380, minLeft: 300, maxLeft: 520, minRight: 320, maxRight: 560, minCenter: 460 });
+
+  function setMessage(message: string) {
+    toast(message);
+  }
 
   useEffect(() => {
     void loadPendingImages();
@@ -282,17 +106,26 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
 
   const selectedPending = pendingImages.find((item) => item.id === selectedPendingId) || pendingImages[0];
   const hasAnyUnconfirmed = useMemo(() => pendingImages.some((item) => item.processed_path), [pendingImages]);
-  const groupedImages = useMemo(() => {
+  const puzzleGroupedImages = useMemo(() => {
     const groups = new Map<string, PendingImageItem[]>();
     groups.set("", []);
     for (const folder of folders) groups.set(folder, []);
-    for (const item of pendingImages) {
+    for (const item of pendingImages.filter((image) => image.kind !== "tablecloth")) {
       const folder = item.folder || "";
       groups.set(folder, [...(groups.get(folder) || []), item]);
     }
     return groups;
   }, [folders, pendingImages]);
-  const rootImages = groupedImages.get("") || [];
+  const backgroundGroupedImages = useMemo(() => {
+    const groups = new Map<string, PendingImageItem[]>();
+    groups.set("", []);
+    for (const folder of folders) groups.set(folder, []);
+    for (const item of pendingImages.filter((image) => image.kind === "tablecloth")) {
+      const folder = item.folder || "";
+      groups.set(folder, [...(groups.get(folder) || []), item]);
+    }
+    return groups;
+  }, [folders, pendingImages]);
   const hasSelection = selectedImageIds.size > 0 || selectedFolders.size > 0;
   const selectedStepTypes = useMemo(() => new Set(steps.map((step) => step.type)), [steps]);
   const inactiveTools = useMemo(
@@ -386,9 +219,9 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
       if (!items.length && skippedCount) {
         setMessage(`没有新增图片，已跳过 ${skippedCount} 个同名文件。`);
       } else if (skippedCount) {
-        setMessage(`已上传 ${items.length} 张${kindLabel(kind)}，跳过 ${skippedCount} 个同名文件。`);
+        setMessage(`已上传 ${items.length} 张图片，跳过 ${skippedCount} 个同名文件。`);
       } else {
-        setMessage(`已上传 ${items.length} 张${kindLabel(kind)}。`);
+        setMessage(`已上传 ${items.length} 张图片。`);
       }
     } catch (error) {
       setMessage(error instanceof Error ? `上传失败：${error.message}` : "上传失败");
@@ -407,10 +240,17 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ accessToken, kind, files }),
       });
-      const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[]; skipped_count?: number; error?: string };
+      const data = (await response.json()) as {
+        ok?: boolean;
+        items?: PendingImageItem[];
+        skipped?: Array<{ name: string; folder: string; reason: string }>;
+        skipped_count?: number;
+        error?: string;
+      };
       if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
       await loadPendingImages(data.items?.[0]?.id);
-      setMessage(`已从 Google Drive 导入 ${data.items?.length || 0} 张图片，跳过 ${data.skipped_count || 0} 张。`);
+      const skippedMessage = driveSkipMessage(data.skipped);
+      setMessage(skippedMessage || `已从 Google Drive 导入 ${data.items?.length || 0} 张图片，跳过 ${data.skipped_count || 0} 张。`);
     } catch (error) {
       setMessage(error instanceof Error ? `Google Drive 导入失败：${error.message}` : "Google Drive 导入失败");
     } finally {
@@ -418,7 +258,7 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
     }
   }
 
-  async function openGooglePicker() {
+  async function openGooglePicker(kind: PendingImageKind = driveKind) {
     if (!googleClientId || !googleApiKey) {
       setMessage("请先配置 VITE_GOOGLE_CLIENT_ID 和 VITE_GOOGLE_API_KEY。");
       return;
@@ -438,7 +278,10 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
       });
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: googleClientId,
-        scope: "https://www.googleapis.com/auth/drive.readonly",
+        scope: [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/drive.metadata.readonly",
+        ].join(" "),
         callback: (tokenResponse: { access_token?: string; error?: string }) => {
           if (tokenResponse.error || !tokenResponse.access_token) {
             setDriveImporting(false);
@@ -468,7 +311,7 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
                 }))
                 .filter((file: { id: string }) => file.id);
               setMessage(`已选择 ${files.length} 个 Drive 项目，正在导入...`);
-              void importGoogleDriveFiles(tokenResponse.access_token as string, files, "image");
+              void importGoogleDriveFiles(tokenResponse.access_token as string, files, kind);
             })
             .build();
           picker.setVisible(true);
@@ -496,6 +339,18 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
     void uploadPending(candidates, kind);
   }
 
+  function chooseUploadKind(kind: PendingImageKind) {
+    setUploadKind(kind);
+    setUploadMenuOpen(false);
+    window.setTimeout(() => uploadInputRef.current?.click(), 0);
+  }
+
+  function chooseDriveKind(kind: PendingImageKind) {
+    setDriveKind(kind);
+    setDriveMenuOpen(false);
+    void openGooglePicker(kind);
+  }
+
   async function uploadFromDrop(event: React.DragEvent, kind: PendingImageKind = "image") {
     event.preventDefault();
     event.currentTarget.classList.remove("border-clay");
@@ -510,8 +365,10 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
   async function renamePending(id: string, name: string) {
     const previous = pendingImages.find((item) => item.id === id);
     const cleanName = nameWithExistingExtension(previous?.name || "", name);
-    if (!cleanName) return;
-    if (previous?.name === cleanName) return;
+    if (!cleanName || previous?.name === cleanName) {
+      setEditingImageId("");
+      return;
+    }
     try {
       const response = await fetch(`/api/pending-images/${id}`, {
         method: "PATCH",
@@ -583,7 +440,7 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
         next.delete(folder);
         return next;
       });
-      setMessage("已创建文件夹。");
+      setMessage(`已创建${kindLabel(createFolderKind)}文件夹。`);
     } catch (error) {
       setMessage(error instanceof Error ? `创建文件夹失败：${error.message}` : "创建文件夹失败");
     }
@@ -675,6 +532,13 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
     setCreatingFolder(false);
   }
 
+  function openCreateFolderDialog(kind: PendingImageKind) {
+    setCreateFolderKind(kind);
+    setNewFolderName("");
+    setCreatingFolder(true);
+    setFolderMenuOpen(false);
+  }
+
   function toggleFolderCollapse(folder: string) {
     setCollapsedFolders((current) => {
       const next = new Set(current);
@@ -701,9 +565,10 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
 
   function expandedImagesForSelected(): ExpandedImageItem[] {
     if (!selectedPending?.url) return [];
-    const images: ExpandedImageItem[] = [{ title: hasProcessedPreview ? "处理前" : "当前图片", url: selectedPending.url, info: selectedPending.source_info }];
+    const name = fileBaseName(selectedPending.name);
+    const images: ExpandedImageItem[] = [{ title: hasProcessedPreview ? "处理前" : "当前图片", name, url: selectedPending.url, info: selectedPending.source_info }];
     if (hasProcessedPreview && selectedPending.processed_url) {
-      images.push({ title: "处理后", url: selectedPending.processed_url, info: selectedPending.processed_info });
+      images.push({ title: "处理后", name, url: selectedPending.processed_url, info: selectedPending.processed_info });
     }
     return images;
   }
@@ -717,7 +582,9 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
   function switchExpandedImage(delta: number) {
     setExpandedImage((current) => {
       if (!current || current.images.length < 2) return current;
-      return { ...current, index: (current.index + delta + current.images.length) % current.images.length };
+      const nextIndex = current.index + delta;
+      if (nextIndex < 0 || nextIndex >= current.images.length) return current;
+      return { ...current, index: nextIndex };
     });
   }
 
@@ -817,172 +684,192 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
     });
   }
 
+  function renderFolderGroups(grouped: Map<string, PendingImageItem[]>, sectionId: string) {
+    const rootItems = grouped.get("") || [];
+    const visibleFolders = folders.filter((folder) => (grouped.get(folder) || []).length > 0);
+    return (
+      <>
+        {rootItems.length > 0 && (
+          <FolderGroup
+            folder=""
+            label="未分组"
+            items={rootItems}
+            droppable={false}
+            collapsed={false}
+            editMode={treeEditMode}
+            selectedPendingId={selectedPending?.id || ""}
+            selectedImageIds={selectedImageIds}
+            selectedFolders={selectedFolders}
+            dragOverFolder={dragOverFolder}
+            onSelectPending={requestSelectPending}
+            onToggleImage={toggleImageSelection}
+            onToggleFolder={toggleFolderSelection}
+            onToggleCollapsed={toggleFolderCollapse}
+            editingImageId={editingImageId}
+            editingFolder={editingFolder}
+            onStartRenameImage={setEditingImageId}
+            onStartRenameFolder={setEditingFolder}
+            onRenameImage={renamePending}
+            onRenameFolder={renameFolder}
+            onMoveImages={moveImages}
+            onDragStart={(item, event) => event.dataTransfer.setData("application/x-jigcat-pending-ids", JSON.stringify(dragImageIds(item)))}
+            onDragOverFolder={setDragOverFolder}
+          />
+        )}
+        {visibleFolders.map((folder) => (
+          <FolderGroup
+            key={`${sectionId}:${folder}`}
+            folder={folder}
+            label={folder}
+            items={grouped.get(folder) || []}
+            droppable
+            collapsed={collapsedFolders.has(folder)}
+            editMode={treeEditMode}
+            selectedPendingId={selectedPending?.id || ""}
+            selectedImageIds={selectedImageIds}
+            selectedFolders={selectedFolders}
+            dragOverFolder={dragOverFolder}
+            onSelectPending={requestSelectPending}
+            onToggleImage={toggleImageSelection}
+            onToggleFolder={toggleFolderSelection}
+            onToggleCollapsed={toggleFolderCollapse}
+            editingImageId={editingImageId}
+            editingFolder={editingFolder}
+            onStartRenameImage={setEditingImageId}
+            onStartRenameFolder={setEditingFolder}
+            onRenameImage={renamePending}
+            onRenameFolder={renameFolder}
+            onMoveImages={moveImages}
+            onDragStart={(item, event) => event.dataTransfer.setData("application/x-jigcat-pending-ids", JSON.stringify(dragImageIds(item)))}
+            onDragOverFolder={setDragOverFolder}
+          />
+        ))}
+      </>
+    );
+  }
+
   return (
     <div className="grid h-full min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
-      <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
-        <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
+      <aside className="flex min-h-0 flex-col border-r border-stone-300 bg-paper">
+        <div className="flex items-start gap-3 border-b border-stone-300 p-4">
           <ImageIcon className="mt-1 text-clay" size={22} />
           <div>
             <h1 className="text-xl font-semibold">图片处理</h1>
-            <p className="text-sm text-muted">待处理素材 / 桌布 / 工具链</p>
+            <p className="text-sm text-muted">待处理图片 / 工具链</p>
           </div>
         </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4 pt-0">
 
         <section className="mt-5 grid gap-3">
           <PanelTitle>上传</PanelTitle>
-          <UploadButton label="批量上传关卡图片" kind="image" onFiles={uploadFromFileList} onDropFiles={uploadFromDrop} />
-          <UploadButton label="批量上传桌布图片" kind="tablecloth" onFiles={uploadFromFileList} onDropFiles={uploadFromDrop} />
+          <DropdownMenu open={uploadMenuOpen} onOpenChange={setUploadMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="fileButton"
+                onMouseEnter={() => setUploadMenuOpen(true)}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.classList.add("border-clay");
+                }}
+                onDragLeave={(event) => event.currentTarget.classList.remove("border-clay")}
+                onDrop={(event) => void uploadFromDrop(event, uploadKind)}
+              >
+                <Upload size={16} />
+                上传
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent onMouseLeave={() => setUploadMenuOpen(false)}>
+              <DropdownMenuItem onSelect={() => chooseUploadKind("image")}>拼图图片</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => chooseUploadKind("tablecloth")}>背景图片</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input
+            ref={uploadInputRef}
+            hidden
+            multiple
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              uploadFromFileList(event.target.files, uploadKind);
+              event.currentTarget.value = "";
+            }}
+            {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          />
         </section>
 
         <section className="mt-5 grid gap-3">
           <PanelTitle>Google Drive</PanelTitle>
-          <button className="btnPrimary" disabled={driveImporting} onClick={() => void openGooglePicker()}>
-            <Cloud size={16} />
-            {driveImporting ? "连接中..." : "选择 Drive 图片/文件夹"}
-          </button>
-          <p className="text-xs leading-relaxed text-muted">需要在 `.env.local` 配置 Google Client ID 和 API Key。可以选择图片，也可以选择文件夹；文件夹只导入其中的直接图片。</p>
+          <DropdownMenu open={driveMenuOpen} onOpenChange={setDriveMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button className="btnPrimary" disabled={driveImporting} onMouseEnter={() => setDriveMenuOpen(true)}>
+                <Cloud size={16} />
+                {driveImporting ? "连接中..." : "Google Drive"}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent onMouseLeave={() => setDriveMenuOpen(false)}>
+              <DropdownMenuItem onSelect={() => chooseDriveKind("image")}>拼图图片</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => chooseDriveKind("tablecloth")}>背景图片</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu open={folderMenuOpen} onOpenChange={setFolderMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button className="btn w-full" onMouseEnter={() => setFolderMenuOpen(true)}>
+                <FolderPlus size={16} />
+                创建文件夹
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent onMouseLeave={() => setFolderMenuOpen(false)}>
+              <DropdownMenuItem onSelect={() => openCreateFolderDialog("image")}>拼图图片</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openCreateFolderDialog("tablecloth")}>背景图片</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </section>
 
         <section className="mt-5 grid gap-3">
           <div className="flex items-center justify-between gap-2">
-            <PanelTitle>关卡图片</PanelTitle>
+            <div />
             <div className="flex items-center gap-2">
-              <button className="iconBtn" disabled={!selectedPending} onClick={locateSelectedPending} title="定位当前图片" aria-label="定位当前图片">
-                <Crosshair size={16} />
-              </button>
-              <button
-                className={treeEditMode ? "iconBtnActive" : "iconBtn"}
-                onClick={() => setTreeEditMode((current) => !current)}
-                title={treeEditMode ? "退出编辑模式" : "编辑文件夹树"}
-                aria-label={treeEditMode ? "退出编辑模式" : "编辑文件夹树"}
-              >
-                <Pencil size={16} />
-              </button>
-              {treeEditMode && hasSelection && (
-                <button className="iconBtnDanger" onClick={() => void deleteSelected()} title="删除所选" aria-label="删除所选">
-                  <Trash2 size={16} />
+              <WithTooltip label="定位当前图片">
+                <button className="iconBtn" disabled={!selectedPending} onClick={locateSelectedPending} aria-label="定位当前图片">
+                  <Crosshair size={16} />
                 </button>
+              </WithTooltip>
+              <WithTooltip label={treeEditMode ? "退出编辑模式" : "编辑文件夹树"}>
+                <button
+                  className={treeEditMode ? "iconBtnActive" : "iconBtn"}
+                  onClick={() => setTreeEditMode((current) => !current)}
+                  aria-label={treeEditMode ? "退出编辑模式" : "编辑文件夹树"}
+                >
+                  <Pencil size={16} />
+                </button>
+              </WithTooltip>
+              {treeEditMode && hasSelection && (
+                <WithTooltip label="删除所选">
+                  <button className="iconBtnDanger" onClick={() => void deleteSelected()} aria-label="删除所选">
+                    <Trash2 size={16} />
+                  </button>
+                </WithTooltip>
               )}
             </div>
           </div>
-          <div className="grid max-h-[52vh] gap-3 overflow-auto pr-1">
+          <div className="grid gap-3 pr-1">
             {pendingImages.length || folders.length ? (
               <>
-                {rootImages.length > 0 && (
-                  <FolderGroup
-                    folder=""
-                    label="未分组"
-                    items={rootImages}
-                    droppable={false}
-                    collapsed={false}
-                    editMode={treeEditMode}
-                    selectedPendingId={selectedPending?.id || ""}
-                    selectedImageIds={selectedImageIds}
-                    selectedFolders={selectedFolders}
-                    dragOverFolder={dragOverFolder}
-                    onSelectPending={requestSelectPending}
-                    onToggleImage={toggleImageSelection}
-                    onToggleFolder={toggleFolderSelection}
-                    onToggleCollapsed={toggleFolderCollapse}
-                    editingImageId={editingImageId}
-                    editingFolder={editingFolder}
-                    onStartRenameImage={setEditingImageId}
-                    onStartRenameFolder={setEditingFolder}
-                    onRenameImage={renamePending}
-                    onRenameFolder={renameFolder}
-                    onMoveImages={moveImages}
-                    onDragStart={(item, event) => event.dataTransfer.setData("application/x-jigcat-pending-ids", JSON.stringify(dragImageIds(item)))}
-                    onDragOverFolder={setDragOverFolder}
-                  />
-                )}
-                {folders.map((folder) => (
-                  <FolderGroup
-                    key={folder}
-                    folder={folder}
-                    label={folder}
-                    items={groupedImages.get(folder) || []}
-                    droppable
-                    collapsed={collapsedFolders.has(folder)}
-                    editMode={treeEditMode}
-                    selectedPendingId={selectedPending?.id || ""}
-                    selectedImageIds={selectedImageIds}
-                    selectedFolders={selectedFolders}
-                    dragOverFolder={dragOverFolder}
-                    onSelectPending={requestSelectPending}
-                    onToggleImage={toggleImageSelection}
-                    onToggleFolder={toggleFolderSelection}
-                    onToggleCollapsed={toggleFolderCollapse}
-                    editingImageId={editingImageId}
-                    editingFolder={editingFolder}
-                    onStartRenameImage={setEditingImageId}
-                    onStartRenameFolder={setEditingFolder}
-                    onRenameImage={renamePending}
-                    onRenameFolder={renameFolder}
-                    onMoveImages={moveImages}
-                    onDragStart={(item, event) => event.dataTransfer.setData("application/x-jigcat-pending-ids", JSON.stringify(dragImageIds(item)))}
-                    onDragOverFolder={setDragOverFolder}
-                  />
-                ))}
-                {creatingFolder ? (
-                  <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                    <input
-                      className="input min-w-0"
-                      autoFocus
-                      value={newFolderName}
-                      placeholder="新文件夹"
-                      onChange={(event) => setNewFolderName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void createFolder();
-                        if (event.key === "Escape") cancelCreateFolder();
-                      }}
-                    />
-                    <button className="btnPrimary px-3" onClick={cancelCreateFolder} title="取消" aria-label="取消创建文件夹">
-                      <X size={16} />
-                    </button>
-                    <button className="btnPrimary px-3" onClick={() => void createFolder()} title="确认" aria-label="确认创建文件夹">
-                      <Check size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <button className="btn w-full" onClick={() => setCreatingFolder(true)}>
-                    <FolderPlus size={16} />
-                    创建文件夹
-                  </button>
-                )}
+                <ImageKindSection title="拼图图片" empty={!pendingImages.some((item) => item.kind !== "tablecloth")}>
+                  {renderFolderGroups(puzzleGroupedImages, "puzzle")}
+                </ImageKindSection>
+                <ImageKindSection title="背景图片" empty={!pendingImages.some((item) => item.kind === "tablecloth")}>
+                  {renderFolderGroups(backgroundGroupedImages, "background")}
+                </ImageKindSection>
               </>
             ) : (
               <>
                 <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">暂无图片。</div>
-                {creatingFolder ? (
-                  <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                    <input
-                      className="input min-w-0"
-                      autoFocus
-                      value={newFolderName}
-                      placeholder="新文件夹"
-                      onChange={(event) => setNewFolderName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") void createFolder();
-                        if (event.key === "Escape") cancelCreateFolder();
-                      }}
-                    />
-                    <button className="btnPrimary px-3" onClick={cancelCreateFolder} title="取消" aria-label="取消创建文件夹">
-                      <X size={16} />
-                    </button>
-                    <button className="btnPrimary px-3" onClick={() => void createFolder()} title="确认" aria-label="确认创建文件夹">
-                      <Check size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <button className="btn w-full" onClick={() => setCreatingFolder(true)}>
-                    <FolderPlus size={16} />
-                    创建文件夹
-                  </button>
-                )}
               </>
             )}
           </div>
         </section>
+        </div>
       </aside>
 
       <div className="cursor-col-resize bg-stone-300/70 transition hover:bg-clay" onPointerDown={columns.startLeftResize} />
@@ -1000,7 +887,6 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
                 onBlur={(event) => void renamePending(selectedPending.id, event.target.value)}
                 aria-label="图片名称"
               />
-              <span className="shrink-0">{kindLabel(selectedPending.kind)}</span>
             </div>
           ) : (
             <div className="min-w-0 truncate text-sm text-muted">选择或上传一张图片</div>
@@ -1104,11 +990,38 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
           )}
         </section>
 
-        {message && <div className="mt-4 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-ink">{message}</div>}
       </aside>
 
       {expandedImage && (
         <ExpandedImageModal gallery={expandedImage} onClose={() => setExpandedImage(null)} onSwitch={switchExpandedImage} />
+      )}
+      {creatingFolder && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
+          <div className="w-full max-w-md rounded-md border border-stone-300 bg-paper p-5 text-ink shadow-xl">
+            <h2 className="text-lg font-semibold">创建{kindLabel(createFolderKind)}文件夹</h2>
+            <p className="mt-2 text-sm text-muted">文件夹可用于整理{kindLabel(createFolderKind)}。</p>
+            <input
+              className="input mt-4"
+              autoFocus
+              value={newFolderName}
+              placeholder="新文件夹"
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void createFolder();
+                if (event.key === "Escape") cancelCreateFolder();
+              }}
+            />
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={cancelCreateFolder}>
+                取消
+              </button>
+              <button className="btnPrimary" onClick={() => void createFolder()}>
+                <Check size={16} />
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {pendingSelectionId && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
@@ -1127,434 +1040,6 @@ function ImagePipelinePage({ onSelectionStateChange }: Props) {
         </div>
       )}
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1.5 text-sm text-muted">
-      {label}
-      {children}
-    </label>
-  );
-}
-
-function PanelTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{children}</h2>;
-}
-
-function UploadButton({
-  label,
-  kind,
-  onFiles,
-  onDropFiles,
-}: {
-  label: string;
-  kind: PendingImageKind;
-  onFiles: (files?: FileList | null, kind?: PendingImageKind) => void;
-  onDropFiles: (event: React.DragEvent, kind?: PendingImageKind) => Promise<void>;
-}) {
-  return (
-    <label
-      className="fileButton"
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.currentTarget.classList.add("border-clay");
-      }}
-      onDragLeave={(event) => event.currentTarget.classList.remove("border-clay")}
-      onDrop={(event) => void onDropFiles(event, kind)}
-    >
-      <Upload size={16} />
-      {label}
-      <input
-        hidden
-        multiple
-        type="file"
-        accept="image/*"
-        onChange={(event) => onFiles(event.target.files, kind)}
-        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-      />
-    </label>
-  );
-}
-
-function FolderGroup({
-  folder,
-  label,
-  items,
-  droppable,
-  collapsed,
-  editMode,
-  selectedPendingId,
-  selectedImageIds,
-  selectedFolders,
-  dragOverFolder,
-  onSelectPending,
-  onToggleImage,
-  onToggleFolder,
-  onToggleCollapsed,
-  editingImageId,
-  editingFolder,
-  onStartRenameImage,
-  onStartRenameFolder,
-  onRenameImage,
-  onRenameFolder,
-  onMoveImages,
-  onDragStart,
-  onDragOverFolder,
-}: {
-  folder: string;
-  label: string;
-  items: PendingImageItem[];
-  droppable: boolean;
-  collapsed: boolean;
-  editMode: boolean;
-  selectedPendingId: string;
-  selectedImageIds: Set<string>;
-  selectedFolders: Set<string>;
-  dragOverFolder: string | null;
-  onSelectPending: (id: string) => void;
-  onToggleImage: (id: string, checked: boolean) => void;
-  onToggleFolder: (folder: string, checked: boolean) => void;
-  onToggleCollapsed: (folder: string) => void;
-  editingImageId: string;
-  editingFolder: string;
-  onStartRenameImage: (id: string) => void;
-  onStartRenameFolder: (folder: string) => void;
-  onRenameImage: (id: string, name: string) => void;
-  onRenameFolder: (oldName: string, nextName: string) => void;
-  onMoveImages: (ids: string[], folder: string) => void;
-  onDragStart: (item: PendingImageItem, event: React.DragEvent) => void;
-  onDragOverFolder: (folder: string | null) => void;
-}) {
-  const canSelectFolder = folder !== "";
-  const activeDrop = droppable && dragOverFolder === folder;
-  return (
-    <section
-      className={`rounded-md border ${activeDrop ? "border-clay bg-white" : "border-stone-300 bg-white/60"} p-2`}
-      onDragOver={(event) => {
-        if (!droppable) return;
-        event.preventDefault();
-        onDragOverFolder(folder);
-      }}
-      onDragLeave={() => onDragOverFolder(null)}
-      onDrop={(event) => {
-        if (!droppable) return;
-        event.preventDefault();
-        onDragOverFolder(null);
-        const raw = event.dataTransfer.getData("application/x-jigcat-pending-ids");
-        if (!raw) return;
-        const ids = JSON.parse(raw) as string[];
-        onMoveImages(ids, folder);
-      }}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2 text-sm font-medium text-ink">
-        <div className="flex min-w-0 items-center gap-2">
-          {canSelectFolder ? (
-            <button className="iconBtn !min-h-7 border-0 bg-transparent px-1 py-1 shadow-none" onClick={() => onToggleCollapsed(folder)} aria-label={collapsed ? "展开文件夹" : "收起文件夹"}>
-              {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-            </button>
-          ) : (
-            <span className="w-7" />
-          )}
-          {editMode && canSelectFolder && (
-            <input
-              className="mr-2 h-4 w-4 shrink-0 accent-clay"
-              type="checkbox"
-              checked={selectedFolders.has(folder)}
-              onChange={(event) => onToggleFolder(folder, event.target.checked)}
-            />
-          )}
-          <InlineEditableName
-            value={label}
-            editMode={editMode && canSelectFolder}
-            editing={editingFolder === folder}
-            className="font-medium text-ink"
-            onStart={() => onStartRenameFolder(folder)}
-            onCommit={(value) => onRenameFolder(folder, value)}
-          />
-        </div>
-        <small className="text-muted">{items.length}</small>
-      </div>
-      <div className={collapsed ? "hidden" : "grid gap-2"}>
-        {items.length ? (
-          items.map((item) => (
-            <div
-              id={pendingImageRowId(item.id)}
-              key={item.id}
-              className={item.id === selectedPendingId ? "objectActive" : "object"}
-              draggable
-              onClick={() => onSelectPending(item.id)}
-              onDragStart={(event) => onDragStart(item, event)}
-            >
-              {editMode && (
-                <input
-                  className="h-4 w-4 shrink-0 accent-clay"
-                  type="checkbox"
-                  checked={selectedImageIds.has(item.id)}
-                  onClick={(event) => event.stopPropagation()}
-                  onChange={(event) => onToggleImage(item.id, event.target.checked)}
-                />
-              )}
-              <div className={`flex min-w-0 flex-1 items-center gap-2 text-left ${editMode ? "ml-0" : ""}`}>
-                <InlineEditableName
-                  value={displayName(item.name)}
-                  editMode={editMode}
-                  editing={editingImageId === item.id}
-                  className={item.processed && !item.processed_path ? "text-emerald-700" : "text-ink"}
-                  onStart={() => onStartRenameImage(item.id)}
-                  onCommit={(value) => onRenameImage(item.id, value)}
-                />
-                {item.processed_path && <span className="mr-1 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">待确认</span>}
-                {item.processed && !item.processed_path && <CheckCircle2 className="mr-1 shrink-0 text-emerald-700" size={16} />}
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded border border-dashed border-stone-200 px-3 py-2 text-xs text-muted">{droppable ? "拖拽图片到这里" : "暂无图片"}</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ImagePreviewCard({
-  title,
-  name,
-  url,
-  info,
-  onOpen,
-}: {
-  title: string;
-  name: string;
-  url: string;
-  info?: ImageInfo;
-  onOpen: () => void;
-}) {
-  return (
-    <button className="group relative block max-h-[calc(100vh-152px)] max-w-full overflow-hidden rounded-md border border-stone-200 bg-white text-left shadow-sm" onClick={onOpen}>
-      <img className="max-h-[calc(100vh-152px)] max-w-full object-contain" src={url} alt={`${title} ${name}`} />
-      <div className="absolute bottom-3 left-3 max-w-[calc(100%-24px)] rounded-md bg-black/70 px-3 py-2 text-xs text-white shadow-sm">
-        <div className="font-medium">{title}</div>
-        <div className="mt-0.5 truncate text-white/80">{name}</div>
-        <div className="mt-1 text-white/80">{imageInfoText(info)}</div>
-      </div>
-      <div className="pointer-events-none absolute inset-0 rounded-md ring-0 ring-clay/60 transition group-hover:ring-2" />
-    </button>
-  );
-}
-
-function InlineEditableName({
-  value,
-  editMode,
-  editing,
-  className,
-  onStart,
-  onCommit,
-}: {
-  value: string;
-  editMode: boolean;
-  editing: boolean;
-  className?: string;
-  onStart: () => void;
-  onCommit: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => {
-    if (editing) setDraft(value);
-  }, [editing, value]);
-
-  function commit() {
-    const next = draft.trim();
-    onCommit(next || value);
-  }
-
-  if (editing) {
-    return (
-      <input
-        className="input h-8 min-w-0 flex-1 px-2 py-1"
-        autoFocus
-        value={draft}
-        onClick={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(value);
-            event.currentTarget.blur();
-          }
-        }}
-      />
-    );
-  }
-
-  return (
-    <span className="group/rename flex min-w-0 flex-1 items-center gap-1">
-      <span className={`min-w-0 flex-1 truncate ${className || ""}`}>{value}</span>
-      {editMode && (
-        <button
-          className="editReveal shrink-0 rounded p-1 text-muted transition hover:bg-stone-100 hover:text-clay"
-          onClick={(event) => {
-            event.stopPropagation();
-            onStart();
-          }}
-          aria-label={`重命名 ${value}`}
-          title="重命名"
-        >
-          <Pencil size={13} />
-        </button>
-      )}
-    </span>
-  );
-}
-
-function ExpandedImageModal({
-  gallery,
-  onClose,
-  onSwitch,
-}: {
-  gallery: ExpandedImage;
-  onClose: () => void;
-  onSwitch: (delta: number) => void;
-}) {
-  const [deviceIndex, setDeviceIndex] = useState(0);
-  const current = gallery.images[gallery.index];
-  const canSwitch = gallery.images.length > 1;
-  const device = portraitDeviceSizes[deviceIndex] || portraitDeviceSizes[0];
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-8" onClick={onClose}>
-      <div className="relative grid h-[calc(100vh-64px)] w-[calc(100vw-64px)] overflow-hidden rounded-md bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
-        <div className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between gap-4 bg-white/95 px-3 py-2 text-sm text-ink shadow-sm">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className="font-medium">{current.title}</div>
-            <select className="selectTrigger !min-h-9 w-56" value={deviceIndex} onChange={(event) => setDeviceIndex(Number(event.target.value))} aria-label="预览分辨率">
-              {portraitDeviceSizes.map((option, index) => (
-                <option key={option.label} value={index}>
-                  {option.label} {option.width} x {option.height}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="iconBtn !min-h-8 shrink-0" onClick={onClose} aria-label="关闭预览">
-            <X size={16} />
-          </button>
-        </div>
-        {canSwitch && (
-          <>
-            <button className="absolute left-4 top-1/2 z-20 -translate-y-1/2 rounded-md border border-white/40 bg-black/45 p-2 text-white transition hover:bg-black/65" onClick={() => onSwitch(-1)} aria-label="上一张">
-              <ChevronLeft size={22} />
-            </button>
-            <button className="absolute right-4 top-1/2 z-20 -translate-y-1/2 rounded-md border border-white/40 bg-black/45 p-2 text-white transition hover:bg-black/65" onClick={() => onSwitch(1)} aria-label="下一张">
-              <ChevronRight size={22} />
-            </button>
-          </>
-        )}
-        <div className="grid h-full place-items-center overflow-auto px-16 pb-8 pt-20">
-          <div className="grid shrink-0 place-items-center overflow-hidden rounded-md border border-stone-300 bg-[#f7efe2] shadow-sm" style={{ width: device.width, height: device.height }}>
-            <img className="h-full w-full object-contain" src={current.url} alt={current.title} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProcessStepRow({
-  step,
-  tool,
-  disabled,
-  disabledReason,
-  onUpdate,
-  onEnabledChange,
-}: {
-  step: ProcessStep;
-  tool: PythonTool;
-  disabled: boolean;
-  disabledReason: string;
-  onUpdate: (patch: Partial<ProcessStep>) => void;
-  onEnabledChange: (checked: boolean) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id, disabled });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`rounded-md border border-stone-300 bg-white p-2 text-sm ${disabled ? "opacity-55" : ""} ${isDragging ? "opacity-70" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-    >
-      <div className={disabled ? "flex items-center gap-2" : "flex cursor-grab items-center gap-2 active:cursor-grabbing"} {...attributes} {...listeners}>
-        <input
-          className="h-4 w-4 cursor-default accent-clay"
-          type="checkbox"
-          checked
-          disabled={disabled}
-          onPointerDown={(event) => event.stopPropagation()}
-          onChange={(event) => onEnabledChange(event.target.checked)}
-          aria-label={`启用${tool.label}`}
-        />
-        <div className="min-w-0 flex-1 font-medium text-ink">{tool.label}</div>
-        {disabledReason && <span className="text-xs text-muted">{disabledReason}</span>}
-      </div>
-      {step.type === "remove_background" && (
-        <Field label="容差">
-          <input className="input" type="number" min="0" max="441" value={step.tolerance} disabled={disabled} onChange={(event) => onUpdate({ tolerance: Number(event.target.value) })} />
-        </Field>
-      )}
-      {step.type === "trim_transparent" && (
-        <Field label="留边">
-          <input className="input" type="number" min="0" max="256" value={step.padding} disabled={disabled} onChange={(event) => onUpdate({ padding: Number(event.target.value) })} />
-        </Field>
-      )}
-      {step.type === "convert_jpg" && (
-        <div className="mt-2 grid grid-cols-[1fr_56px] gap-2">
-          <Field label="质量">
-            <input className="input" type="number" min="1" max="100" value={step.quality} disabled={disabled} onChange={(event) => onUpdate({ quality: Number(event.target.value) })} />
-          </Field>
-          <Field label="底色">
-            <input className="input h-10 p-1" type="color" value={step.background} disabled={disabled} onChange={(event) => onUpdate({ background: event.target.value })} />
-          </Field>
-        </div>
-      )}
-      {step.type === "compress" && (
-        <Field label="质量">
-          <input className="input" type="number" min="1" max="100" value={step.quality} disabled={disabled} onChange={(event) => onUpdate({ quality: Number(event.target.value) })} />
-        </Field>
-      )}
-    </div>
-  );
-}
-
-function PythonToolRow({
-  tool,
-  disabled,
-  disabledReason,
-  onEnabledChange,
-}: {
-  tool: PythonTool;
-  disabled: boolean;
-  disabledReason: string;
-  onEnabledChange: (checked: boolean) => void;
-}) {
-  return (
-    <label
-      className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
-        tool.supported && !disabled ? "border-stone-300 bg-stone-100/80 text-ink" : "border-stone-200 bg-stone-100/70 text-muted opacity-70"
-      }`}
-    >
-      <input
-        className="mt-0.5 h-4 w-4 accent-clay disabled:accent-stone-300"
-        type="checkbox"
-        disabled={!tool.supported || !tool.stepType || disabled}
-        checked={false}
-        onChange={(event) => onEnabledChange(event.target.checked)}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block font-medium">{tool.label}</span>
-        <span className="mt-1 block text-xs text-muted">{disabledReason || tool.description}</span>
-      </span>
-    </label>
   );
 }
 

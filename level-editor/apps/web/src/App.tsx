@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import LevelEditorPage from "./pages/LevelEditorPage";
 import ImagePipelinePage, { type ImagePipelineSelectionState } from "./pages/ImagePipelinePage";
 import CatalogManagementPage from "./pages/CatalogManagementPage";
+import { Toaster } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 
 type Route = "/editor" | "/images" | "/catalog";
 
@@ -34,7 +37,6 @@ function App() {
   const [imageSelection, setImageSelection] = useState<ImagePipelineSelectionState | null>(null);
   const [pendingRoute, setPendingRoute] = useState<Route | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
-  const [navMessage, setNavMessage] = useState("");
   const [editorDirty, setEditorDirty] = useState(false);
   const [catalogDirty, setCatalogDirty] = useState(false);
 
@@ -103,23 +105,14 @@ function App() {
       return;
     }
     if (!imageSelection) {
-      setNavMessage("请先选择一张关卡图片。");
-      return;
-    }
-    if (imageSelection.kind === "tablecloth") {
-      setNavMessage("桌布不能进入碎片编辑器，请选择关卡图片。");
+      toast.warning("请先选择一张关卡图片。");
       return;
     }
     if (imageSelection.status === "待确认") {
-      setNavMessage("请先确认或放弃当前处理结果，再进入编辑器。");
-      return;
-    }
-    if (imageSelection.status === "未处理") {
-      setNavMessage("建议先处理图片；也可以确认当前素材后再编辑。");
+      toast.warning("请先确认或放弃当前处理结果，再进入编辑器。");
       return;
     }
     setOpeningEditor(true);
-    setNavMessage("");
     const editorUrl = `/editor?image=${encodeURIComponent(imageSelection.id)}&mode=polygon`;
     window.history.pushState({}, "", editorUrl);
     setRoute("/editor");
@@ -136,6 +129,7 @@ function App() {
 
   return (
     <>
+      <TooltipProvider delayDuration={250}>
       <div className="grid h-screen min-h-0 grid-rows-[64px_1fr] bg-linen text-ink">
         <header className="z-[80] grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-b border-[#dec8a5] bg-[#fff7e8]/95 px-5 shadow-[0_2px_12px_rgba(90,58,34,0.08)] backdrop-blur">
           <div className="flex min-w-0 items-center gap-3">
@@ -174,10 +168,9 @@ function App() {
                 </span>
               </div>
             )}
-            {route === "/images" && navMessage && <div className="max-w-72 truncate rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">{navMessage}</div>}
             {route === "/images" && (
               <button className="btnPrimary" disabled={openingEditor} onClick={editCurrentImage}>
-                {openingEditor ? "打开中..." : "编辑碎片"}
+                {openingEditor ? "打开中..." : "去编辑"}
               </button>
             )}
           </div>
@@ -208,6 +201,8 @@ function App() {
           </div>
         </div>
       )}
+      </TooltipProvider>
+      <Toaster />
     </>
   );
 }

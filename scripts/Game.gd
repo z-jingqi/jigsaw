@@ -1,6 +1,5 @@
 extends Node2D
 
-const DEFAULT_LEVEL_IMAGE_PATH := "res://levels/cat/cat_moon_01/source.png"
 const MENU_BACKGROUND_PATH := "res://assets/source/menu_background.png"
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
 const START_BUTTON_IMAGE_PATH := "res://assets/ui/start-game.png"
@@ -18,7 +17,6 @@ const ICON_MODE_PUZZLE_TODO_PATH := "res://assets/icons/status/mode_puzzle_todo.
 const ICON_MODE_POLYGON_DONE_PATH := "res://assets/icons/status/mode_polygon_done.png"
 const ICON_MODE_POLYGON_TODO_PATH := "res://assets/icons/status/mode_polygon_todo.png"
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
-const LEVEL_CONFIG_PATH := "res://levels/cat/cat_moon_01/level.json"
 const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
@@ -101,7 +99,6 @@ var status_label: Label
 func _ready() -> void:
 	_lock_portrait_orientation()
 	rng.seed = 7
-	texture = _cached_texture(DEFAULT_LEVEL_IMAGE_PATH)
 	menu_background = load(MENU_BACKGROUND_PATH)
 	title_texture = load(TITLE_IMAGE_PATH)
 	start_button_texture = load(START_BUTTON_IMAGE_PATH)
@@ -118,13 +115,12 @@ func _ready() -> void:
 	icon_mode_puzzle_todo = _cached_texture(ICON_MODE_PUZZLE_TODO_PATH)
 	icon_mode_polygon_done = _cached_texture(ICON_MODE_POLYGON_DONE_PATH)
 	icon_mode_polygon_todo = _cached_texture(ICON_MODE_POLYGON_TODO_PATH)
-	source_image = texture.get_image()
-	source_size = texture.get_size()
 	board_layer = Node2D.new()
 	add_child(board_layer)
 	ui_layer = CanvasLayer.new()
 	add_child(ui_layer)
 	_build_catalog()
+	_apply_level_media({})
 	_load_progress()
 	_show_last_topic_levels()
 
@@ -203,24 +199,13 @@ func _build_catalog() -> void:
 			next_topics.append({
 				"id": str(topic.get("id", "")),
 				"name": str(topic.get("name", topic.get("id", ""))),
+				"cover": str(topic.get("cover", "")),
 				"levels": levels,
 			})
 		if not next_topics.is_empty():
 			topics = next_topics
 			return
-	var cat_config := _load_config_path(LEVEL_CONFIG_PATH)
-	var level_title := _config_string(cat_config, "title", "月亮小睡")
-	var level_description := _config_string(cat_config, "description", "小猫安静地靠在月亮上，像一段柔软的午后梦。")
-	topics = [{
-		"id": "cat",
-		"name": "猫",
-		"levels": [{
-			"id": "cat_moon_01",
-			"title": level_title,
-			"description": level_description,
-			"config_path": LEVEL_CONFIG_PATH,
-		}]
-	}]
+	topics = []
 
 
 func _load_progress() -> void:
@@ -607,11 +592,7 @@ func _show_topics() -> void:
 	for topic in topics:
 		var total: int = topic["levels"].size() * 2
 		var done: int = _topic_done_count(topic)
-		var card := _card_button(
-			"%s\n%d/%d" % [topic["name"], done, total],
-			Vector2(360, 260),
-			func(t: Dictionary = topic) -> void: _show_levels(t, _focus_level_id(t))
-		)
+		var card := _topic_card_button(topic, "%d/%d" % [done, total], func(t: Dictionary = topic) -> void: _show_levels(t, _focus_level_id(t)))
 		grid.add_child(card)
 
 
@@ -657,6 +638,9 @@ func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	card.text = ""
 	card.custom_minimum_size = Vector2(360, 260)
 	_apply_card_style(card)
+	var preview_texture := _level_thumbnail(level)
+	if preview_texture == null:
+		card.disabled = true
 	var content := VBoxContainer.new()
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
 	content.offset_left = 18
@@ -666,14 +650,7 @@ func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	content.add_theme_constant_override("separation", 8)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(content)
-	var preview := TextureRect.new()
-	preview.texture = _level_thumbnail(level)
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	preview.custom_minimum_size = Vector2(300, 142)
-	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(preview)
+	content.add_child(_preview_panel(preview_texture, Vector2(300, 142), "暂无关卡图片"))
 	var title := Label.new()
 	title.text = str(level["title"])
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -688,6 +665,34 @@ func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	content.add_child(row)
 	row.add_child(_status_icon("polygon", _is_done(level["id"], "polygon"), 42))
 	row.add_child(_status_icon("knob", _is_done(level["id"], "knob"), 42))
+	if preview_texture != null:
+		card.pressed.connect(action)
+		_wire_button_animation(card)
+	return card
+
+
+func _topic_card_button(topic: Dictionary, status_text: String, action: Callable) -> Button:
+	var card := Button.new()
+	card.text = ""
+	card.custom_minimum_size = Vector2(360, 260)
+	_apply_card_style(card)
+	var content := VBoxContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = 18
+	content.offset_top = 16
+	content.offset_right = -18
+	content.offset_bottom = -14
+	content.add_theme_constant_override("separation", 8)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(content)
+	content.add_child(_preview_panel(_topic_cover_texture(topic), Vector2(300, 142), "暂无主题封面"))
+	var title := Label.new()
+	title.text = "%s\n%s" % [str(topic["name"]), status_text]
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", brown)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(title)
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card
@@ -709,6 +714,49 @@ func _card_button(text: String, size: Vector2, action: Callable) -> Button:
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card
+
+
+func _preview_panel(preview_texture: Texture2D, min_size: Vector2, placeholder_text: String) -> Control:
+	var holder := CenterContainer.new()
+	holder.custom_minimum_size = min_size
+	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if preview_texture != null:
+		var preview := TextureRect.new()
+		preview.texture = preview_texture
+		preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		preview.custom_minimum_size = min_size
+		preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		holder.add_child(preview)
+		return holder
+	var placeholder := PanelContainer.new()
+	placeholder.custom_minimum_size = min_size
+	placeholder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.96, 0.88, 0.86)
+	style.border_color = Color(0.73, 0.50, 0.28, 0.35)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 14
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_left = 14
+	style.corner_radius_bottom_right = 14
+	placeholder.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.text = placeholder_text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", muted)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	placeholder.add_child(label)
+	holder.add_child(placeholder)
+	return holder
 
 
 func _apply_card_style(card: Button) -> void:
@@ -740,9 +788,23 @@ func _apply_card_style(card: Button) -> void:
 
 func _level_thumbnail(level: Dictionary) -> Texture2D:
 	var level_config := _load_level_config(level)
-	var image_path := _level_image_path(level_config)
-	var thumbnail := _cached_texture(image_path)
-	return thumbnail if thumbnail != null else texture
+	var image_path := _level_list_image_path(level_config)
+	return _cached_texture(image_path) if not image_path.is_empty() else null
+
+
+func _topic_cover_texture(topic: Dictionary) -> Texture2D:
+	var cover_path := str(topic.get("cover", ""))
+	return _cached_texture(cover_path) if not cover_path.is_empty() else null
+
+
+func _level_list_image_path(level_config: Dictionary) -> String:
+	var knob_path := _image_path_from_value(_mode_config(level_config, "knob").get("image", null), "")
+	if not knob_path.is_empty():
+		return knob_path
+	var polygon_path := _image_path_from_value(_mode_config(level_config, "polygon").get("image", null), "")
+	if not polygon_path.is_empty():
+		return polygon_path
+	return ""
 
 
 func _status_icon(mode: String, done: bool, size: float) -> TextureRect:
@@ -1085,6 +1147,16 @@ func _load_level_config(level: Dictionary) -> Dictionary:
 	return _load_config_path(config_path)
 
 
+func _first_level_config() -> Dictionary:
+	for topic in topics:
+		if not topic.has("levels") or typeof(topic["levels"]) != TYPE_ARRAY:
+			continue
+		for level in topic["levels"]:
+			if typeof(level) == TYPE_DICTIONARY:
+				return _load_level_config(level)
+	return {}
+
+
 func _load_config_path(config_path: String) -> Dictionary:
 	if config_path.is_empty() or not FileAccess.file_exists(config_path):
 		return {}
@@ -1117,8 +1189,6 @@ func _mode_config(level_config: Dictionary, play_mode: String) -> Dictionary:
 func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 	var config := _mode_config(active_level_config, play_mode)
 	if config.is_empty() or not config.has("pieces") or typeof(config["pieces"]) != TYPE_ARRAY:
-		return {}
-	if str(config.get("source", "")) != "precomputed":
 		return {}
 	var source_pieces: Array = config["pieces"]
 	if source_pieces.is_empty():
@@ -1331,16 +1401,23 @@ func _visible_source_rect_for_polygon(points: PackedVector2Array, fallback: Rect
 
 func _apply_level_media(level_config: Dictionary) -> void:
 	var image_path := _level_image_path(level_config, current_mode)
-	var next_texture := _cached_texture(image_path)
+	var next_texture := _cached_texture(image_path) if not image_path.is_empty() else null
 	if next_texture == null:
-		image_path = DEFAULT_LEVEL_IMAGE_PATH
-		next_texture = _cached_texture(image_path)
+		var fallback_path := _default_level_image_path(level_config)
+		if not fallback_path.is_empty() and fallback_path != image_path:
+			image_path = fallback_path
+			next_texture = _cached_texture(image_path)
+	if next_texture == null:
+		image_path = ""
+		next_texture = _placeholder_texture()
 	texture = next_texture
 	source_image = _cached_source_image(image_path, texture)
 	source_size = texture.get_size()
 
 
 func _cached_texture(path: String) -> Texture2D:
+	if path.is_empty():
+		return null
 	if texture_cache.has(path):
 		return texture_cache[path]
 	var loaded: Texture2D = load(path)
@@ -1355,11 +1432,18 @@ func _cached_texture(path: String) -> Texture2D:
 	return loaded
 
 
+func _placeholder_texture() -> Texture2D:
+	var image := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+	image.fill(Color.TRANSPARENT)
+	return ImageTexture.create_from_image(image)
+
+
 func _cached_source_image(path: String, source_texture: Texture2D) -> Image:
-	if source_image_cache.has(path):
+	if not path.is_empty() and source_image_cache.has(path):
 		return source_image_cache[path]
 	var image := source_texture.get_image()
-	source_image_cache[path] = image
+	if not path.is_empty():
+		source_image_cache[path] = image
 	return image
 
 
@@ -1367,9 +1451,6 @@ func _level_image_path(level_config: Dictionary, mode := "") -> String:
 	if not mode.is_empty():
 		var mode_config := _mode_config(level_config, mode)
 		var mode_image_path := _image_path_from_value(mode_config.get("image", null), "")
-		if not mode_image_path.is_empty():
-			return mode_image_path
-		mode_image_path = _image_path_from_value(mode_config.get("source_image", null), "")
 		if not mode_image_path.is_empty():
 			return mode_image_path
 	return _default_level_image_path(level_config)
@@ -1381,7 +1462,7 @@ func _default_level_image_path(level_config: Dictionary) -> String:
 		var default_image_path := _image_path_from_value(assets.get("default_image", null), "")
 		if not default_image_path.is_empty():
 			return default_image_path
-	return _image_path_from_value(level_config.get("image", null), DEFAULT_LEVEL_IMAGE_PATH)
+	return _image_path_from_value(level_config.get("image", null), "")
 
 
 func _image_path_from_value(value, fallback: String) -> String:
@@ -2420,4 +2501,7 @@ func _first_unfinished_level() -> Dictionary:
 		for level in topic["levels"]:
 			if not _is_done(level["id"], "polygon") or not _is_done(level["id"], "knob"):
 				return { "topic": topic, "level": level }
-	return { "topic": topics[0], "level": topics[0]["levels"][0] }
+	for topic in topics:
+		if topic.has("levels") and typeof(topic["levels"]) == TYPE_ARRAY and not topic["levels"].is_empty():
+			return { "topic": topic, "level": topic["levels"][0] }
+	return {}

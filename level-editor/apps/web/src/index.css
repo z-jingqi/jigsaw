@@ -171,7 +171,7 @@
   }
 
   .toastViewport {
-    @apply fixed left-1/2 top-5 z-[70] w-[min(420px,calc(100vw-32px))] -translate-x-1/2;
+    @apply fixed left-1/2 top-20 z-[120] w-[min(420px,calc(100vw-32px))] -translate-x-1/2;
   }
 
   .toastCard {

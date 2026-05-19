@@ -1,57 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import * as Dialog from "@radix-ui/react-dialog";
-import * as Select from "@radix-ui/react-select";
-import { Check, ChevronDown, CircleAlert, Download, Eye, GripVertical, Hexagon, Magnet, Pencil, Plus, Puzzle, Redo2, RefreshCcw, Save, Trash2, Undo2, Upload, X } from "lucide-react";
-import { useResizableColumns } from "../components/useResizableColumns";
+import { PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
+import { CircleAlert, Eye, Hexagon, Magnet, Pencil, Plus, Puzzle, Redo2, RefreshCcw, Save, Trash2, Undo2, X } from "lucide-react";
+import { toast } from "sonner";
 import {
   DEFAULT_BROWSER_IMAGE,
   DEFAULT_IMAGE_PATH,
   analyzeActualPieces,
   catmullRomPath,
   detectImageOutline,
-  findCutGaps,
   generateFractureNetwork,
   generateKnobPieces,
   makeEmptyLevel,
-  polygonArea,
   presetCut,
-  presetShapePoints,
   samplePath,
   serializePoints,
-  simplifyClosedPath,
   snapPoint,
-  traceBoundaryLoops,
   uid,
   type ActualPiecePreview,
 } from "../geometry";
-import type { CatalogLevel, CatalogTopic, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig, PendingImageItem } from "../types";
+import type { CatalogLevel, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig, PendingImageItem } from "../types";
+import { cellsToLevelPieces, mergePolygons, pointFromTuple, polygonCenter, polylinePath, translateCut, tupleBounds, tupleFromPoint, unionTupleBounds, visibleBoundsList } from "../features/level-editor/lib/polygonPieces";
+import { presetTemplates, ShapeButton, shapeTension } from "../features/level-editor/lib/shapes";
+import { Field } from "../shared/ui/Field";
+import { Input } from "../shared/ui/Input";
+import { PanelTitle } from "../shared/ui/PanelTitle";
+import { SelectBox, type SelectOption } from "../shared/ui/SelectBox";
+import { Textarea } from "../shared/ui/Textarea";
+import { makeDefaultCatalog, normalizeOrder, updateCatalogLevel } from "../shared/lib/catalog";
+import { idFromEnglishName, nextSequentialId } from "../shared/lib/ids";
+import { localized, reservedI18n } from "../shared/lib/i18n";
+import { WithTooltip } from "../components/ui/tooltip";
+import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 
 const snapThreshold = 18;
-const mergePolygonTolerance = 5;
-const presetTemplates: CutTemplate[] = [
-  "circle",
-  "star",
-  "zigzag",
-  "crescent",
-  "rectangle",
-  "trapezoid",
-  "sector",
-  "heart",
-  "triangle",
-  "diamond",
-  "pentagon",
-  "hexagon",
-  "octagon",
-  "parallelogram",
-  "arrow",
-  "cross",
-  "shield",
-  "leaf",
-  "semicircle",
-];
+const editorLocale = "zh-cn";
 
 type EditMode = "polygon" | "knob";
 type PolygonViewMode = "result" | "edit" | "inspect";
@@ -63,23 +46,6 @@ type LevelTarget = {
 
 type ImageTarget = EditMode;
 
-type ProcessStepType = "remove_background" | "trim_transparent" | "convert_jpg";
-
-type ProcessStep = {
-  id: string;
-  type: ProcessStepType;
-  tolerance: number;
-  padding: number;
-  quality: number;
-  background: string;
-};
-
-type PendingImage = {
-  pendingId: string;
-  name: string;
-  url: string;
-} | null;
-
 type Props = {
   onUnsavedChange?: (dirty: boolean) => void;
 };
@@ -88,10 +54,19 @@ type CreateDialogKind = "topic" | "level" | null;
 
 type SaveModeDialogState = {
   open: boolean;
+  targetMode: "existing" | "new";
   topicId: string;
   levelId: string;
+  newTopic: boolean;
   title: string;
   description: string;
+  newTopicName: string;
+  newTopicId: string;
+  newLevelTitle: string;
+  newLevelDescription: string;
+  newBackgroundType: "color" | "image";
+  newBackgroundColor: string;
+  newBackgroundPath: string;
 };
 
 type EditorSnapshot = {
@@ -114,12 +89,6 @@ type DrawingCutState = {
   points: Point[];
 };
 
-type SelectOption = {
-  value: string;
-  label: string;
-  detail?: string;
-};
-
 type AnalysisWorkerMessage =
   | {
       type: "imageReady";
@@ -131,11 +100,6 @@ type AnalysisWorkerMessage =
       result: Omit<ActualPiecePreview, "dataUrl"> & { previewBuffer: ArrayBuffer };
     };
 
-type ToastNotice = {
-  id: number;
-  message: string;
-};
-
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return structuredClone(snapshot);
 }
@@ -146,33 +110,6 @@ function isTextEditingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
 }
 
-function makeDefaultCatalog(): LevelCatalog {
-  return {
-    schema: "jigsaw.catalog.v1",
-    version: 1,
-    default_locale: "zh-Hans",
-    locales: ["zh-Hans", "en"],
-    topics: [],
-  };
-}
-
-function localized(value: Record<string, string> | undefined, locale: string, fallback: string) {
-  return value?.[locale] || value?.["zh-Hans"] || value?.en || fallback;
-}
-
-function normalizeOrder<T extends { sort_order: number }>(items: T[]): T[] {
-  return items.map((item, index) => ({ ...item, sort_order: index }));
-}
-
-function nextSequentialId(prefix: string, existingIds: string[]): string {
-  const used = new Set(existingIds);
-  for (let index = 1; index < 10000; index += 1) {
-    const id = `${prefix}_${String(index).padStart(2, "0")}`;
-    if (!used.has(id)) return id;
-  }
-  return `${prefix}_${Date.now().toString(36)}`;
-}
-
 function modeImageConfig(level: LevelConfig, mode: EditMode): LevelImageConfig {
   return level.modes[mode].image as LevelImageConfig;
 }
@@ -181,29 +118,8 @@ function modeImagePath(level: LevelConfig, mode: EditMode): string {
   return imageConfigPath(modeImageConfig(level, mode));
 }
 
-function imageNameFromPath(godotPath: string, fallback: string) {
-  return godotPath.split("/").pop()?.split(/[?#]/)[0] || fallback;
-}
-
 function displayPendingImageName(item: PendingImageItem) {
   return item.name.replace(/\.[^.]+$/, "");
-}
-
-function processStepLabel(type: ProcessStepType) {
-  if (type === "remove_background") return "去背景";
-  if (type === "trim_transparent") return "裁透明边";
-  return "转 JPG";
-}
-
-function createProcessStep(type: ProcessStepType): ProcessStep {
-  return {
-    id: uid("process"),
-    type,
-    tolerance: 35,
-    padding: 0,
-    quality: 88,
-    background: "#F6EBD4",
-  };
 }
 
 function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, levelId?: string): LevelConfig {
@@ -239,310 +155,9 @@ function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, leve
   };
 }
 
-function updateCatalogLevel(catalog: LevelCatalog, target: LevelTarget, update: (level: CatalogLevel) => CatalogLevel): LevelCatalog {
-  return {
-    ...catalog,
-    topics: catalog.topics.map((topic) =>
-      topic.id === target.topicId
-        ? {
-            ...topic,
-            levels: topic.levels.map((level) => (level.id === target.levelId ? update(level) : level)),
-          }
-        : topic,
-    ),
-  };
-}
-
-function pointFromTuple(point: number[]): Point {
-  return { x: point[0] || 0, y: point[1] || 0 };
-}
-
-function tupleFromPoint(point: Point): number[] {
-  return [Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100];
-}
-
 function imageConfigPath(value?: LevelImageConfig): string {
   if (!value) return "";
   return typeof value === "string" ? value : value.path || "";
-}
-
-function polygonCenter(points: Point[]): Point {
-  if (!points.length) return { x: 0, y: 0 };
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
-  };
-}
-
-function pointBounds(points: Point[]): { x: number; y: number; width: number; height: number } {
-  if (!points.length) return { x: 0, y: 0, width: 0, height: 0 };
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x);
-    maxY = Math.max(maxY, point.y);
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-}
-
-function tupleBounds(points: Point[]): number[] {
-  const bounds = pointBounds(points);
-  return [bounds.x, bounds.y, bounds.width, bounds.height].map((value) => Math.round(value * 100) / 100);
-}
-
-function unionTupleBounds(boundsList: Array<number[] | undefined>, fallbackPoints: Point[]): number[] {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const bounds of boundsList) {
-    if (!bounds || bounds.length < 4) continue;
-    minX = Math.min(minX, bounds[0]);
-    minY = Math.min(minY, bounds[1]);
-    maxX = Math.max(maxX, bounds[0] + bounds[2]);
-    maxY = Math.max(maxY, bounds[1] + bounds[3]);
-  }
-  if (!Number.isFinite(minX)) return tupleBounds(fallbackPoints);
-  return [minX, minY, Math.max(1, maxX - minX), Math.max(1, maxY - minY)].map((value) => Math.round(value * 100) / 100);
-}
-
-function visibleBoundsList(piece?: LevelPiece): number[][] {
-  if (!piece) return [];
-  if (piece.visible_bounds_list?.length) return piece.visible_bounds_list;
-  return piece.visible_bounds ? [piece.visible_bounds] : [];
-}
-
-function translateCut(cut: CutLine, center: Point): CutLine {
-  const currentCenter = polygonCenter(cut.points);
-  const dx = center.x - currentCenter.x;
-  const dy = center.y - currentCenter.y;
-  return {
-    ...cut,
-    points: cut.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
-  };
-}
-
-function edgePointKey(point: Point, precision = 2): string {
-  return `${Math.round(point.x / precision)},${Math.round(point.y / precision)}`;
-}
-
-function edgeKey(a: Point, b: Point, precision = 2): string {
-  return `${edgePointKey(a, precision)}>${edgePointKey(b, precision)}`;
-}
-
-function undirectedEdgeKey(a: Point, b: Point, precision = 2): string {
-  const ak = edgePointKey(a, precision);
-  const bk = edgePointKey(b, precision);
-  return ak < bk ? `${ak}|${bk}` : `${bk}|${ak}`;
-}
-
-function polygonEdges(points: Point[]) {
-  return points.map((from, index) => ({ from, to: points[(index + 1) % points.length] }));
-}
-
-function polylinePath(points: Point[], closed = false): string {
-  if (!points.length) return "";
-  const commands = [`M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`];
-  for (let i = 1; i < points.length; i += 1) {
-    commands.push(`L ${points[i].x.toFixed(2)} ${points[i].y.toFixed(2)}`);
-  }
-  if (closed) commands.push("Z");
-  return commands.join(" ");
-}
-
-function pointToSegmentDistance(point: Point, a: Point, b: Point): number {
-  const vx = b.x - a.x;
-  const vy = b.y - a.y;
-  const wx = point.x - a.x;
-  const wy = point.y - a.y;
-  const len2 = vx * vx + vy * vy;
-  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2));
-  return Math.hypot(point.x - (a.x + vx * t), point.y - (a.y + vy * t));
-}
-
-function nearestBoundaryDistance(point: Point, points: Point[]): number {
-  return polygonEdges(points).reduce((best, edge) => Math.min(best, pointToSegmentDistance(point, edge.from, edge.to)), Infinity);
-}
-
-function sampleSegment(a: Point, b: Point, spacing: number): Point[] {
-  const length = Math.hypot(b.x - a.x, b.y - a.y);
-  const count = Math.max(2, Math.ceil(length / spacing));
-  return Array.from({ length: count + 1 }, (_, index) => ({
-    x: a.x + ((b.x - a.x) * index) / count,
-    y: a.y + ((b.y - a.y) * index) / count,
-  }));
-}
-
-function sharedBoundaryLength(a: Point[], b: Point[], tolerance = 4): number {
-  let length = 0;
-  for (const edge of polygonEdges(a)) {
-    const edgeLength = Math.hypot(edge.to.x - edge.from.x, edge.to.y - edge.from.y);
-    if (edgeLength < 1) continue;
-    const samples = sampleSegment(edge.from, edge.to, 8);
-    let closeSamples = 0;
-    for (const point of samples) {
-      if (nearestBoundaryDistance(point, b) <= tolerance) closeSamples += 1;
-    }
-    if (closeSamples >= Math.max(2, samples.length * 0.45)) {
-      length += edgeLength * (closeSamples / samples.length);
-    }
-  }
-  return length;
-}
-
-function areNeighborPieces(a: Point[], b: Point[]): boolean {
-  return Math.max(sharedBoundaryLength(a, b), sharedBoundaryLength(b, a)) >= 16;
-}
-
-function edgeSharedWithPolygon(edge: { from: Point; to: Point }, polygon: Point[], tolerance = mergePolygonTolerance): boolean {
-  const edgeLength = Math.hypot(edge.to.x - edge.from.x, edge.to.y - edge.from.y);
-  if (edgeLength < 1) return false;
-  const samples = sampleSegment(edge.from, edge.to, 6);
-  let closeSamples = 0;
-  for (const point of samples) {
-    if (nearestBoundaryDistance(point, polygon) <= tolerance) closeSamples += 1;
-  }
-  return closeSamples >= Math.max(2, samples.length * 0.45);
-}
-
-function mergePolygonsByExactEdges(a: Point[], b: Point[]): Point[] | null {
-  const allEdges = [...polygonEdges(a), ...polygonEdges(b)];
-  const edgeCounts = new Map<string, number>();
-  for (const edge of allEdges) {
-    const key = undirectedEdgeKey(edge.from, edge.to);
-    edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
-  }
-  const sharedEdges = [...edgeCounts.values()].filter((count) => count > 1).length;
-  if (sharedEdges === 0) return null;
-
-  const boundary = allEdges.filter((edge) => edgeCounts.get(undirectedEdgeKey(edge.from, edge.to)) === 1);
-  if (boundary.length < 3) return null;
-  const unused = new Map(boundary.map((edge) => [edgeKey(edge.from, edge.to), edge]));
-  const first = boundary[0];
-  const merged: Point[] = [first.from, first.to];
-  unused.delete(edgeKey(first.from, first.to));
-  let current = first.to;
-  let guard = 0;
-
-  while (unused.size && guard < boundary.length + 4) {
-    guard += 1;
-    const currentKey = edgePointKey(current);
-    let foundKey = "";
-    let found = null as null | { from: Point; to: Point };
-    for (const [key, edge] of unused) {
-      if (edgePointKey(edge.from) === currentKey) {
-        foundKey = key;
-        found = edge;
-        break;
-      }
-      if (edgePointKey(edge.to) === currentKey) {
-        foundKey = key;
-        found = { from: edge.to, to: edge.from };
-        break;
-      }
-    }
-    if (!found) break;
-    current = found.to;
-    if (edgePointKey(current) === edgePointKey(merged[0])) {
-      unused.delete(foundKey);
-      break;
-    }
-    merged.push(current);
-    unused.delete(foundKey);
-  }
-
-  return merged.length >= 3 ? merged : null;
-}
-
-function drawPolygonToMask(ctx: CanvasRenderingContext2D, points: Point[], bounds: { x: number; y: number }, padding: number, scale: number) {
-  if (points.length < 3) return;
-  ctx.beginPath();
-  ctx.moveTo((points[0].x - bounds.x + padding) * scale, (points[0].y - bounds.y + padding) * scale);
-  for (let i = 1; i < points.length; i += 1) {
-    ctx.lineTo((points[i].x - bounds.x + padding) * scale, (points[i].y - bounds.y + padding) * scale);
-  }
-  ctx.closePath();
-}
-
-function strokeSharedEdgesToMask(ctx: CanvasRenderingContext2D, edges: Array<{ from: Point; to: Point }>, bounds: { x: number; y: number }, padding: number, scale: number) {
-  for (const edge of edges) {
-    ctx.beginPath();
-    ctx.moveTo((edge.from.x - bounds.x + padding) * scale, (edge.from.y - bounds.y + padding) * scale);
-    ctx.lineTo((edge.to.x - bounds.x + padding) * scale, (edge.to.y - bounds.y + padding) * scale);
-    ctx.stroke();
-  }
-}
-
-function mergePolygonsByMask(a: Point[], b: Point[]): Point[] | null {
-  if (!areNeighborPieces(a, b)) return null;
-  const bounds = pointBounds([...a, ...b]);
-  const padding = mergePolygonTolerance * 4 + 8;
-  const rawWidth = Math.max(1, bounds.width + padding * 2);
-  const rawHeight = Math.max(1, bounds.height + padding * 2);
-  const scale = Math.min(1, 1400 / Math.max(rawWidth, rawHeight));
-  const width = Math.max(4, Math.ceil(rawWidth * scale));
-  const height = Math.max(4, Math.ceil(rawHeight * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-
-  ctx.fillStyle = "#fff";
-  drawPolygonToMask(ctx, a, bounds, padding, scale);
-  ctx.fill();
-  drawPolygonToMask(ctx, b, bounds, padding, scale);
-  ctx.fill();
-
-  const sharedEdges = [
-    ...polygonEdges(a).filter((edge) => edgeSharedWithPolygon(edge, b)),
-    ...polygonEdges(b).filter((edge) => edgeSharedWithPolygon(edge, a)),
-  ];
-  ctx.strokeStyle = "#fff";
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(2, mergePolygonTolerance * 2.5 * scale);
-  strokeSharedEdgesToMask(ctx, sharedEdges, bounds, padding, scale);
-
-  const data = ctx.getImageData(0, 0, width, height).data;
-  const mask = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i += 1) mask[i] = data[i * 4 + 3] > 0 ? 1 : 0;
-  const loops = traceBoundaryLoops(mask, width, height);
-  const largestLoop = loops.sort((left, right) => Math.abs(polygonArea(right)) - Math.abs(polygonArea(left)))[0] || [];
-  if (largestLoop.length < 4) return null;
-  const raw = largestLoop.map((point) => ({
-    x: point.x / scale + bounds.x - padding,
-    y: point.y / scale + bounds.y - padding,
-  }));
-  const simplified = simplifyClosedPath(raw, Math.max(1.2, 2.2 / Math.max(scale, 1e-6)));
-  return simplified.length >= 3 ? simplified : null;
-}
-
-function mergePolygons(a: Point[], b: Point[]): Point[] | null {
-  return mergePolygonsByExactEdges(a, b) || mergePolygonsByMask(a, b);
-}
-
-function cellsToLevelPieces(cells: PieceCell[]): LevelPiece[] {
-  const validCells = cells.filter((piece) => piece.points.length >= 3);
-  return validCells.map((piece) => {
-    const neighbors = validCells
-      .filter((candidate) => candidate.id !== piece.id && areNeighborPieces(piece.points, candidate.points))
-      .map((candidate) => candidate.id);
-    return {
-      id: piece.id,
-      cell: [0, 0],
-      home: tupleFromPoint(polygonCenter(piece.points)),
-      points: piece.points.map(tupleFromPoint),
-      neighbors,
-      cut_lines: [],
-      visible_bounds: tupleBounds(piece.points),
-      visible_bounds_list: [tupleBounds(piece.points)],
-    };
-  });
 }
 
 function polygonViewLabel(view: PolygonViewMode): string {
@@ -563,18 +178,28 @@ function previewBufferToDataUrl(width: number, height: number, previewBuffer: Ar
 
 function App({ onUnsavedChange }: Props) {
   const [catalog, setCatalog] = useState<LevelCatalog>(() => makeDefaultCatalog());
-  const [locale, setLocale] = useState("zh-Hans");
+  const locale = editorLocale;
   const [currentTarget, setCurrentTarget] = useState<LevelTarget>({ topicId: "cat", levelId: "cat_moon_01" });
   const [pendingTarget, setPendingTarget] = useState<LevelTarget | null>(null);
   const [level, setLevel] = useState<LevelConfig>(() => makeEmptyLevel());
   const [pendingImages, setPendingImages] = useState<PendingImageItem[]>([]);
+  const [backgroundImages, setBackgroundImages] = useState<PendingImageItem[]>([]);
   const [selectedImages, setSelectedImages] = useState<Record<EditMode, PendingImageItem | null>>({ polygon: null, knob: null });
   const [saveDialog, setSaveDialog] = useState<SaveModeDialogState>({
     open: false,
+    targetMode: "existing",
     topicId: "cat",
     levelId: "cat_moon_01",
+    newTopic: false,
     title: "月亮小睡",
     description: "",
+    newTopicName: "新主题",
+    newTopicId: "new_topic",
+    newLevelTitle: "新关卡",
+    newLevelDescription: "",
+    newBackgroundType: "color",
+    newBackgroundColor: "#F6EBD4",
+    newBackgroundPath: "",
   });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageUrl, setImageUrl] = useState(DEFAULT_BROWSER_IMAGE);
@@ -594,22 +219,14 @@ function App({ onUnsavedChange }: Props) {
   const [polygonView, setPolygonView] = useState<PolygonViewMode>("result");
   const [drawingCut, setDrawingCut] = useState<DrawingCutState | null>(null);
   const [drawingHoverPoint, setDrawingHoverPoint] = useState<Point | null>(null);
-  const [jsonText, setJsonText] = useState("");
-  const [toast, setToast] = useState<ToastNotice | null>(null);
   const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
+  const [knobGridDraft, setKnobGridDraft] = useState({ cols: "8", rows: "8", piece_size: "190" });
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
-  const [pendingImage, setPendingImage] = useState<PendingImage>(null);
-  const columns = useResizableColumns({ initialLeft: 360, initialRight: 380, minLeft: 300, maxLeft: 540, minRight: 320, maxRight: 560, minCenter: 520 });
-  const [processingSteps, setProcessingSteps] = useState<ProcessStep[]>([
-    createProcessStep("trim_transparent"),
-    createProcessStep("convert_jpg"),
-  ]);
-  const [processing, setProcessing] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const cutPathCacheRef = useRef<WeakMap<CutLine, string>>(new WeakMap());
   const piecePathCacheRef = useRef<WeakMap<PieceCell, string>>(new WeakMap());
@@ -627,12 +244,6 @@ function App({ onUnsavedChange }: Props) {
   }, []);
 
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timeout = window.setTimeout(() => setToast((current) => (current?.id === toast.id ? null : current)), 3000);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
 
   useEffect(() => {
     try {
@@ -667,7 +278,7 @@ function App({ onUnsavedChange }: Props) {
   }, []);
 
   function showToast(message: string) {
-    setToast({ id: Date.now(), message });
+    toast(message);
   }
 
   const currentTopic = useMemo(() => catalog.topics.find((topic) => topic.id === currentTarget.topicId), [catalog, currentTarget.topicId]);
@@ -685,7 +296,7 @@ function App({ onUnsavedChange }: Props) {
   );
   const saveTopic = useMemo(() => catalog.topics.find((topic) => topic.id === saveDialog.topicId) || catalog.topics[0], [catalog.topics, saveDialog.topicId]);
   const saveLevelOptions = useMemo<SelectOption[]>(
-    () => (saveTopic?.levels || []).map((item) => ({ value: item.id, label: localized(item.title_i18n, locale, item.title), detail: item.id })),
+    () => (saveTopic?.levels || []).map((item) => ({ value: item.id, label: localized(item.title_i18n, locale, item.title) })),
     [locale, saveTopic],
   );
   const currentTopicName = localized(currentTopic?.name_i18n, locale, currentTopic?.name || currentTarget.topicId);
@@ -693,16 +304,24 @@ function App({ onUnsavedChange }: Props) {
   const imageOptions = useMemo<SelectOption[]>(
     () =>
       pendingImages
-        .filter((item) => item.kind === "image" && !item.processed_path)
+        .filter((item) => !item.processed_path)
         .map((item) => ({
           value: item.id,
           label: displayPendingImageName(item),
-          detail: item.folder || (item.processed ? "已处理" : "未处理"),
         })),
     [pendingImages],
   );
+  const backgroundImageOptions = useMemo<SelectOption[]>(
+    () =>
+      backgroundImages.map((item) => ({
+        value: item.path,
+        label: displayPendingImageName(item),
+      })),
+    [backgroundImages],
+  );
+  const canUseBackgroundImage = backgroundImageOptions.length > 0;
   const activePendingImage = selectedImages[activeMode];
-  const otherMode: EditMode = activeMode === "polygon" ? "knob" : "polygon";
+  const canvasBackgroundStyle = { backgroundColor: level.background.color };
 
   useEffect(() => {
     if (!activePendingImage) {
@@ -711,6 +330,14 @@ function App({ onUnsavedChange }: Props) {
     }
     loadEditorImage(activePendingImage.url, activePendingImage.name, activePendingImage.path, activeMode);
   }, [activeMode, activePendingImage?.id, activePendingImage?.url]);
+
+  useEffect(() => {
+    setKnobGridDraft({
+      cols: String(level.grid.cols),
+      rows: String(level.grid.rows),
+      piece_size: String(level.grid.piece_size),
+    });
+  }, [level.grid.cols, level.grid.rows, level.grid.piece_size]);
 
   async function loadCatalog() {
     try {
@@ -723,7 +350,6 @@ function App({ onUnsavedChange }: Props) {
         topics: normalizeOrder([...(nextCatalog.topics || [])].map((topic) => ({ ...topic, levels: normalizeOrder([...(topic.levels || [])]) }))),
       };
       setCatalog(normalized);
-      setLocale(normalized.default_locale || normalized.locales[0] || "zh-Hans");
       const params = new URLSearchParams(window.location.search);
       const firstTopic = normalized.topics[0];
       const firstLevel = firstTopic?.levels[0];
@@ -750,8 +376,16 @@ function App({ onUnsavedChange }: Props) {
       const response = await fetch("/api/pending-images");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[] };
-      const items = (data.items || []).filter((item) => item.kind === "image" && !item.processed_path);
+      const availableItems = (data.items || []).filter((item) => !item.processed_path);
+      const items = availableItems.filter((item) => item.kind !== "tablecloth");
+      const tableclothItems = availableItems.filter((item) => item.kind === "tablecloth");
       setPendingImages(items);
+      setBackgroundImages(tableclothItems);
+      setSaveDialog((current) => ({
+        ...current,
+        newBackgroundPath: current.newBackgroundPath || tableclothItems[0]?.path || "",
+        newBackgroundType: current.newBackgroundType === "image" && !tableclothItems.length ? "color" : current.newBackgroundType,
+      }));
       const preferred = items.find((item) => item.id === preferredId) || items.find((item) => item.processed) || items[0] || null;
       if (preferred) {
         setSelectedImages({ polygon: preferred, knob: preferred });
@@ -807,15 +441,6 @@ function App({ onUnsavedChange }: Props) {
     applyPendingImageToMode(mode, item);
   }
 
-  function useActiveImageForOtherMode() {
-    if (!activePendingImage) {
-      showToast("请先为当前模式选择图片。");
-      return;
-    }
-    selectImageForMode(otherMode, activePendingImage.id);
-    showToast(`${otherMode === "polygon" ? "多边形" : "凹凸"}模式已使用当前图片。`);
-  }
-
   function applyLoadedLevel(data: LevelConfig, topicId: string, levelId: string) {
     const nextLevel = normalizeLevelConfig(data, topicId, levelId);
     setCurrentTarget({ topicId, levelId });
@@ -830,7 +455,6 @@ function App({ onUnsavedChange }: Props) {
     setKnobPieces(data.modes?.knob?.pieces || []);
     setSelectedId("");
     setSelectedPieceIds([]);
-    setJsonText(JSON.stringify(nextLevel, null, 2));
     setDirtyModes({ polygon: false, knob: false });
     setCompletedModes({
       polygon: Boolean(data.modes?.polygon?.pieces?.length),
@@ -889,7 +513,6 @@ function App({ onUnsavedChange }: Props) {
     if (!analysis.outline.length) return [];
     return samplePath([...analysis.outline, analysis.outline[0]], Math.min(300, Math.max(100, analysis.outline.length)));
   }, [analysis.outline]);
-  const cutGaps = useMemo(() => findCutGaps(analysisCuts, snapPoints, 1.5, snapThreshold), [analysisCuts, snapPoints]);
   const generatedKnobPieces = useMemo(
     () => (activeMode === "knob" ? generateKnobPieces(image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size) : []),
     [activeMode, image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size],
@@ -1235,10 +858,6 @@ function App({ onUnsavedChange }: Props) {
     return true;
   }
 
-  function markExported() {
-    setDirtyModes({ polygon: false, knob: false });
-  }
-
   function markCurrentModeComplete() {
     if (!modeReady[activeMode]) {
       showToast(activeMode === "polygon" ? "多边形模式还没有生成可用碎片。" : "凹凸模式还没有可用碎片。");
@@ -1386,102 +1005,6 @@ function App({ onUnsavedChange }: Props) {
     setCompletedModes((current) => ({ ...current, [target]: false }));
   }
 
-  async function onUploadImage(file?: File, target: ImageTarget = activeMode) {
-    if (!file) return;
-    recordImageEdit(target);
-    const form = new FormData();
-    form.append("source", file);
-    try {
-      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/source/${target}`, { method: "POST", body: form });
-      const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
-      if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
-      loadEditorImage(
-        result.url || URL.createObjectURL(file),
-        file.name,
-        result.godotPath || modeImagePath(level, target) || DEFAULT_IMAGE_PATH,
-        target,
-      );
-    } catch (error) {
-      showToast(error instanceof Error ? `上传 source 失败：${error.message}` : "上传 source 失败");
-      loadEditorImage(
-        URL.createObjectURL(file),
-        file.name,
-        modeImagePath(level, target) || DEFAULT_IMAGE_PATH,
-        target,
-      );
-    }
-  }
-
-  async function onUploadPendingImage(file?: File) {
-    if (!file) return;
-    const form = new FormData();
-    form.append("source", file);
-    try {
-      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/pending-image`, { method: "POST", body: form });
-      const result = (await response.json()) as { ok?: boolean; pendingId?: string; name?: string; url?: string; error?: string };
-      if (!response.ok || !result.ok || !result.pendingId || !result.url) throw new Error(result.error || `HTTP ${response.status}`);
-      setPendingImage({ pendingId: result.pendingId, name: result.name || file.name, url: result.url });
-      showToast("待处理图片已上传。");
-    } catch (error) {
-      showToast(error instanceof Error ? `上传待处理图片失败：${error.message}` : "上传待处理图片失败");
-    }
-  }
-
-  function addProcessingStep(type: ProcessStepType) {
-    setProcessingSteps((current) => [...current, createProcessStep(type)]);
-  }
-
-  function updateProcessingStep(id: string, patch: Partial<ProcessStep>) {
-    setProcessingSteps((current) => current.map((step) => (step.id === id ? { ...step, ...patch } : step)));
-  }
-
-  function removeProcessingStep(id: string) {
-    setProcessingSteps((current) => current.filter((step) => step.id !== id));
-  }
-
-  function onProcessStepDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setProcessingSteps((current) => {
-      const oldIndex = current.findIndex((step) => step.id === active.id);
-      const newIndex = current.findIndex((step) => step.id === over.id);
-      if (oldIndex < 0 || newIndex < 0) return current;
-      return arrayMove(current, oldIndex, newIndex);
-    });
-  }
-
-  async function applyProcessingPipeline(target: ImageTarget) {
-    if (!pendingImage) {
-      showToast("请先上传待处理图片。");
-      return;
-    }
-    if (!processingSteps.length) {
-      showToast("请先添加至少一个处理步骤。");
-      return;
-    }
-    recordImageEdit(target);
-    setProcessing(true);
-    try {
-      const response = await fetch(`/api/levels/${currentTarget.topicId}/${currentTarget.levelId}/process-image`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          pendingId: pendingImage.pendingId,
-          target,
-          steps: processingSteps.map(({ id: _id, ...step }) => step),
-        }),
-      });
-      const result = (await response.json()) as { ok?: boolean; godotPath?: string; url?: string; error?: string };
-      if (!response.ok || !result.ok || !result.godotPath || !result.url) throw new Error(result.error || `HTTP ${response.status}`);
-      loadEditorImage(result.url, imageNameFromPath(result.godotPath, `${target}_source.png`), result.godotPath, target);
-      showToast("图片处理完成。");
-    } catch (error) {
-      showToast(error instanceof Error ? `图片处理失败：${error.message}` : "图片处理失败");
-    } finally {
-      setProcessing(false);
-    }
-  }
-
   function updateLevel<T extends keyof LevelConfig>(key: T, value: LevelConfig[T]) {
     recordEdit(activeMode);
     setLevel((current) => ({ ...current, [key]: value }));
@@ -1491,12 +1014,12 @@ function App({ onUnsavedChange }: Props) {
     recordEdit(activeMode);
     setLevel((current) => ({
       ...current,
-      title: locale === catalog.default_locale ? value : current.title,
+      title: value,
       title_i18n: { ...(current.title_i18n || {}), [locale]: value },
     }));
     setCatalog((current) => updateCatalogLevel(current, currentTarget, (levelItem) => ({
       ...levelItem,
-      title: locale === current.default_locale ? value : levelItem.title,
+      title: value,
       title_i18n: { ...(levelItem.title_i18n || {}), [locale]: value },
     })));
   }
@@ -1505,7 +1028,7 @@ function App({ onUnsavedChange }: Props) {
     recordEdit(activeMode);
     setLevel((current) => ({
       ...current,
-      description: locale === catalog.default_locale ? value : current.description,
+      description: value,
       description_i18n: { ...(current.description_i18n || {}), [locale]: value },
     }));
   }
@@ -1550,30 +1073,32 @@ function App({ onUnsavedChange }: Props) {
     });
   }
 
-  function updateBackground<K extends keyof LevelConfig["background"]>(key: K, value: LevelConfig["background"][K]) {
-    recordEdit(activeMode);
-    setLevel((current) => ({ ...current, background: { ...current.background, [key]: value } }));
-  }
-
   function updateGrid<K extends keyof LevelConfig["grid"]>(key: K, value: number) {
     recordEdit("knob");
-    const nextGrid = { ...level.grid, [key]: value };
+    const nextValue = key === "piece_size" ? Math.max(80, Math.min(320, Math.round(value))) : Math.max(1, Math.min(12, Math.round(value)));
+    const nextGrid = { ...level.grid, [key]: nextValue };
     setLevel((current) => ({
       ...current,
       grid: {
         ...current.grid,
-        [key]: value,
+        [key]: nextValue,
       },
       modes: {
         ...current.modes,
         knob: {
           ...current.modes.knob,
-          [key]: value,
+          [key]: nextValue,
         },
       },
     }));
     setKnobPieces(generateKnobPieces(image, nextGrid.cols, nextGrid.rows, level.modes.knob.knob_size));
     setSelectedPieceIds([]);
+  }
+
+  function commitKnobGrid<K extends keyof LevelConfig["grid"]>(key: K) {
+    const fallback = level.grid[key];
+    const parsed = Number(knobGridDraft[key]);
+    updateGrid(key, Number.isFinite(parsed) ? parsed : fallback);
   }
 
   function updateKnobSize(value: number) {
@@ -1830,15 +1355,15 @@ function App({ onUnsavedChange }: Props) {
       id: currentTarget.levelId,
       topic_id: currentTarget.topicId,
       locale,
+      title_i18n: reservedI18n(normalizedLevel.title_i18n, normalizedLevel.title),
+      description_i18n: reservedI18n(normalizedLevel.description_i18n, normalizedLevel.description),
       modes: {
         polygon: {
           ...level.modes.polygon,
-          source: "precomputed",
           pieces: polygonLevelPieces,
         },
         knob: {
           ...level.modes.knob,
-          source: "precomputed",
           rows: Math.max(1, Math.round(level.grid.rows)),
           cols: Math.max(1, Math.round(level.grid.cols)),
           piece_size: level.grid.piece_size,
@@ -1868,20 +1393,7 @@ function App({ onUnsavedChange }: Props) {
       },
     };
     const text = JSON.stringify(data, null, 2);
-    setJsonText(text);
     return text;
-  }
-
-  function downloadJson() {
-    const text = jsonText || buildJson();
-    const blob = new Blob([text], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${level.id || "level"}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    markExported();
-    showToast("JSON 已导出。");
   }
 
   function openSaveDialog() {
@@ -1891,13 +1403,17 @@ function App({ onUnsavedChange }: Props) {
     }
     const topic = catalog.topics.find((item) => item.id === saveDialog.topicId) || catalog.topics[0];
     const levelItem = topic?.levels.find((item) => item.id === saveDialog.levelId) || topic?.levels[0];
+    const nextTopicId = idFromEnglishName(saveDialog.newTopicId, "topic", catalog.topics.map((item) => item.id));
     setSaveDialog((current) => ({
       ...current,
       open: true,
+      targetMode: current.targetMode || "existing",
       topicId: topic?.id || current.topicId,
       levelId: levelItem?.id || current.levelId,
-      title: current.title || level.title || levelItem?.title || "",
-      description: current.description || level.description || "",
+      title: localized(levelItem?.title_i18n, locale, levelItem?.title || level.title),
+      description: level.description,
+      newTopicId: current.newTopicId || nextTopicId,
+      newLevelTitle: current.newLevelTitle || "新关卡",
     }));
   }
 
@@ -1906,31 +1422,66 @@ function App({ onUnsavedChange }: Props) {
       showToast("请先为当前模式选择图片并生成可用碎片。");
       return false;
     }
-    const text = buildJson();
+    const existingTopic = catalog.topics.find((item) => item.id === saveDialog.topicId) || catalog.topics[0];
+    const existingLevel = existingTopic?.levels.find((item) => item.id === saveDialog.levelId);
+    const targetTopicId =
+      saveDialog.targetMode === "new" && saveDialog.newTopic
+        ? idFromEnglishName(saveDialog.newTopicId, "topic", catalog.topics.map((item) => item.id))
+        : saveDialog.topicId;
+    const targetLevelId =
+      saveDialog.targetMode === "new"
+        ? nextSequentialId("level", (saveDialog.newTopic ? [] : existingTopic?.levels || []).map((item) => item.id))
+        : saveDialog.levelId;
+    const targetTitle = saveDialog.targetMode === "new" ? saveDialog.newLevelTitle.trim() || "新关卡" : localized(existingLevel?.title_i18n, locale, existingLevel?.title || level.title);
+    const targetDescription = saveDialog.targetMode === "new" ? saveDialog.newLevelDescription.trim() : level.description;
+    const nextLevel = JSON.parse(buildJson()) as LevelConfig;
+    nextLevel.id = targetLevelId;
+    nextLevel.topic_id = targetTopicId;
+    nextLevel.title = targetTitle;
+    nextLevel.description = targetDescription;
+    nextLevel.title_i18n = { ...(nextLevel.title_i18n || {}), [locale]: targetTitle };
+    nextLevel.description_i18n = { ...(nextLevel.description_i18n || {}), [locale]: targetDescription };
+    if (saveDialog.targetMode === "new") {
+      nextLevel.background = {
+        type: saveDialog.newBackgroundType === "image" && canUseBackgroundImage ? "image" : "color",
+        color: saveDialog.newBackgroundColor,
+        path: saveDialog.newBackgroundType === "image" && canUseBackgroundImage ? saveDialog.newBackgroundPath : "",
+      };
+    }
     showToast("保存中...");
     try {
       const response = await fetch("/api/editor/save-mode", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          topicId: saveDialog.topicId,
-          levelId: saveDialog.levelId,
+          topicId: targetTopicId,
+          levelId: targetLevelId,
           mode: activeMode,
           imageId: activePendingImage.id,
-          title: saveDialog.title || level.title || saveDialog.levelId,
-          description: saveDialog.description || level.description || "",
-          level: JSON.parse(text),
+          title: targetTitle,
+          description: targetDescription,
+          topicName: saveDialog.targetMode === "new" && saveDialog.newTopic ? saveDialog.newTopicName.trim() : undefined,
+          level: nextLevel,
         }),
       });
-      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string; catalog?: LevelCatalog; topicId?: string; levelId?: string };
+      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string; catalog?: LevelCatalog; topicId?: string; levelId?: string; sharedModes?: EditMode[] };
       if (!response.ok || !result.ok) {
         throw new Error(result.error || `HTTP ${response.status}`);
       }
       showToast(`已保存到 ${result.path}`);
       if (result.catalog) setCatalog(result.catalog);
       setCurrentTarget({ topicId: result.topicId || saveDialog.topicId, levelId: result.levelId || saveDialog.levelId });
-      setDirtyModes((current) => ({ ...current, [activeMode]: false }));
-      setCompletedModes((current) => ({ ...current, [activeMode]: true }));
+      const savedModes = new Set<EditMode>(result.sharedModes?.length ? result.sharedModes : [activeMode]);
+      setDirtyModes((current) => ({
+        ...current,
+        polygon: savedModes.has("polygon") ? false : current.polygon,
+        knob: savedModes.has("knob") ? false : current.knob,
+      }));
+      setCompletedModes((current) => ({
+        ...current,
+        polygon: savedModes.has("polygon") ? modeReady.polygon : current.polygon,
+        knob: savedModes.has("knob") ? modeReady.knob : current.knob,
+      }));
       setSaveDialog((current) => ({ ...current, open: false }));
       return true;
     } catch (error) {
@@ -1939,119 +1490,37 @@ function App({ onUnsavedChange }: Props) {
     }
   }
 
-  function importJson(file?: File) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(String(reader.result)) as LevelConfig;
-        const nextLevel = normalizeLevelConfig(data, currentTarget.topicId, currentTarget.levelId);
-        setLevel(nextLevel);
-        const importedCuts: CutLine[] = [
-          ...(data.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) })),
-          ...(data.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) })),
-        ];
-        setCuts(importedCuts);
-        setAnalysisCuts(importedCuts);
-        setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
-        setKnobPieces(data.modes?.knob?.pieces || []);
-        setSelectedId(importedCuts[0]?.id || "");
-        setSelectedPieceIds([]);
-        setJsonText(JSON.stringify(nextLevel, null, 2));
-        setDirtyModes({ polygon: false, knob: false });
-        setCompletedModes({
-          polygon: Boolean(data.modes?.polygon?.pieces?.length),
-          knob: Boolean(data.modes?.knob?.pieces?.length),
-        });
-        setUndoStack([]);
-        setRedoStack([]);
-        showToast("JSON 已导入。");
-      } catch (error) {
-        showToast(error instanceof Error ? `导入 JSON 失败：${error.message}` : "导入 JSON 失败");
-      }
-    };
-    reader.onerror = () => showToast("读取 JSON 失败");
-    reader.readAsText(file);
-  }
+  const activeSaveStatus = dirtyModes[activeMode] ? "未保存" : completedModes[activeMode] ? "已保存" : "";
 
   return (
-    <div className="grid h-full min-h-0 overflow-hidden bg-linen text-ink" style={{ gridTemplateColumns: columns.gridTemplateColumns }}>
-      <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
-        <div className="flex items-start gap-3 border-b border-stone-300 pb-4">
-          <Hexagon className="mt-1 text-clay" size={22} />
-          <div>
-            <h1 className="text-xl font-semibold">关卡编辑器</h1>
-            <p className="text-sm text-muted">TypeScript · Tailwind · 非网格切割</p>
-          </div>
-        </div>
-
-        <section className="mt-5 grid gap-3">
-          <PanelTitle>当前编辑</PanelTitle>
-          <div className="rounded-md border border-stone-300 bg-white/70 p-3 text-sm text-muted">
-            editor 只编辑当前模式和当前图片。保存时再选择主题、关卡和写入模式。
-          </div>
-          <Field label={activeMode === "polygon" ? "多边形图片" : "凹凸图片"}>
-            <SelectBox value={activePendingImage?.id || ""} options={imageOptions} onValueChange={(id) => selectImageForMode(activeMode, id)} placeholder="选择已处理图片" />
-          </Field>
-          <button className="btn" disabled={!activePendingImage} onClick={useActiveImageForOtherMode}>
-            另一模式也使用这张图
-          </button>
-          <button className="btn" onClick={() => void loadPendingImages(activePendingImage?.id || "")}>
-            刷新图片池
-          </button>
-        </section>
-
-        <section className="mt-5 grid gap-3">
-          <PanelTitle>文本草稿</PanelTitle>
-          <div className="grid gap-2">
-            <SelectBox value={locale} options={catalog.locales.map((item) => ({ value: item, label: item }))} onValueChange={setLocale} placeholder="语言" />
-          </div>
-          <Field label="标题">
-            <Input value={localized(level.title_i18n, locale, level.title)} onChange={(event) => updateLocalizedTitle(event.target.value)} />
-          </Field>
-          <Field label="介绍">
-            <Textarea className="min-h-24" value={localized(level.description_i18n, locale, level.description)} onChange={(event) => updateLocalizedDescription(event.target.value)} />
-          </Field>
-        </section>
-
-        <section className="mt-6 grid gap-3">
-          <PanelTitle>背景</PanelTitle>
-          <div className="grid grid-cols-[1fr_56px] gap-2">
-            <SelectBox
-              value={level.background.type}
-              options={[
-                { value: "color", label: "纯色" },
-                { value: "image", label: "图片" },
-              ]}
-              onValueChange={(value) => updateBackground("type", value as "color" | "image")}
-              placeholder="背景"
-            />
-            <Input className="h-10 p-1" type="color" value={level.background.color} onChange={(event) => updateBackground("color", event.target.value)} />
-          </div>
-        </section>
-
-      </aside>
-
-      <div className="cursor-col-resize bg-stone-300/70 transition hover:bg-clay" onPointerDown={columns.startLeftResize} />
-
+    <div className="grid h-full min-h-0 grid-cols-[minmax(520px,1fr)_380px] overflow-hidden bg-linen text-ink">
       <main className="grid min-h-0 min-w-0 grid-rows-[auto_1fr] overflow-hidden">
-        <div className="flex min-h-14 items-center justify-between gap-3 overflow-auto border-b border-stone-300 bg-[#f7efe2] px-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="inline-flex shrink-0 gap-1 rounded-md border border-stone-300 bg-white p-1">
-              <button className={activeMode === "polygon" ? "iconBtnActive" : "iconBtn"} onClick={() => requestModeChange("polygon")} title="多边形">
-                <Hexagon size={18} />
-                {(completedModes.polygon || dirtyModes.polygon) && <span className={completedModes.polygon ? "statusDot done" : "statusDot dirty"} />}
-              </button>
-              <button className={activeMode === "knob" ? "iconBtnActive" : "iconBtn"} onClick={() => requestModeChange("knob")} title="凹凸">
-                <Puzzle size={18} />
-                {(completedModes.knob || dirtyModes.knob) && <span className={completedModes.knob ? "statusDot done" : "statusDot dirty"} />}
-              </button>
-            </div>
-            <div className="min-w-0 truncate text-sm text-ink">
-              {activePendingImage ? displayPendingImageName(activePendingImage) : "请选择图片"} <span className="text-muted">/</span> {activeMode === "polygon" ? "多边形" : "凹凸"}
-            </div>
+        <div className="grid min-h-14 grid-cols-[1fr_minmax(260px,420px)_1fr] items-center gap-3 overflow-auto border-b border-stone-300 bg-[#f7efe2] px-3">
+          <div className="flex min-w-0 items-center gap-3 justify-self-start">
+            <ToggleGroup type="single" value={activeMode} onValueChange={(value) => {
+              if (value === "polygon" || value === "knob") requestModeChange(value);
+            }}>
+              <WithTooltip label="多边形">
+                <ToggleGroupItem value="polygon" aria-label="多边形" className="relative gap-2 px-3">
+                  <Hexagon size={18} />
+                  <span>多边形</span>
+                  {(completedModes.polygon || dirtyModes.polygon) && <span className={completedModes.polygon ? "statusDot done" : "statusDot dirty"} />}
+                </ToggleGroupItem>
+              </WithTooltip>
+              <WithTooltip label="凹凸">
+                <ToggleGroupItem value="knob" aria-label="凹凸" className="relative gap-2 px-3">
+                  <Puzzle size={18} />
+                  <span>凹凸</span>
+                  {(completedModes.knob || dirtyModes.knob) && <span className={completedModes.knob ? "statusDot done" : "statusDot dirty"} />}
+                </ToggleGroupItem>
+              </WithTooltip>
+            </ToggleGroup>
+            {activeSaveStatus && <span className={dirtyModes[activeMode] ? "text-sm font-medium text-amber-700" : "text-sm font-medium text-emerald-700"}>{activeSaveStatus}</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <SelectBox value={activePendingImage?.id || ""} options={imageOptions} onValueChange={(id) => selectImageForMode(activeMode, id)} placeholder="选择拼图图片" />
+          </div>
+          <div className="flex items-center gap-2 justify-self-end">
             <button className="btnPrimary" onClick={markCurrentModeComplete}>
               完成
             </button>
@@ -2062,7 +1531,7 @@ function App({ onUnsavedChange }: Props) {
           </div>
         </div>
 
-        <div className="relative grid min-h-0 place-items-center overflow-hidden p-5" style={{ background: level.background.color }}>
+        <div className="relative grid min-h-0 place-items-center overflow-hidden p-5" style={canvasBackgroundStyle}>
           <div className="canvasModeBadge">{canvasModeLabel}</div>
           <svg
             ref={svgRef}
@@ -2087,7 +1556,6 @@ function App({ onUnsavedChange }: Props) {
                   className={[
                     "pieceSelectable",
                     selectedPieceIds.includes(piece.id) ? "selectedPiece" : "",
-                    polygonView === "inspect" && actualPreview?.smallPieceIds.includes(piece.id) ? "smallPiece" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -2118,12 +1586,6 @@ function App({ onUnsavedChange }: Props) {
                   }}
                 />
               ))}
-            {activeMode === "polygon" && polygonView === "inspect" && cutGaps.map((gap, index) => (
-              <g key={`${gap.cutId}_${index}`} className="gapWarning">
-                <line x1={gap.point.x} y1={gap.point.y} x2={gap.nearest.x} y2={gap.nearest.y} />
-                <circle cx={gap.point.x} cy={gap.point.y} r={12} />
-              </g>
-            ))}
             {activeMode === "polygon" && polygonView !== "result" && cuts.map((cut) => (
               <g key={cut.id} className={cut.id === selectedId ? "selected" : ""}>
                 <path
@@ -2151,45 +1613,33 @@ function App({ onUnsavedChange }: Props) {
         </div>
       </main>
 
-      <div className="cursor-col-resize bg-stone-300/70 transition hover:bg-clay" onPointerDown={columns.startRightResize} />
-
-      <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-l border-stone-300 bg-paper p-4">
+      <aside className="flex min-h-0 flex-col gap-4 overflow-hidden border-l border-stone-300 bg-paper p-4">
         <section className="grid gap-3">
           <PanelTitle>工具</PanelTitle>
           <div className="grid grid-cols-6 gap-2">
-            <button className="iconBtn" disabled={!undoStack.length} onClick={undo} title="撤销 (Cmd/Ctrl+Z)">
-              <Undo2 size={18} />
-            </button>
-            <button className="iconBtn" disabled={!redoStack.length} onClick={redo} title="重做 (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)">
-              <Redo2 size={18} />
-            </button>
-            <button className={snapEnabled ? "iconBtnActive" : "iconBtn"} onClick={() => setSnapEnabled((value) => !value)} title="吸附">
-              <Magnet size={18} />
-            </button>
-            <button className="iconBtnActive" onClick={mergeSelectedPieces} title="合并">
-              <Plus size={18} />
-            </button>
+            <WithTooltip label="撤销 (Cmd/Ctrl+Z)"><button className="iconBtn" disabled={!undoStack.length} onClick={undo} aria-label="撤销"><Undo2 size={18} /></button></WithTooltip>
+            <WithTooltip label="重做 (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)"><button className="iconBtn" disabled={!redoStack.length} onClick={redo} aria-label="重做"><Redo2 size={18} /></button></WithTooltip>
+            <WithTooltip label="吸附"><button className={snapEnabled ? "iconBtnActive" : "iconBtn"} onClick={() => setSnapEnabled((value) => !value)} aria-label="吸附"><Magnet size={18} /></button></WithTooltip>
+            <WithTooltip label="合并"><button className="iconBtnActive" onClick={mergeSelectedPieces} aria-label="合并"><Plus size={18} /></button></WithTooltip>
             {activeMode === "polygon" && (
-              <button className="iconBtnDanger" disabled={!selectedId} onClick={removeSelected} title="删除选中线条 (Backspace)">
-                <Trash2 size={18} />
-              </button>
+              <WithTooltip label="删除选中线条 (Backspace)"><button className="iconBtnDanger" disabled={!selectedId} onClick={removeSelected} aria-label="删除选中线条"><Trash2 size={18} /></button></WithTooltip>
             )}
             {activeMode === "polygon" && (
-              <button className="iconBtnDanger" disabled={!cuts.length} onClick={clearAllCuts} title="清空线条">
-                <X size={18} />
-              </button>
+              <WithTooltip label="清空线条"><button className="iconBtnDanger" disabled={!cuts.length} onClick={clearAllCuts} aria-label="清空线条"><X size={18} /></button></WithTooltip>
             )}
           </div>
         </section>
 
         {activeMode === "polygon" && (
-          <section className="grid gap-3 border-t border-stone-300 pt-4">
+          <section className="flex min-h-0 flex-1 flex-col gap-3 border-t border-stone-300 pt-4">
             <PanelTitle>多边形</PanelTitle>
             <div className="grid grid-cols-3 gap-2">
               {(["result", "edit", "inspect"] as PolygonViewMode[]).map((view) => (
-                <button key={view} className={polygonView === view ? "iconBtnActive" : "iconBtn"} onClick={() => setPolygonView(view)} title={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
-                  {view === "result" ? <Eye size={18} /> : view === "edit" ? <Pencil size={18} /> : <CircleAlert size={18} />}
-                </button>
+                <WithTooltip key={view} label={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
+                  <button className={polygonView === view ? "iconBtnActive" : "iconBtn"} onClick={() => setPolygonView(view)} aria-label={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
+                    {view === "result" ? <Eye size={18} /> : view === "edit" ? <Pencil size={18} /> : <CircleAlert size={18} />}
+                  </button>
+                </WithTooltip>
               ))}
             </div>
             <Field label={`${targetPieces} 片`}>
@@ -2205,19 +1655,9 @@ function App({ onUnsavedChange }: Props) {
                 {drawingCut ? "结束" : "线"}
               </button>
             </div>
-            <div className="grid max-h-72 grid-cols-3 gap-2 overflow-auto pr-1">
+            <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-2 overflow-auto pr-1">
               {presetTemplates.map((template) => (
                 <ShapeButton key={template} template={template} onClick={() => addPreset(template)} />
-              ))}
-            </div>
-            {(actualPreview?.smallPieceIds.length || 0) > 0 && <p className="rounded-md bg-[#fff3de] px-3 py-2 text-sm text-[#9e3f35]">过小碎片：{actualPreview?.smallPieceIds.length}</p>}
-            {cutGaps.length > 0 && <p className="rounded-md bg-[#fff3de] px-3 py-2 text-sm text-muted">未连接端点：{cutGaps.length}</p>}
-            <div className="grid max-h-56 gap-2 overflow-auto pr-1">
-              {cuts.map((cut) => (
-                <button key={cut.id} className={cut.id === selectedId ? "objectActive" : "object"} onClick={() => setSelectedId(cut.id)}>
-                  <span>{templateName(cut.template)}</span>
-                  <small>{cut.type === "preset_shape" ? "形状" : "线"}</small>
-                </button>
               ))}
             </div>
           </section>
@@ -2232,14 +1672,47 @@ function App({ onUnsavedChange }: Props) {
             </button>
             <div className="grid grid-cols-2 gap-2">
               <Field label="列">
-                <Input type="number" min="1" max="12" step="1" value={level.grid.cols} onChange={(event) => updateGrid("cols", Number(event.target.value))} />
+                <Input
+                  type="number"
+                  min="1"
+                  max="12"
+                  step="1"
+                  value={knobGridDraft.cols}
+                  onChange={(event) => setKnobGridDraft((current) => ({ ...current, cols: event.target.value }))}
+                  onBlur={() => commitKnobGrid("cols")}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
               </Field>
               <Field label="行">
-                <Input type="number" min="1" max="12" step="1" value={level.grid.rows} onChange={(event) => updateGrid("rows", Number(event.target.value))} />
+                <Input
+                  type="number"
+                  min="1"
+                  max="12"
+                  step="1"
+                  value={knobGridDraft.rows}
+                  onChange={(event) => setKnobGridDraft((current) => ({ ...current, rows: event.target.value }))}
+                  onBlur={() => commitKnobGrid("rows")}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
               </Field>
             </div>
             <Field label="尺寸">
-              <Input type="number" min="80" max="320" step="10" value={level.grid.piece_size} onChange={(event) => updateGrid("piece_size", Number(event.target.value))} />
+              <Input
+                type="number"
+                min="80"
+                max="320"
+                step="10"
+                value={knobGridDraft.piece_size}
+                onChange={(event) => setKnobGridDraft((current) => ({ ...current, piece_size: event.target.value }))}
+                onBlur={() => commitKnobGrid("piece_size")}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
             </Field>
             <Field label={`凸耳 ${level.modes.knob.knob_size.toFixed(2)}`}>
               <input type="range" min="0.12" max="0.36" step="0.01" value={level.modes.knob.knob_size} onChange={(event) => updateKnobSize(Number(event.target.value))} />
@@ -2247,64 +1720,134 @@ function App({ onUnsavedChange }: Props) {
           </section>
         )}
       </aside>
-      {toast && (
-        <div className="toastViewport" role="status" aria-live="polite">
-          <div className="toastCard">
-            <span>{toast.message}</span>
-            <button className="toastClose" onClick={() => setToast(null)} aria-label="关闭提示">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-      )}
       {saveDialog.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
           <div className="w-full max-w-lg rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold">保存当前模式</h2>
-                <p className="mt-1 text-sm text-muted">选择要写入的主题、关卡和模式。当前图片会复制到目标关卡文件夹。</p>
+                <p className="mt-1 text-sm text-muted">当前图片会复制到目标关卡文件夹。</p>
               </div>
               <button className="iconBtn" onClick={() => setSaveDialog((current) => ({ ...current, open: false }))} aria-label="关闭">
                 <X size={18} />
               </button>
             </div>
             <div className="mt-5 grid gap-3">
-              <Field label="主题">
-                <SelectBox
-                  value={saveDialog.topicId}
-                  options={topicOptions}
-                  onValueChange={(topicId) => {
-                    const topic = catalog.topics.find((item) => item.id === topicId);
-                    const firstLevel = topic?.levels[0];
-                    setSaveDialog((current) => ({
-                      ...current,
-                      topicId,
-                      levelId: firstLevel?.id || current.levelId,
-                      title: firstLevel?.title || current.title,
-                    }));
-                  }}
-                  placeholder="选择主题"
-                />
-              </Field>
-              <Field label="关卡">
-                <SelectBox
-                  value={saveDialog.levelId}
-                  options={saveLevelOptions}
-                  onValueChange={(levelId) => {
-                    const levelItem = saveTopic?.levels.find((item) => item.id === levelId);
-                    setSaveDialog((current) => ({ ...current, levelId, title: levelItem?.title || current.title }));
-                  }}
-                  placeholder="选择关卡"
-                />
-              </Field>
-              <Field label="标题">
-                <Input value={saveDialog.title} onChange={(event) => setSaveDialog((current) => ({ ...current, title: event.target.value }))} />
-              </Field>
-              <Field label="介绍">
-                <Textarea className="min-h-20" value={saveDialog.description} onChange={(event) => setSaveDialog((current) => ({ ...current, description: event.target.value }))} />
-              </Field>
-              <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-muted">
+              <div className="grid grid-cols-2 gap-2">
+                <button className={saveDialog.targetMode === "existing" ? "btnActive" : "btn"} onClick={() => setSaveDialog((current) => ({ ...current, targetMode: "existing" }))}>
+                  选择模式
+                </button>
+                <button className={saveDialog.targetMode === "new" ? "btnActive" : "btn"} onClick={() => setSaveDialog((current) => ({ ...current, targetMode: "new" }))}>
+                  新增模式
+                </button>
+              </div>
+              {saveDialog.targetMode === "existing" ? (
+                <>
+                  <Field label="主题">
+                    <SelectBox
+                      value={saveDialog.topicId}
+                      options={topicOptions}
+                      onValueChange={(topicId) => {
+                        const topic = catalog.topics.find((item) => item.id === topicId);
+                        const firstLevel = topic?.levels[0];
+                        setSaveDialog((current) => ({
+                          ...current,
+                          topicId,
+                          levelId: firstLevel?.id || "",
+                          title: firstLevel?.title || current.title,
+                        }));
+                      }}
+                      placeholder="选择主题"
+                    />
+                  </Field>
+                  <Field label="关卡">
+                    <SelectBox
+                      value={saveDialog.levelId}
+                      options={saveLevelOptions}
+                      onValueChange={(levelId) => {
+                        const levelItem = saveTopic?.levels.find((item) => item.id === levelId);
+                        setSaveDialog((current) => ({ ...current, levelId, title: levelItem?.title || current.title }));
+                      }}
+                      placeholder="选择关卡"
+                    />
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 text-sm text-ink">
+                    <input className="h-4 w-4 accent-clay" type="checkbox" checked={saveDialog.newTopic} onChange={(event) => setSaveDialog((current) => ({ ...current, newTopic: event.target.checked }))} />
+                    新增主题
+                  </label>
+                  {saveDialog.newTopic ? (
+                    <>
+                      <Field label="主题">
+                        <Input value={saveDialog.newTopicName} onChange={(event) => setSaveDialog((current) => ({ ...current, newTopicName: event.target.value }))} />
+                      </Field>
+                      <Field label="英文名称">
+                        <Input
+                          value={saveDialog.newTopicId}
+                          onChange={(event) => setSaveDialog((current) => ({ ...current, newTopicId: idFromEnglishName(event.target.value, "topic", []) }))}
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <Field label="主题">
+                      <SelectBox
+                        value={saveDialog.topicId}
+                        options={topicOptions}
+                        onValueChange={(topicId) => setSaveDialog((current) => ({ ...current, topicId }))}
+                        placeholder="选择主题"
+                      />
+                    </Field>
+                  )}
+                  <Field label="关卡">
+                    <Input value={saveDialog.newLevelTitle} onChange={(event) => setSaveDialog((current) => ({ ...current, newLevelTitle: event.target.value }))} />
+                  </Field>
+                  <Field label="关卡介绍">
+                    <Textarea className="min-h-20" value={saveDialog.newLevelDescription} onChange={(event) => setSaveDialog((current) => ({ ...current, newLevelDescription: event.target.value }))} />
+                  </Field>
+                  <div className="grid gap-2 rounded-md border border-stone-200 bg-white/60 p-3">
+                    <div className="text-sm font-medium text-ink">关卡背景</div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <ToggleGroup
+                        type="single"
+                        value={saveDialog.newBackgroundType}
+                        onValueChange={(value) => {
+                          if (value === "color") setSaveDialog((current) => ({ ...current, newBackgroundType: "color" }));
+                          if (value === "image" && canUseBackgroundImage) {
+                            setSaveDialog((current) => ({ ...current, newBackgroundType: "image", newBackgroundPath: current.newBackgroundPath || backgroundImages[0]?.path || "" }));
+                          }
+                        }}
+                      >
+                        <ToggleGroupItem value="color">纯色</ToggleGroupItem>
+                        <ToggleGroupItem value="image" disabled={!canUseBackgroundImage}>
+                          图片
+                        </ToggleGroupItem>
+                      </ToggleGroup>
+                      {saveDialog.newBackgroundType === "image" && canUseBackgroundImage ? (
+                        <div className="w-64">
+                          <SelectBox
+                            value={saveDialog.newBackgroundPath}
+                            options={backgroundImageOptions}
+                            onValueChange={(newBackgroundPath) => setSaveDialog((current) => ({ ...current, newBackgroundPath }))}
+                            placeholder="选择背景图片"
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          className="h-9 w-24 rounded border border-stone-300 bg-white p-1"
+                          type="color"
+                          value={saveDialog.newBackgroundColor}
+                          onChange={(event) => setSaveDialog((current) => ({ ...current, newBackgroundColor: event.target.value }))}
+                          aria-label="背景颜色"
+                        />
+                      )}
+                      {!canUseBackgroundImage && <span className="text-xs text-muted">暂无背景图片</span>}
+                    </div>
+                  </div>
+                </>
+              )}
+              <div className="px-1 py-1 text-sm text-muted">
                 写入模式：{activeMode === "polygon" ? "多边形" : "凹凸"}；图片：{activePendingImage ? displayPendingImageName(activePendingImage) : "未选择"}
               </div>
             </div>
@@ -2337,327 +1880,6 @@ function App({ onUnsavedChange }: Props) {
       )}
     </div>
   );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1.5 text-sm text-muted">
-      {label}
-      {children}
-    </label>
-  );
-}
-
-type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
-
-function Input({ className = "", ...props }: InputProps) {
-  return <input className={`input ${className}`} {...props} />;
-}
-
-type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
-
-function Textarea({ className = "", ...props }: TextareaProps) {
-  return <textarea className={`input ${className}`} {...props} />;
-}
-
-function SelectBox({ value, options, placeholder, onValueChange }: { value: string; options: SelectOption[]; placeholder: string; onValueChange: (value: string) => void }) {
-  return (
-    <Select.Root value={value} onValueChange={onValueChange}>
-      <Select.Trigger className="selectTrigger" aria-label={placeholder}>
-        <Select.Value placeholder={placeholder} />
-        <Select.Icon>
-          <ChevronDown size={16} />
-        </Select.Icon>
-      </Select.Trigger>
-      <Select.Portal>
-        <Select.Content className="selectContent" position="popper" sideOffset={6}>
-          <Select.Viewport className="p-1">
-            {options.map((option) => (
-              <Select.Item key={option.value} value={option.value} className="selectItem">
-                <Select.ItemText>
-                  <span>{option.label}</span>
-                  {option.detail && <small>{option.detail}</small>}
-                </Select.ItemText>
-                <Select.ItemIndicator>
-                  <Check size={14} />
-                </Select.ItemIndicator>
-              </Select.Item>
-            ))}
-          </Select.Viewport>
-        </Select.Content>
-      </Select.Portal>
-    </Select.Root>
-  );
-}
-
-function SortDialog({
-  open,
-  onOpenChange,
-  sensors,
-  catalog,
-  currentTopic,
-  locale,
-  currentTarget,
-  onDragEnd,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  sensors: ReturnType<typeof useSensors>;
-  catalog: LevelCatalog;
-  currentTopic?: CatalogTopic;
-  locale: string;
-  currentTarget: LevelTarget;
-  onDragEnd: (event: DragEndEvent) => void;
-  onSave: () => void;
-}) {
-  const topicIds = catalog.topics.map((topic) => `topic:${topic.id}`);
-  const levelIds = (currentTopic?.levels || []).map((item) => `level:${item.id}`);
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialogOverlay" />
-        <Dialog.Content className="dialogContent">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Dialog.Title className="text-xl font-semibold text-ink">排序</Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-muted">拖拽调整主题和当前主题下的关卡顺序。</Dialog.Description>
-            </div>
-            <Dialog.Close className="iconBtn" aria-label="关闭">
-              <X size={18} />
-            </Dialog.Close>
-          </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <div className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-              <section className="grid gap-2">
-                <PanelTitle>主题</PanelTitle>
-                <SortableContext items={topicIds} strategy={verticalListSortingStrategy}>
-                  {catalog.topics.map((topic) => (
-                    <SortableRow
-                      key={topic.id}
-                      id={`topic:${topic.id}`}
-                      label={localized(topic.name_i18n, locale, topic.name)}
-                      detail={`${topic.levels.length}`}
-                      active={topic.id === currentTarget.topicId}
-                    />
-                  ))}
-                </SortableContext>
-              </section>
-              <section className="grid gap-2">
-                <PanelTitle>关卡</PanelTitle>
-                <SortableContext items={levelIds} strategy={verticalListSortingStrategy}>
-                  {(currentTopic?.levels || []).map((item) => (
-                    <SortableRow
-                      key={item.id}
-                      id={`level:${item.id}`}
-                      label={localized(item.title_i18n, locale, item.title)}
-                      detail={item.id}
-                      active={item.id === currentTarget.levelId}
-                    />
-                  ))}
-                </SortableContext>
-              </section>
-            </div>
-          </DndContext>
-          <div className="mt-5 flex justify-end gap-2">
-            <button className="btn" onClick={onSave}>
-              保存关卡
-            </button>
-            <Dialog.Close className="btnPrimary">完成</Dialog.Close>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function CreateItemDialog({
-  open,
-  title,
-  description,
-  nameLabel,
-  defaultName,
-  onOpenChange,
-  onSubmit,
-}: {
-  open: boolean;
-  title: string;
-  description?: string;
-  nameLabel: string;
-  defaultName: string;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (name: string) => boolean;
-}) {
-  const [name, setName] = useState(defaultName);
-
-  useEffect(() => {
-    if (!open) return;
-    setName(defaultName);
-  }, [defaultName, open]);
-
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
-    const cleanName = name.trim();
-    if (!cleanName) return;
-    if (onSubmit(cleanName)) onOpenChange(false);
-  }
-
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialogOverlay" />
-        <Dialog.Content className="dialogContent max-w-md">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Dialog.Title className="text-xl font-semibold text-ink">{title}</Dialog.Title>
-              {description && <Dialog.Description className="mt-1 text-sm text-muted">{description}</Dialog.Description>}
-            </div>
-            <Dialog.Close className="iconBtn" aria-label="关闭">
-              <X size={18} />
-            </Dialog.Close>
-          </div>
-          <form className="mt-5 grid gap-3" onSubmit={submit}>
-            <Field label={nameLabel}>
-              <Input value={name} autoFocus onChange={(event) => setName(event.target.value)} />
-            </Field>
-            <div className="mt-2 flex justify-end gap-2">
-              <Dialog.Close className="btn" type="button">
-                取消
-              </Dialog.Close>
-              <button className="btnPrimary" type="submit">
-                创建
-              </button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function SortableRow({ id, label, detail, active }: { id: string; label: string; detail: string; active: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`${active ? "sortRowActive" : "sortRow"} ${isDragging ? "opacity-70" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-    >
-      <GripVertical size={16} />
-      <span className="min-w-0 truncate">{label}</span>
-      <small className="ml-auto text-muted">{detail}</small>
-    </div>
-  );
-}
-
-function ProcessStepRow({
-  step,
-  onUpdate,
-  onRemove,
-}: {
-  step: ProcessStep;
-  onUpdate: (patch: Partial<ProcessStep>) => void;
-  onRemove: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`rounded-md border border-stone-300 bg-white p-2 text-sm ${isDragging ? "opacity-70" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-    >
-      <div className="flex items-center gap-2">
-        <button className="iconBtn !min-h-8 !px-2" type="button" {...attributes} {...listeners} aria-label="拖拽排序">
-          <GripVertical size={15} />
-        </button>
-        <div className="min-w-0 flex-1 font-medium text-ink">{processStepLabel(step.type)}</div>
-        <button className="iconBtnDanger !min-h-8 !px-2" type="button" onClick={onRemove} aria-label="删除步骤">
-          <Trash2 size={15} />
-        </button>
-      </div>
-      {step.type === "remove_background" && (
-        <Field label="容差">
-          <Input type="number" min="0" max="441" value={step.tolerance} onChange={(event) => onUpdate({ tolerance: Number(event.target.value) })} />
-        </Field>
-      )}
-      {step.type === "trim_transparent" && (
-        <Field label="留边">
-          <Input type="number" min="0" max="256" value={step.padding} onChange={(event) => onUpdate({ padding: Number(event.target.value) })} />
-        </Field>
-      )}
-      {step.type === "convert_jpg" && (
-        <div className="mt-2 grid grid-cols-[1fr_56px] gap-2">
-          <Field label="质量">
-            <Input type="number" min="1" max="100" value={step.quality} onChange={(event) => onUpdate({ quality: Number(event.target.value) })} />
-          </Field>
-          <Field label="底色">
-            <Input className="h-10 p-1" type="color" value={step.background} onChange={(event) => onUpdate({ background: event.target.value })} />
-          </Field>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ShapeButton({ template, onClick }: { template: CutTemplate; onClick: () => void }) {
-  return (
-    <button
-      className="shapeButton"
-      draggable
-      title={templateName(template)}
-      onClick={onClick}
-      onDragStart={(event) => {
-        event.dataTransfer.setData("application/x-jigcat-shape", template);
-        event.dataTransfer.effectAllowed = "copy";
-      }}
-    >
-      <svg viewBox="0 0 64 64" className="h-10 w-full" aria-hidden="true">
-        <path d={shapeIconPath(template)} />
-      </svg>
-    </button>
-  );
-}
-
-function shapeIconPath(template: CutTemplate) {
-  return catmullRomPath(presetShapePoints(template, { x: 0, y: 0, width: 64, height: 64 }), shapeTension(template), true);
-}
-
-function shapeTension(template: CutTemplate) {
-  return ["star", "zigzag", "knob", "rectangle", "trapezoid", "triangle", "diamond", "pentagon", "hexagon", "octagon", "parallelogram", "arrow", "cross", "shield"].includes(template) ? 0 : 0.25;
-}
-
-function PanelTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">{children}</h2>;
-}
-
-function templateName(template: CutTemplate) {
-  const names: Record<CutTemplate, string> = {
-    knob: "凹凸",
-    round: "圆形凸起",
-    circle: "圆形",
-    star: "五角星",
-    blob: "圆润块",
-    zigzag: "折线",
-    crescent: "月牙",
-    rectangle: "矩形",
-    trapezoid: "梯形",
-    sector: "扇形",
-    heart: "桃心",
-    triangle: "三角形",
-    diamond: "菱形",
-    pentagon: "五边形",
-    hexagon: "六边形",
-    octagon: "八边形",
-    parallelogram: "平行四边形",
-    arrow: "箭头",
-    cross: "十字",
-    shield: "盾牌",
-    leaf: "叶形",
-    semicircle: "半圆",
-  };
-  return names[template];
 }
 
 export default App;

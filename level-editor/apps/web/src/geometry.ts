@@ -10,14 +10,16 @@ export function makeEmptyLevel(): LevelConfig {
     version: 1,
     id: "cat_moon_01",
     topic_id: "cat",
-    locale: "zh-Hans",
+    locale: "zh-cn",
     title: "月亮小睡",
     description: "小猫安静地靠在月亮上，像一段柔软的午后梦。",
     title_i18n: {
+      "zh-cn": "月亮小睡",
       "zh-Hans": "月亮小睡",
       en: "Moon Nap",
     },
     description_i18n: {
+      "zh-cn": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
       "zh-Hans": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
       en: "A quiet cat rests on a crescent moon like a soft afternoon dream.",
     },
@@ -50,7 +52,6 @@ export function makeEmptyLevel(): LevelConfig {
     component_overrides: {},
     modes: {
       polygon: {
-        source: "precomputed" as const,
         image: {
           path: DEFAULT_IMAGE_PATH,
           name: "cat_moon.png",
@@ -60,7 +61,6 @@ export function makeEmptyLevel(): LevelConfig {
         pieces: [],
       },
       knob: {
-        source: "precomputed" as const,
         image: {
           path: DEFAULT_IMAGE_PATH,
           name: "cat_moon.png",

@@ -200,12 +200,10 @@ export type LevelConfig = {
   component_overrides: Record<string, string>;
   modes: {
     polygon: {
-      source: "precomputed";
       image?: LevelImageConfig;
       pieces: LevelPiece[];
     };
     knob: {
-      source: "precomputed";
       image?: LevelImageConfig;
       rows: number;
       cols: number;
