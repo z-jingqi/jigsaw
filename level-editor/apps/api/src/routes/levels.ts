@@ -1,4 +1,4 @@
-import { copyFile, readdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Hono } from "hono";
 import { catalogPath, projectRoot } from "../config/paths.js";
@@ -8,6 +8,7 @@ import { readJson, writeJson } from "../lib/fs-json.js";
 import { safeFileName, safeId } from "../lib/sanitize.js";
 import { normalizeLevelImageModes } from "../level/service.js";
 import { levelAssetPath, levelDir, levelPath, sourcePath, topicDir } from "../paths/levels.js";
+import { readPendingImages } from "../pending/store.js";
 
 function levelFileNameFromGodotPath(value: unknown, topicId: string, levelId: string) {
 	const pathValue = typeof value === "string" ? value : value && typeof value === "object" ? String((value as { path?: string }).path || "") : "";
@@ -51,11 +52,40 @@ async function normalizeSharedModeImage(level: any, topicId: string, levelId: st
 	replaceSharedImagePath(level, polygonPath, nextPath, nextName);
 }
 
+async function normalizeTableclothBackground(level: any, topicId: string, levelId: string) {
+	if (level.background?.type !== "image") return;
+	const configuredPath = String(level.background?.path || "");
+	if (!configuredPath) {
+		level.background = { ...(level.background || {}), type: "color", path: "" };
+		return;
+	}
+	const levelPrefix = `res://levels/${topicId}/${levelId}/`;
+	if (configuredPath.startsWith(levelPrefix)) return;
+	const pendingItem = (await readPendingImages()).find((item) => item.path === configuredPath);
+	if (!pendingItem) return;
+	const input = path.resolve(projectRoot, pendingItem.path);
+	const extension = path.extname(input).toLowerCase() || ".png";
+	const finalName = `tablecloth${extension === ".jpeg" ? ".jpg" : extension}`;
+	const finalPath = levelAssetPath(topicId, levelId, finalName);
+	await mkdir(path.dirname(finalPath), { recursive: true });
+	await copyFile(input, finalPath);
+	level.background = {
+		...(level.background || {}),
+		type: "image",
+		color: String(level.background?.color || "#ead8bd"),
+		path: `res://levels/${topicId}/${levelId}/${finalName}`,
+	};
+	level.assets = {
+		...(level.assets || {}),
+		cover: level.background.path,
+	};
+}
+
 async function cleanupUnreferencedLevelImages(level: unknown, topicId: string, levelId: string) {
 	const referencedFiles = collectReferencedLevelFiles(level, topicId, levelId);
 	const dir = levelDir(topicId, levelId);
 	const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-	const removableSourceFile = /^(source|polygon_source|knob_source)\.(png|jpe?g|webp)$/i;
+	const removableSourceFile = /^(source|polygon_source|knob_source|tablecloth)\.(png|jpe?g|webp)$/i;
 	await Promise.all(
 		entries
 			.filter((entry) => entry.isFile())
@@ -86,6 +116,7 @@ export function registerLevelRoutes(app: Hono) {
 		level.id = levelId;
 		level.topic_id = topicId;
 		normalizeLevelImageModes(level, topicId, levelId);
+		await normalizeTableclothBackground(level, topicId, levelId);
 		await normalizeSharedModeImage(level, topicId, levelId);
 		await writeJson(target, level);
 		await cleanupUnreferencedLevelImages(level, topicId, levelId);

@@ -386,9 +386,12 @@ func _visible_source_rect_for_polygon(points: PackedVector2Array, fallback: Rect
 
 
 func _add_level_background(level_config: Dictionary) -> void:
+	var viewport_size := get_viewport_rect().size
 	var bg := ColorRect.new()
 	bg.color = _level_background_color(level_config)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.position = Vector2.ZERO
+	bg.size = viewport_size
 	bg.z_index = -101
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
@@ -405,6 +408,8 @@ func _add_level_background(level_config: Dictionary) -> void:
 	bg_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg_image.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg_image.position = Vector2.ZERO
+	bg_image.size = viewport_size
 	bg_image.z_index = -100
 	bg_image.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg_image)

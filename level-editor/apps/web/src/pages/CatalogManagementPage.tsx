@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Check, FolderPlus, Hexagon, Image as ImageIcon, Layers, Link2, Pencil, Plus, Puzzle, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
@@ -122,6 +123,16 @@ function levelAssetUrl(topicId: string, levelId: string, path: string) {
   return fileName ? `/api/levels/${encodeURIComponent(topicId)}/${encodeURIComponent(levelId)}/assets/${encodeURIComponent(fileName)}?mtime=${Date.now()}` : "";
 }
 
+function pendingImageUrl(items: PendingImageItem[], path: string) {
+  return items.find((item) => item.path === path)?.url || "";
+}
+
+function levelBackgroundUrl(topicId: string, levelId: string, path: string, items: PendingImageItem[]) {
+  if (!path) return "";
+  if (path.startsWith(`res://levels/${topicId}/${levelId}/`)) return levelAssetUrl(topicId, levelId, path);
+  return pendingImageUrl(items, path);
+}
+
 function modeStatus(draft?: LevelConfig) {
   return {
     polygon: Boolean(draft?.modes?.polygon?.pieces?.length),
@@ -193,6 +204,26 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
   }, [levelDrafts]);
   const backgroundImageOptions = useMemo(() => backgroundImages.map((item) => ({ value: item.path, label: item.name.split(/[\\/]/).pop() || item.name })), [backgroundImages]);
   const canUseBackgroundImage = backgroundImageOptions.length > 0;
+  const tableclothPreview = useMemo(() => {
+    const background = selectedLevelDraft?.background;
+    const color = background?.color || "#ead8bd";
+    if (!selectedTopic || !selectedLevel || background?.type !== "image" || !background.path) {
+      return { type: "color" as const, color, url: "", label: "纯色桌布" };
+    }
+    const url = levelBackgroundUrl(selectedTopic.id, selectedLevel.id, background.path, backgroundImages);
+    return { type: url ? ("image" as const) : ("color" as const), color, url, label: url ? "桌布图片" : "桌布图片未保存" };
+  }, [backgroundImages, selectedLevel, selectedLevelDraft?.background, selectedTopic]);
+  const tableclothStyle = useMemo<CSSProperties>(() => {
+    if (tableclothPreview.type === "image") {
+      return {
+        backgroundColor: tableclothPreview.color,
+        backgroundImage: `url("${tableclothPreview.url}")`,
+        backgroundPosition: "center",
+        backgroundSize: "cover",
+      };
+    }
+    return { backgroundColor: tableclothPreview.color };
+  }, [tableclothPreview]);
   const hasTreeSelection = selectedTopicIds.size > 0 || selectedLevelKeys.size > 0;
 
   useEffect(() => {
@@ -968,7 +999,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
                     <ToggleGroup
                       type="single"
                       value={canUseBackgroundImage ? selectedLevelDraft?.background.type || "color" : "color"}
-                      onValueChange={(value) => {
+                      onValueChange={(value: string) => {
                         if (value === "color" || (value === "image" && canUseBackgroundImage)) {
                           const fallbackBackground = makeLevel(selectedTopic.id, selectedLevel.id, selectedLevel.title).background;
                           updateSelectedLevelDraft({
@@ -991,9 +1022,9 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
                         <SelectBox
                           value={selectedLevelDraft.background.path || backgroundImageOptions[0]?.value || ""}
                           options={backgroundImageOptions}
-                          onValueChange={(path) => updateSelectedLevelDraft({ background: { ...selectedLevelDraft.background, type: "image", path } })}
+                          onValueChange={(path: string) => updateSelectedLevelDraft({ background: { ...selectedLevelDraft.background, type: "image", path } })}
                           placeholder="选择背景图片"
-                        />
+                      />
                       </div>
                     ) : (
                       <input
@@ -1009,8 +1040,19 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
                             },
                           })
                         }
-                      />
+                        />
                     )}
+                  </div>
+                  <div className="overflow-hidden rounded-md border border-stone-300 bg-white/70">
+                    <div className="flex items-center justify-between border-b border-stone-200 px-3 py-2 text-sm font-medium text-ink">
+                      <span>桌布预览</span>
+                      <span className="text-xs font-normal text-muted">{tableclothPreview.label}</span>
+                    </div>
+                    <div className="p-4" style={tableclothStyle}>
+                      <div className="grid min-h-28 place-items-center rounded-md border border-dashed border-stone-300/70 bg-white/35 px-4 text-xs text-ink/70 shadow-inner">
+                        图片会在桌布内侧留出间距
+                      </div>
+                    </div>
                   </div>
                 </section>
                 <section className="grid gap-3">
@@ -1039,8 +1081,10 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
                             })}
                             {preview.modes.length > 1 && <span className="ml-auto rounded bg-clay/10 px-2 py-0.5 text-xs text-clay">同图</span>}
                           </div>
-                          <div className="grid min-h-36 place-items-center bg-stone-100/70 p-2">
-                            <img className="max-h-44 w-full object-contain" src={preview.url} alt={`${preview.modes.map((mode) => mode.label).join("/")}图片`} />
+                          <div className="grid min-h-48 place-items-center p-4" style={tableclothStyle}>
+                            <div className="grid h-44 w-full place-items-center rounded-md bg-white/20 p-4 shadow-inner backdrop-blur-[1px]">
+                              <img className="h-full w-full object-contain drop-shadow-[0_3px_10px_rgba(90,58,34,0.18)]" src={preview.url} alt={`${preview.modes.map((mode) => mode.label).join("/")}图片`} />
+                            </div>
                           </div>
                         </div>
                       );
@@ -1183,7 +1227,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
           </div>
         </div>
       )}
-      <AlertDialog open={Boolean(deleteDialogContent)} onOpenChange={(open) => {
+      <AlertDialog open={Boolean(deleteDialogContent)} onOpenChange={(open: boolean) => {
         if (!open) setDeleteDialog(null);
       }}>
         <AlertDialogContent>
