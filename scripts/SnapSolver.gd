@@ -19,7 +19,9 @@ static func _groups_can_snap(a, b, snap_tolerance: float) -> bool:
 			if not _are_declared_neighbors(am, bm):
 				continue
 			var expected: Vector2 = (bm["home"] - am["home"]).rotated(a.node.rotation)
-			var actual: Vector2 = b.node.to_global(bm["visual"].position) - a.node.to_global(am["visual"].position)
+			var a_anchor: Vector2 = a.node.position + am["visual"].position.rotated(a.node.rotation)
+			var b_anchor: Vector2 = b.node.position + bm["visual"].position.rotated(b.node.rotation)
+			var actual: Vector2 = b_anchor - a_anchor
 			if actual.distance_to(expected) <= snap_tolerance:
 				return true
 	return false

@@ -74,6 +74,7 @@ var current_screen := "home"
 var modal_open := false
 
 var status_label: Label
+var zoom_label: Label
 
 
 func _ready() -> void:
@@ -96,6 +97,7 @@ func _ready() -> void:
 	icon_mode_polygon_todo = repository.cached_texture(ICON_MODE_POLYGON_TODO_PATH)
 	puzzle_board = PuzzleBoardScript.new()
 	puzzle_board.status_changed.connect(_set_game_status)
+	puzzle_board.zoom_changed.connect(_set_zoom_label)
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	add_child(puzzle_board)
 	ui_layer = CanvasLayer.new()
@@ -350,6 +352,23 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	button.button_up.connect(func() -> void:
 		icon_rect.modulate = soft_brown
 	)
+	button.pressed.connect(action)
+	_wire_button_animation(button)
+	return button
+
+
+func _tool_text_button(text: String, action: Callable, tooltip: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.tooltip_text = tooltip
+	button.custom_minimum_size = Vector2(72, _icon_button_size())
+	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_color_override("font_color", soft_brown)
+	button.add_theme_color_override("font_hover_color", deep_orange)
+	button.add_theme_color_override("font_pressed_color", deep_orange)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var empty := StyleBoxEmpty.new()
+		button.add_theme_stylebox_override(state, empty)
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
@@ -929,6 +948,11 @@ func _set_game_status(text: String) -> void:
 		status_label.text = text
 
 
+func _set_zoom_label(percent: int) -> void:
+	if zoom_label != null and is_instance_valid(zoom_label):
+		zoom_label.text = "%d%%" % percent
+
+
 func _on_puzzle_completed() -> void:
 	progress_store.mark_completed(current_level["id"], current_mode)
 	_show_complete_modal()
@@ -970,10 +994,31 @@ func _build_game_hud(level_title: String) -> void:
 	bottom_tools.add_theme_constant_override("separation", button_separation)
 	screen_root.add_child(bottom_tools)
 	bottom_tools.add_child(_icon_button(icon_rotate, puzzle_board.align_all, "转正"))
+	bottom_tools.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
 	bottom_tools.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
 	bottom_tools.add_child(_icon_button(icon_album, puzzle_board.toggle_preview, "预览图"))
+	var zoom_tools := VBoxContainer.new()
+	zoom_tools.alignment = BoxContainer.ALIGNMENT_END
+	zoom_tools.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	zoom_tools.offset_left = -84
+	zoom_tools.offset_top = -GAME_FOOTER_MARGIN - _icon_button_size() * 3.0 - 46.0
+	zoom_tools.offset_right = -12
+	zoom_tools.offset_bottom = -GAME_FOOTER_MARGIN
+	zoom_tools.add_theme_constant_override("separation", 4)
+	screen_root.add_child(zoom_tools)
+	zoom_tools.add_child(_tool_text_button("+", puzzle_board.zoom_in, "放大"))
+	zoom_label = Label.new()
+	zoom_label.text = "100%"
+	zoom_label.custom_minimum_size = Vector2(72, 34)
+	zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	zoom_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	zoom_label.add_theme_font_size_override("font_size", 15)
+	zoom_label.add_theme_color_override("font_color", brown)
+	zoom_tools.add_child(zoom_label)
+	zoom_tools.add_child(_tool_text_button("-", puzzle_board.zoom_out, "缩小"))
+	zoom_tools.add_child(_tool_text_button("重置", puzzle_board.reset_view, "重置视角"))
 	status_label = Label.new()
-	status_label.text = "拖动碎片。双击碎片旋转。"
+	status_label.text = "拖动碎片。空白处拖动桌布，双指缩放。"
 	status_label.position = Vector2(20, viewport_size.y - _game_bottom_reserved_height() + 10.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
@@ -985,7 +1030,7 @@ func _hud_top_icons_width() -> float:
 
 
 func _hud_bottom_icons_width() -> float:
-	return _icon_button_size() * 3.0 + _hud_button_separation() * 2.0
+	return _icon_button_size() * 3.0 + 72.0 + _hud_button_separation() * 3.0
 
 
 func _hud_button_separation() -> float:
@@ -1064,7 +1109,7 @@ func _show_tutorial_modal() -> void:
 	var box := _modal_box(Vector2(420, 290))
 	box.add_child(_modal_title("怎么玩"))
 	var text := Label.new()
-	text.text = "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n把相邻碎片靠近正确位置，它们会自动吸附。"
+	text.text = "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.add_theme_font_size_override("font_size", 20)
 	text.add_theme_color_override("font_color", brown)
