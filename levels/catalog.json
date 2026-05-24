@@ -21,13 +21,11 @@
 					"id": "level_01",
 					"title": "芭丝特",
 					"title_i18n": {
-						"zh-Hans": "月亮小睡",
-						"zh-cn": "芭丝特",
-						"en": "Moon Nap"
+						"zh-cn": "芭丝特"
 					},
 					"sort_order": 0,
 					"path": "res://levels/cat/level_01/level.json",
-					"source": "res://levels/cat/level_01/polygon_source.jpg"
+					"source": "res://levels/cat/level_01/source.jpg"
 				}
 			]
 		}

@@ -8,7 +8,15 @@ import { bodyFiles, bodyStrings, contentTypeForFile, imageExtension } from "../l
 import { safeFileName, safeFolderName, safePendingImageKind, safeStem } from "../lib/sanitize.js";
 import { pendingNameKey, uniqueStrings } from "../lib/strings.js";
 import { globalPendingDir, globalPendingImagePath } from "../paths/pending.js";
-import { readPendingData, readPendingFolders, readPendingImages, writePendingData, writePendingImages } from "../pending/store.js";
+import {
+	readPendingData,
+	readPendingFolders,
+	readPendingImage,
+	readPendingImages,
+	writePendingData,
+	writePendingImage,
+	writePendingImages,
+} from "../pending/store.js";
 import type { PendingImageItem } from "../types/pending.js";
 import type { ProcessStep } from "../types/process.js";
 import { runImagePipeline } from "../image/pipeline.js";
@@ -109,6 +117,17 @@ export function registerPendingImageRoutes(app: Hono) {
 		};
 		await writePendingImages(items);
 		return c.json({ ok: true, item: items[index] });
+	});
+
+	app.patch("/api/pending-images/:pendingId/editor-state", async (c) => {
+		const pendingId = safeFileName(c.req.param("pendingId"));
+		const payload = await c.req.json();
+		// 仅读写单张图片的 JSON 文件，避免每次编辑都重写整个图片库索引。
+		const item = await readPendingImage(pendingId);
+		if (!item) return c.json({ ok: false, error: "pending image not found" }, 404);
+		const next: PendingImageItem = { ...item, editor_state: normalizePendingEditorState(payload.editor_state) };
+		await writePendingImage(next);
+		return c.json({ ok: true, item: next });
 	});
 
 	app.get("/api/pending-images/:pendingId/source", async (c) => {
@@ -235,4 +254,25 @@ export function registerPendingImageRoutes(app: Hono) {
 		await writePendingImages(items);
 		return c.json({ ok: true, item: items[index] });
 	});
+}
+
+function normalizePendingEditorState(value: any) {
+	const state = value && typeof value === "object" ? value : {};
+	return {
+		polygon: normalizePendingEditorModeState(state.polygon, false),
+		knob: normalizePendingEditorModeState(state.knob, true),
+	};
+}
+
+function normalizePendingEditorModeState(value: any, knob: boolean) {
+	const state = value && typeof value === "object" ? value : {};
+	return {
+		dirty: Boolean(state.dirty),
+		completed: Boolean(state.completed),
+		saved: Boolean(state.saved),
+		cuts: knob ? [] : Array.isArray(state.cuts) ? state.cuts : [],
+		pieces: knob ? [] : Array.isArray(state.pieces) ? state.pieces : [],
+		knob_pieces: knob && Array.isArray(state.knob_pieces) ? state.knob_pieces : [],
+		analysis_dirty: Boolean(state.analysis_dirty),
+	};
 }

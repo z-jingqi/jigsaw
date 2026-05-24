@@ -21,10 +21,10 @@ const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
 const GAME_FOOTER_MARGIN := 18.0
-const MIN_ICON_BUTTON_SIZE := 48.0
-const MAX_ICON_BUTTON_SIZE := 64.0
-const MIN_ICON_ART_SIZE := 28.0
-const MAX_ICON_ART_SIZE := 36.0
+const HUD_BLOCKER_PADDING := 0.0
+const HUD_DEBUG_MEASUREMENTS := true
+const HUD_TEXT_BUTTON_FONT_SIZE := 22
+const HUD_ZOOM_LABEL_HEIGHT := 34.0
 
 var cream := Color("#F6EBD4")
 var paper := Color("#FFF6E6")
@@ -59,11 +59,10 @@ var source_size := Vector2.ZERO
 var source_scale := 1.0
 var board_origin := Vector2.ZERO
 var active_level_config := {}
-var puzzle_board: Node2D
+var puzzle_board: PuzzleBoard
 var ui_layer: CanvasLayer
 var screen_root: Control
 var modal_root: Control
-var preview_sprite: Sprite2D
 
 var topics: Array[Dictionary] = []
 var progress_store = ProgressStoreScript.new()
@@ -75,6 +74,7 @@ var modal_open := false
 
 var status_label: Label
 var zoom_label: Label
+var hud_blocker_controls: Array[Control] = []
 
 
 func _ready() -> void:
@@ -100,6 +100,7 @@ func _ready() -> void:
 	puzzle_board.zoom_changed.connect(_set_zoom_label)
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	add_child(puzzle_board)
+	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
 	ui_layer = CanvasLayer.new()
 	add_child(ui_layer)
 	_build_catalog()
@@ -321,22 +322,24 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.tooltip_text = tooltip
-	var icon_size := _icon_button_size()
-	var art_size := _icon_art_size()
-	button.custom_minimum_size = Vector2(icon_size, icon_size)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		var empty := StyleBoxEmpty.new()
-		button.add_theme_stylebox_override(state, empty)
+	var icon_size := _texture_size(icon)
+	button.custom_minimum_size = icon_size
+	if _show_hud_debug_measurements():
+		_apply_debug_control_background(button, Color(0.18, 0.52, 0.95, 0.24))
+	else:
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			var empty := StyleBoxEmpty.new()
+			button.add_theme_stylebox_override(state, empty)
 	var icon_rect := TextureRect.new()
 	icon_rect.texture = icon
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.custom_minimum_size = Vector2(art_size, art_size)
-	icon_rect.set_anchors_preset(Control.PRESET_CENTER)
-	icon_rect.offset_left = -art_size * 0.5
-	icon_rect.offset_top = -art_size * 0.5
-	icon_rect.offset_right = art_size * 0.5
-	icon_rect.offset_bottom = art_size * 0.5
+	icon_rect.custom_minimum_size = icon_size
+	icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon_rect.offset_left = 0
+	icon_rect.offset_top = 0
+	icon_rect.offset_right = 0
+	icon_rect.offset_bottom = 0
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_rect.modulate = soft_brown
 	button.add_child(icon_rect)
@@ -361,17 +364,37 @@ func _tool_text_button(text: String, action: Callable, tooltip: String) -> Butto
 	var button := Button.new()
 	button.text = text
 	button.tooltip_text = tooltip
-	button.custom_minimum_size = Vector2(72, _icon_button_size())
-	button.add_theme_font_size_override("font_size", 17)
+	button.custom_minimum_size = Vector2(_hud_text_button_width(text), _hud_text_button_height())
+	button.add_theme_font_size_override("font_size", HUD_TEXT_BUTTON_FONT_SIZE)
 	button.add_theme_color_override("font_color", soft_brown)
 	button.add_theme_color_override("font_hover_color", deep_orange)
 	button.add_theme_color_override("font_pressed_color", deep_orange)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		var empty := StyleBoxEmpty.new()
-		button.add_theme_stylebox_override(state, empty)
+	if _show_hud_debug_measurements():
+		_apply_debug_control_background(button, Color(0.95, 0.56, 0.18, 0.24))
+	else:
+		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+			var empty := StyleBoxEmpty.new()
+			button.add_theme_stylebox_override(state, empty)
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
+
+
+func _show_hud_debug_measurements() -> bool:
+	return HUD_DEBUG_MEASUREMENTS and current_screen == "game"
+
+
+func _apply_debug_control_background(control: Control, color: Color) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = color
+	normal.border_color = Color(0.22, 0.13, 0.04, 0.9)
+	normal.border_width_left = 2
+	normal.border_width_top = 2
+	normal.border_width_right = 2
+	normal.border_width_bottom = 2
+	control.add_theme_stylebox_override("normal", normal)
+	for state in ["hover", "pressed", "disabled", "focus"]:
+		control.add_theme_stylebox_override(state, normal.duplicate())
 
 
 func _image_rect(min_size: Vector2) -> TextureRect:
@@ -961,25 +984,32 @@ func _on_puzzle_completed() -> void:
 func _build_game_hud(level_title: String) -> void:
 	var viewport_size := get_viewport_rect().size
 	var button_separation := _hud_button_separation()
+	var title_size := _hud_title_size(level_title)
+	var title_area_width := viewport_size.x - _hud_top_icons_width()
+	var title_left := maxf(0.0, (title_area_width - title_size.x) * 0.5)
 	var title := Label.new()
 	title.text = level_title
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	title.offset_left = 86
-	title.offset_top = 18
-	title.offset_right = viewport_size.x - 150.0
-	title.offset_bottom = 56
-	title.visible = viewport_size.x >= 430.0
+	title.custom_minimum_size = title_size
+	title.offset_left = title_left
+	title.offset_top = 0
+	title.offset_right = title_left + title_size.x
+	title.offset_bottom = title_size.y
+	title.visible = _show_hud_debug_measurements() or viewport_size.x >= 640.0
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", brown)
+	if _show_hud_debug_measurements():
+		_apply_debug_control_background(title, Color(0.36, 0.86, 0.48, 0.22))
 	screen_root.add_child(title)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -_hud_top_icons_width() - 8.0
-	top_actions.offset_top = 4
-	top_actions.offset_right = -8
-	top_actions.offset_bottom = 4 + _icon_button_size() + 8
+	top_actions.offset_left = -_hud_top_icons_width()
+	top_actions.offset_top = 0
+	top_actions.offset_right = 0
+	top_actions.offset_bottom = _icon_button_size()
 	top_actions.add_theme_constant_override("separation", button_separation)
 	screen_root.add_child(top_actions)
 	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, "暂停"))
@@ -987,33 +1017,34 @@ func _build_game_hud(level_title: String) -> void:
 	var bottom_tools := HBoxContainer.new()
 	bottom_tools.alignment = BoxContainer.ALIGNMENT_BEGIN
 	bottom_tools.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bottom_tools.offset_left = 12
-	bottom_tools.offset_top = -GAME_FOOTER_MARGIN - _icon_button_size()
-	bottom_tools.offset_right = 12 + _hud_bottom_icons_width()
-	bottom_tools.offset_bottom = -GAME_FOOTER_MARGIN
+	bottom_tools.offset_left = 0
+	bottom_tools.offset_top = -_icon_button_size()
+	bottom_tools.offset_right = _hud_bottom_icons_width()
+	bottom_tools.offset_bottom = 0
 	bottom_tools.add_theme_constant_override("separation", button_separation)
 	screen_root.add_child(bottom_tools)
 	bottom_tools.add_child(_icon_button(icon_rotate, puzzle_board.align_all, "转正"))
 	bottom_tools.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
 	bottom_tools.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
-	bottom_tools.add_child(_icon_button(icon_album, puzzle_board.toggle_preview, "预览图"))
 	var zoom_tools := VBoxContainer.new()
 	zoom_tools.alignment = BoxContainer.ALIGNMENT_END
 	zoom_tools.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	zoom_tools.offset_left = -84
-	zoom_tools.offset_top = -GAME_FOOTER_MARGIN - _icon_button_size() * 3.0 - 46.0
-	zoom_tools.offset_right = -12
-	zoom_tools.offset_bottom = -GAME_FOOTER_MARGIN
-	zoom_tools.add_theme_constant_override("separation", 4)
+	zoom_tools.offset_left = -_hud_zoom_tools_width()
+	zoom_tools.offset_top = -_hud_zoom_tools_height()
+	zoom_tools.offset_right = 0
+	zoom_tools.offset_bottom = 0
+	zoom_tools.add_theme_constant_override("separation", 2)
 	screen_root.add_child(zoom_tools)
 	zoom_tools.add_child(_tool_text_button("+", puzzle_board.zoom_in, "放大"))
 	zoom_label = Label.new()
 	zoom_label.text = "100%"
-	zoom_label.custom_minimum_size = Vector2(72, 34)
+	zoom_label.custom_minimum_size = Vector2(_hud_zoom_tools_width(), HUD_ZOOM_LABEL_HEIGHT)
 	zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	zoom_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	zoom_label.add_theme_font_size_override("font_size", 15)
+	zoom_label.add_theme_font_size_override("font_size", 18)
 	zoom_label.add_theme_color_override("font_color", brown)
+	if _show_hud_debug_measurements():
+		_apply_debug_control_background(zoom_label, Color(0.36, 0.86, 0.48, 0.22))
 	zoom_tools.add_child(zoom_label)
 	zoom_tools.add_child(_tool_text_button("-", puzzle_board.zoom_out, "缩小"))
 	zoom_tools.add_child(_tool_text_button("重置", puzzle_board.reset_view, "重置视角"))
@@ -1022,6 +1053,18 @@ func _build_game_hud(level_title: String) -> void:
 	status_label.position = Vector2(20, viewport_size.y - _game_bottom_reserved_height() + 10.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
+	hud_blocker_controls.clear()
+	hud_blocker_controls.append(title)
+	for control in top_actions.get_children():
+		if control is Control:
+			hud_blocker_controls.append(control)
+	for control in bottom_tools.get_children():
+		if control is Control:
+			hud_blocker_controls.append(control)
+	for control in zoom_tools.get_children():
+		if control is Control:
+			hud_blocker_controls.append(control)
+	_queue_game_drag_blocker_refresh()
 	_animate_screen_in(screen_root)
 
 
@@ -1030,23 +1073,43 @@ func _hud_top_icons_width() -> float:
 
 
 func _hud_bottom_icons_width() -> float:
-	return _icon_button_size() * 3.0 + 72.0 + _hud_button_separation() * 3.0
+	return _icon_button_size() * 2.0 + _hud_text_button_width("整理") + _hud_button_separation() * 2.0
+
+
+func _hud_zoom_tools_width() -> float:
+	return maxf(_icon_button_size(), _hud_text_button_width("重置"))
+
+
+func _hud_zoom_tools_height() -> float:
+	return _hud_text_button_height() * 3.0 + HUD_ZOOM_LABEL_HEIGHT + 2.0 * 3.0
+
+
+func _hud_title_size(text: String) -> Vector2:
+	return Vector2(maxf(48.0, float(text.length()) * 24.0 * 0.9), _icon_button_size())
 
 
 func _hud_button_separation() -> float:
-	return 6.0 if get_viewport_rect().size.x < 430.0 else 8.0
+	return 3.0 if get_viewport_rect().size.x < 430.0 else 4.0
 
 
 func _icon_button_size() -> float:
-	var viewport_width := get_viewport_rect().size.x
-	var available_width := maxf(240.0, viewport_width - 32.0)
-	var separation := 6.0 if viewport_width < 430.0 else 8.0
-	var fitting_size := floorf((available_width - separation * 2.0) / 3.0)
-	return clampf(fitting_size, MIN_ICON_BUTTON_SIZE, MAX_ICON_BUTTON_SIZE)
+	var size := _texture_size(icon_pause)
+	return maxf(size.x, size.y)
 
 
-func _icon_art_size() -> float:
-	return clampf(_icon_button_size() * 0.56, MIN_ICON_ART_SIZE, MAX_ICON_ART_SIZE)
+func _texture_size(icon: Texture2D) -> Vector2:
+	if icon == null:
+		return Vector2(48, 48)
+	var size := icon.get_size()
+	return Vector2(maxf(1.0, size.x), maxf(1.0, size.y))
+
+
+func _hud_text_button_width(text: String) -> float:
+	return maxf(20.0, float(text.length()) * HUD_TEXT_BUTTON_FONT_SIZE * 0.9)
+
+
+func _hud_text_button_height() -> float:
+	return float(HUD_TEXT_BUTTON_FONT_SIZE) + 8.0
 
 
 func _mode_key(play_mode: String) -> String:
@@ -1055,6 +1118,23 @@ func _mode_key(play_mode: String) -> String:
 
 func _game_bottom_reserved_height() -> float:
 	return BoardLayoutScript.game_bottom_reserved_height(_icon_button_size())
+
+
+func _queue_game_drag_blocker_refresh() -> void:
+	call_deferred("_refresh_game_drag_blockers")
+
+
+func _refresh_game_drag_blockers() -> void:
+	if current_screen != "game" or puzzle_board == null:
+		return
+	var blockers: Array[Rect2] = []
+	for control in hud_blocker_controls:
+		if not is_instance_valid(control) or not control.visible:
+			continue
+		var rect := Rect2(control.global_position, control.size).grow(HUD_BLOCKER_PADDING)
+		if rect.size.x > 0.0 and rect.size.y > 0.0:
+			blockers.append(rect)
+	puzzle_board.set_drag_blockers(blockers)
 
 
 func _apply_level_media(level_config: Dictionary) -> void:

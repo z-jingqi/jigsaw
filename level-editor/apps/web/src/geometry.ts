@@ -1,31 +1,21 @@
-import { Delaunay } from "d3-delaunay";
 import type { Bounds, CutLine, CutTemplate, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point } from "./types";
 
-export const DEFAULT_IMAGE_PATH = "res://levels/cat/cat_moon_01/source.png";
-export const DEFAULT_BROWSER_IMAGE = "/api/levels/cat/cat_moon_01/source";
+export const EMPTY_IMAGE_PATH = "";
 
 export function makeEmptyLevel(): LevelConfig {
   return {
     schema: "jigsaw.level.v1" as const,
     version: 1,
-    id: "cat_moon_01",
-    topic_id: "cat",
+    id: "",
+    topic_id: "",
     locale: "zh-cn",
-    title: "月亮小睡",
-    description: "小猫安静地靠在月亮上，像一段柔软的午后梦。",
-    title_i18n: {
-      "zh-cn": "月亮小睡",
-      "zh-Hans": "月亮小睡",
-      en: "Moon Nap",
-    },
-    description_i18n: {
-      "zh-cn": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
-      "zh-Hans": "小猫安静地靠在月亮上，像一段柔软的午后梦。",
-      en: "A quiet cat rests on a crescent moon like a soft afternoon dream.",
-    },
+    title: "",
+    description: "",
+    title_i18n: {},
+    description_i18n: {},
     image: {
-      path: DEFAULT_IMAGE_PATH,
-      name: "cat_moon.png",
+      path: EMPTY_IMAGE_PATH,
+      name: "",
       width: 0,
       height: 0,
     },
@@ -53,8 +43,8 @@ export function makeEmptyLevel(): LevelConfig {
     modes: {
       polygon: {
         image: {
-          path: DEFAULT_IMAGE_PATH,
-          name: "cat_moon.png",
+          path: EMPTY_IMAGE_PATH,
+          name: "",
           width: 0,
           height: 0,
         },
@@ -62,8 +52,8 @@ export function makeEmptyLevel(): LevelConfig {
       },
       knob: {
         image: {
-          path: DEFAULT_IMAGE_PATH,
-          name: "cat_moon.png",
+          path: EMPTY_IMAGE_PATH,
+          name: "",
           width: 0,
           height: 0,
         },
@@ -428,169 +418,6 @@ export function smoothClosedPath(points: Point[], iterations: number): Point[] {
     });
   }
   return result;
-}
-
-function seeded(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0xffffffff;
-  };
-}
-
-function trimSegmentToOutline(a: Point, b: Point, outline: Point[]): Point[] {
-  const samples: Point[] = [];
-  const chunks = Math.max(24, Math.ceil(distance(a, b) / 5));
-  let current: Point[] = [];
-  let longest: Point[] = [];
-  for (let i = 0; i <= chunks; i += 1) {
-    const p = pointLerp(a, b, i / chunks);
-    if (pointInPolygon(p, outline)) {
-      current.push(p);
-    } else {
-      if (current.length > longest.length) longest = current;
-      current = [];
-    }
-  }
-  if (current.length > longest.length) longest = current;
-  if (longest.length < 2) return [];
-  return samplePath(longest, Math.min(5, longest.length));
-}
-
-function normalizeVector(vector: Point): Point {
-  const length = Math.hypot(vector.x, vector.y);
-  if (length < 1e-6) return { x: 0, y: 0 };
-  return { x: vector.x / length, y: vector.y / length };
-}
-
-function outlineCenter(bounds: Bounds): Point {
-  return { x: bounds.x + bounds.width * 0.5, y: bounds.y + bounds.height * 0.5 };
-}
-
-function cutEndpointRefs(cuts: CutLine[]) {
-  return cuts.flatMap((cut, cutIndex) => [
-    { cutIndex, end: 0 as const, point: cut.points[0] },
-    { cutIndex, end: 1 as const, point: cut.points[cut.points.length - 1] },
-  ]);
-}
-
-function setCutEndpoint(cuts: CutLine[], cutIndex: number, end: 0 | 1, point: Point) {
-  const points = cuts[cutIndex].points;
-  if (end === 0) points[0] = point;
-  else points[points.length - 1] = point;
-}
-
-function snapCloseCutEndpoints(cuts: CutLine[], threshold: number) {
-  const refs = cutEndpointRefs(cuts);
-  const used = new Set<number>();
-  for (let i = 0; i < refs.length; i += 1) {
-    if (used.has(i)) continue;
-    const cluster = [i];
-    used.add(i);
-    for (let cursor = 0; cursor < cluster.length; cursor += 1) {
-      const current = refs[cluster[cursor]].point;
-      for (let j = 0; j < refs.length; j += 1) {
-        if (used.has(j)) continue;
-        if (distance(current, refs[j].point) > threshold) continue;
-        used.add(j);
-        cluster.push(j);
-      }
-    }
-    if (cluster.length < 2) continue;
-    const average = cluster.reduce(
-      (sum, index) => ({ x: sum.x + refs[index].point.x / cluster.length, y: sum.y + refs[index].point.y / cluster.length }),
-      { x: 0, y: 0 },
-    );
-    for (const index of cluster) setCutEndpoint(cuts, refs[index].cutIndex, refs[index].end, average);
-  }
-}
-
-function extendEndpointPastOutline(cut: CutLine, end: 0 | 1, outline: Point[], bounds: Bounds, snapDistance: number, padding: number): Point | null {
-  const point = end === 0 ? cut.points[0] : cut.points[cut.points.length - 1];
-  const neighbor = end === 0 ? cut.points[1] : cut.points[cut.points.length - 2];
-  if (!neighbor) return null;
-  const hit = nearestOnPath(point, outline, true);
-  if (!hit || hit.distance > snapDistance) return null;
-
-  let direction = normalizeVector({ x: point.x - neighbor.x, y: point.y - neighbor.y });
-  let candidate = { x: hit.point.x + direction.x * padding, y: hit.point.y + direction.y * padding };
-  if (pointInPolygon(candidate, outline)) {
-    const center = outlineCenter(bounds);
-    direction = normalizeVector({ x: hit.point.x - center.x, y: hit.point.y - center.y });
-    candidate = { x: hit.point.x + direction.x * padding, y: hit.point.y + direction.y * padding };
-  }
-  return candidate;
-}
-
-function prepareAutoGeneratedCuts(cuts: CutLine[], outline: Point[], bounds: Bounds): CutLine[] {
-  const next = cuts.map((cut) => ({ ...cut, points: cut.points.map((point) => ({ ...point })) }));
-  const minSide = Math.max(1, Math.min(bounds.width, bounds.height));
-  snapCloseCutEndpoints(next, Math.max(10, minSide * 0.018));
-  const outlineSnapDistance = Math.max(10, minSide * 0.035);
-  const outsidePadding = Math.min(16, Math.max(10, minSide * 0.018));
-  for (const cut of next) {
-    if (cut.points.length < 2) continue;
-    const start = extendEndpointPastOutline(cut, 0, outline, bounds, outlineSnapDistance, outsidePadding);
-    if (start) cut.points[0] = start;
-    const end = extendEndpointPastOutline(cut, 1, outline, bounds, outlineSnapDistance, outsidePadding);
-    if (end) cut.points[cut.points.length - 1] = end;
-  }
-  snapCloseCutEndpoints(next, Math.max(8, minSide * 0.014));
-  return next;
-}
-
-export function generateFractureNetwork(outline: Point[], bounds: Bounds | null, targetPieces: number) {
-  if (!outline.length || !bounds) return { cuts: [] as CutLine[], pieces: [] as PieceCell[] };
-  const rand = seeded(targetPieces * 97 + Math.round(bounds.width + bounds.height));
-  const sites: Point[] = [];
-  const attempts = targetPieces * 80;
-  for (let i = 0; i < attempts && sites.length < targetPieces; i += 1) {
-    const point = {
-      x: bounds.x + rand() * bounds.width,
-      y: bounds.y + rand() * bounds.height,
-    };
-    if (pointInPolygon(point, outline)) sites.push(point);
-  }
-  const outlineSites = samplePath([...outline, outline[0]], Math.max(8, Math.round(targetPieces * 0.45)));
-  const allSites = [...sites, ...outlineSites];
-  const delaunay = Delaunay.from(allSites, (p) => p.x, (p) => p.y);
-  const voronoi = delaunay.voronoi([bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height]);
-  const pieces: PieceCell[] = [];
-  const cutsByKey = new Map<string, CutLine>();
-
-  for (let i = 0; i < sites.length; i += 1) {
-    const cell = voronoi.cellPolygon(i);
-    if (!cell || cell.length < 3) continue;
-    const polygon = cell.map(([x, y]) => ({ x, y }));
-    const center = polygon.reduce((sum, p) => ({ x: sum.x + p.x, y: sum.y + p.y }), { x: 0, y: 0 });
-    center.x /= polygon.length;
-    center.y /= polygon.length;
-    if (!pointInPolygon(center, outline)) continue;
-    pieces.push({ id: uid("piece"), points: polygon });
-
-    for (let p = 1; p < polygon.length; p += 1) {
-      const a = polygon[p - 1];
-      const b = polygon[p];
-      const trimmed = trimSegmentToOutline(a, b, outline);
-      if (trimmed.length < 2) continue;
-      const midpoint = pointLerp(trimmed[0], trimmed[trimmed.length - 1], 0.5);
-      const nearOutline = nearestPoint(midpoint, outline);
-      if (nearOutline && nearOutline.distance < Math.min(bounds.width, bounds.height) * 0.025) continue;
-      const keyA = pointKey(trimmed[0], 8);
-      const keyB = pointKey(trimmed[trimmed.length - 1], 8);
-      const key = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
-      if (!cutsByKey.has(key)) {
-        cutsByKey.set(key, {
-          id: uid("cut"),
-          type: "fracture",
-          template: ["knob", "round", "star", "blob", "crescent"][cutsByKey.size % 5] as CutTemplate,
-          points: trimmed,
-        });
-      }
-    }
-  }
-
-  return { cuts: prepareAutoGeneratedCuts([...cutsByKey.values()], outline, bounds), pieces };
 }
 
 export function presetCut(template: CutTemplate, bounds: Bounds): CutLine {
@@ -986,43 +813,96 @@ function appendPath(target: Point[], source: Point[], reversed: boolean) {
   }
 }
 
-function readAlphaMask(image: HTMLImageElement) {
+type AlphaMask = {
+  width: number;
+  height: number;
+  binary: Uint8Array;
+};
+
+const alphaMaskCache = new WeakMap<HTMLImageElement, AlphaMask | null>();
+
+function readAlphaMask(image: HTMLImageElement): AlphaMask | null {
+  const cached = alphaMaskCache.get(image);
+  if (cached !== undefined) return cached;
+  if (typeof document === "undefined") {
+    alphaMaskCache.set(image, null);
+    return null;
+  }
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
+  if (!ctx) {
+    alphaMaskCache.set(image, null);
+    return null;
+  }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(image, 0, 0);
-  return {
-    width: canvas.width,
-    height: canvas.height,
-    data: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
-  };
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const binary = new Uint8Array(canvas.width * canvas.height);
+  for (let i = 0; i < binary.length; i += 1) binary[i] = data[i * 4 + 3] > 18 ? 1 : 0;
+  const mask: AlphaMask = { width: canvas.width, height: canvas.height, binary };
+  alphaMaskCache.set(image, mask);
+  return mask;
 }
 
-function visibleAlphaBoundsForPolygon(points: Point[], alpha: ReturnType<typeof readAlphaMask>): Bounds | null {
+let polygonRasterCanvas: HTMLCanvasElement | null = null;
+
+function rasterizePolygonMask(points: Point[], x0: number, y0: number, w: number, h: number): Uint8Array | null {
+  if (typeof document === "undefined") return null;
+  if (!polygonRasterCanvas) polygonRasterCanvas = document.createElement("canvas");
+  if (polygonRasterCanvas.width !== w || polygonRasterCanvas.height !== h) {
+    polygonRasterCanvas.width = w;
+    polygonRasterCanvas.height = h;
+  }
+  const ctx = polygonRasterCanvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(points[0].x - x0, points[0].y - y0);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x - x0, points[i].y - y0);
+  }
+  ctx.closePath();
+  ctx.fill();
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i += 1) mask[i] = data[i * 4 + 3] > 0 ? 1 : 0;
+  return mask;
+}
+
+function visibleAlphaBoundsForPolygon(points: Point[], alpha: AlphaMask | null): Bounds | null {
   if (!alpha) return boundsForPoints(points);
+  if (points.length < 3) return null;
   const bounds = boundsForPoints(points);
+  const x0 = Math.max(0, Math.floor(bounds.x));
+  const y0 = Math.max(0, Math.floor(bounds.y));
+  const x1 = Math.min(alpha.width - 1, Math.ceil(bounds.x + bounds.width));
+  const y1 = Math.min(alpha.height - 1, Math.ceil(bounds.y + bounds.height));
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  if (w <= 0 || h <= 0) return null;
+  const polyMask = rasterizePolygonMask(points, x0, y0, w, h);
+  if (!polyMask) return null;
   let count = 0;
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  const x0 = Math.max(0, Math.floor(bounds.x));
-  const y0 = Math.max(0, Math.floor(bounds.y));
-  const x1 = Math.min(alpha.width - 1, Math.ceil(bounds.x + bounds.width));
-  const y1 = Math.min(alpha.height - 1, Math.ceil(bounds.y + bounds.height));
-  for (let y = y0; y <= y1; y += 1) {
-    for (let x = x0; x <= x1; x += 1) {
-      if (!pointInPolygon({ x, y }, points)) continue;
-      if (alpha.data[(y * alpha.width + x) * 4 + 3] > 18) {
-        count += 1;
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-      }
+  for (let dy = 0; dy < h; dy += 1) {
+    const polyRow = dy * w;
+    const alphaRow = (y0 + dy) * alpha.width;
+    for (let dx = 0; dx < w; dx += 1) {
+      if (!polyMask[polyRow + dx]) continue;
+      if (!alpha.binary[alphaRow + x0 + dx]) continue;
+      count += 1;
+      const gx = x0 + dx;
+      const gy = y0 + dy;
+      if (gx < minX) minX = gx;
+      if (gx > maxX) maxX = gx;
+      if (gy < minY) minY = gy;
+      if (gy > maxY) maxY = gy;
     }
   }
   if (count < 24 || !Number.isFinite(minX)) return null;
@@ -1079,6 +959,12 @@ export type CutGap = {
   nearest: Point;
   distance: number;
   kind: "outline" | "cut";
+};
+
+export type CutIntersection = {
+  aCutId: string;
+  bCutId: string;
+  point: Point;
 };
 
 export function analyzeActualPieces(image: HTMLImageElement, cuts: CutLine[], maxSize = 1200): ActualPiecePreview {
@@ -1228,6 +1114,105 @@ export function findCutGaps(cuts: CutLine[], outlinePoints: Point[], connectedDi
     }
   }
   return gaps.sort((a, b) => a.distance - b.distance);
+}
+
+function cross(a: Point, b: Point, c: Point) {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+function segmentIntersection(a: Point, b: Point, c: Point, d: Point): Point | null {
+  const r = { x: b.x - a.x, y: b.y - a.y };
+  const s = { x: d.x - c.x, y: d.y - c.y };
+  const denominator = r.x * s.y - r.y * s.x;
+  if (Math.abs(denominator) < 1e-6) return null;
+  const t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / denominator;
+  const u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / denominator;
+  const epsilon = 1e-4;
+  if (t < -epsilon || t > 1 + epsilon || u < -epsilon || u > 1 + epsilon) return null;
+  const firstEndpoint = t <= epsilon || t >= 1 - epsilon;
+  const secondEndpoint = u <= epsilon || u >= 1 - epsilon;
+  if (firstEndpoint && secondEndpoint) return null;
+  const clampedT = Math.max(0, Math.min(1, t));
+  const point = { x: a.x + r.x * clampedT, y: a.y + r.y * clampedT };
+  if (Math.abs(cross(a, b, point)) > 1e-3) return null;
+  return point;
+}
+
+function cutSegments(cut: CutLine) {
+  const segments: Array<{ a: Point; b: Point }> = [];
+  if (cut.points.length < 2) return segments;
+  const count = cut.type === "preset_shape" ? cut.points.length : cut.points.length - 1;
+  for (let index = 0; index < count; index += 1) {
+    segments.push({ a: cut.points[index], b: cut.points[(index + 1) % cut.points.length] });
+  }
+  return segments;
+}
+
+/**
+ * 相切（接触但未跨越）检测距离阈值（图片像素空间）。
+ * 预设形状（圆形/桃心等）以折线采样，几何意义上的"相切"在折线近似下表现为：
+ * 线段端点距离形状边任意一段在该阈值内，但没有形成正常 segment-segment 交点。
+ */
+const TANGENT_THRESHOLD = 3;
+
+function nearestPairBetweenSegments(
+  aSegments: Array<{ a: Point; b: Point }>,
+  bSegments: Array<{ a: Point; b: Point }>,
+): { distance: number; point: Point } | null {
+  let best: { distance: number; point: Point } | null = null;
+  const consider = (probe: Point, segA: Point, segB: Point) => {
+    const hit = pointToSegment(probe, segA, segB);
+    if (!best || hit.distance < best.distance) {
+      best = {
+        distance: hit.distance,
+        point: { x: (probe.x + hit.closest.x) * 0.5, y: (probe.y + hit.closest.y) * 0.5 },
+      };
+    }
+  };
+  for (const sa of aSegments) {
+    for (const sb of bSegments) {
+      consider(sa.a, sb.a, sb.b);
+      consider(sa.b, sb.a, sb.b);
+      consider(sb.a, sa.a, sa.b);
+      consider(sb.b, sa.a, sa.b);
+    }
+  }
+  return best;
+}
+
+export function findCutIntersections(cuts: CutLine[]): CutIntersection[] {
+  const intersections: CutIntersection[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < cuts.length; i += 1) {
+    const aSegments = cutSegments(cuts[i]);
+    for (let j = i + 1; j < cuts.length; j += 1) {
+      const bSegments = cutSegments(cuts[j]);
+      const before = intersections.length;
+      for (const first of aSegments) {
+        for (const second of bSegments) {
+          const point = segmentIntersection(first.a, first.b, second.a, second.b);
+          if (!point) continue;
+          const key = `${Math.round(point.x * 10)},${Math.round(point.y * 10)},${cuts[i].id},${cuts[j].id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          intersections.push({ aCutId: cuts[i].id, bCutId: cuts[j].id, point });
+        }
+      }
+      // 没有找到正常交点时，再用 segment-segment 最近距离判定一次"近似相切"，
+      // 避免折线采样下的圆形之类闭合形状与直线相切时漏报。
+      if (intersections.length === before) {
+        const tangent = nearestPairBetweenSegments(aSegments, bSegments);
+        if (tangent && tangent.distance <= TANGENT_THRESHOLD) {
+          const key = `${Math.round(tangent.point.x * 10)},${Math.round(tangent.point.y * 10)},${cuts[i].id},${cuts[j].id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            intersections.push({ aCutId: cuts[i].id, bCutId: cuts[j].id, point: tangent.point });
+          }
+        }
+      }
+    }
+  }
+  return intersections;
 }
 
 export function serializePoints(points: Point[]): number[][] {

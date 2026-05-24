@@ -9,7 +9,7 @@ import { readJson, writeJson } from "../lib/fs-json.js";
 import { safeFileName, safeId, safeMode } from "../lib/sanitize.js";
 import { makeLevelJson, normalizeLevelForModeSave, normalizeLevelImageModes } from "../level/service.js";
 import { levelAssetPath, levelPath } from "../paths/levels.js";
-import { readPendingImages } from "../pending/store.js";
+import { readPendingImages, writePendingImages } from "../pending/store.js";
 
 function imagePathFromValue(value: any) {
 	if (typeof value === "string") return value;
@@ -59,6 +59,21 @@ export function registerEditorRoutes(app: Hono) {
 
 		const catalog = upsertCatalogLevel(await readJson(catalogPath, makeEmptyCatalog()), topicId, levelId, title, finalName, topicName);
 		await writeJson(catalogPath, catalog);
+		const savedModeSet = new Set([...(imageItem.saved_modes || []), ...sharedModes]);
+		await writePendingImages(items.map((item) => {
+			if (item.id !== imageItem.id) return item;
+			const editorState = { ...(item.editor_state || {}) };
+			for (const savedMode of sharedModes) {
+				editorState[savedMode] = {
+					...(editorState[savedMode] || {}),
+					dirty: false,
+					completed: true,
+					saved: true,
+					analysis_dirty: false,
+				};
+			}
+			return { ...item, saved_modes: [...savedModeSet], editor_state: editorState };
+		}));
 		return c.json({
 			ok: true,
 			level: nextLevel,

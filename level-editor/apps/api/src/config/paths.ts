@@ -9,7 +9,9 @@ export const levelsDir = path.join(projectRoot, "levels");
 export const catalogPath = path.join(levelsDir, "catalog.json");
 export const pendingDataDir = path.join(editorRoot, "data", "pending");
 export const pendingImagesDir = path.join(pendingDataDir, "images");
-export const pendingImagesIndexPath = path.join(pendingDataDir, "images.json");
+// 每张图片一个 JSON 文件 + 一个 index.json
+export const pendingItemsDir = path.join(pendingDataDir, "items");
+export const pendingIndexPath = path.join(pendingDataDir, "index.json");
 export const toolsDir = path.join(projectRoot, "tools");
 export const port = Number(process.env.LEVEL_EDITOR_API_PORT || 5174);
 export const googleDriveFolderMime = "application/vnd.google-apps.folder";

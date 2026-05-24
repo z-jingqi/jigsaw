@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
-import { CircleAlert, Eye, Hexagon, Magnet, Pencil, Plus, Puzzle, Redo2, RefreshCcw, Save, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  DEFAULT_BROWSER_IMAGE,
-  DEFAULT_IMAGE_PATH,
+  EMPTY_IMAGE_PATH,
   analyzeActualPieces,
-  catmullRomPath,
   detectImageOutline,
-  generateFractureNetwork,
+  findCutIntersections,
+  findCutGaps,
   generateKnobPieces,
   makeEmptyLevel,
   presetCut,
@@ -17,32 +15,49 @@ import {
   serializePoints,
   snapPoint,
   uid,
-  type ActualPiecePreview,
 } from "../geometry";
-import type { CatalogLevel, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, LevelImageConfig, PendingImageItem } from "../types";
+import type { CatalogLevel, CutLine, CutTemplate, LevelCatalog, LevelConfig, LevelPiece, OutlineAnalysis, PieceCell, Point, PendingImageEditorState, PendingImageItem } from "../types";
 import { cellsToLevelPieces, mergePolygons, pointFromTuple, polygonCenter, polylinePath, translateCut, tupleBounds, tupleFromPoint, unionTupleBounds, visibleBoundsList } from "../features/level-editor/lib/polygonPieces";
-import { presetTemplates, ShapeButton, shapeTension } from "../features/level-editor/lib/shapes";
-import { Field } from "../shared/ui/Field";
-import { Input } from "../shared/ui/Input";
-import { PanelTitle } from "../shared/ui/PanelTitle";
-import { SelectBox, type SelectOption } from "../shared/ui/SelectBox";
-import { Textarea } from "../shared/ui/Textarea";
+import { type SelectOption } from "../shared/ui/SelectBox";
 import { makeDefaultCatalog, normalizeOrder, updateCatalogLevel } from "../shared/lib/catalog";
 import { idFromEnglishName, nextSequentialId } from "../shared/lib/ids";
 import { localized, reservedI18n } from "../shared/lib/i18n";
-import { WithTooltip } from "../components/ui/tooltip";
-import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
-
-const snapThreshold = 18;
-const editorLocale = "zh-cn";
-
-type EditMode = "polygon" | "knob";
-type PolygonViewMode = "result" | "edit" | "inspect";
-
-type LevelTarget = {
-  topicId: string;
-  levelId: string;
-};
+import { EditorTopBar } from "../features/level-editor/components/EditorTopBar";
+import { EditorCanvas } from "../features/level-editor/components/EditorCanvas";
+import { EditorToolbox } from "../features/level-editor/components/EditorToolbox";
+import { PolygonModePanel } from "../features/level-editor/components/PolygonModePanel";
+import { KnobModePanel } from "../features/level-editor/components/KnobModePanel";
+import { EditorSaveDialog } from "../features/level-editor/components/EditorSaveDialog";
+import { EditorModeSwitchDialog } from "../features/level-editor/components/EditorModeSwitchDialog";
+import { useEditorHistory } from "../features/level-editor/hooks/useEditorHistory";
+import { useAnalysisWorker } from "../features/level-editor/hooks/useAnalysisWorker";
+import { useEditorCanvasView } from "../features/level-editor/hooks/useEditorCanvasView";
+import {
+  DEFAULT_CUT_COLOR,
+  EDITOR_LOCALE,
+  SNAP_THRESHOLD,
+  clamp,
+  cloneSnapshot,
+  displayPendingImageName,
+  imageConfigPath,
+  isTextEditingTarget,
+  levelImageUrl,
+  modeImageConfig,
+  modeImagePath,
+  normalizeLevelConfig,
+  polygonViewLabel,
+  scaleCutPoints,
+} from "../features/level-editor/lib/editor";
+import type {
+  DragState,
+  DrawingCutState,
+  EditMode,
+  EditorSnapshot,
+  LevelTarget,
+  PolygonViewMode,
+  SaveModeDialogState,
+  SnapConnectionMarker,
+} from "../features/level-editor/types";
 
 type ImageTarget = EditMode;
 
@@ -52,134 +67,10 @@ type Props = {
 
 type CreateDialogKind = "topic" | "level" | null;
 
-type SaveModeDialogState = {
-  open: boolean;
-  targetMode: "existing" | "new";
-  topicId: string;
-  levelId: string;
-  newTopic: boolean;
-  title: string;
-  description: string;
-  newTopicName: string;
-  newTopicId: string;
-  newLevelTitle: string;
-  newLevelDescription: string;
-  newBackgroundType: "color" | "image";
-  newBackgroundColor: string;
-  newBackgroundPath: string;
-};
-
-type EditorSnapshot = {
-  level: LevelConfig;
-  cuts: CutLine[];
-  pieces: PieceCell[];
-  knobPieces: LevelPiece[];
-  completedModes: Record<EditMode, boolean>;
-};
-
-type DragState = {
-  cutId: string;
-  pointIndex: number | null;
-  start: Point;
-  original: CutLine;
-};
-
-type DrawingCutState = {
-  id: string;
-  points: Point[];
-};
-
-type AnalysisWorkerMessage =
-  | {
-      type: "imageReady";
-      requestId: number;
-    }
-  | {
-      type: "analysisResult";
-      requestId: number;
-      result: Omit<ActualPiecePreview, "dataUrl"> & { previewBuffer: ArrayBuffer };
-    };
-
-function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
-  return structuredClone(snapshot);
-}
-
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tagName = target.tagName.toLowerCase();
-  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
-}
-
-function modeImageConfig(level: LevelConfig, mode: EditMode): LevelImageConfig {
-  return level.modes[mode].image as LevelImageConfig;
-}
-
-function modeImagePath(level: LevelConfig, mode: EditMode): string {
-  return imageConfigPath(modeImageConfig(level, mode));
-}
-
-function displayPendingImageName(item: PendingImageItem) {
-  return item.name.replace(/\.[^.]+$/, "");
-}
-
-function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: string, levelId?: string): LevelConfig {
-  const defaults = makeEmptyLevel();
-  return {
-    ...defaults,
-    ...data,
-    id: levelId || data.id || defaults.id,
-    topic_id: topicId || data.topic_id || defaults.topic_id,
-    image: { ...defaults.image, ...(data.image || {}) },
-    assets: {
-      ...(defaults.assets || {}),
-      ...(data.assets || {}),
-    },
-    background: { ...defaults.background, ...data.background },
-    grid: { ...defaults.grid, ...data.grid },
-    modes: {
-      polygon: {
-        ...defaults.modes.polygon,
-        ...(data.modes?.polygon || {}),
-        image: data.modes?.polygon?.image || defaults.modes.polygon.image,
-      },
-      knob: {
-        ...defaults.modes.knob,
-        ...(data.modes?.knob || {}),
-        image: data.modes?.knob?.image || defaults.modes.knob.image,
-        cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
-        rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
-        piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
-      },
-    },
-    editor: { ...defaults.editor, ...data.editor },
-  };
-}
-
-function imageConfigPath(value?: LevelImageConfig): string {
-  if (!value) return "";
-  return typeof value === "string" ? value : value.path || "";
-}
-
-function polygonViewLabel(view: PolygonViewMode): string {
-  if (view === "result") return "查看";
-  if (view === "edit") return "编辑";
-  return "检查";
-}
-
-function previewBufferToDataUrl(width: number, height: number, previewBuffer: ArrayBuffer): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return "";
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(previewBuffer), width, height), 0, 0);
-  return canvas.toDataURL("image/png");
-}
-
 function App({ onUnsavedChange }: Props) {
   const [catalog, setCatalog] = useState<LevelCatalog>(() => makeDefaultCatalog());
-  const locale = editorLocale;
-  const [currentTarget, setCurrentTarget] = useState<LevelTarget>({ topicId: "cat", levelId: "cat_moon_01" });
+  const locale = EDITOR_LOCALE;
+  const [currentTarget, setCurrentTarget] = useState<LevelTarget>({ topicId: "", levelId: "" });
   const [pendingTarget, setPendingTarget] = useState<LevelTarget | null>(null);
   const [level, setLevel] = useState<LevelConfig>(() => makeEmptyLevel());
   const [pendingImages, setPendingImages] = useState<PendingImageItem[]>([]);
@@ -188,10 +79,10 @@ function App({ onUnsavedChange }: Props) {
   const [saveDialog, setSaveDialog] = useState<SaveModeDialogState>({
     open: false,
     targetMode: "existing",
-    topicId: "cat",
-    levelId: "cat_moon_01",
+    topicId: "",
+    levelId: "",
     newTopic: false,
-    title: "月亮小睡",
+    title: "",
     description: "",
     newTopicName: "新主题",
     newTopicId: "new_topic",
@@ -202,41 +93,57 @@ function App({ onUnsavedChange }: Props) {
     newBackgroundPath: "",
   });
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [imageUrl, setImageUrl] = useState(DEFAULT_BROWSER_IMAGE);
+  const [imageUrl, setImageUrl] = useState("");
   const [analysis, setAnalysis] = useState<OutlineAnalysis>({ outline: [], edgePoints: [], bounds: null });
   const [activeMode, setActiveMode] = useState<EditMode>("polygon");
   const [cuts, setCuts] = useState<CutLine[]>([]);
   const [pieces, setPieces] = useState<PieceCell[]>([]);
   const [knobPieces, setKnobPieces] = useState<LevelPiece[]>([]);
   const [analysisCuts, setAnalysisCuts] = useState<CutLine[]>([]);
-  const [actualPreview, setActualPreview] = useState<ActualPiecePreview | null>(null);
   const [selectedPieceIds, setSelectedPieceIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [targetPieces, setTargetPieces] = useState(14);
+  const [polygonAnalysisDirty, setPolygonAnalysisDirty] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [showKnobPieces, setShowKnobPieces] = useState(true);
   const [polygonView, setPolygonView] = useState<PolygonViewMode>("result");
+  const [lineToolActive, setLineToolActive] = useState(false);
+  // 切割线颜色按"关卡"维度保存（在 level.json 的 editor.cut_color），polygon 与 knob 模式共用。
+  const [cutLineColor, setCutLineColor] = useState<string>(DEFAULT_CUT_COLOR);
   const [drawingCut, setDrawingCut] = useState<DrawingCutState | null>(null);
   const [drawingHoverPoint, setDrawingHoverPoint] = useState<Point | null>(null);
   const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
   const [knobGridDraft, setKnobGridDraft] = useState({ cols: "8", rows: "8", piece_size: "190" });
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
-  const [sortOpen, setSortOpen] = useState(false);
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
-  const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
+
+  const history = useEditorHistory();
+
+  const [actualPreview, setActualPreview] = useState<ReturnType<typeof analyzeActualPieces> | null>(null);
+  const analysisWorker = useAnalysisWorker(setActualPreview);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
   const cutPathCacheRef = useRef<WeakMap<CutLine, string>>(new WeakMap());
   const piecePathCacheRef = useRef<WeakMap<PieceCell, string>>(new WeakMap());
   const knobPiecePathCacheRef = useRef<WeakMap<LevelPiece, string>>(new WeakMap());
   const dragFrameRef = useRef<number | null>(null);
   const dragPointRef = useRef<Point | null>(null);
-  const analysisWorkerRef = useRef<Worker | null>(null);
-  const analysisRequestIdRef = useRef(0);
-  const imageRequestIdRef = useRef(0);
-  const [workerImageReady, setWorkerImageReady] = useState(false);
+  // 一次方向键按下→抬起期间的连续微移共享同一个 undo 项，避免按住方向键产生大量历史记录。
+  const nudgeSessionRef = useRef(false);
+  // 用户在空白画布上按下并拖拽时的 pan 状态。每次 pointermove 都基于 lastClient 增量更新 pan，
+  // 避免累计 client→svg 的转换误差，且 zoom 变化时不需要重新计算。
+  const panDragRef = useRef<{
+    pointerId: number;
+    lastClientX: number;
+    lastClientY: number;
+    svgRect: DOMRect;
+    viewBoxWidth: number;
+    viewBoxHeight: number;
+    moved: boolean;
+  } | null>(null);
+  const editorStateSaveTimerRef = useRef<number | null>(null);
+  const editorStateHydratingRef = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   useEffect(() => {
@@ -244,38 +151,6 @@ function App({ onUnsavedChange }: Props) {
   }, []);
 
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
-
-  useEffect(() => {
-    try {
-      const worker = new Worker(new URL("../actualPieces.worker.ts", import.meta.url), { type: "module" });
-      worker.onmessage = (event: MessageEvent<AnalysisWorkerMessage>) => {
-        const message = event.data;
-        if (message.type === "imageReady") {
-          if (message.requestId === imageRequestIdRef.current) setWorkerImageReady(true);
-          return;
-        }
-        if (message.requestId !== analysisRequestIdRef.current) return;
-        const { previewBuffer, ...result } = message.result;
-        setActualPreview({
-          ...result,
-          dataUrl: previewBufferToDataUrl(result.width, result.height, previewBuffer),
-        });
-      };
-      worker.onerror = () => {
-        worker.terminate();
-        if (analysisWorkerRef.current === worker) analysisWorkerRef.current = null;
-        setWorkerImageReady(false);
-      };
-      analysisWorkerRef.current = worker;
-      return () => {
-        worker.terminate();
-        if (analysisWorkerRef.current === worker) analysisWorkerRef.current = null;
-      };
-    } catch {
-      analysisWorkerRef.current = null;
-      return undefined;
-    }
-  }, []);
 
   function showToast(message: string) {
     toast(message);
@@ -321,15 +196,23 @@ function App({ onUnsavedChange }: Props) {
   );
   const canUseBackgroundImage = backgroundImageOptions.length > 0;
   const activePendingImage = selectedImages[activeMode];
+  const activeLevelImageConfig = modeImageConfig(level, activeMode);
+  const activeLevelImagePath = imageConfigPath(activeLevelImageConfig);
+  const activeLevelImageName = typeof activeLevelImageConfig === "string" ? "source.png" : activeLevelImageConfig.name || "source.png";
   const canvasBackgroundStyle = { backgroundColor: level.background.color };
 
   useEffect(() => {
     if (!activePendingImage) {
-      loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, activeMode, false);
+      const url = levelImageUrl(currentTarget.topicId, currentTarget.levelId, activeLevelImagePath);
+      if (!url) {
+        clearEditorImage();
+        return;
+      }
+      loadEditorImage(url, activeLevelImageName, activeLevelImagePath || EMPTY_IMAGE_PATH, activeMode, false);
       return;
     }
     loadEditorImage(activePendingImage.url, activePendingImage.name, activePendingImage.path, activeMode);
-  }, [activeMode, activePendingImage?.id, activePendingImage?.url]);
+  }, [activeMode, activeLevelImageName, activeLevelImagePath, activePendingImage?.id, activePendingImage?.url, currentTarget.levelId, currentTarget.topicId]);
 
   useEffect(() => {
     setKnobGridDraft({
@@ -354,7 +237,6 @@ function App({ onUnsavedChange }: Props) {
       const firstTopic = normalized.topics[0];
       const firstLevel = firstTopic?.levels[0];
       if (firstTopic && firstLevel) {
-        setCurrentTarget({ topicId: firstTopic.id, levelId: firstLevel.id });
         setSaveDialog((current) => ({
           ...current,
           topicId: firstTopic.id,
@@ -362,7 +244,22 @@ function App({ onUnsavedChange }: Props) {
           title: firstLevel.title,
         }));
       }
-      await loadPendingImages(params.get("image") || "");
+      // 并行拉关卡 + pending 图片，最后一次性 hydrate，避免「先看到关卡线段、再看到图片草稿」的闪烁。
+      const [levelData, pendingData] = await Promise.all([
+        firstTopic && firstLevel
+          ? fetchLevelConfig(firstTopic.id, firstLevel.id, firstLevel)
+          : Promise.resolve<LevelConfig | null>(null),
+        fetchPendingPool(),
+      ]);
+      hydrateInitialEditorState({
+        levelData,
+        topicId: firstTopic?.id || "",
+        levelId: firstLevel?.id || "",
+        catalogLevel: firstLevel,
+        pendingItems: pendingData.items,
+        tableclothItems: pendingData.tablecloths,
+        preferredImageId: params.get("image") || "",
+      });
       const requestedMode = params.get("mode");
       if (requestedMode === "polygon" || requestedMode === "knob") setActiveMode(requestedMode);
     } catch (error) {
@@ -371,47 +268,133 @@ function App({ onUnsavedChange }: Props) {
     }
   }
 
-  async function loadPendingImages(preferredId = "") {
-    try {
-      const response = await fetch("/api/pending-images");
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[] };
-      const availableItems = (data.items || []).filter((item) => !item.processed_path);
-      const items = availableItems.filter((item) => item.kind !== "tablecloth");
-      const tableclothItems = availableItems.filter((item) => item.kind === "tablecloth");
-      setPendingImages(items);
-      setBackgroundImages(tableclothItems);
-      setSaveDialog((current) => ({
-        ...current,
-        newBackgroundPath: current.newBackgroundPath || tableclothItems[0]?.path || "",
-        newBackgroundType: current.newBackgroundType === "image" && !tableclothItems.length ? "color" : current.newBackgroundType,
-      }));
-      const preferred = items.find((item) => item.id === preferredId) || items.find((item) => item.processed) || items[0] || null;
-      if (preferred) {
-        setSelectedImages({ polygon: preferred, knob: preferred });
-        applyPendingImageToMode("polygon", preferred);
-        applyPendingImageToMode("knob", preferred);
-      }
-    } catch (error) {
-      showToast(error instanceof Error ? `加载图片池失败：${error.message}` : "加载图片池失败");
-    }
-  }
-
-  async function loadLevel(topicId: string, levelId: string, catalogLevel?: CatalogLevel) {
+  async function fetchLevelConfig(topicId: string, levelId: string, catalogLevel?: CatalogLevel): Promise<LevelConfig> {
     try {
       const response = await fetch(`/api/levels/${topicId}/${levelId}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as LevelConfig;
-      applyLoadedLevel(data, topicId, levelId);
+      return (await response.json()) as LevelConfig;
     } catch (error) {
       const fallback = makeEmptyLevel();
       fallback.id = levelId;
       fallback.topic_id = topicId;
       fallback.title = catalogLevel?.title || levelId;
       fallback.title_i18n = catalogLevel?.title_i18n || { [locale]: fallback.title };
-      fallback.image.path = `res://levels/${topicId}/${levelId}/source.png`;
-      applyLoadedLevel(fallback, topicId, levelId);
+      fallback.image.path = catalogLevel?.source || "";
+      fallback.modes.polygon.image = { path: catalogLevel?.source || "", name: "", width: 0, height: 0 };
+      fallback.modes.knob.image = { path: catalogLevel?.source || "", name: "", width: 0, height: 0 };
+      showToast(error instanceof Error ? `加载关卡失败：${error.message}` : "加载关卡失败");
+      return fallback;
     }
+  }
+
+  async function fetchPendingPool(): Promise<{ items: PendingImageItem[]; tablecloths: PendingImageItem[] }> {
+    try {
+      const response = await fetch("/api/pending-images");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { ok?: boolean; items?: PendingImageItem[] };
+      const availableItems = (data.items || []).filter((item) => !item.processed_path);
+      return {
+        items: availableItems.filter((item) => item.kind !== "tablecloth"),
+        tablecloths: availableItems.filter((item) => item.kind === "tablecloth"),
+      };
+    } catch (error) {
+      showToast(error instanceof Error ? `加载图片池失败：${error.message}` : "加载图片池失败");
+      return { items: [], tablecloths: [] };
+    }
+  }
+
+  async function loadPendingImages(preferredId = "", applySelection = true) {
+    const data = await fetchPendingPool();
+    setPendingImages(data.items);
+    setBackgroundImages(data.tablecloths);
+    setSaveDialog((current) => ({
+      ...current,
+      newBackgroundPath: current.newBackgroundPath || data.tablecloths[0]?.path || "",
+      newBackgroundType: current.newBackgroundType === "image" && !data.tablecloths.length ? "color" : current.newBackgroundType,
+    }));
+    if (!applySelection) return;
+    const preferred = data.items.find((item) => item.id === preferredId) || data.items.find((item) => item.processed) || data.items[0] || null;
+    if (preferred) {
+      setSelectedImages({ polygon: preferred, knob: preferred });
+      applyPendingImageToMode("polygon", preferred);
+      applyPendingImageToMode("knob", preferred);
+    }
+  }
+
+  async function loadLevel(topicId: string, levelId: string, catalogLevel?: CatalogLevel) {
+    const data = await fetchLevelConfig(topicId, levelId, catalogLevel);
+    applyLoadedLevel(data, topicId, levelId);
+  }
+
+  /** 选定 mode 的初始数据：若 image 草稿非空就用草稿；否则用 level.json 里的数据。和首次 hydrate / 切换图片走一致的判断。 */
+  function pickInitialModeState(mode: EditMode, item: PendingImageItem | null, levelData: LevelConfig | null) {
+    const modeState = item?.editor_state?.[mode];
+    const polygonHasDraft =
+      mode === "polygon" &&
+      Boolean(
+        modeState &&
+          ((modeState.cuts?.length ?? 0) > 0 ||
+            (modeState.pieces?.length ?? 0) > 0 ||
+            modeState.dirty ||
+            modeState.completed ||
+            modeState.saved),
+      );
+    const knobHasDraft =
+      mode === "knob" &&
+      Boolean(
+        modeState &&
+          ((modeState.knob_pieces?.length ?? 0) > 0 || modeState.dirty || modeState.completed || modeState.saved),
+      );
+
+    if (mode === "polygon") {
+      if (polygonHasDraft && modeState) {
+        const cuts = structuredClone(modeState.cuts || []) as CutLine[];
+        const pieces = structuredClone(modeState.pieces || []) as PieceCell[];
+        return {
+          cuts,
+          pieces,
+          knobPieces: [] as LevelPiece[],
+          dirty: Boolean(modeState.dirty),
+          completed: Boolean(modeState.completed || modeState.saved || item?.saved_modes?.includes("polygon")),
+          analysisDirty: Boolean(modeState.analysis_dirty),
+        };
+      }
+      const importedCuts: CutLine[] = [
+        ...((levelData?.editor?.cuts || []).map((cut) => ({ ...cut, points: cut.points.map(([x, y]) => ({ x, y })) }))),
+        ...((levelData?.editor?.shapes || []).map((shape) => ({ ...shape, points: shape.points.map(([x, y]) => ({ x, y })) }))),
+      ];
+      const importedPieces: PieceCell[] = (levelData?.editor?.pieces || []).map((piece) => ({
+        ...piece,
+        points: piece.points.map(([x, y]) => ({ x, y })),
+      })) as PieceCell[];
+      return {
+        cuts: importedCuts,
+        pieces: importedPieces,
+        knobPieces: [] as LevelPiece[],
+        dirty: false,
+        completed:
+          Boolean(levelData?.modes?.polygon?.pieces?.length) || Boolean(item?.saved_modes?.includes("polygon")),
+        analysisDirty: false,
+      };
+    }
+    if (knobHasDraft && modeState) {
+      return {
+        cuts: [] as CutLine[],
+        pieces: [] as PieceCell[],
+        knobPieces: structuredClone(modeState.knob_pieces || []) as LevelPiece[],
+        dirty: Boolean(modeState.dirty),
+        completed: Boolean(modeState.completed || modeState.saved || item?.saved_modes?.includes("knob")),
+        analysisDirty: false,
+      };
+    }
+    return {
+      cuts: [] as CutLine[],
+      pieces: [] as PieceCell[],
+      knobPieces: (levelData?.modes?.knob?.pieces || []) as LevelPiece[],
+      dirty: false,
+      completed: Boolean(levelData?.modes?.knob?.pieces?.length) || Boolean(item?.saved_modes?.includes("knob")),
+      analysisDirty: false,
+    };
   }
 
   function applyPendingImageToMode(mode: EditMode, item: PendingImageItem) {
@@ -431,14 +414,67 @@ function App({ onUnsavedChange }: Props) {
         },
       },
     }));
+    applyPendingEditorStateToMode(mode, item);
   }
 
   function selectImageForMode(mode: EditMode, imageId: string) {
     const item = pendingImages.find((candidate) => candidate.id === imageId) || null;
     if (!item) return;
-    recordImageEdit(mode);
+    const previous = selectedImages[mode];
+    if (previous) {
+      const latestPrevious = pendingImages.find((candidate) => candidate.id === previous.id) || previous;
+      void persistPendingEditorState(latestPrevious, pendingEditorStateForCurrentMode(latestPrevious, mode));
+    }
     setSelectedImages((current) => ({ ...current, [mode]: item }));
     applyPendingImageToMode(mode, item);
+  }
+
+  function applyPendingEditorStateToMode(mode: EditMode, item: PendingImageItem) {
+    editorStateHydratingRef.current = true;
+    const modeState = item.editor_state?.[mode];
+    // 只有当图片实际有草稿（已编辑过/已保存过/含数据），才覆盖编辑器中现有的 cuts/pieces/knobPieces；
+    // 否则保留来自 level.json 的数据（避免新图片把关卡已有的形状清空）。
+    const polygonHasDraft =
+      mode === "polygon" &&
+      Boolean(
+        modeState &&
+          ((modeState.cuts?.length ?? 0) > 0 ||
+            (modeState.pieces?.length ?? 0) > 0 ||
+            modeState.dirty ||
+            modeState.completed ||
+            modeState.saved),
+      );
+    const knobHasDraft =
+      mode === "knob" &&
+      Boolean(
+        modeState &&
+          ((modeState.knob_pieces?.length ?? 0) > 0 || modeState.dirty || modeState.completed || modeState.saved),
+      );
+
+    const hasDraft = mode === "polygon" ? polygonHasDraft : knobHasDraft;
+    if (mode === "polygon" && polygonHasDraft) {
+      const nextCuts = structuredClone(modeState!.cuts || []);
+      const nextPieces = modeState!.pieces || [];
+      setCuts(nextCuts);
+      setAnalysisCuts(nextCuts);
+      setPieces(structuredClone(nextPieces));
+      setPolygonAnalysisDirty(Boolean(modeState!.analysis_dirty));
+    } else if (mode === "knob" && knobHasDraft) {
+      const savedKnobPieces = modeState!.knob_pieces || [];
+      setKnobPieces(structuredClone(savedKnobPieces));
+    }
+    setSelectedId("");
+    setSelectedPieceIds([]);
+    // 仅当图片有草稿时才用图片的 dirty/completed 覆盖；否则保留 applyLoadedLevel 写入的关卡级状态。
+    if (hasDraft) {
+      setDirtyModes((current) => ({ ...current, [mode]: Boolean(modeState?.dirty) }));
+      setCompletedModes((current) => ({ ...current, [mode]: Boolean(modeState?.completed || modeState?.saved || item.saved_modes?.includes(mode)) }));
+    } else if (item.saved_modes?.includes(mode)) {
+      setCompletedModes((current) => ({ ...current, [mode]: true }));
+    }
+    window.setTimeout(() => {
+      editorStateHydratingRef.current = false;
+    }, 0);
   }
 
   function applyLoadedLevel(data: LevelConfig, topicId: string, levelId: string) {
@@ -453,6 +489,11 @@ function App({ onUnsavedChange }: Props) {
     setAnalysisCuts(importedCuts);
     setPieces((data.editor?.pieces || []).map((piece) => ({ ...piece, points: piece.points.map(([x, y]) => ({ x, y })) })));
     setKnobPieces(data.modes?.knob?.pieces || []);
+    setCutLineColor(data.editor?.cut_color || DEFAULT_CUT_COLOR);
+    setPolygonAnalysisDirty(false);
+    setLineToolActive(false);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
     setSelectedId("");
     setSelectedPieceIds([]);
     setDirtyModes({ polygon: false, knob: false });
@@ -460,8 +501,88 @@ function App({ onUnsavedChange }: Props) {
       polygon: Boolean(data.modes?.polygon?.pieces?.length),
       knob: Boolean(data.modes?.knob?.pieces?.length),
     });
-    setUndoStack([]);
-    setRedoStack([]);
+    history.reset();
+  }
+
+  /**
+   * 首次进入编辑器时，把 level + pending image 一次性写入所有 state，避免：
+   * 1) 先 setCuts(level) → 渲染 → setCuts(image draft) 的两帧闪烁；
+   * 2) 切换 image / 关卡时遗留的过渡状态。
+   */
+  function hydrateInitialEditorState(args: {
+    levelData: LevelConfig | null;
+    topicId: string;
+    levelId: string;
+    catalogLevel?: CatalogLevel;
+    pendingItems: PendingImageItem[];
+    tableclothItems: PendingImageItem[];
+    preferredImageId: string;
+  }) {
+    const { levelData, topicId, levelId, pendingItems, tableclothItems, preferredImageId } = args;
+    setPendingImages(pendingItems);
+    setBackgroundImages(tableclothItems);
+    setSaveDialog((current) => ({
+      ...current,
+      newBackgroundPath: current.newBackgroundPath || tableclothItems[0]?.path || "",
+      newBackgroundType: current.newBackgroundType === "image" && !tableclothItems.length ? "color" : current.newBackgroundType,
+    }));
+    if (!levelData) return;
+    const preferred =
+      pendingItems.find((item) => item.id === preferredImageId) ||
+      pendingItems.find((item) => item.processed) ||
+      pendingItems[0] ||
+      null;
+    const baseLevel = normalizeLevelConfig(levelData, topicId, levelId);
+    const polygonInitial = pickInitialModeState("polygon", preferred, levelData);
+    const knobInitial = pickInitialModeState("knob", preferred, levelData);
+    const nextLevel: LevelConfig = preferred
+      ? {
+          ...baseLevel,
+          modes: {
+            polygon: {
+              ...baseLevel.modes.polygon,
+              image: {
+                path: preferred.path,
+                name: preferred.name,
+                width: preferred.source_info.width,
+                height: preferred.source_info.height,
+              },
+            },
+            knob: {
+              ...baseLevel.modes.knob,
+              image: {
+                path: preferred.path,
+                name: preferred.name,
+                width: preferred.source_info.width,
+                height: preferred.source_info.height,
+              },
+            },
+          },
+        }
+      : baseLevel;
+    editorStateHydratingRef.current = true;
+    setCurrentTarget({ topicId, levelId });
+    setLevel(nextLevel);
+    setCuts(polygonInitial.cuts);
+    setAnalysisCuts(polygonInitial.cuts);
+    setPieces(polygonInitial.pieces);
+    setKnobPieces(knobInitial.knobPieces);
+    setCutLineColor(levelData.editor?.cut_color || DEFAULT_CUT_COLOR);
+    setPolygonAnalysisDirty(polygonInitial.analysisDirty);
+    setLineToolActive(false);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
+    setSelectedId("");
+    setSelectedPieceIds([]);
+    setDirtyModes({ polygon: polygonInitial.dirty, knob: knobInitial.dirty });
+    setCompletedModes({ polygon: polygonInitial.completed, knob: knobInitial.completed });
+    if (preferred) {
+      setSelectedImages({ polygon: preferred, knob: preferred });
+    }
+    history.reset();
+    window.setTimeout(() => {
+      editorStateHydratingRef.current = false;
+    }, 0);
   }
 
   useEffect(() => {
@@ -480,13 +601,13 @@ function App({ onUnsavedChange }: Props) {
 
   useEffect(() => {
     setActualPreview(null);
-    setWorkerImageReady(false);
+    analysisWorker.setWorkerImageReady(false);
     if (!image) return;
-    const worker = analysisWorkerRef.current;
+    const worker = analysisWorker.workerRef.current;
     if (!worker || !("createImageBitmap" in window)) return;
     let cancelled = false;
-    const requestId = imageRequestIdRef.current + 1;
-    imageRequestIdRef.current = requestId;
+    const requestId = analysisWorker.imageRequestIdRef.current + 1;
+    analysisWorker.imageRequestIdRef.current = requestId;
     void createImageBitmap(image)
       .then((bitmap) => {
         if (cancelled) {
@@ -496,19 +617,16 @@ function App({ onUnsavedChange }: Props) {
         worker.postMessage({ type: "setImage", requestId, image: bitmap }, [bitmap]);
       })
       .catch(() => {
-        if (imageRequestIdRef.current === requestId) setWorkerImageReady(false);
+        if (analysisWorker.imageRequestIdRef.current === requestId) analysisWorker.setWorkerImageReady(false);
       });
     return () => {
       cancelled = true;
     };
   }, [image]);
 
-  const viewBox = useMemo(() => {
-    if (!image) return "0 0 1024 1024";
-    return `0 0 ${image.naturalWidth} ${image.naturalHeight}`;
-  }, [image]);
-
-  const selected = cuts.find((cut) => cut.id === selectedId);
+  const selected = cuts.find((cut) => cut.id === selectedId) || null;
+  const canvasView = useEditorCanvasView({ image, locked: Boolean(drag) });
+  const viewBox = canvasView.viewBox;
   const snapPoints = useMemo(() => {
     if (!analysis.outline.length) return [];
     return samplePath([...analysis.outline, analysis.outline[0]], Math.min(300, Math.max(100, analysis.outline.length)));
@@ -517,10 +635,36 @@ function App({ onUnsavedChange }: Props) {
     () => (activeMode === "knob" ? generateKnobPieces(image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size) : []),
     [activeMode, image, level.grid.cols, level.grid.rows, level.modes.knob.knob_size],
   );
+  const effectiveKnobPieces = useMemo(
+    () => (knobPieces.length ? knobPieces : generatedKnobPieces),
+    [knobPieces, generatedKnobPieces],
+  );
   const modeReady = {
-    polygon: pieces.length > 0,
-    knob: knobPieces.length > 0,
+    polygon: pieces.length > 0 && !polygonAnalysisDirty,
+    knob: effectiveKnobPieces.length > 0,
   };
+  const cutIntersections = useMemo(() => findCutIntersections(cuts), [cuts]);
+  const cutGaps = useMemo(() => findCutGaps(cuts, snapPoints, 2.5, SNAP_THRESHOLD), [cuts, snapPoints]);
+  const snapConnectionMarkers = useMemo<SnapConnectionMarker[]>(() => {
+    const markers: SnapConnectionMarker[] = [];
+    const seen = new Set<string>();
+    for (const cut of cuts) {
+      if (cut.type !== "fracture" || cut.points.length < 2) continue;
+      const endpoints = [
+        { id: "start", point: cut.points[0] },
+        { id: "end", point: cut.points[cut.points.length - 1] },
+      ];
+      for (const endpoint of endpoints) {
+        const hit = snapPoint(endpoint.point, snapPoints, cuts, 2.5, cut.id);
+        if (!hit) continue;
+        const key = `${Math.round(hit.point.x * 10)},${Math.round(hit.point.y * 10)},${hit.kind}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        markers.push({ id: key, point: hit.point, kind: hit.kind });
+      }
+    }
+    return markers;
+  }, [cuts, snapPoints]);
   const canSaveCurrentMode = Boolean(activePendingImage && modeReady[activeMode]);
   const canSaveToGodot = canSaveCurrentMode;
   const canvasModeLabel =
@@ -533,35 +677,58 @@ function App({ onUnsavedChange }: Props) {
       setActualPreview(null);
       return;
     }
-    const requestId = analysisRequestIdRef.current + 1;
-    analysisRequestIdRef.current = requestId;
-    const worker = analysisWorkerRef.current;
-    if (worker && workerImageReady) {
+    if (!analysisCuts.length) {
+      setActualPreview(null);
+      return;
+    }
+    const requestId = analysisWorker.analysisRequestIdRef.current + 1;
+    analysisWorker.analysisRequestIdRef.current = requestId;
+    const worker = analysisWorker.workerRef.current;
+    if (worker && analysisWorker.workerImageReady) {
       worker.postMessage({ type: "analyze", requestId, cuts: analysisCuts, maxSize: 840 });
       return;
     }
     const timeout = window.setTimeout(() => {
-      if (requestId !== analysisRequestIdRef.current) return;
+      if (requestId !== analysisWorker.analysisRequestIdRef.current) return;
       setActualPreview(analyzeActualPieces(image, analysisCuts, 840));
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [image, analysisCuts, workerImageReady]);
+  }, [image, analysisCuts, analysisWorker.workerImageReady]);
 
   useEffect(() => {
-    if (!analysisCuts.length || !actualPreview?.pieces.length) return;
+    if (!analysisCuts.length) {
+      setPieces([]);
+      setSelectedPieceIds([]);
+      return;
+    }
+    if (!actualPreview) return;
     setPieces(actualPreview.pieces);
     setSelectedPieceIds((current) => current.filter((id) => actualPreview.pieces.some((piece) => piece.id === id)));
+    setPolygonAnalysisDirty(false);
   }, [actualPreview, analysisCuts.length]);
 
   useEffect(() => {
     if (activeMode !== "polygon") return;
+    if (editorStateHydratingRef.current) return;
     if (drag) return;
-    const timeout = window.setTimeout(() => setAnalysisCuts(structuredClone(cuts)), 180);
-    return () => window.clearTimeout(timeout);
-  }, [activeMode, cuts, drag]);
-  useEffect(() => {
-    if (activeMode === "knob" && !knobPieces.length && generatedKnobPieces.length) setKnobPieces(generatedKnobPieces);
-  }, [activeMode, generatedKnobPieces, knobPieces.length]);
+    if (analysisCuts === cuts) return;
+    if (!cuts.length) {
+      if (analysisCuts.length) {
+        setAnalysisCuts([]);
+        setPieces([]);
+        setActualPreview(null);
+        setSelectedPieceIds([]);
+        setPolygonAnalysisDirty(false);
+      }
+      return;
+    }
+    setPolygonAnalysisDirty(true);
+    const timer = window.setTimeout(() => {
+      setAnalysisCuts(cuts);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeMode, analysisCuts, cuts, drag]);
+
 
   useEffect(() => {
     const hasDirtyMode = dirtyModes.polygon || dirtyModes.knob;
@@ -575,13 +742,33 @@ function App({ onUnsavedChange }: Props) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirtyModes, onUnsavedChange]);
 
+  useEffect(() => {
+    if (!activePendingImage || editorStateHydratingRef.current) return;
+    if (editorStateSaveTimerRef.current != null) window.clearTimeout(editorStateSaveTimerRef.current);
+    editorStateSaveTimerRef.current = window.setTimeout(() => {
+      const latestItem = pendingImages.find((item) => item.id === activePendingImage.id) || activePendingImage;
+      void persistPendingEditorState(latestItem, pendingEditorStateForCurrentMode(latestItem));
+    }, 450);
+    return () => {
+      if (editorStateSaveTimerRef.current != null) window.clearTimeout(editorStateSaveTimerRef.current);
+    };
+  }, [
+    activeMode,
+    activePendingImage?.id,
+    cuts,
+    pieces,
+    effectiveKnobPieces,
+    dirtyModes,
+    completedModes,
+    polygonAnalysisDirty,
+  ]);
+
   function snapshot(): EditorSnapshot {
-    return cloneSnapshot({ level, cuts, pieces, knobPieces, completedModes });
+    return cloneSnapshot({ level, cuts, pieces, knobPieces, completedModes, cutLineColor });
   }
 
   function recordEdit(mode: EditMode = activeMode) {
-    setUndoStack((current) => [...current.slice(-49), snapshot()]);
-    setRedoStack([]);
+    history.pushUndo(snapshot());
     setDirtyModes((current) => ({ ...current, [mode]: true }));
     setCompletedModes((current) => ({ ...current, [mode]: false }));
   }
@@ -593,6 +780,8 @@ function App({ onUnsavedChange }: Props) {
     setPieces(next.pieces);
     setKnobPieces(next.knobPieces);
     setCompletedModes(next.completedModes || { polygon: false, knob: false });
+    setCutLineColor(next.cutLineColor || DEFAULT_CUT_COLOR);
+    setPolygonAnalysisDirty(false);
     setSelectedId("");
     setSelectedPieceIds([]);
     setDrag(null);
@@ -600,33 +789,68 @@ function App({ onUnsavedChange }: Props) {
     setDrawingHoverPoint(null);
   }
 
-  function undo() {
-    setUndoStack((current) => {
-      if (!current.length) return current;
-      const previous = current[current.length - 1];
-      setRedoStack((redo) => [...redo, snapshot()]);
-      restoreSnapshot(previous);
-      setDirtyModes((dirty) => ({ ...dirty, [activeMode]: true }));
-      return current.slice(0, -1);
+  function pendingEditorStateForCurrentMode(item: PendingImageItem, mode: EditMode = activeMode): PendingImageEditorState {
+    const currentState = item.editor_state || {};
+    const savedModeSet = new Set(item.saved_modes || []);
+    return {
+      ...currentState,
+      [mode]:
+        mode === "polygon"
+          ? {
+              ...(currentState.polygon || {}),
+              dirty: dirtyModes.polygon,
+              completed: completedModes.polygon,
+              saved: savedModeSet.has("polygon"),
+              cuts: structuredClone(cuts),
+              pieces: structuredClone(pieces),
+              analysis_dirty: polygonAnalysisDirty,
+            }
+          : {
+              ...(currentState.knob || {}),
+              dirty: dirtyModes.knob,
+              completed: completedModes.knob,
+              saved: savedModeSet.has("knob"),
+              knob_pieces: structuredClone(effectiveKnobPieces),
+            },
+    };
+  }
+
+  async function persistPendingEditorState(item: PendingImageItem, state: PendingImageEditorState) {
+    setPendingImages((current) => current.map((candidate) => (candidate.id === item.id ? { ...candidate, editor_state: state } : candidate)));
+    setBackgroundImages((current) => current.map((candidate) => (candidate.id === item.id ? { ...candidate, editor_state: state } : candidate)));
+    setSelectedImages((current) => ({
+      polygon: current.polygon?.id === item.id ? { ...current.polygon, editor_state: state } : current.polygon,
+      knob: current.knob?.id === item.id ? { ...current.knob, editor_state: state } : current.knob,
+    }));
+    await fetch(`/api/pending-images/${encodeURIComponent(item.id)}/editor-state`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ editor_state: state }),
     });
   }
 
+  function undo() {
+    const previous = history.undo(snapshot());
+    if (!previous) return;
+    restoreSnapshot(previous);
+    setDirtyModes((dirty) => ({ ...dirty, [activeMode]: true }));
+  }
+
   function redo() {
-    setRedoStack((current) => {
-      if (!current.length) return current;
-      const next = current[current.length - 1];
-      setUndoStack((undoItems) => [...undoItems, snapshot()]);
-      restoreSnapshot(next);
-      setDirtyModes((dirty) => ({ ...dirty, [activeMode]: true }));
-      return current.slice(0, -1);
-    });
+    const next = history.redo(snapshot());
+    if (!next) return;
+    restoreSnapshot(next);
+    setDirtyModes((dirty) => ({ ...dirty, [activeMode]: true }));
   }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (drawingCut && event.key === "Escape") {
+      if (lineToolActive && event.key === "Escape") {
+        // ESC：完全退出添加线段模式（无论当前是否已经按下了第一点）。
         event.preventDefault();
-        finishDrawingCut();
+        setLineToolActive(false);
+        setDrawingCut(null);
+        setDrawingHoverPoint(null);
         return;
       }
       if (isTextEditingTarget(event.target)) return;
@@ -646,11 +870,28 @@ function App({ onUnsavedChange }: Props) {
       if (!modKey && activeMode === "polygon" && selectedId && (event.key === "Backspace" || event.key === "Delete")) {
         event.preventDefault();
         removeSelected();
+        return;
+      }
+      // 方向键微移：只在多边形编辑模式且已选中线段/形状时生效；按住会随浏览器自动重复。
+      if (!modKey && activeMode === "polygon" && selectedId && !drawingCut) {
+        const dx = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+        const dy = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+        if (dx !== 0 || dy !== 0) {
+          event.preventDefault();
+          nudgeSelectedCut(dx, dy);
+        }
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key.startsWith("Arrow")) nudgeSessionRef.current = false;
+    };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMode, drawingCut, redoStack.length, selectedId, undoStack.length]);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [activeMode, drawingCut, lineToolActive, history.canRedo, history.canUndo, selectedId]);
 
   function requestModeChange(mode: EditMode) {
     if (mode === activeMode) return;
@@ -662,11 +903,21 @@ function App({ onUnsavedChange }: Props) {
   }
 
   function switchMode(mode: EditMode) {
+    const previous = selectedImages[activeMode];
+    if (previous) {
+      const latestPrevious = pendingImages.find((candidate) => candidate.id === previous.id) || previous;
+      void persistPendingEditorState(latestPrevious, pendingEditorStateForCurrentMode(latestPrevious, activeMode));
+    }
     setActiveMode(mode);
     setSelectedId("");
     setSelectedPieceIds([]);
     setDrag(null);
+    setLineToolActive(false);
+    setDrawingCut(null);
+    setDrawingHoverPoint(null);
     setPendingMode(null);
+    const item = selectedImages[mode];
+    if (item) applyPendingEditorStateToMode(mode, item);
   }
 
   function hasUnsavedChanges() {
@@ -860,7 +1111,7 @@ function App({ onUnsavedChange }: Props) {
 
   function markCurrentModeComplete() {
     if (!modeReady[activeMode]) {
-      showToast(activeMode === "polygon" ? "多边形模式还没有生成可用碎片。" : "凹凸模式还没有可用碎片。");
+      showToast(activeMode === "polygon" ? "多边形模式还没有更新出可用碎片。" : "凹凸模式还没有可用碎片。");
       return;
     }
     setCompletedModes((current) => ({ ...current, [activeMode]: true }));
@@ -907,7 +1158,7 @@ function App({ onUnsavedChange }: Props) {
       return;
     }
 
-    const selectedKnobPieces = selectedPieceIds.map((id) => knobPieces.find((piece) => piece.id === id));
+    const selectedKnobPieces = selectedPieceIds.map((id) => effectiveKnobPieces.find((piece) => piece.id === id));
     if (!selectedKnobPieces[0] || !selectedKnobPieces[1]) return;
     const firstPoints = selectedKnobPieces[0].points.map(pointFromTuple);
     const secondPoints = selectedKnobPieces[1].points.map(pointFromTuple);
@@ -930,8 +1181,9 @@ function App({ onUnsavedChange }: Props) {
       visible_bounds: unionTupleBounds(mergedVisibleBoundsList, mergedPoints),
       visible_bounds_list: mergedVisibleBoundsList.length ? mergedVisibleBoundsList : [tupleBounds(mergedPoints)],
     };
-    setKnobPieces((current) =>
-      current
+    const baseKnobPieces = effectiveKnobPieces;
+    setKnobPieces(
+      baseKnobPieces
         .filter((piece) => !selectedPieceIds.includes(piece.id))
         .map((piece) => ({
           ...piece,
@@ -964,7 +1216,19 @@ function App({ onUnsavedChange }: Props) {
     });
   }
 
+  function clearEditorImage() {
+    setImage(null);
+    setImageUrl("");
+    setAnalysis({ outline: [], edgePoints: [], bounds: null });
+    setActualPreview(null);
+    analysisWorker.setWorkerImageReady(false);
+  }
+
   function loadEditorImage(src: string, name: string, godotPath: string, target: ImageTarget, updateConfig = true) {
+    if (!src) {
+      clearEditorImage();
+      return;
+    }
     const next = new Image();
     next.onload = () => {
       setImage(next);
@@ -990,17 +1254,14 @@ function App({ onUnsavedChange }: Props) {
       });
     };
     next.onerror = () => {
-      if (src !== DEFAULT_BROWSER_IMAGE) {
-        loadEditorImage(DEFAULT_BROWSER_IMAGE, "cat_moon.png", DEFAULT_IMAGE_PATH, target, false);
-        showToast("当前图片无法加载，已临时使用示例图预览。");
-      }
+      clearEditorImage();
+      showToast("当前图片无法加载，请检查关卡图片是否存在。");
     };
     next.src = src;
   }
 
   function recordImageEdit(target: ImageTarget) {
-    setUndoStack((current) => [...current.slice(-49), snapshot()]);
-    setRedoStack([]);
+    history.pushUndo(snapshot());
     setDirtyModes((current) => ({ ...current, [target]: true }));
     setCompletedModes((current) => ({ ...current, [target]: false }));
   }
@@ -1076,7 +1337,6 @@ function App({ onUnsavedChange }: Props) {
   function updateGrid<K extends keyof LevelConfig["grid"]>(key: K, value: number) {
     recordEdit("knob");
     const nextValue = key === "piece_size" ? Math.max(80, Math.min(320, Math.round(value))) : Math.max(1, Math.min(12, Math.round(value)));
-    const nextGrid = { ...level.grid, [key]: nextValue };
     setLevel((current) => ({
       ...current,
       grid: {
@@ -1091,7 +1351,7 @@ function App({ onUnsavedChange }: Props) {
         },
       },
     }));
-    setKnobPieces(generateKnobPieces(image, nextGrid.cols, nextGrid.rows, level.modes.knob.knob_size));
+    setKnobPieces([]);
     setSelectedPieceIds([]);
   }
 
@@ -1113,17 +1373,12 @@ function App({ onUnsavedChange }: Props) {
         },
       },
     }));
-    setKnobPieces(generateKnobPieces(image, level.grid.cols, level.grid.rows, value));
+    setKnobPieces([]);
     setSelectedPieceIds([]);
   }
 
-  function autoGenerate() {
-    recordEdit("polygon");
-    const result = generateFractureNetwork(analysis.outline, analysis.bounds, targetPieces);
-    setCuts(result.cuts);
-    setAnalysisCuts(result.cuts);
-    setPieces(result.pieces);
-    setSelectedId(result.cuts[0]?.id || "");
+  function updateCutLineColor(value: string) {
+    setCutLineColor(value);
   }
 
   function addPreset(template: CutTemplate) {
@@ -1139,6 +1394,7 @@ function App({ onUnsavedChange }: Props) {
     recordEdit("polygon");
     const next = translateCut(presetCut(template, analysis.bounds), center);
     setCuts((current) => [...current, next]);
+    setPolygonAnalysisDirty(true);
     setSelectedId(next.id);
   }
 
@@ -1150,20 +1406,38 @@ function App({ onUnsavedChange }: Props) {
     setPolygonView("edit");
   }
 
+  function startDrawingCut(initialPoint?: Point) {
+    setDrawingHoverPoint(initialPoint || null);
+    setDrawingCut({ id: uid("cut"), points: initialPoint ? [initialPoint] : [] });
+  }
+
   function addBridgeCut() {
     if (!analysis.outline.length) return;
     setPolygonView("edit");
     setSelectedId("");
-    setDrawingHoverPoint(null);
-    setDrawingCut({ id: uid("cut"), points: [] });
+    setLineToolActive(true);
+    startDrawingCut();
     showToast("左键添加点，右键结束线条。");
+  }
+
+  function toggleLineTool() {
+    if (lineToolActive) {
+      setLineToolActive(false);
+      setDrawingCut(null);
+      setDrawingHoverPoint(null);
+      return;
+    }
+    addBridgeCut();
   }
 
   function finishDrawingCut() {
     if (!drawingCut) return;
     if (drawingCut.points.length < 2) {
-      setDrawingCut(null);
-      setDrawingHoverPoint(null);
+      if (lineToolActive) startDrawingCut();
+      else {
+        setDrawingCut(null);
+        setDrawingHoverPoint(null);
+      }
       showToast("已取消添加线条。");
       return;
     }
@@ -1175,16 +1449,40 @@ function App({ onUnsavedChange }: Props) {
       points: drawingCut.points,
     };
     setCuts((current) => [...current, next]);
+    setPolygonAnalysisDirty(true);
     setSelectedId(next.id);
-    setDrawingCut(null);
-    setDrawingHoverPoint(null);
+    if (lineToolActive) startDrawingCut();
+    else {
+      setDrawingCut(null);
+      setDrawingHoverPoint(null);
+    }
   }
 
   function removeSelected() {
     if (!selectedId) return;
     recordEdit("polygon");
     setCuts((current) => current.filter((cut) => cut.id !== selectedId));
+    setPolygonAnalysisDirty(true);
     setSelectedId("");
+  }
+
+  /** 用方向键微移当前选中的线段/形状，单次 1 像素，按住时浏览器自动重复触发。 */
+  function nudgeSelectedCut(dx: number, dy: number) {
+    if (!selectedId) return;
+    if (!nudgeSessionRef.current) {
+      recordEdit("polygon");
+      nudgeSessionRef.current = true;
+    } else {
+      setDirtyModes((current) => ({ ...current, polygon: true }));
+      setCompletedModes((current) => ({ ...current, polygon: false }));
+    }
+    setPolygonAnalysisDirty(true);
+    setCuts((current) =>
+      current.map((cut) => {
+        if (cut.id !== selectedId) return cut;
+        return { ...cut, points: cut.points.map((point) => ({ x: point.x + dx, y: point.y + dy })) };
+      }),
+    );
   }
 
   function clearAllCuts() {
@@ -1193,6 +1491,7 @@ function App({ onUnsavedChange }: Props) {
     setCuts([]);
     setAnalysisCuts([]);
     setPieces([]);
+    setPolygonAnalysisDirty(false);
     setSelectedId("");
     setSelectedPieceIds([]);
     setDrawingCut(null);
@@ -1220,16 +1519,43 @@ function App({ onUnsavedChange }: Props) {
     return clientPointToSvg(event.clientX, event.clientY);
   }
 
+  function snapEditorPoint(point: Point, excludeId = ""): Point {
+    if (!snapEnabled) return point;
+    const hit = snapPoint(point, snapPoints, cuts, SNAP_THRESHOLD, excludeId);
+    return hit ? { ...hit.point } : point;
+  }
+
+
   function handleCanvasPointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (lineToolActive && !drawingCut) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const point = snapEditorPoint(svgPoint(event));
+      startDrawingCut(point);
+      return;
+    }
     if (drawingCut) {
       if (event.button !== 0) return;
       event.preventDefault();
-      const point = svgPoint(event);
+      const point = snapEditorPoint(svgPoint(event), drawingCut.id);
       setDrawingCut((current) => (current ? { ...current, points: [...current.points, point] } : current));
       setDrawingHoverPoint(point);
       return;
     }
-    setSelectedId("");
+    // 编辑模式下空白处左键按下：开始拖拽底图；松手时若没有移动过，再当作 deselect。
+    if (event.button !== 0) return;
+    const svg = event.currentTarget;
+    const [, , widthStr, heightStr] = viewBox.split(" ");
+    panDragRef.current = {
+      pointerId: event.pointerId,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
+      svgRect: svg.getBoundingClientRect(),
+      viewBoxWidth: Number(widthStr),
+      viewBoxHeight: Number(heightStr),
+      moved: false,
+    };
+    svg.setPointerCapture(event.pointerId);
   }
 
   function handleCanvasContextMenu(event: React.MouseEvent<SVGSVGElement>) {
@@ -1244,19 +1570,60 @@ function App({ onUnsavedChange }: Props) {
     const cut = cuts.find((item) => item.id === cutId);
     if (!cut) return;
     recordEdit("polygon");
+    setPolygonAnalysisDirty(true);
     setSelectedId(cutId);
     setDrag({
       cutId,
       pointIndex,
+      action: "move",
       start: svgPoint(event),
       original: structuredClone(cut),
     });
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  function beginScale(event: React.PointerEvent<SVGElement>, cutId: string) {
+    if (drawingCut) return;
+    event.stopPropagation();
+    const cut = cuts.find((item) => item.id === cutId);
+    if (!cut || cut.type !== "preset_shape") return;
+    const start = svgPoint(event);
+    const center = polygonCenter(cut.points);
+    recordEdit("polygon");
+    setPolygonAnalysisDirty(true);
+    setSelectedId(cutId);
+    setDrag({
+      cutId,
+      pointIndex: null,
+      action: "scale",
+      start,
+      original: structuredClone(cut),
+      center,
+      startDistance: Math.max(1, Math.hypot(start.x - center.x, start.y - center.y)),
+    });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
   function moveDrag(event: React.PointerEvent<SVGSVGElement>) {
     if (drawingCut) {
-      setDrawingHoverPoint(svgPoint(event));
+      setDrawingHoverPoint(snapEditorPoint(svgPoint(event), drawingCut.id));
+      return;
+    }
+    const panDrag = panDragRef.current;
+    if (panDrag && event.pointerId === panDrag.pointerId) {
+      const dxClient = event.clientX - panDrag.lastClientX;
+      const dyClient = event.clientY - panDrag.lastClientY;
+      if (!panDrag.moved && (Math.abs(dxClient) > 1 || Math.abs(dyClient) > 1)) {
+        panDrag.moved = true;
+      }
+      if (panDrag.moved) {
+        const scaleX = panDrag.viewBoxWidth / Math.max(1, panDrag.svgRect.width);
+        const scaleY = panDrag.viewBoxHeight / Math.max(1, panDrag.svgRect.height);
+        // 鼠标向右拖 → viewBox 应该向左移 → pan.x 减小，因此取相反符号。
+        canvasView.panBy(-dxClient * scaleX, -dyClient * scaleY);
+      }
+      panDrag.lastClientX = event.clientX;
+      panDrag.lastClientY = event.clientY;
       return;
     }
     if (!drag) return;
@@ -1278,7 +1645,11 @@ function App({ onUnsavedChange }: Props) {
       items.map((cut) => {
         if (cut.id !== drag.cutId) return cut;
         const next = structuredClone(drag.original);
-        if (drag.pointIndex === null) {
+        if (drag.action === "scale" && drag.center && drag.startDistance) {
+          const distance = Math.hypot(currentPoint.x - drag.center.x, currentPoint.y - drag.center.y);
+          const scale = Math.max(0.15, Math.min(5, distance / drag.startDistance));
+          next.points = scaleCutPoints(next.points, drag.center, scale);
+        } else if (drag.pointIndex === null) {
           next.points = next.points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
           if (snapEnabled && next.type !== "preset_shape") {
             const endpoints = [
@@ -1287,7 +1658,7 @@ function App({ onUnsavedChange }: Props) {
             ];
             const hit = endpoints
               .map((endpoint) => {
-                const snap = snapPoint(endpoint.point, snapPoints, cuts, snapThreshold, next.id);
+                const snap = snapPoint(endpoint.point, snapPoints, cuts, SNAP_THRESHOLD, next.id);
                 return snap ? { ...snap, endpoint } : null;
               })
               .filter((item): item is NonNullable<typeof item> => Boolean(item))
@@ -1301,7 +1672,7 @@ function App({ onUnsavedChange }: Props) {
         } else {
           next.points[drag.pointIndex] = { x: next.points[drag.pointIndex].x + dx, y: next.points[drag.pointIndex].y + dy };
           if (snapEnabled && next.type !== "preset_shape") {
-            const hit = snapPoint(next.points[drag.pointIndex], snapPoints, cuts, snapThreshold, next.id);
+            const hit = snapPoint(next.points[drag.pointIndex], snapPoints, cuts, SNAP_THRESHOLD, next.id);
             if (hit) next.points[drag.pointIndex] = { ...hit.point };
           }
         }
@@ -1319,30 +1690,12 @@ function App({ onUnsavedChange }: Props) {
     if (finalPoint) applyDragMove(finalPoint);
     dragPointRef.current = null;
     setDrag(null);
-  }
-
-  function cutPathD(cut: CutLine): string {
-    const cached = cutPathCacheRef.current.get(cut);
-    if (cached) return cached;
-    const value = cut.type === "preset_shape" ? catmullRomPath(cut.points, shapeTension(cut.template), true) : polylinePath(cut.points);
-    cutPathCacheRef.current.set(cut, value);
-    return value;
-  }
-
-  function piecePathD(piece: PieceCell): string {
-    const cached = piecePathCacheRef.current.get(piece);
-    if (cached) return cached;
-    const value = catmullRomPath(piece.points, 0.15, true);
-    piecePathCacheRef.current.set(piece, value);
-    return value;
-  }
-
-  function knobPiecePathD(piece: LevelPiece): string {
-    const cached = knobPiecePathCacheRef.current.get(piece);
-    if (cached) return cached;
-    const value = catmullRomPath(piece.points.map(pointFromTuple), 0.15, true);
-    knobPiecePathCacheRef.current.set(piece, value);
-    return value;
+    const panDrag = panDragRef.current;
+    if (panDrag) {
+      // 没有真正拖动过 → 视为点击空白 → 取消选中（保留旧的 deselect 行为）。
+      if (!panDrag.moved) setSelectedId("");
+      panDragRef.current = null;
+    }
   }
 
   function buildJson() {
@@ -1368,11 +1721,12 @@ function App({ onUnsavedChange }: Props) {
           cols: Math.max(1, Math.round(level.grid.cols)),
           piece_size: level.grid.piece_size,
           knob_size: level.modes.knob.knob_size,
-          pieces: knobPieces,
+          pieces: effectiveKnobPieces,
         },
       },
       editor: {
         outline: serializePoints(analysis.outline),
+        cut_color: cutLineColor,
         cuts: cuts
           .filter((cut) => cut.type === "fracture")
           .map((cut) => ({
@@ -1398,7 +1752,7 @@ function App({ onUnsavedChange }: Props) {
 
   function openSaveDialog() {
     if (!canSaveToGodot) {
-      showToast("请先为当前模式选择图片并生成可用碎片。");
+      showToast("请先为当前模式选择图片并更新出可用碎片。");
       return;
     }
     const topic = catalog.topics.find((item) => item.id === saveDialog.topicId) || catalog.topics[0];
@@ -1419,7 +1773,7 @@ function App({ onUnsavedChange }: Props) {
 
   async function saveJsonToGodot(): Promise<boolean> {
     if (!canSaveToGodot || !activePendingImage) {
-      showToast("请先为当前模式选择图片并生成可用碎片。");
+      showToast("请先为当前模式选择图片并更新出可用碎片。");
       return false;
     }
     const existingTopic = catalog.topics.find((item) => item.id === saveDialog.topicId) || catalog.topics[0];
@@ -1464,14 +1818,24 @@ function App({ onUnsavedChange }: Props) {
           level: nextLevel,
         }),
       });
-      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string; catalog?: LevelCatalog; topicId?: string; levelId?: string; sharedModes?: EditMode[] };
+      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string; catalog?: LevelCatalog; level?: LevelConfig; topicId?: string; levelId?: string; sharedModes?: EditMode[] };
       if (!response.ok || !result.ok) {
         throw new Error(result.error || `HTTP ${response.status}`);
       }
       showToast(`已保存到 ${result.path}`);
       if (result.catalog) setCatalog(result.catalog);
-      setCurrentTarget({ topicId: result.topicId || saveDialog.topicId, levelId: result.levelId || saveDialog.levelId });
       const savedModes = new Set<EditMode>(result.sharedModes?.length ? result.sharedModes : [activeMode]);
+      const savedTarget = { topicId: result.topicId || saveDialog.topicId, levelId: result.levelId || saveDialog.levelId };
+      // 必须先清掉已保存模式的 selectedImages，再 applyLoadedLevel；
+      // 否则 useEffect 会以"旧 pending image + 新 level"组合 触发 loadEditorImage(updateConfig=true)，
+      // 把 level.modes[mode].image.path 反向覆盖回 pending 路径，随后再次清选时找不到合法 res:// → 图片消失。
+      setSelectedImages((current) => ({
+        polygon: savedModes.has("polygon") ? null : current.polygon,
+        knob: savedModes.has("knob") ? null : current.knob,
+      }));
+      if (result.level) applyLoadedLevel(result.level, savedTarget.topicId, savedTarget.levelId);
+      else setCurrentTarget(savedTarget);
+      await loadPendingImages(activePendingImage.id, false);
       setDirtyModes((current) => ({
         ...current,
         polygon: savedModes.has("polygon") ? false : current.polygon,
@@ -1492,392 +1856,136 @@ function App({ onUnsavedChange }: Props) {
 
   const activeSaveStatus = dirtyModes[activeMode] ? "未保存" : completedModes[activeMode] ? "已保存" : "";
 
+  const canvasCaches = {
+    cutPath: cutPathCacheRef.current,
+    piecePath: piecePathCacheRef.current,
+    knobPiecePath: knobPiecePathCacheRef.current,
+  };
+
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(520px,1fr)_380px] overflow-hidden bg-linen text-ink">
       <main className="grid min-h-0 min-w-0 grid-rows-[auto_1fr] overflow-hidden">
-        <div className="grid min-h-14 grid-cols-[1fr_minmax(260px,420px)_1fr] items-center gap-3 overflow-auto border-b border-stone-300 bg-[#f7efe2] px-3">
-          <div className="flex min-w-0 items-center gap-3 justify-self-start">
-            <ToggleGroup type="single" value={activeMode} onValueChange={(value) => {
-              if (value === "polygon" || value === "knob") requestModeChange(value);
-            }}>
-              <WithTooltip label="多边形">
-                <ToggleGroupItem value="polygon" aria-label="多边形" className="relative gap-2 px-3">
-                  <Hexagon size={18} />
-                  <span>多边形</span>
-                  {(completedModes.polygon || dirtyModes.polygon) && <span className={completedModes.polygon ? "statusDot done" : "statusDot dirty"} />}
-                </ToggleGroupItem>
-              </WithTooltip>
-              <WithTooltip label="凹凸">
-                <ToggleGroupItem value="knob" aria-label="凹凸" className="relative gap-2 px-3">
-                  <Puzzle size={18} />
-                  <span>凹凸</span>
-                  {(completedModes.knob || dirtyModes.knob) && <span className={completedModes.knob ? "statusDot done" : "statusDot dirty"} />}
-                </ToggleGroupItem>
-              </WithTooltip>
-            </ToggleGroup>
-            {activeSaveStatus && <span className={dirtyModes[activeMode] ? "text-sm font-medium text-amber-700" : "text-sm font-medium text-emerald-700"}>{activeSaveStatus}</span>}
-          </div>
-          <div className="min-w-0">
-            <SelectBox value={activePendingImage?.id || ""} options={imageOptions} onValueChange={(id) => selectImageForMode(activeMode, id)} placeholder="选择拼图图片" />
-          </div>
-          <div className="flex items-center gap-2 justify-self-end">
-            <button className="btnPrimary" onClick={markCurrentModeComplete}>
-              完成
-            </button>
-            <button className="btnPrimary" disabled={!canSaveToGodot} onClick={openSaveDialog}>
-              <Save size={16} />
-              保存模式
-            </button>
-          </div>
-        </div>
-
-        <div className="relative grid min-h-0 place-items-center overflow-hidden p-5" style={canvasBackgroundStyle}>
-          <div className="canvasModeBadge">{canvasModeLabel}</div>
-          <svg
-            ref={svgRef}
-            className="h-[min(calc(100vh-96px),760px)] w-full max-w-[1040px] border border-black/15 bg-white/20"
-            viewBox={viewBox}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerLeave={endDrag}
-            onPointerDown={handleCanvasPointerDown}
-            onContextMenu={handleCanvasContextMenu}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={dropShape}
-          >
-            {image && <image href={imageUrl} x="0" y="0" width={image.naturalWidth} height={image.naturalHeight} preserveAspectRatio="xMidYMid meet" />}
-            {activeMode === "polygon" && polygonView !== "edit" && actualPreview?.dataUrl && (
-              <image href={actualPreview.dataUrl} x="0" y="0" width={image?.naturalWidth || 0} height={image?.naturalHeight || 0} preserveAspectRatio="none" />
-            )}
-            {activeMode === "polygon" && polygonView === "inspect" &&
-              pieces.map((piece) => (
-                <path
-                  key={piece.id}
-                  className={[
-                    "pieceSelectable",
-                    selectedPieceIds.includes(piece.id) ? "selectedPiece" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  d={piecePathD(piece)}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    togglePieceSelection(piece.id);
-                  }}
-                />
-              ))}
-            {activeMode === "polygon" && polygonView === "result" &&
-              cuts.map((cut) => (
-                <path
-                  key={cut.id}
-                  className="resultCutPath"
-                  d={cutPathD(cut)}
-                />
-              ))}
-            {activeMode === "knob" && showKnobPieces &&
-              knobPieces.map((piece) => (
-                <path
-                  key={piece.id}
-                  className={selectedPieceIds.includes(piece.id) ? "knobPreview selectedPiece" : "knobPreview"}
-                  d={knobPiecePathD(piece)}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    togglePieceSelection(piece.id);
-                  }}
-                />
-              ))}
-            {activeMode === "polygon" && polygonView !== "result" && cuts.map((cut) => (
-              <g key={cut.id} className={cut.id === selectedId ? "selected" : ""}>
-                <path
-                  className={cut.type === "preset_shape" ? "shapePath" : "cutPath"}
-                  d={cutPathD(cut)}
-                  onPointerDown={(event) => beginDrag(event, cut.id, null)}
-                />
-                {cut.id === selectedId &&
-                  cut.points.map((point, index) => (
-                    <circle key={`${cut.id}_${index}`} className="handle" cx={point.x} cy={point.y} r={10} onPointerDown={(event) => beginDrag(event, cut.id, index)} />
-                  ))}
-              </g>
-            ))}
-            {activeMode === "polygon" && drawingCut && (
-              <g className="drawingCutPreview">
-                {drawingCut.points.length > 0 && (
-                  <path d={polylinePath(drawingHoverPoint ? [...drawingCut.points, drawingHoverPoint] : drawingCut.points)} />
-                )}
-                {drawingCut.points.map((point, index) => (
-                  <circle key={`${drawingCut.id}_${index}`} cx={point.x} cy={point.y} r={8} />
-                ))}
-              </g>
-            )}
-          </svg>
-        </div>
+        <EditorTopBar
+          activeMode={activeMode}
+          onModeChange={requestModeChange}
+          dirtyModes={dirtyModes}
+          completedModes={completedModes}
+          activeImageId={activePendingImage?.id || ""}
+          imageOptions={imageOptions}
+          onSelectImage={(id) => selectImageForMode(activeMode, id)}
+          activeSaveStatus={activeSaveStatus}
+          canSaveToGodot={canSaveToGodot}
+          onMarkComplete={markCurrentModeComplete}
+          onOpenSaveDialog={openSaveDialog}
+        />
+        <EditorCanvas
+          ref={svgRef}
+          viewBox={viewBox}
+          background={canvasBackgroundStyle}
+          modeBadge={canvasModeLabel}
+          zoom={canvasView.zoom}
+          onZoomChange={canvasView.changeZoom}
+          onSetZoom={canvasView.setZoom}
+          onZoomReset={canvasView.resetZoom}
+          image={image}
+          imageUrl={imageUrl}
+          activeMode={activeMode}
+          polygonView={polygonView}
+          showKnobPieces={showKnobPieces}
+          cutLineColor={cutLineColor}
+          lineToolActive={lineToolActive}
+          cuts={cuts}
+          pieces={pieces}
+          knobPieces={effectiveKnobPieces}
+          selectedId={selectedId}
+          selectedPieceIds={selectedPieceIds}
+          drawingCut={drawingCut}
+          drawingHoverPoint={drawingHoverPoint}
+          actualPreview={actualPreview}
+          cutGaps={cutGaps}
+          cutIntersections={cutIntersections}
+          snapConnectionMarkers={snapConnectionMarkers}
+          caches={canvasCaches}
+          onCanvasPointerDown={handleCanvasPointerDown}
+          onCanvasPointerMove={moveDrag}
+          onCanvasPointerUp={endDrag}
+          onCanvasPointerLeave={endDrag}
+          onCanvasContextMenu={handleCanvasContextMenu}
+          onCanvasDrop={dropShape}
+          onTogglePieceSelection={togglePieceSelection}
+          onBeginDragCut={beginDrag}
+          onBeginScaleCut={beginScale}
+        />
       </main>
 
       <aside className="flex min-h-0 flex-col gap-4 overflow-hidden border-l border-stone-300 bg-paper p-4">
-        <section className="grid gap-3">
-          <PanelTitle>工具</PanelTitle>
-          <div className="grid grid-cols-6 gap-2">
-            <WithTooltip label="撤销 (Cmd/Ctrl+Z)"><button className="iconBtn" disabled={!undoStack.length} onClick={undo} aria-label="撤销"><Undo2 size={18} /></button></WithTooltip>
-            <WithTooltip label="重做 (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)"><button className="iconBtn" disabled={!redoStack.length} onClick={redo} aria-label="重做"><Redo2 size={18} /></button></WithTooltip>
-            <WithTooltip label="吸附"><button className={snapEnabled ? "iconBtnActive" : "iconBtn"} onClick={() => setSnapEnabled((value) => !value)} aria-label="吸附"><Magnet size={18} /></button></WithTooltip>
-            <WithTooltip label="合并"><button className="iconBtnActive" onClick={mergeSelectedPieces} aria-label="合并"><Plus size={18} /></button></WithTooltip>
-            {activeMode === "polygon" && (
-              <WithTooltip label="删除选中线条 (Backspace)"><button className="iconBtnDanger" disabled={!selectedId} onClick={removeSelected} aria-label="删除选中线条"><Trash2 size={18} /></button></WithTooltip>
-            )}
-            {activeMode === "polygon" && (
-              <WithTooltip label="清空线条"><button className="iconBtnDanger" disabled={!cuts.length} onClick={clearAllCuts} aria-label="清空线条"><X size={18} /></button></WithTooltip>
-            )}
-          </div>
-        </section>
-
+        <EditorToolbox
+          activeMode={activeMode}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          snapEnabled={snapEnabled}
+          hasSelectedCut={Boolean(selectedId)}
+          hasCuts={cuts.length > 0}
+          cutLineColor={cutLineColor}
+          onCutLineColorChange={updateCutLineColor}
+          onUndo={undo}
+          onRedo={redo}
+          onToggleSnap={() => setSnapEnabled((value) => !value)}
+          onMerge={mergeSelectedPieces}
+          onRemoveSelected={removeSelected}
+          onClearCuts={clearAllCuts}
+        />
         {activeMode === "polygon" && (
-          <section className="flex min-h-0 flex-1 flex-col gap-3 border-t border-stone-300 pt-4">
-            <PanelTitle>多边形</PanelTitle>
-            <div className="grid grid-cols-3 gap-2">
-              {(["result", "edit", "inspect"] as PolygonViewMode[]).map((view) => (
-                <WithTooltip key={view} label={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
-                  <button className={polygonView === view ? "iconBtnActive" : "iconBtn"} onClick={() => setPolygonView(view)} aria-label={view === "result" ? "结果" : view === "edit" ? "编辑" : "检查"}>
-                    {view === "result" ? <Eye size={18} /> : view === "edit" ? <Pencil size={18} /> : <CircleAlert size={18} />}
-                  </button>
-                </WithTooltip>
-              ))}
-            </div>
-            <Field label={`${targetPieces} 片`}>
-              <input type="range" min="6" max="36" value={targetPieces} onChange={(event) => setTargetPieces(Number(event.target.value))} />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="btnPrimary" onClick={autoGenerate}>
-                <RefreshCcw size={16} />
-                生成
-              </button>
-              <button className={drawingCut ? "btnActive" : "btn"} onClick={drawingCut ? finishDrawingCut : addBridgeCut}>
-                <Plus size={16} />
-                {drawingCut ? "结束" : "线"}
-              </button>
-            </div>
-            <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-2 overflow-auto pr-1">
-              {presetTemplates.map((template) => (
-                <ShapeButton key={template} template={template} onClick={() => addPreset(template)} />
-              ))}
-            </div>
-          </section>
+          <PolygonModePanel
+            polygonView={polygonView}
+            onPolygonViewChange={setPolygonView}
+            lineToolActive={lineToolActive}
+            onToggleLineTool={toggleLineTool}
+            onAddPreset={addPreset}
+            analyzing={polygonAnalysisDirty}
+          />
         )}
-
         {activeMode === "knob" && (
-          <section className="grid gap-3 border-t border-stone-300 pt-4">
-            <PanelTitle>凹凸</PanelTitle>
-            <button className={showKnobPieces ? "btnActive" : "btn"} onClick={() => setShowKnobPieces((value) => !value)}>
-              <Eye size={16} />
-              预览
-            </button>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="列">
-                <Input
-                  type="number"
-                  min="1"
-                  max="12"
-                  step="1"
-                  value={knobGridDraft.cols}
-                  onChange={(event) => setKnobGridDraft((current) => ({ ...current, cols: event.target.value }))}
-                  onBlur={() => commitKnobGrid("cols")}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-              </Field>
-              <Field label="行">
-                <Input
-                  type="number"
-                  min="1"
-                  max="12"
-                  step="1"
-                  value={knobGridDraft.rows}
-                  onChange={(event) => setKnobGridDraft((current) => ({ ...current, rows: event.target.value }))}
-                  onBlur={() => commitKnobGrid("rows")}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.blur();
-                  }}
-                />
-              </Field>
-            </div>
-            <Field label="尺寸">
-              <Input
-                type="number"
-                min="80"
-                max="320"
-                step="10"
-                value={knobGridDraft.piece_size}
-                onChange={(event) => setKnobGridDraft((current) => ({ ...current, piece_size: event.target.value }))}
-                onBlur={() => commitKnobGrid("piece_size")}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") event.currentTarget.blur();
-                }}
-              />
-            </Field>
-            <Field label={`凸耳 ${level.modes.knob.knob_size.toFixed(2)}`}>
-              <input type="range" min="0.12" max="0.36" step="0.01" value={level.modes.knob.knob_size} onChange={(event) => updateKnobSize(Number(event.target.value))} />
-            </Field>
-          </section>
+          <KnobModePanel
+            showKnobPieces={showKnobPieces}
+            onToggleShowKnobPieces={() => setShowKnobPieces((value) => !value)}
+            draft={knobGridDraft}
+            onDraftChange={setKnobGridDraft}
+            onCommitDraft={commitKnobGrid}
+            knobSize={level.modes.knob.knob_size}
+            onKnobSizeChange={updateKnobSize}
+          />
         )}
       </aside>
-      {saveDialog.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
-          <div className="w-full max-w-lg rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold">保存当前模式</h2>
-                <p className="mt-1 text-sm text-muted">当前图片会复制到目标关卡文件夹。</p>
-              </div>
-              <button className="iconBtn" onClick={() => setSaveDialog((current) => ({ ...current, open: false }))} aria-label="关闭">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="mt-5 grid gap-3">
-              <div className="grid grid-cols-2 gap-2">
-                <button className={saveDialog.targetMode === "existing" ? "btnActive" : "btn"} onClick={() => setSaveDialog((current) => ({ ...current, targetMode: "existing" }))}>
-                  选择模式
-                </button>
-                <button className={saveDialog.targetMode === "new" ? "btnActive" : "btn"} onClick={() => setSaveDialog((current) => ({ ...current, targetMode: "new" }))}>
-                  新增模式
-                </button>
-              </div>
-              {saveDialog.targetMode === "existing" ? (
-                <>
-                  <Field label="主题">
-                    <SelectBox
-                      value={saveDialog.topicId}
-                      options={topicOptions}
-                      onValueChange={(topicId) => {
-                        const topic = catalog.topics.find((item) => item.id === topicId);
-                        const firstLevel = topic?.levels[0];
-                        setSaveDialog((current) => ({
-                          ...current,
-                          topicId,
-                          levelId: firstLevel?.id || "",
-                          title: firstLevel?.title || current.title,
-                        }));
-                      }}
-                      placeholder="选择主题"
-                    />
-                  </Field>
-                  <Field label="关卡">
-                    <SelectBox
-                      value={saveDialog.levelId}
-                      options={saveLevelOptions}
-                      onValueChange={(levelId) => {
-                        const levelItem = saveTopic?.levels.find((item) => item.id === levelId);
-                        setSaveDialog((current) => ({ ...current, levelId, title: levelItem?.title || current.title }));
-                      }}
-                      placeholder="选择关卡"
-                    />
-                  </Field>
-                </>
-              ) : (
-                <>
-                  <label className="flex items-center gap-2 text-sm text-ink">
-                    <input className="h-4 w-4 accent-clay" type="checkbox" checked={saveDialog.newTopic} onChange={(event) => setSaveDialog((current) => ({ ...current, newTopic: event.target.checked }))} />
-                    新增主题
-                  </label>
-                  {saveDialog.newTopic ? (
-                    <>
-                      <Field label="主题">
-                        <Input value={saveDialog.newTopicName} onChange={(event) => setSaveDialog((current) => ({ ...current, newTopicName: event.target.value }))} />
-                      </Field>
-                      <Field label="英文名称">
-                        <Input
-                          value={saveDialog.newTopicId}
-                          onChange={(event) => setSaveDialog((current) => ({ ...current, newTopicId: idFromEnglishName(event.target.value, "topic", []) }))}
-                        />
-                      </Field>
-                    </>
-                  ) : (
-                    <Field label="主题">
-                      <SelectBox
-                        value={saveDialog.topicId}
-                        options={topicOptions}
-                        onValueChange={(topicId) => setSaveDialog((current) => ({ ...current, topicId }))}
-                        placeholder="选择主题"
-                      />
-                    </Field>
-                  )}
-                  <Field label="关卡">
-                    <Input value={saveDialog.newLevelTitle} onChange={(event) => setSaveDialog((current) => ({ ...current, newLevelTitle: event.target.value }))} />
-                  </Field>
-                  <Field label="关卡介绍">
-                    <Textarea className="min-h-20" value={saveDialog.newLevelDescription} onChange={(event) => setSaveDialog((current) => ({ ...current, newLevelDescription: event.target.value }))} />
-                  </Field>
-                  <div className="grid gap-2 rounded-md border border-stone-200 bg-white/60 p-3">
-                    <div className="text-sm font-medium text-ink">关卡背景</div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <ToggleGroup
-                        type="single"
-                        value={saveDialog.newBackgroundType}
-                        onValueChange={(value) => {
-                          if (value === "color") setSaveDialog((current) => ({ ...current, newBackgroundType: "color" }));
-                          if (value === "image" && canUseBackgroundImage) {
-                            setSaveDialog((current) => ({ ...current, newBackgroundType: "image", newBackgroundPath: current.newBackgroundPath || backgroundImages[0]?.path || "" }));
-                          }
-                        }}
-                      >
-                        <ToggleGroupItem value="color">纯色</ToggleGroupItem>
-                        <ToggleGroupItem value="image" disabled={!canUseBackgroundImage}>
-                          图片
-                        </ToggleGroupItem>
-                      </ToggleGroup>
-                      {saveDialog.newBackgroundType === "image" && canUseBackgroundImage ? (
-                        <div className="w-64">
-                          <SelectBox
-                            value={saveDialog.newBackgroundPath}
-                            options={backgroundImageOptions}
-                            onValueChange={(newBackgroundPath) => setSaveDialog((current) => ({ ...current, newBackgroundPath }))}
-                            placeholder="选择背景图片"
-                          />
-                        </div>
-                      ) : (
-                        <input
-                          className="h-9 w-24 rounded border border-stone-300 bg-white p-1"
-                          type="color"
-                          value={saveDialog.newBackgroundColor}
-                          onChange={(event) => setSaveDialog((current) => ({ ...current, newBackgroundColor: event.target.value }))}
-                          aria-label="背景颜色"
-                        />
-                      )}
-                      {!canUseBackgroundImage && <span className="text-xs text-muted">暂无背景图片</span>}
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className="px-1 py-1 text-sm text-muted">
-                写入模式：{activeMode === "polygon" ? "多边形" : "凹凸"}；图片：{activePendingImage ? displayPendingImageName(activePendingImage) : "未选择"}
-              </div>
-            </div>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button className="btn" onClick={() => setSaveDialog((current) => ({ ...current, open: false }))}>
-                取消
-              </button>
-              <button className="btnPrimary" onClick={() => void saveJsonToGodot()}>
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {pendingMode && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
-          <div className="w-full max-w-md rounded-lg border border-stone-300 bg-paper p-5 text-ink shadow-xl">
-            <h2 className="text-xl font-semibold">当前模式有未保存修改</h2>
-            <p className="mt-2 text-sm text-muted">切换到其他模式前，建议先保存到 Godot。继续切换不会丢弃当前数据，但这些修改仍会保持未保存状态。</p>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button className="btn" onClick={() => setPendingMode(null)}>
-                继续编辑
-              </button>
-              <button className="btnPrimary" onClick={() => switchMode(pendingMode)}>
-                切换模式
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      <EditorSaveDialog
+        state={saveDialog}
+        topicOptions={topicOptions}
+        saveLevelOptions={saveLevelOptions}
+        backgroundImages={backgroundImages}
+        backgroundImageOptions={backgroundImageOptions}
+        canUseBackgroundImage={canUseBackgroundImage}
+        activePendingImage={activePendingImage}
+        activeMode={activeMode}
+        onChange={setSaveDialog}
+        onClose={() => setSaveDialog((current) => ({ ...current, open: false }))}
+        onSave={() => void saveJsonToGodot()}
+        onTopicChange={(topicId) => {
+          const topic = catalog.topics.find((item) => item.id === topicId);
+          const firstLevel = topic?.levels[0];
+          setSaveDialog((current) => ({
+            ...current,
+            topicId,
+            levelId: firstLevel?.id || "",
+            title: firstLevel?.title || current.title,
+          }));
+        }}
+        onLevelChange={(levelId) => {
+          const levelItem = saveTopic?.levels.find((item) => item.id === levelId);
+          setSaveDialog((current) => ({ ...current, levelId, title: levelItem?.title || current.title }));
+        }}
+      />
+      <EditorModeSwitchDialog pendingMode={pendingMode} onCancel={() => setPendingMode(null)} onConfirm={() => pendingMode && switchMode(pendingMode)} />
     </div>
   );
 }

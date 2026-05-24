@@ -1,144 +1,39 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Check, FolderPlus, Hexagon, Image as ImageIcon, Layers, Link2, Pencil, Plus, Puzzle, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
+import { Hexagon, Puzzle } from "lucide-react";
 import { toast } from "sonner";
-import { makeEmptyLevel } from "../geometry";
-import type { CatalogLevel, CatalogTopic, LevelCatalog, LevelConfig, LevelImageConfig, PendingImageItem, ProcessStep, ProcessStepType, PythonTool } from "../types";
-import { CoverStepRow } from "../features/catalog/components/CoverStepRow";
-import { TopicTree } from "../features/catalog/components/TopicTree";
-import { Field } from "../shared/ui/Field";
-import { PanelTitle } from "../shared/ui/PanelTitle";
-import { SelectBox } from "../shared/ui/SelectBox";
-import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
-import { WithTooltip } from "../components/ui/tooltip";
-import { makeDefaultCatalog, normalizeOrder, retargetCatalogLevel, retargetGodotPath, topicCoverUrl } from "../shared/lib/catalog";
+import type { CatalogLevel, CatalogTopic, LevelCatalog, LevelConfig, PendingImageItem, ProcessStep, PythonTool } from "../types";
+import { CatalogTreeAside } from "../features/catalog/components/CatalogTreeAside";
+import {
+  LevelDetailsPanel,
+  type ModePreviewGroup,
+  type TableclothPreview,
+} from "../features/catalog/components/LevelDetailsPanel";
+import { TopicCoverAside } from "../features/catalog/components/TopicCoverAside";
+import { CatalogCreateDialog } from "../features/catalog/components/CatalogCreateDialog";
+import { CatalogDeleteDialog } from "../features/catalog/components/CatalogDeleteDialog";
+import {
+  imageName,
+  imagePath,
+  levelAssetUrl,
+  levelBackgroundUrl,
+  makeLevel,
+  modeStatus,
+  moveLevelDraft,
+  moveLevelInCatalog,
+  sameImageInfoExceptName,
+  type CatalogDeleteDialogKind,
+} from "../features/catalog/lib/catalogPage";
+import { makeDefaultCatalog, normalizeOrder } from "../shared/lib/catalog";
 import { idFromEnglishName, levelKey, nextSequentialId } from "../shared/lib/ids";
 import { defaultLocale, localized } from "../shared/lib/i18n";
-import { createProcessStep, defaultStepTypes, fallbackPythonTool } from "../shared/lib/processSteps";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../components/ui/alert-dialog";
+import { createProcessStep, defaultStepTypes } from "../shared/lib/processSteps";
 
 type Props = {
   onUnsavedChange?: (dirty: boolean) => void;
 };
-
-type DeleteDialogKind = "selected" | "topic" | "level" | null;
-
-function makeLevel(topicId: string, levelId: string, title: string, description = ""): LevelConfig {
-  const blank = makeEmptyLevel();
-  return {
-    ...blank,
-    id: levelId,
-    topic_id: topicId,
-    title,
-    description,
-    title_i18n: { [defaultLocale]: title },
-    description_i18n: { [defaultLocale]: description },
-    image: { ...blank.image, path: `res://levels/${topicId}/${levelId}/source.png` },
-    assets: { default_image: { ...blank.image, path: `res://levels/${topicId}/${levelId}/source.png` } },
-  };
-}
-
-function moveLevelInCatalog(topics: CatalogTopic[], activeTopicId: string, activeLevelId: string, overTopicId: string, overLevelId: string) {
-  const sourceTopic = topics.find((topic) => topic.id === activeTopicId);
-  const targetTopic = topics.find((topic) => topic.id === overTopicId);
-  const moving = sourceTopic?.levels.find((level) => level.id === activeLevelId);
-  if (!sourceTopic || !targetTopic || !moving) return topics;
-  if (activeTopicId === overTopicId) {
-    const oldIndex = sourceTopic.levels.findIndex((level) => level.id === activeLevelId);
-    const newIndex = sourceTopic.levels.findIndex((level) => level.id === overLevelId);
-    if (oldIndex < 0 || newIndex < 0) return topics;
-    return topics.map((topic) => (topic.id === activeTopicId ? { ...topic, levels: normalizeOrder(arrayMove(topic.levels, oldIndex, newIndex)) } : topic));
-  }
-  const nextMoving = retargetCatalogLevel(moving, activeTopicId, overTopicId);
-  return topics.map((topic) => {
-    if (topic.id === activeTopicId) return { ...topic, levels: normalizeOrder(topic.levels.filter((level) => level.id !== activeLevelId)) };
-    if (topic.id !== overTopicId) return topic;
-    const insertIndex = overLevelId ? topic.levels.findIndex((level) => level.id === overLevelId) : -1;
-    const levels = [...topic.levels];
-    levels.splice(insertIndex >= 0 ? insertIndex : levels.length, 0, nextMoving);
-    return { ...topic, levels: normalizeOrder(levels) };
-  });
-}
-
-function moveLevelDraft(drafts: Record<string, LevelConfig>, activeTopicId: string, activeLevelId: string, overTopicId: string) {
-  const oldKey = levelKey(activeTopicId, activeLevelId);
-  const draft = drafts[oldKey];
-  if (!draft) return drafts;
-  const nextKey = levelKey(overTopicId, activeLevelId);
-  const nextDraft: LevelConfig = {
-    ...draft,
-    topic_id: overTopicId,
-    image: { ...draft.image, path: retargetGodotPath(draft.image.path, activeTopicId, activeLevelId, overTopicId) },
-    assets: draft.assets?.default_image
-      ? {
-          ...draft.assets,
-          default_image: {
-            ...draft.assets.default_image,
-            path: retargetGodotPath(draft.assets.default_image.path, activeTopicId, activeLevelId, overTopicId),
-          },
-        }
-      : draft.assets,
-  };
-  const { [oldKey]: _removed, ...rest } = drafts;
-  return { ...rest, [nextKey]: nextDraft };
-}
-
-function imagePath(value?: LevelImageConfig) {
-  if (!value) return "";
-  return typeof value === "string" ? value : value.path || "";
-}
-
-function imageName(value?: LevelImageConfig) {
-  if (!value || typeof value === "string") return "";
-  return value.name || imagePath(value).split("/").pop() || "";
-}
-
-function imageExtension(path: string) {
-  const fileName = path.split(/[\\/]/).pop() || "";
-  const index = fileName.lastIndexOf(".");
-  return index >= 0 ? fileName.slice(index).toLowerCase() : "";
-}
-
-function sameImageInfoExceptName(a?: LevelImageConfig, b?: LevelImageConfig) {
-  if (!a || !b || typeof a === "string" || typeof b === "string") return false;
-  const aPath = imagePath(a);
-  const bPath = imagePath(b);
-  if (!aPath || !bPath || aPath === bPath) return false;
-  return Number(a.width || 0) > 0 && a.width === b.width && a.height === b.height && imageExtension(aPath) === imageExtension(bPath);
-}
-
-function levelAssetUrl(topicId: string, levelId: string, path: string) {
-  const fileName = path.split("/").pop() || "";
-  return fileName ? `/api/levels/${encodeURIComponent(topicId)}/${encodeURIComponent(levelId)}/assets/${encodeURIComponent(fileName)}?mtime=${Date.now()}` : "";
-}
-
-function pendingImageUrl(items: PendingImageItem[], path: string) {
-  return items.find((item) => item.path === path)?.url || "";
-}
-
-function levelBackgroundUrl(topicId: string, levelId: string, path: string, items: PendingImageItem[]) {
-  if (!path) return "";
-  if (path.startsWith(`res://levels/${topicId}/${levelId}/`)) return levelAssetUrl(topicId, levelId, path);
-  return pendingImageUrl(items, path);
-}
-
-function modeStatus(draft?: LevelConfig) {
-  return {
-    polygon: Boolean(draft?.modes?.polygon?.pieces?.length),
-    knob: Boolean(draft?.modes?.knob?.pieces?.length),
-  };
-}
 
 function CatalogManagementPage({ onUnsavedChange }: Props) {
   const [catalog, setCatalog] = useState<LevelCatalog>(() => makeDefaultCatalog());
@@ -157,7 +52,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
   const [coverSteps, setCoverSteps] = useState<ProcessStep[]>(() => defaultStepTypes.map(createProcessStep));
   const [disabledCoverStepIds, setDisabledCoverStepIds] = useState<Set<string>>(() => new Set());
   const [createDialog, setCreateDialog] = useState<"topic" | "level" | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogKind>(null);
+  const [deleteDialog, setDeleteDialog] = useState<CatalogDeleteDialogKind>(null);
   const [newTopicName, setNewTopicName] = useState("新主题");
   const [newTopicId, setNewTopicId] = useState("new_topic");
   const [newLevelTitle, setNewLevelTitle] = useState("新关卡");
@@ -174,12 +69,11 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
   const loadGenerationRef = useRef(0);
   const catalogRef = useRef(catalog);
   const levelDraftsRef = useRef(levelDrafts);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const selectedTopic = useMemo(() => catalog.topics.find((topic) => topic.id === selectedTopicId), [catalog.topics, selectedTopicId]);
   const selectedLevel = useMemo(() => selectedTopic?.levels.find((level) => level.id === selectedLevelId), [selectedLevelId, selectedTopic]);
   const selectedLevelDraft = selectedTopic && selectedLevel ? levelDrafts[levelKey(selectedTopic.id, selectedLevel.id)] : undefined;
-  const selectedModePreviews = useMemo(() => {
+  const selectedModePreviews = useMemo<ModePreviewGroup[]>(() => {
     if (!selectedTopic || !selectedLevel || !selectedLevelDraft) return [];
     const previews = ([
       { mode: "polygon", label: "多边形", icon: Hexagon, image: selectedLevelDraft.modes?.polygon?.image, path: imagePath(selectedLevelDraft.modes?.polygon?.image) },
@@ -187,7 +81,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     ] as const)
       .filter((item) => item.path)
       .map((item) => ({ ...item, name: imageName(item.image), url: levelAssetUrl(selectedTopic.id, selectedLevel.id, item.path) }));
-    const groups = new Map<string, { path: string; url: string; modes: typeof previews }>();
+    const groups = new Map<string, ModePreviewGroup>();
     for (const preview of previews) {
       const existing = groups.get(preview.path);
       if (existing) existing.modes.push(preview);
@@ -199,19 +93,23 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     () => sameImageInfoExceptName(selectedLevelDraft?.modes?.polygon?.image, selectedLevelDraft?.modes?.knob?.image),
     [selectedLevelDraft],
   );
-  const levelModeStatus = useMemo(() => {
-    return Object.fromEntries(Object.entries(levelDrafts).map(([key, draft]) => [key, modeStatus(draft)]));
-  }, [levelDrafts]);
-  const backgroundImageOptions = useMemo(() => backgroundImages.map((item) => ({ value: item.path, label: item.name.split(/[\\/]/).pop() || item.name })), [backgroundImages]);
+  const levelModeStatus = useMemo(
+    () => Object.fromEntries(Object.entries(levelDrafts).map(([key, draft]) => [key, modeStatus(draft)])),
+    [levelDrafts],
+  );
+  const backgroundImageOptions = useMemo(
+    () => backgroundImages.map((item) => ({ value: item.path, label: item.name.split(/[\\/]/).pop() || item.name })),
+    [backgroundImages],
+  );
   const canUseBackgroundImage = backgroundImageOptions.length > 0;
-  const tableclothPreview = useMemo(() => {
+  const tableclothPreview = useMemo<TableclothPreview>(() => {
     const background = selectedLevelDraft?.background;
     const color = background?.color || "#ead8bd";
     if (!selectedTopic || !selectedLevel || background?.type !== "image" || !background.path) {
-      return { type: "color" as const, color, url: "", label: "纯色桌布" };
+      return { type: "color", color, url: "", label: "纯色桌布" };
     }
     const url = levelBackgroundUrl(selectedTopic.id, selectedLevel.id, background.path, backgroundImages);
-    return { type: url ? ("image" as const) : ("color" as const), color, url, label: url ? "桌布图片" : "桌布图片未保存" };
+    return { type: url ? "image" : "color", color, url, label: url ? "桌布图片" : "桌布图片未保存" };
   }, [backgroundImages, selectedLevel, selectedLevelDraft?.background, selectedTopic]);
   const tableclothStyle = useMemo<CSSProperties>(() => {
     if (tableclothPreview.type === "image") {
@@ -397,19 +295,6 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     setCatalog((current) => ({
       ...current,
       topics: current.topics.map((topic) => (topic.id === selectedTopic.id ? { ...topic, ...patch } : topic)),
-    }));
-  }
-
-  function updateSelectedLevel(patch: Partial<CatalogLevel>) {
-    if (!selectedTopic || !selectedLevel) return;
-    setDirty(true);
-    setCatalog((current) => ({
-      ...current,
-      topics: current.topics.map((topic) =>
-        topic.id === selectedTopic.id
-          ? { ...topic, levels: topic.levels.map((level) => (level.id === selectedLevel.id ? { ...level, ...patch } : level)) }
-          : topic,
-      ),
     }));
   }
 
@@ -728,7 +613,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     if (activeId.startsWith("level:")) {
       const [, activeTopic, activeLevel] = activeId.split(":");
       const overParts = overId.split(":");
-      const overTopic = overParts[0] === "topic" ? overParts[1] : overParts[1];
+      const overTopic = overParts[1];
       const overLevel = overParts[0] === "level" ? overParts[2] : "";
       if (!overTopic) return;
       setDirty(true);
@@ -875,374 +760,116 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     }
   }
 
+  const fallbackBackground = useMemo(() => {
+    if (!selectedTopic || !selectedLevel) return makeLevel("", "", "").background;
+    return makeLevel(selectedTopic.id, selectedLevel.id, selectedLevel.title).background;
+  }, [selectedLevel, selectedTopic]);
+
   return (
     <div className="grid h-full min-h-0 grid-cols-[360px_1fr_360px] overflow-hidden bg-linen text-ink">
-      <aside className="min-h-0 overflow-auto border-r border-stone-300 bg-paper p-4">
-        <div className="flex items-start justify-between gap-3 border-b border-stone-300 pb-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <Layers className="mt-1 shrink-0 text-clay" size={22} />
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold">关卡管理</h1>
-              <p className="text-sm text-muted">主题 / 关卡 / 封面</p>
-            </div>
-          </div>
-          <button className="btnPrimary shrink-0" disabled={loadingGodot || saving || !dirty} onClick={() => void saveToGodot()}>
-            <Save size={16} />
-            {saving ? "保存中..." : loadingGodot ? "读取中..." : "保存到 Godot"}
-          </button>
-        </div>
-        <section className="mt-5 grid gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <PanelTitle>关卡树</PanelTitle>
-            <div className="flex items-center gap-2">
-              <WithTooltip label="从 Godot 重置">
-                <button className="iconBtn" disabled={loadingGodot || saving} onClick={() => void resetFromGodot()} aria-label="从 Godot 重置">
-                  <RotateCcw size={16} />
-                </button>
-              </WithTooltip>
-              <WithTooltip label={treeEditMode ? "退出编辑模式" : "编辑关卡树"}>
-                <button className={treeEditMode ? "iconBtnActive" : "iconBtn"} disabled={loadingGodot} onClick={() => setTreeEditMode((current) => !current)} aria-label={treeEditMode ? "退出编辑模式" : "编辑关卡树"}>
-                  <Pencil size={16} />
-                </button>
-              </WithTooltip>
-              {treeEditMode && hasTreeSelection && (
-                <WithTooltip label="删除选中">
-                  <button className="iconBtnDanger" disabled={loadingGodot} onClick={() => setDeleteDialog("selected")} aria-label="删除选中">
-                    <Trash2 size={16} />
-                  </button>
-                </WithTooltip>
-              )}
-              <WithTooltip label="创建主题">
-                <button className="iconBtn" disabled={loadingGodot} onClick={openCreateTopic} aria-label="创建主题">
-                  <FolderPlus size={16} />
-                </button>
-              </WithTooltip>
-              <WithTooltip label="创建关卡">
-                <button className="iconBtn" disabled={loadingGodot || !catalog.topics.length} onClick={openCreateLevel} aria-label="创建关卡">
-                  <Plus size={16} />
-                </button>
-              </WithTooltip>
-            </div>
-          </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext items={catalog.topics.map((topic) => `topic:${topic.id}`)} strategy={verticalListSortingStrategy}>
-              <div className="grid max-h-[calc(100vh-210px)] gap-3 overflow-auto pr-1">
-                {catalog.topics.map((topic) => (
-                  <TopicTree
-                    key={topic.id}
-                    topic={topic}
-                    locale={locale}
-                    collapsed={collapsedTopics.has(topic.id)}
-                    selectedTopicId={selectedTopicId}
-                    selectedLevelId={selectedLevelId}
-                    editMode={treeEditMode}
-                    selectedTopicIds={selectedTopicIds}
-                    selectedLevelKeys={selectedLevelKeys}
-                    editingTopicId={editingTopicId}
-                    editingLevelKey={editingLevelKey}
-                    levelModeStatus={levelModeStatus}
-                    onToggle={() => toggleTopic(topic.id)}
-                    onSelectTopic={() => {
-                      setSelectedTopicId(topic.id);
-                      setSelectedLevelId(topic.levels[0]?.id || "");
-                    }}
-                    onSelectLevel={selectLevel}
-                    onToggleTopicSelection={toggleTopicSelection}
-                    onToggleLevelSelection={toggleLevelSelection}
-                    onStartRenameTopic={setEditingTopicId}
-                    onStartRenameLevel={setEditingLevelKey}
-                    onRenameTopic={renameTopic}
-                    onRenameLevel={renameLevel}
-                  />
-                ))}
-                {loadingGodot && <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">正在读取 Godot 关卡...</div>}
-                {!loadingGodot && !catalog.topics.length && <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">暂无主题。</div>}
-              </div>
-            </SortableContext>
-          </DndContext>
-        </section>
-      </aside>
+      <CatalogTreeAside
+        catalog={catalog}
+        locale={locale}
+        collapsedTopics={collapsedTopics}
+        selectedTopicId={selectedTopicId}
+        selectedLevelId={selectedLevelId}
+        treeEditMode={treeEditMode}
+        selectedTopicIds={selectedTopicIds}
+        selectedLevelKeys={selectedLevelKeys}
+        editingTopicId={editingTopicId}
+        editingLevelKey={editingLevelKey}
+        levelModeStatus={levelModeStatus}
+        hasTreeSelection={hasTreeSelection}
+        loadingGodot={loadingGodot}
+        saving={saving}
+        dirty={dirty}
+        onSaveToGodot={() => void saveToGodot()}
+        onResetFromGodot={() => void resetFromGodot()}
+        onToggleEditMode={() => setTreeEditMode((current) => !current)}
+        onRequestDelete={() => setDeleteDialog("selected")}
+        onCreateTopic={openCreateTopic}
+        onCreateLevel={openCreateLevel}
+        onDragEnd={onDragEnd}
+        onToggleTopicCollapse={toggleTopic}
+        onSelectTopic={(topic) => {
+          setSelectedTopicId(topic.id);
+          setSelectedLevelId(topic.levels[0]?.id || "");
+        }}
+        onSelectLevel={selectLevel}
+        onToggleTopicSelection={toggleTopicSelection}
+        onToggleLevelSelection={toggleLevelSelection}
+        onStartRenameTopic={setEditingTopicId}
+        onStartRenameLevel={setEditingLevelKey}
+        onRenameTopic={renameTopic}
+        onRenameLevel={renameLevel}
+      />
 
-      <main className="min-h-0 overflow-auto p-6">
-        <div className="mx-auto grid max-w-3xl gap-5">
-          <section className="grid gap-3">
-            <PanelTitle>主题</PanelTitle>
-            {selectedTopic ? (
-              <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-ink">
-                {localized(selectedTopic.name_i18n, locale, selectedTopic.name)}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">请选择或创建主题。</div>
-            )}
-          </section>
+      <LevelDetailsPanel
+        locale={locale}
+        selectedTopic={selectedTopic}
+        selectedLevel={selectedLevel}
+        selectedLevelDraft={selectedLevelDraft}
+        selectedModePreviews={selectedModePreviews}
+        canMergeSelectedModeImages={canMergeSelectedModeImages}
+        onMergeSelectedModeImages={mergeSelectedModeImages}
+        tableclothPreview={tableclothPreview}
+        tableclothStyle={tableclothStyle}
+        backgroundImageOptions={backgroundImageOptions}
+        canUseBackgroundImage={canUseBackgroundImage}
+        onUpdateDescription={(description) =>
+          updateSelectedLevelDraft({ description, description_i18n: { ...(selectedLevelDraft?.description_i18n || {}), [locale]: description } })
+        }
+        onUpdateBackground={(background) => updateSelectedLevelDraft({ background })}
+        fallbackBackground={fallbackBackground}
+      />
 
-          <section className="grid gap-3">
-            <PanelTitle>关卡信息</PanelTitle>
-            {selectedTopic && selectedLevel ? (
-              <>
-                <div className="rounded-md border border-stone-300 bg-white/70 px-3 py-2 text-sm text-ink">
-                  {localized(selectedLevel.title_i18n, locale, selectedLevel.title)}
-                </div>
-                <Field label="介绍">
-                  <textarea
-                    className="input min-h-32"
-                    value={localized(selectedLevelDraft?.description_i18n, locale, selectedLevelDraft?.description || "")}
-                    onChange={(event) => {
-                      const description = event.target.value;
-                      updateSelectedLevelDraft({ description, description_i18n: { ...(selectedLevelDraft?.description_i18n || {}), [locale]: description } });
-                    }}
-                  />
-                </Field>
-                <section className="grid gap-3">
-                  <PanelTitle>关卡背景</PanelTitle>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <ToggleGroup
-                      type="single"
-                      value={canUseBackgroundImage ? selectedLevelDraft?.background.type || "color" : "color"}
-                      onValueChange={(value: string) => {
-                        if (value === "color" || (value === "image" && canUseBackgroundImage)) {
-                          const fallbackBackground = makeLevel(selectedTopic.id, selectedLevel.id, selectedLevel.title).background;
-                          updateSelectedLevelDraft({
-                            background: {
-                              ...(selectedLevelDraft?.background || fallbackBackground),
-                              type: value,
-                              path: value === "image" ? selectedLevelDraft?.background.path || backgroundImageOptions[0]?.value || "" : selectedLevelDraft?.background.path || "",
-                            },
-                          });
-                        }
-                      }}
-                    >
-                      <ToggleGroupItem value="color">纯色</ToggleGroupItem>
-                      <ToggleGroupItem value="image" disabled={!canUseBackgroundImage}>
-                        图片
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                    {canUseBackgroundImage && selectedLevelDraft?.background.type === "image" ? (
-                      <div className="w-64">
-                        <SelectBox
-                          value={selectedLevelDraft.background.path || backgroundImageOptions[0]?.value || ""}
-                          options={backgroundImageOptions}
-                          onValueChange={(path: string) => updateSelectedLevelDraft({ background: { ...selectedLevelDraft.background, type: "image", path } })}
-                          placeholder="选择背景图片"
-                      />
-                      </div>
-                    ) : (
-                      <input
-                        className="input h-10 w-24 p-1"
-                        type="color"
-                        value={selectedLevelDraft?.background.color || "#F6EBD4"}
-                        onChange={(event) =>
-                          updateSelectedLevelDraft({
-                            background: {
-                              ...(selectedLevelDraft?.background || makeLevel(selectedTopic.id, selectedLevel.id, selectedLevel.title).background),
-                              type: "color",
-                              color: event.target.value,
-                            },
-                          })
-                        }
-                        />
-                    )}
-                  </div>
-                  <div className="overflow-hidden rounded-md border border-stone-300 bg-white/70">
-                    <div className="flex items-center justify-between border-b border-stone-200 px-3 py-2 text-sm font-medium text-ink">
-                      <span>桌布预览</span>
-                      <span className="text-xs font-normal text-muted">{tableclothPreview.label}</span>
-                    </div>
-                    <div className="p-4" style={tableclothStyle}>
-                      <div className="grid min-h-28 place-items-center rounded-md border border-dashed border-stone-300/70 bg-white/35 px-4 text-xs text-ink/70 shadow-inner">
-                        图片会在桌布内侧留出间距
-                      </div>
-                    </div>
-                  </div>
-                </section>
-                <section className="grid gap-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <PanelTitle>模式图片</PanelTitle>
-                    {canMergeSelectedModeImages && (
-                      <button className="btn !min-h-8 px-2 py-1 text-xs" onClick={mergeSelectedModeImages}>
-                        <Link2 size={14} />
-                        合并同图
-                      </button>
-                    )}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {selectedModePreviews.map((preview) => {
-                      return (
-                        <div key={preview.path} className="overflow-hidden rounded-md border border-stone-300 bg-white/70">
-                          <div className="flex items-center gap-2 border-b border-stone-200 px-3 py-2 text-sm font-medium">
-                            {preview.modes.map((mode) => {
-                              const Icon = mode.icon;
-                              return (
-                                <span key={mode.mode} className="inline-flex items-center gap-1">
-                                  <Icon size={15} />
-                                  {mode.label}
-                                </span>
-                              );
-                            })}
-                            {preview.modes.length > 1 && <span className="ml-auto rounded bg-clay/10 px-2 py-0.5 text-xs text-clay">同图</span>}
-                          </div>
-                          <div className="grid min-h-48 place-items-center p-4" style={tableclothStyle}>
-                            <div className="grid h-44 w-full place-items-center rounded-md bg-white/20 p-4 shadow-inner backdrop-blur-[1px]">
-                              <img className="h-full w-full object-contain drop-shadow-[0_3px_10px_rgba(90,58,34,0.18)]" src={preview.url} alt={`${preview.modes.map((mode) => mode.label).join("/")}图片`} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {!selectedModePreviews.length && <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">暂无模式图片</div>}
-                  </div>
-                </section>
-              </>
-            ) : (
-              <div className="rounded-md border border-dashed border-stone-300 bg-white/70 px-3 py-4 text-sm text-muted">请选择或创建关卡。</div>
-            )}
-          </section>
-        </div>
-      </main>
+      <TopicCoverAside
+        selectedTopic={selectedTopic}
+        loadingGodot={loadingGodot}
+        coverLoadError={coverLoadError}
+        onCoverLoadError={() => setCoverLoadError(true)}
+        onUploadCover={(file) => void uploadCover(file)}
+        coverSteps={coverSteps}
+        pythonTools={pythonTools}
+        disabledCoverStepIds={disabledCoverStepIds}
+        onResetCoverSteps={() => {
+          setCoverSteps(defaultStepTypes.map(createProcessStep));
+          setDisabledCoverStepIds(new Set());
+        }}
+        onUpdateCoverStep={(id, patch) => setCoverSteps((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)))}
+        onToggleCoverStepEnabled={(id, checked) =>
+          setDisabledCoverStepIds((current) => {
+            const next = new Set(current);
+            if (checked) next.delete(id);
+            else next.add(id);
+            return next;
+          })
+        }
+        onCoverStepDragEnd={onCoverStepDragEnd}
+        processingCover={processingCover}
+        onProcessCover={() => void processCover()}
+      />
 
-      <aside className="min-h-0 overflow-auto border-l border-stone-300 bg-paper p-4">
-        <section className="grid gap-3">
-          <PanelTitle>主题封面</PanelTitle>
-          <label
-            className={[
-              "group relative grid min-h-36 cursor-pointer place-items-center overflow-hidden rounded-md border bg-white/70 transition hover:border-clay",
-              selectedTopic?.cover && !coverLoadError ? "border-stone-300" : "border-dashed border-stone-300",
-              loadingGodot || !selectedTopic ? "pointer-events-none opacity-60" : "",
-            ].join(" ")}
-          >
-            {selectedTopic?.cover && !coverLoadError ? (
-              <>
-                <img className="max-h-56 w-full object-contain" src={topicCoverUrl(selectedTopic)} alt="主题封面" onError={() => setCoverLoadError(true)} />
-                <span className="absolute inset-0 grid place-items-center bg-black/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
-                  点击上传封面
-                </span>
-              </>
-            ) : (
-              <span className="grid place-items-center gap-2 text-sm text-muted">
-                <span>{coverLoadError ? "封面加载失败" : "暂无封面"}</span>
-                <span className="btn pointer-events-none">
-                  <Upload size={16} />
-                  上传封面
-                </span>
-              </span>
-            )}
-            <input hidden disabled={loadingGodot} type="file" accept="image/*" onChange={(event) => void uploadCover(event.target.files?.[0])} />
-          </label>
-        </section>
+      <CatalogCreateDialog
+        open={createDialog}
+        locale={locale}
+        topics={catalog.topics}
+        topicName={newTopicName}
+        topicId={newTopicId}
+        levelTitle={newLevelTitle}
+        levelDescription={newLevelDescription}
+        levelTopicId={newLevelTopicId}
+        onTopicNameChange={setNewTopicName}
+        onTopicIdChange={setNewTopicId}
+        onLevelTitleChange={setNewLevelTitle}
+        onLevelDescriptionChange={setNewLevelDescription}
+        onLevelTopicIdChange={setNewLevelTopicId}
+        onCreateTopic={createTopic}
+        onCreateLevel={createLevel}
+        onClose={() => setCreateDialog(null)}
+      />
 
-        <section className="mt-5 grid gap-3 border-t border-stone-300 pt-4">
-          <div className="flex items-center justify-between gap-2">
-            <PanelTitle>封面处理</PanelTitle>
-            <button className="btn !min-h-8 px-2 py-1 text-xs" onClick={() => {
-              setCoverSteps(defaultStepTypes.map(createProcessStep));
-              setDisabledCoverStepIds(new Set());
-            }}>
-              <RotateCcw size={14} />
-              默认
-            </button>
-          </div>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onCoverStepDragEnd}>
-            <SortableContext items={coverSteps.map((step) => step.id)} strategy={verticalListSortingStrategy}>
-              <div className="grid gap-2">
-                {coverSteps.map((step) => (
-                  <CoverStepRow
-                    key={step.id}
-                    step={step}
-                    tool={pythonTools.find((tool) => tool.stepType === step.type) || fallbackPythonTool(step.type)}
-                    disabled={disabledCoverStepIds.has(step.id)}
-                    onUpdate={(patch) => setCoverSteps((current) => current.map((item) => (item.id === step.id ? { ...item, ...patch } : item)))}
-                    onEnabledChange={(checked) => {
-                      setDisabledCoverStepIds((current) => {
-                        const next = new Set(current);
-                        if (checked) next.delete(step.id);
-                        else next.add(step.id);
-                        return next;
-                      });
-                    }}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-          <button className="btnPrimary" disabled={loadingGodot || !selectedTopic?.cover || processingCover} onClick={() => void processCover()}>
-            <ImageIcon size={16} />
-            {processingCover ? "处理中..." : "处理封面"}
-          </button>
-        </section>
-
-      </aside>
-      {createDialog && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 px-4">
-          <div className="w-full max-w-md rounded-md border border-stone-300 bg-paper p-5 text-ink shadow-xl">
-            <div className="flex items-start justify-between gap-4">
-              <h2 className="text-lg font-semibold">{createDialog === "topic" ? "创建主题" : "创建关卡"}</h2>
-              <button className="iconBtn !min-h-8" onClick={() => setCreateDialog(null)} aria-label="关闭">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {createDialog === "topic" ? (
-                <>
-                  <Field label="主题名">
-                    <input className="input" autoFocus value={newTopicName} onChange={(event) => setNewTopicName(event.target.value)} onKeyDown={(event) => {
-                      if (event.key === "Enter") createTopic();
-                    }} />
-                  </Field>
-                  <Field label="英文名称">
-                    <input
-                      className="input"
-                      value={newTopicId}
-                      onChange={(event) => setNewTopicId(idFromEnglishName(event.target.value, "topic", []))}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") createTopic();
-                      }}
-                    />
-                  </Field>
-                </>
-              ) : (
-                <>
-                  <Field label="主题">
-                    <select className="input" value={newLevelTopicId} onChange={(event) => setNewLevelTopicId(event.target.value)}>
-                      {catalog.topics.map((topic) => (
-                        <option key={topic.id} value={topic.id}>{localized(topic.name_i18n, locale, topic.name)}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="关卡名">
-                    <input className="input" autoFocus value={newLevelTitle} onChange={(event) => setNewLevelTitle(event.target.value)} />
-                  </Field>
-                  <Field label="介绍">
-                    <textarea className="input min-h-24" value={newLevelDescription} onChange={(event) => setNewLevelDescription(event.target.value)} />
-                  </Field>
-                </>
-              )}
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button className="btn" onClick={() => setCreateDialog(null)}>取消</button>
-                <button className="btnPrimary" onClick={createDialog === "topic" ? createTopic : createLevel}>
-                  <Check size={16} />
-                  创建
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      <AlertDialog open={Boolean(deleteDialogContent)} onOpenChange={(open: boolean) => {
-        if (!open) setDeleteDialog(null);
-      }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{deleteDialogContent?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{deleteDialogContent?.description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction className="bg-[#9e3f35] hover:bg-[#87342c]" onClick={confirmDeleteDialog}>
-              删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <CatalogDeleteDialog content={deleteDialogContent} onCancel={() => setDeleteDialog(null)} onConfirm={confirmDeleteDialog} />
     </div>
   );
 }

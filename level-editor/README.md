@@ -69,7 +69,7 @@ POST /api/editor/save-mode
 ```json
 {
   "level": {
-    "id": "cat_moon_01"
+    "id": "level_01"
   }
 }
 ```

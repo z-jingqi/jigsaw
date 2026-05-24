@@ -58,8 +58,8 @@ var pinch_active := false
 var pinch_start_distance := 0.0
 var pinch_start_scale := 1.0
 var pinch_start_world_midpoint := Vector2.ZERO
-var preview_sprite: Sprite2D
 var hud_icon_size := 56.0
+var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
 
 
@@ -93,7 +93,7 @@ func clear() -> void:
 	selected_group = null
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
-	preview_sprite = null
+	drag_blockers.clear()
 	active_touch_index = -1
 	active_touches.clear()
 	panning = false
@@ -479,7 +479,7 @@ func _organized_group_positions(movable: Array) -> Dictionary:
 
 
 func _organize_areas() -> Array[Rect2]:
-	var table := _piece_drag_area()
+	var table := _piece_drag_area(false)
 	var board := Rect2(board_origin, source_size * source_scale).grow(ORGANIZE_GAP)
 	var areas: Array[Rect2] = []
 	var bottom := Rect2(
@@ -534,7 +534,7 @@ func _animate_group_to(group, target_position: Vector2) -> void:
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "position", _clamped_group_position(group, target_position), 0.24)
+	tween.tween_property(group.node, "position", _clamped_group_position(group, target_position, false), 0.24)
 	tween.finished.connect(func(g = group) -> void:
 		if is_instance_valid(g.node):
 			g.is_animating = false
@@ -574,23 +574,8 @@ func show_hint() -> void:
 	status_changed.emit("高亮的两块可以拼在一起。")
 
 
-func toggle_preview() -> void:
-	if not is_instance_valid(preview_sprite):
-		return
-	var show := not preview_sprite.visible
-	preview_sprite.visible = true
-	var start_alpha := 0.0 if show else preview_sprite.modulate.a
-	var target_alpha := 0.82 if show else 0.0
-	preview_sprite.modulate.a = start_alpha
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(preview_sprite, "modulate:a", target_alpha, 0.18)
-	if not show:
-		tween.finished.connect(func() -> void:
-			if is_instance_valid(preview_sprite):
-				preview_sprite.visible = false
-		)
+func set_drag_blockers(blockers: Array[Rect2]) -> void:
+	drag_blockers = blockers.duplicate()
 
 
 func _start_play_session(play_mode: String) -> bool:
@@ -606,21 +591,8 @@ func _start_play_session(play_mode: String) -> bool:
 	)
 	for piece in sorted_pieces:
 		_create_group(piece)
-	_add_preview_sprite(level["play_area"])
 	fit_view_to_pieces(false)
 	return true
-
-
-func _add_preview_sprite(play_area: Rect2) -> void:
-	preview_sprite = Sprite2D.new()
-	preview_sprite.texture = texture
-	var preview_max := Vector2(play_area.size.x * 0.24, play_area.size.y * 0.24)
-	var preview_scale := minf(preview_max.x / source_size.x, preview_max.y / source_size.y)
-	preview_sprite.scale = Vector2.ONE * preview_scale
-	preview_sprite.position = play_area.end - source_size * preview_scale * 0.5 - Vector2(16, 16)
-	preview_sprite.modulate = Color(1, 1, 1, 0.82)
-	preview_sprite.visible = false
-	add_child(preview_sprite)
 
 
 func _level_from_mode_pieces(play_mode: String) -> Dictionary:
@@ -870,19 +842,19 @@ func _create_group(piece: Dictionary) -> void:
 	piece["visual"] = visual
 	var group = PieceGroupScript.new(group_node, piece)
 	groups.append(group)
-	_move_group_to(group, _scatter_position_for_group(group))
+	_move_group_to(group, _scatter_position_for_group(group), false)
 	spawn_bounds.append(_group_bounds_at(group, group.node.position).grow(8.0))
 
 
 func _scatter_position_for_group(group) -> Vector2:
 	var area := _piece_spawn_area()
-	var clamp_area := _piece_drag_area()
+	var clamp_area := _piece_drag_area(false)
 	var best_position := area.get_center()
 	var best_score := INF
 	var attempts := 96
 	for attempt in range(attempts):
 		var candidate := _spawn_candidate(area, attempt, attempts)
-		var clamped := _clamped_group_position(group, candidate)
+		var clamped := _clamped_group_position(group, candidate, false)
 		var bounds := _group_bounds_at(group, clamped).grow(8.0)
 		var score := _spawn_overlap_score(bounds, clamp_area)
 		if score <= 0.001:
@@ -931,15 +903,22 @@ func _rect_overlap_area(a: Rect2, b: Rect2) -> float:
 	return maxf(0.0, x1 - x0) * maxf(0.0, y1 - y0)
 
 
-func _move_group_to(group, target_position: Vector2) -> void:
+func _move_group_to(group, target_position: Vector2, use_visible_area := true) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
-	group.node.position = _clamped_group_position(group, target_position)
+	group.node.position = _clamped_group_position(group, target_position, use_visible_area)
 
 
-func _clamped_group_position(group, target_position: Vector2) -> Vector2:
+func _clamped_group_position(group, target_position: Vector2, use_visible_area := true) -> Vector2:
+	var area := _piece_drag_area(use_visible_area)
+	var clamped := _clamp_position_to_area(group, target_position, area)
+	if use_visible_area:
+		clamped = _avoid_drag_blockers(group, clamped, area)
+	return clamped
+
+
+func _clamp_position_to_area(group, target_position: Vector2, area: Rect2) -> Vector2:
 	var bounds := _group_bounds_at(group, target_position)
-	var area := _piece_drag_area()
 	var delta := Vector2.ZERO
 	if bounds.size.x <= area.size.x:
 		if bounds.position.x < area.position.x:
@@ -958,8 +937,78 @@ func _clamped_group_position(group, target_position: Vector2) -> Vector2:
 	return target_position + delta
 
 
-func _piece_drag_area() -> Rect2:
-	return _virtual_table_area().grow(-PIECE_DRAG_PADDING)
+func _avoid_drag_blockers(group, target_position: Vector2, area: Rect2) -> Vector2:
+	if drag_blockers.is_empty():
+		return target_position
+	var clamped := target_position
+	for iteration in range(3):
+		var moved := false
+		for blocker in drag_blockers:
+			var piece_rect := _world_rect_to_screen(_group_bounds_at(group, clamped))
+			if not piece_rect.intersects(blocker):
+				continue
+			var push := _screen_push_out(piece_rect, blocker)
+			if push == Vector2.ZERO:
+				continue
+			clamped += push / maxf(0.001, view_scale)
+			clamped = _clamp_position_to_area(group, clamped, area)
+			moved = true
+		if not moved:
+			break
+	return clamped
+
+
+func _screen_push_out(subject: Rect2, obstacle: Rect2) -> Vector2:
+	var viewport := get_viewport_rect().size
+	var touches_left := obstacle.position.x <= 0.0
+	var touches_top := obstacle.position.y <= 0.0
+	var touches_right := obstacle.end.x >= viewport.x
+	var touches_bottom := obstacle.end.y >= viewport.y
+	var push_left := obstacle.position.x - subject.end.x
+	var push_right := obstacle.end.x - subject.position.x
+	var push_up := obstacle.position.y - subject.end.y
+	var push_down := obstacle.end.y - subject.position.y
+	var candidates: Array[Vector2] = []
+	if not touches_left:
+		candidates.append(Vector2(push_left, 0.0))
+	if not touches_right:
+		candidates.append(Vector2(push_right, 0.0))
+	if not touches_top:
+		candidates.append(Vector2(0.0, push_up))
+	if not touches_bottom:
+		candidates.append(Vector2(0.0, push_down))
+	if candidates.is_empty():
+		return Vector2.ZERO
+	var best: Vector2 = candidates[0]
+	for candidate in candidates:
+		if candidate.length_squared() < best.length_squared():
+			best = candidate
+	return best
+
+
+func _world_rect_to_screen(rect: Rect2) -> Rect2:
+	var top_left := _world_to_screen(rect.position)
+	var bottom_right := _world_to_screen(rect.end)
+	return Rect2(top_left.min(bottom_right), (bottom_right - top_left).abs())
+
+
+func _piece_drag_area(use_visible_area := false) -> Rect2:
+	var table := _virtual_table_area().grow(-PIECE_DRAG_PADDING)
+	if not use_visible_area:
+		return table
+	var visible := _visible_world_area().grow(-PIECE_DRAG_PADDING / maxf(0.001, view_scale))
+	if visible.size.x >= 48.0 and visible.size.y >= 48.0:
+		return visible
+	return table
+
+
+func _visible_world_area() -> Rect2:
+	var viewport := get_viewport_rect().size
+	var top_left := _screen_to_world(Vector2.ZERO)
+	var bottom_right := _screen_to_world(viewport)
+	var position := top_left.min(bottom_right)
+	var size := (bottom_right - top_left).abs()
+	return Rect2(position, size)
 
 
 func _virtual_table_area() -> Rect2:
@@ -1082,7 +1131,6 @@ func _visible_cut_line_segments(source_line: PackedVector2Array, home: Vector2, 
 
 func _select_group(group) -> void:
 	selected_group = group
-	status_changed.emit("已选中碎片。")
 
 
 func _rotate_group(group) -> void:
@@ -1124,7 +1172,7 @@ func _try_snap_chain(active) -> void:
 			active.absorb(other)
 			groups.erase(other)
 			_refresh_group_z_indices()
-			_move_group_to(active, active.node.position)
+			_move_group_to(active, active.node.position, false)
 			if selected_group == other:
 				selected_group = active
 			_pulse_node(active.node)
@@ -1140,8 +1188,6 @@ func _check_complete() -> void:
 		if not completion_emitted:
 			completion_emitted = true
 			completed.emit()
-	else:
-		status_changed.emit("剩余碎片组：%d" % groups.size())
 
 
 func _set_hint_highlights(pair: Array) -> void:

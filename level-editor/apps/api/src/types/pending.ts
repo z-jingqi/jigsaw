@@ -19,8 +19,25 @@ export type PendingImageItem = {
 	pending_step_types?: ProcessStepType[];
 	compression_stable?: boolean;
 	was_processed_before_preview?: boolean;
+	saved_modes?: Array<"polygon" | "knob">;
+	editor_state?: PendingImageEditorState;
 	folder?: string;
 	created_at: string;
+};
+
+export type PendingImageEditorModeState = {
+	dirty?: boolean;
+	completed?: boolean;
+	saved?: boolean;
+	cuts?: Array<any>;
+	pieces?: Array<any>;
+	knob_pieces?: Array<any>;
+	analysis_dirty?: boolean;
+};
+
+export type PendingImageEditorState = {
+	polygon?: PendingImageEditorModeState;
+	knob?: PendingImageEditorModeState;
 };
 
 export type PendingImagesData = {

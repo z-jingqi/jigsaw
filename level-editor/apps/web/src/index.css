@@ -190,6 +190,50 @@
     pointer-events: none;
     @apply rounded-md border border-stone-300 bg-white/90 px-3 py-1.5 text-sm font-medium text-ink shadow-sm;
   }
+
+  .canvasZoomSlider {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 10;
+    width: 36px;
+    @apply flex flex-col items-center gap-2 rounded-md border border-stone-300 bg-white/90 px-1.5 py-2 text-xs font-medium text-ink shadow-sm;
+  }
+
+  .canvasZoomSliderBtn {
+    @apply inline-flex h-6 w-6 items-center justify-center rounded text-stone-600 transition hover:bg-stone-100 hover:text-ink disabled:cursor-default disabled:text-stone-300 disabled:hover:bg-transparent disabled:hover:text-stone-300;
+  }
+
+  .canvasZoomSliderTrack {
+    position: relative;
+    width: 4px;
+    height: 120px;
+    cursor: pointer;
+    touch-action: none;
+    @apply rounded-full bg-stone-200;
+  }
+
+  .canvasZoomSliderFill {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    @apply rounded-full bg-clay/70;
+  }
+
+  .canvasZoomSliderThumb {
+    position: absolute;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translateX(-50%);
+    pointer-events: none;
+    @apply rounded-full border border-clay bg-white shadow;
+  }
+
+  .canvasZoomSliderLabel {
+    @apply min-w-[28px] text-center tabular-nums text-stone-600;
+  }
 }
 
 .outlinePath {
@@ -264,7 +308,15 @@
 
 .selected .cutPath,
 .selected .shapePath {
-  stroke: #3f7f72;
+  stroke: #3f7f72 !important;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 2px rgba(63, 127, 114, 0.6));
+}
+
+/* 添加线段模式：无论指针落在哪个元素上都强制使用 crosshair。 */
+.editorSvg--lineTool,
+.editorSvg--lineTool * {
+  cursor: crosshair !important;
 }
 
 .handle {
@@ -275,6 +327,28 @@
   vector-effect: non-scaling-stroke;
 }
 
+.shapeTransform rect {
+  pointer-events: none;
+  fill: none;
+  stroke: #3f7f72;
+  stroke-dasharray: 8 6;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.scaleHandle {
+  cursor: nwse-resize;
+  fill: #fffaf0;
+  stroke: #3f7f72;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.scaleHandle_ne,
+.scaleHandle_sw {
+  cursor: nesw-resize;
+}
+
 .gapWarning line {
   stroke: #c77c2e;
   stroke-dasharray: 5 4;
@@ -283,10 +357,38 @@
   vector-effect: non-scaling-stroke;
 }
 
+.gapWarning {
+  pointer-events: none;
+}
+
 .gapWarning circle {
   fill: rgba(217, 147, 63, 0.16);
   stroke: #c77c2e;
   stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.gapWarning .gapTarget {
+  fill: #c77c2e;
+  stroke: #fffaf0;
+  stroke-width: 2;
+}
+
+.snapConnection {
+  pointer-events: none;
+}
+
+.snapConnection .snapHalo {
+  fill: none;
+  stroke: #3f7f72;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.snapConnection .snapDot {
+  fill: #3f7f72;
+  stroke: #fffaf0;
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
@@ -305,4 +407,17 @@
   stroke: #3f7f72;
   stroke-width: 3;
   vector-effect: non-scaling-stroke;
+}
+
+.cutIntersection path {
+  fill: rgba(158, 63, 53, 0.08);
+  stroke: #9e3f35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.cutIntersection {
+  pointer-events: none;
 }

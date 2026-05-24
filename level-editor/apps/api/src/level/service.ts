@@ -77,6 +77,10 @@ export function normalizeLevelForModeSave(
 	} else {
 		base.editor = existingLevel.editor || incomingLevel.editor || { outline: [], cuts: [], shapes: [], pieces: [] };
 	}
+	// cut_color 是关卡级别的设置（polygon / knob 共享），无论保存哪种模式都让 incoming 的颜色覆盖 existing。
+	if (incomingLevel.editor && typeof incomingLevel.editor.cut_color === "string" && incomingLevel.editor.cut_color) {
+		base.editor = { ...base.editor, cut_color: incomingLevel.editor.cut_color };
+	}
 	normalizeLevelImageModes(base, topicId, levelId);
 	return base;
 }

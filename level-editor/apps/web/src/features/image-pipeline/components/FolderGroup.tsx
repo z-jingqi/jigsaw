@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Hexagon, Puzzle } from "lucide-react";
 import type { PendingImageItem } from "../../../types";
 import { displayName, pendingImageRowId } from "../lib/display";
 import { InlineEditableName } from "./InlineEditableName";
@@ -131,6 +131,8 @@ export function FolderGroup({
                   onCommit={(value) => onRenameImage(item.id, value)}
                 />
                 {item.processed_path && <span className="mr-1 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">待确认</span>}
+                {modeStatusIcon(item, "polygon")}
+                {modeStatusIcon(item, "knob")}
                 {item.processed && !item.processed_path && <CheckCircle2 className="mr-1 shrink-0 text-emerald-700" size={16} />}
               </div>
             </div>
@@ -141,4 +143,14 @@ export function FolderGroup({
       </div>
     </section>
   );
+}
+
+function modeStatusIcon(item: PendingImageItem, mode: "polygon" | "knob") {
+  const state = item.editor_state?.[mode];
+  const saved = Boolean((item.saved_modes || []).includes(mode) || state?.saved);
+  const edited = Boolean(saved || state?.dirty || state?.completed || state?.cuts?.length || state?.pieces?.length || state?.knob_pieces?.length);
+  if (!edited) return null;
+  const Icon = mode === "polygon" ? Hexagon : Puzzle;
+  const label = `${mode === "polygon" ? "多边形" : "凹凸"}${saved ? "已保存" : "已编辑未保存"}`;
+  return <Icon className={`shrink-0 ${saved ? "text-emerald-700" : "text-amber-700"}`} size={15} aria-label={label} />;
 }

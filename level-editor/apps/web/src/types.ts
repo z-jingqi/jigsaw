@@ -143,8 +143,25 @@ export type PendingImageItem = {
   applied_step_types?: ProcessStepType[];
   pending_step_types?: ProcessStepType[];
   compression_stable?: boolean;
+  saved_modes?: ImageTarget[];
+  editor_state?: PendingImageEditorState;
   folder?: string;
   created_at: string;
+};
+
+export type PendingImageEditorModeState = {
+  dirty?: boolean;
+  completed?: boolean;
+  saved?: boolean;
+  cuts?: CutLine[];
+  pieces?: PieceCell[];
+  knob_pieces?: LevelPiece[];
+  analysis_dirty?: boolean;
+};
+
+export type PendingImageEditorState = {
+  polygon?: PendingImageEditorModeState;
+  knob?: PendingImageEditorModeState;
 };
 
 export type PythonTool = {
@@ -214,6 +231,7 @@ export type LevelConfig = {
   };
   editor: {
     outline: number[][];
+    cut_color?: string;
     cuts: Array<{
       id: string;
       type: CutKind;
