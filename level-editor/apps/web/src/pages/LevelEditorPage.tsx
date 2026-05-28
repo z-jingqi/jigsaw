@@ -75,7 +75,7 @@ function App({ onUnsavedChange }: Props) {
   const [level, setLevel] = useState<LevelConfig>(() => makeEmptyLevel());
   const [pendingImages, setPendingImages] = useState<PendingImageItem[]>([]);
   const [backgroundImages, setBackgroundImages] = useState<PendingImageItem[]>([]);
-  const [selectedImages, setSelectedImages] = useState<Record<EditMode, PendingImageItem | null>>({ polygon: null, knob: null });
+  const [selectedImages, setSelectedImages] = useState<Record<EditMode, PendingImageItem | null>>({ polygon: null, knob: null, swap: null });
   const [saveDialog, setSaveDialog] = useState<SaveModeDialogState>({
     open: false,
     targetMode: "existing",
@@ -112,8 +112,8 @@ function App({ onUnsavedChange }: Props) {
   const [cutLineColor, setCutLineColor] = useState<string>(DEFAULT_CUT_COLOR);
   const [drawingCut, setDrawingCut] = useState<DrawingCutState | null>(null);
   const [drawingHoverPoint, setDrawingHoverPoint] = useState<Point | null>(null);
-  const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
-  const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false });
+  const [dirtyModes, setDirtyModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false, swap: false });
+  const [completedModes, setCompletedModes] = useState<Record<EditMode, boolean>>({ polygon: false, knob: false, swap: false });
   const [knobGridDraft, setKnobGridDraft] = useState({ cols: "8", rows: "8", piece_size: "190" });
   const [pendingMode, setPendingMode] = useState<EditMode | null>(null);
   const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
@@ -261,7 +261,7 @@ function App({ onUnsavedChange }: Props) {
         preferredImageId: params.get("image") || "",
       });
       const requestedMode = params.get("mode");
-      if (requestedMode === "polygon" || requestedMode === "knob") setActiveMode(requestedMode);
+      if (requestedMode === "polygon" || requestedMode === "knob" || requestedMode === "swap") setActiveMode(requestedMode);
     } catch (error) {
       showToast(error instanceof Error ? `加载 catalog 失败：${error.message}` : "加载 catalog 失败");
       await loadPendingImages(new URLSearchParams(window.location.search).get("image") || "");
@@ -282,6 +282,7 @@ function App({ onUnsavedChange }: Props) {
       fallback.image.path = catalogLevel?.source || "";
       fallback.modes.polygon.image = { path: catalogLevel?.source || "", name: "", width: 0, height: 0 };
       fallback.modes.knob.image = { path: catalogLevel?.source || "", name: "", width: 0, height: 0 };
+      fallback.modes.swap.image = { path: catalogLevel?.source || "", name: "", width: 0, height: 0 };
       showToast(error instanceof Error ? `加载关卡失败：${error.message}` : "加载关卡失败");
       return fallback;
     }
@@ -315,9 +316,10 @@ function App({ onUnsavedChange }: Props) {
     if (!applySelection) return;
     const preferred = data.items.find((item) => item.id === preferredId) || data.items.find((item) => item.processed) || data.items[0] || null;
     if (preferred) {
-      setSelectedImages({ polygon: preferred, knob: preferred });
+      setSelectedImages({ polygon: preferred, knob: preferred, swap: preferred });
       applyPendingImageToMode("polygon", preferred);
       applyPendingImageToMode("knob", preferred);
+      applyPendingImageToMode("swap", preferred);
     }
   }
 
@@ -345,6 +347,9 @@ function App({ onUnsavedChange }: Props) {
         modeState &&
           ((modeState.knob_pieces?.length ?? 0) > 0 || modeState.dirty || modeState.completed || modeState.saved),
       );
+    const swapHasDraft =
+      mode === "swap" &&
+      Boolean(modeState && (modeState.dirty || modeState.completed || modeState.saved));
 
     if (mode === "polygon") {
       if (polygonHasDraft && modeState) {
@@ -374,6 +379,16 @@ function App({ onUnsavedChange }: Props) {
         dirty: false,
         completed:
           Boolean(levelData?.modes?.polygon?.pieces?.length) || Boolean(item?.saved_modes?.includes("polygon")),
+        analysisDirty: false,
+      };
+    }
+    if (mode === "swap") {
+      return {
+        cuts: [] as CutLine[],
+        pieces: [] as PieceCell[],
+        knobPieces: [] as LevelPiece[],
+        dirty: Boolean(swapHasDraft && modeState?.dirty),
+        completed: Boolean(imageConfigPath(levelData?.modes?.swap?.image)) || Boolean(modeState?.completed || modeState?.saved || item?.saved_modes?.includes("swap")),
         analysisDirty: false,
       };
     }
@@ -450,8 +465,11 @@ function App({ onUnsavedChange }: Props) {
         modeState &&
           ((modeState.knob_pieces?.length ?? 0) > 0 || modeState.dirty || modeState.completed || modeState.saved),
       );
+    const swapHasDraft =
+      mode === "swap" &&
+      Boolean(modeState && (modeState.dirty || modeState.completed || modeState.saved));
 
-    const hasDraft = mode === "polygon" ? polygonHasDraft : knobHasDraft;
+    const hasDraft = mode === "polygon" ? polygonHasDraft : mode === "knob" ? knobHasDraft : swapHasDraft;
     if (mode === "polygon" && polygonHasDraft) {
       const nextCuts = structuredClone(modeState!.cuts || []);
       const nextPieces = modeState!.pieces || [];
@@ -496,10 +514,11 @@ function App({ onUnsavedChange }: Props) {
     setDrawingHoverPoint(null);
     setSelectedId("");
     setSelectedPieceIds([]);
-    setDirtyModes({ polygon: false, knob: false });
+    setDirtyModes({ polygon: false, knob: false, swap: false });
     setCompletedModes({
       polygon: Boolean(data.modes?.polygon?.pieces?.length),
       knob: Boolean(data.modes?.knob?.pieces?.length),
+      swap: Boolean(imageConfigPath(data.modes?.swap?.image)),
     });
     history.reset();
   }
@@ -535,6 +554,7 @@ function App({ onUnsavedChange }: Props) {
     const baseLevel = normalizeLevelConfig(levelData, topicId, levelId);
     const polygonInitial = pickInitialModeState("polygon", preferred, levelData);
     const knobInitial = pickInitialModeState("knob", preferred, levelData);
+    const swapInitial = pickInitialModeState("swap", preferred, levelData);
     const nextLevel: LevelConfig = preferred
       ? {
           ...baseLevel,
@@ -550,6 +570,15 @@ function App({ onUnsavedChange }: Props) {
             },
             knob: {
               ...baseLevel.modes.knob,
+              image: {
+                path: preferred.path,
+                name: preferred.name,
+                width: preferred.source_info.width,
+                height: preferred.source_info.height,
+              },
+            },
+            swap: {
+              ...baseLevel.modes.swap,
               image: {
                 path: preferred.path,
                 name: preferred.name,
@@ -574,10 +603,10 @@ function App({ onUnsavedChange }: Props) {
     setDrawingHoverPoint(null);
     setSelectedId("");
     setSelectedPieceIds([]);
-    setDirtyModes({ polygon: polygonInitial.dirty, knob: knobInitial.dirty });
-    setCompletedModes({ polygon: polygonInitial.completed, knob: knobInitial.completed });
+    setDirtyModes({ polygon: polygonInitial.dirty, knob: knobInitial.dirty, swap: swapInitial.dirty });
+    setCompletedModes({ polygon: polygonInitial.completed, knob: knobInitial.completed, swap: swapInitial.completed });
     if (preferred) {
-      setSelectedImages({ polygon: preferred, knob: preferred });
+      setSelectedImages({ polygon: preferred, knob: preferred, swap: preferred });
     }
     history.reset();
     window.setTimeout(() => {
@@ -642,6 +671,7 @@ function App({ onUnsavedChange }: Props) {
   const modeReady = {
     polygon: pieces.length > 0 && !polygonAnalysisDirty,
     knob: effectiveKnobPieces.length > 0,
+    swap: Boolean(activePendingImage || activeLevelImagePath),
   };
   const cutIntersections = useMemo(() => findCutIntersections(cuts), [cuts]);
   const cutGaps = useMemo(() => findCutGaps(cuts, snapPoints, 2.5, SNAP_THRESHOLD), [cuts, snapPoints]);
@@ -670,7 +700,9 @@ function App({ onUnsavedChange }: Props) {
   const canvasModeLabel =
     activeMode === "polygon"
       ? `多边形 · ${drawingCut ? "添加线条" : polygonViewLabel(polygonView)}`
-      : `凹凸 · ${showKnobPieces ? "预览" : "编辑"}`;
+      : activeMode === "knob"
+        ? `凹凸 · ${showKnobPieces ? "预览" : "编辑"}`
+        : "方格交换 · 3x4";
 
   useEffect(() => {
     if (!image) {
@@ -731,7 +763,7 @@ function App({ onUnsavedChange }: Props) {
 
 
   useEffect(() => {
-    const hasDirtyMode = dirtyModes.polygon || dirtyModes.knob;
+    const hasDirtyMode = dirtyModes.polygon || dirtyModes.knob || dirtyModes.swap;
     onUnsavedChange?.(hasDirtyMode);
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasDirtyMode) return;
@@ -779,7 +811,7 @@ function App({ onUnsavedChange }: Props) {
     setAnalysisCuts(next.cuts);
     setPieces(next.pieces);
     setKnobPieces(next.knobPieces);
-    setCompletedModes(next.completedModes || { polygon: false, knob: false });
+    setCompletedModes(next.completedModes || { polygon: false, knob: false, swap: false });
     setCutLineColor(next.cutLineColor || DEFAULT_CUT_COLOR);
     setPolygonAnalysisDirty(false);
     setSelectedId("");
@@ -792,6 +824,17 @@ function App({ onUnsavedChange }: Props) {
   function pendingEditorStateForCurrentMode(item: PendingImageItem, mode: EditMode = activeMode): PendingImageEditorState {
     const currentState = item.editor_state || {};
     const savedModeSet = new Set(item.saved_modes || []);
+    if (mode === "swap") {
+      return {
+        ...currentState,
+        swap: {
+          ...(currentState.swap || {}),
+          dirty: dirtyModes.swap,
+          completed: completedModes.swap,
+          saved: savedModeSet.has("swap"),
+        },
+      };
+    }
     return {
       ...currentState,
       [mode]:
@@ -821,6 +864,7 @@ function App({ onUnsavedChange }: Props) {
     setSelectedImages((current) => ({
       polygon: current.polygon?.id === item.id ? { ...current.polygon, editor_state: state } : current.polygon,
       knob: current.knob?.id === item.id ? { ...current.knob, editor_state: state } : current.knob,
+      swap: current.swap?.id === item.id ? { ...current.swap, editor_state: state } : current.swap,
     }));
     await fetch(`/api/pending-images/${encodeURIComponent(item.id)}/editor-state`, {
       method: "PATCH",
@@ -921,7 +965,7 @@ function App({ onUnsavedChange }: Props) {
   }
 
   function hasUnsavedChanges() {
-    return dirtyModes.polygon || dirtyModes.knob;
+    return dirtyModes.polygon || dirtyModes.knob || dirtyModes.swap;
   }
 
   function requestLevelChange(target: LevelTarget) {
@@ -944,7 +988,7 @@ function App({ onUnsavedChange }: Props) {
   async function saveAndSwitchLevel() {
     if (!pendingTarget) return;
     if (!canSaveToGodot) {
-      showToast("当前关卡两个模式都完成后，才能保存并切换。");
+      showToast("当前模式完成后，才能保存并切换。");
       return;
     }
     const ok = await saveJsonToGodot();
@@ -1111,12 +1155,18 @@ function App({ onUnsavedChange }: Props) {
 
   function markCurrentModeComplete() {
     if (!modeReady[activeMode]) {
-      showToast(activeMode === "polygon" ? "多边形模式还没有更新出可用碎片。" : "凹凸模式还没有可用碎片。");
+      showToast(
+        activeMode === "polygon"
+          ? "多边形模式还没有更新出可用碎片。"
+          : activeMode === "knob"
+            ? "凹凸模式还没有可用碎片。"
+            : "请先为方格交换模式选择图片。",
+      );
       return;
     }
     setCompletedModes((current) => ({ ...current, [activeMode]: true }));
     setDirtyModes((current) => ({ ...current, [activeMode]: false }));
-    showToast(`${activeMode === "polygon" ? "多边形" : "凹凸"}模式已标记完成。`);
+    showToast(`${activeMode === "polygon" ? "多边形" : activeMode === "knob" ? "凹凸" : "方格交换"}模式已标记完成。`);
   }
 
   function catalogForSave() {
@@ -1723,6 +1773,11 @@ function App({ onUnsavedChange }: Props) {
           knob_size: level.modes.knob.knob_size,
           pieces: effectiveKnobPieces,
         },
+        swap: {
+          ...level.modes.swap,
+          rows: 4,
+          cols: 3,
+        },
       },
       editor: {
         outline: serializePoints(analysis.outline),
@@ -1832,6 +1887,7 @@ function App({ onUnsavedChange }: Props) {
       setSelectedImages((current) => ({
         polygon: savedModes.has("polygon") ? null : current.polygon,
         knob: savedModes.has("knob") ? null : current.knob,
+        swap: savedModes.has("swap") ? null : current.swap,
       }));
       if (result.level) applyLoadedLevel(result.level, savedTarget.topicId, savedTarget.levelId);
       else setCurrentTarget(savedTarget);
@@ -1840,11 +1896,13 @@ function App({ onUnsavedChange }: Props) {
         ...current,
         polygon: savedModes.has("polygon") ? false : current.polygon,
         knob: savedModes.has("knob") ? false : current.knob,
+        swap: savedModes.has("swap") ? false : current.swap,
       }));
       setCompletedModes((current) => ({
         ...current,
         polygon: savedModes.has("polygon") ? modeReady.polygon : current.polygon,
         knob: savedModes.has("knob") ? modeReady.knob : current.knob,
+        swap: savedModes.has("swap") ? modeReady.swap : current.swap,
       }));
       setSaveDialog((current) => ({ ...current, open: false }));
       return true;

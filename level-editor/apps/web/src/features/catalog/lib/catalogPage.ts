@@ -108,6 +108,7 @@ export function modeStatus(draft?: LevelConfig) {
   return {
     polygon: Boolean(draft?.modes?.polygon?.pieces?.length),
     knob: Boolean(draft?.modes?.knob?.pieces?.length),
+    swap: Boolean(imagePath(draft?.modes?.swap?.image)),
   };
 }
 

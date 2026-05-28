@@ -42,14 +42,17 @@ function replaceSharedImagePath(value: unknown, oldPath: string, nextPath: strin
 async function normalizeSharedModeImage(level: any, topicId: string, levelId: string) {
 	const polygonPath = typeof level.modes?.polygon?.image === "string" ? level.modes.polygon.image : String(level.modes?.polygon?.image?.path || "");
 	const knobPath = typeof level.modes?.knob?.image === "string" ? level.modes.knob.image : String(level.modes?.knob?.image?.path || "");
-	if (!polygonPath || polygonPath !== knobPath) return;
-	const currentName = levelFileNameFromGodotPath(polygonPath, topicId, levelId);
-	const match = currentName.match(/^(?:polygon_source|knob_source)\.(png|jpe?g|webp)$/i);
+	const swapPath = typeof level.modes?.swap?.image === "string" ? level.modes.swap.image : String(level.modes?.swap?.image?.path || "");
+	const sharedPaths = [polygonPath, knobPath, swapPath].filter(Boolean);
+	if (sharedPaths.length < 2 || !sharedPaths.every((item) => item === sharedPaths[0])) return;
+	const sharedPath = sharedPaths[0];
+	const currentName = levelFileNameFromGodotPath(sharedPath, topicId, levelId);
+	const match = currentName.match(/^(?:polygon_source|knob_source|swap_source)\.(png|jpe?g|webp)$/i);
 	if (!match) return;
 	const nextName = `source.${match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase()}`;
 	const nextPath = `res://levels/${topicId}/${levelId}/${nextName}`;
 	await copyFile(levelAssetPath(topicId, levelId, currentName), levelAssetPath(topicId, levelId, nextName)).catch(() => undefined);
-	replaceSharedImagePath(level, polygonPath, nextPath, nextName);
+	replaceSharedImagePath(level, sharedPath, nextPath, nextName);
 }
 
 async function normalizeTableclothBackground(level: any, topicId: string, levelId: string) {
@@ -85,7 +88,7 @@ async function cleanupUnreferencedLevelImages(level: unknown, topicId: string, l
 	const referencedFiles = collectReferencedLevelFiles(level, topicId, levelId);
 	const dir = levelDir(topicId, levelId);
 	const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-	const removableSourceFile = /^(source|polygon_source|knob_source|tablecloth)\.(png|jpe?g|webp)$/i;
+	const removableSourceFile = /^(source|polygon_source|knob_source|swap_source|tablecloth)\.(png|jpe?g|webp)$/i;
 	await Promise.all(
 		entries
 			.filter((entry) => entry.isFile())

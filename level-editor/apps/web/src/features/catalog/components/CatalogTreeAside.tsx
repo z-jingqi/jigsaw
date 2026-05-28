@@ -17,7 +17,7 @@ type Props = {
   selectedLevelKeys: Set<string>;
   editingTopicId: string;
   editingLevelKey: string;
-  levelModeStatus: Record<string, { polygon: boolean; knob: boolean }>;
+  levelModeStatus: Record<string, { polygon: boolean; knob: boolean; swap?: boolean }>;
   hasTreeSelection: boolean;
   loadingGodot: boolean;
   saving: boolean;

@@ -32,7 +32,7 @@ export function bodyStrings(value: unknown): string[] {
 	return [String(value)];
 }
 
-export function targetImageFileName(target: "default" | "polygon" | "knob", extension: string) {
+export function targetImageFileName(target: "default" | "polygon" | "knob" | "swap", extension: string) {
 	const ext = extension === ".jpeg" ? ".jpg" : extension || ".png";
 	if (target === "default") return `source${ext}`;
 	return `${target}_source${ext}`;

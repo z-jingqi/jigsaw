@@ -8,9 +8,9 @@ import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-grou
 import { localized } from "../../../shared/lib/i18n";
 
 type ModePreviewMode = {
-  mode: "polygon" | "knob";
+  mode: "polygon" | "knob" | "swap";
   label: string;
-  icon: typeof Hexagon;
+  icon: typeof Hexagon | null;
   image: LevelImageConfig | undefined;
   path: string;
   name: string;
@@ -171,7 +171,7 @@ export function LevelDetailsPanel({
                           const Icon = mode.icon;
                           return (
                             <span key={mode.mode} className="inline-flex items-center gap-1">
-                              <Icon size={15} />
+                              {Icon ? <Icon size={15} /> : <span className="rounded bg-clay/10 px-1 text-[10px] font-bold leading-4 text-clay">3x4</span>}
                               {mode.label}
                             </span>
                           );
@@ -198,4 +198,4 @@ export function LevelDetailsPanel({
   );
 }
 
-export const modePreviewIcons = { polygon: Hexagon, knob: Puzzle } as const;
+export const modePreviewIcons = { polygon: Hexagon, knob: Puzzle, swap: null } as const;

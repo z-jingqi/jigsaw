@@ -129,6 +129,9 @@ func cached_source_image(path: String, source_texture: Texture2D) -> Image:
 
 
 func level_list_image_path(level_config: Dictionary) -> String:
+	var swap_path := image_path_from_value(mode_config(level_config, "swap").get("image", null), "")
+	if not swap_path.is_empty():
+		return swap_path
 	var knob_path := image_path_from_value(mode_config(level_config, "knob").get("image", null), "")
 	if not knob_path.is_empty():
 		return knob_path
@@ -139,7 +142,7 @@ func level_list_image_path(level_config: Dictionary) -> String:
 
 
 func level_image_path(level_config: Dictionary, mode := "") -> String:
-	for candidate_mode in [mode, "knob", "polygon"]:
+	for candidate_mode in [mode, "swap", "knob", "polygon"]:
 		if str(candidate_mode).is_empty():
 			continue
 		var mode_data := mode_config(level_config, str(candidate_mode))

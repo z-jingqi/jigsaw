@@ -33,7 +33,7 @@ export function registerEditorRoutes(app: Hono) {
 		if (!imageItem) return c.json({ ok: false, error: "pending image not found" }, 404);
 		if (imageItem.processed_path) return c.json({ ok: false, error: "confirm processed image first" }, 400);
 
-		const sharedModes = (["polygon", "knob"] as const).filter((candidate) => {
+		const sharedModes = (["polygon", "knob", "swap"] as const).filter((candidate) => {
 			if (candidate === mode) return true;
 			const candidateImage = incomingLevel.modes?.[candidate]?.image;
 			return imagePathFromValue(candidateImage) === imageItem.path;

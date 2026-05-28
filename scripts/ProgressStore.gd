@@ -63,12 +63,23 @@ func mark_tutorial_seen() -> void:
 	save_to_disk()
 
 
+func random_rotation_enabled() -> bool:
+	return bool(progress.get("random_rotation_enabled", false))
+
+
+func set_random_rotation_enabled(enabled: bool) -> void:
+	progress["random_rotation_enabled"] = enabled
+	save_to_disk()
+
+
 func completed_modes(level_id: String) -> Array:
 	var modes := []
 	if is_done(level_id, "polygon"):
 		modes.append("多边形")
 	if is_done(level_id, "knob"):
 		modes.append("凹凸拼图")
+	if is_done(level_id, "swap"):
+		modes.append("方格交换")
 	return modes
 
 
@@ -78,6 +89,8 @@ func topic_done_count(topic: Dictionary) -> int:
 		if is_done(level["id"], "polygon"):
 			count += 1
 		if is_done(level["id"], "knob"):
+			count += 1
+		if is_done(level["id"], "swap"):
 			count += 1
 	return count
 
@@ -129,7 +142,7 @@ func focus_level(topic: Dictionary) -> Dictionary:
 
 
 func level_has_unfinished_mode(level: Dictionary) -> bool:
-	return not is_done(level["id"], "polygon") or not is_done(level["id"], "knob")
+	return not is_done(level["id"], "polygon") or not is_done(level["id"], "knob") or not is_done(level["id"], "swap")
 
 
 func preferred_mode(level: Dictionary) -> String:
@@ -138,10 +151,14 @@ func preferred_mode(level: Dictionary) -> String:
 		return "polygon"
 	if last_mode == "knob" and not is_done(level["id"], "knob"):
 		return "knob"
+	if last_mode == "swap" and not is_done(level["id"], "swap"):
+		return "swap"
 	if not is_done(level["id"], "polygon"):
 		return "polygon"
 	if not is_done(level["id"], "knob"):
 		return "knob"
+	if not is_done(level["id"], "swap"):
+		return "swap"
 	return last_mode
 
 
@@ -162,7 +179,7 @@ func resume_target(topics: Array[Dictionary]) -> Dictionary:
 func last_completed_level(topics: Array[Dictionary]) -> Dictionary:
 	for topic in topics:
 		for level in topic.get("levels", []):
-			if is_done(level["id"], "polygon") or is_done(level["id"], "knob"):
+			if is_done(level["id"], "polygon") or is_done(level["id"], "knob") or is_done(level["id"], "swap"):
 				return level
 	return {}
 

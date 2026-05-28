@@ -84,7 +84,7 @@ async function normalizeItem(item: PendingImageItem): Promise<PendingImageItem> 
 		compression_stable: Boolean(item.compression_stable),
 		was_processed_before_preview: Boolean(item.was_processed_before_preview),
 		saved_modes: Array.isArray(item.saved_modes)
-			? item.saved_modes.filter((mode) => mode === "polygon" || mode === "knob")
+			? item.saved_modes.filter((mode) => mode === "polygon" || mode === "knob" || mode === "swap")
 			: undefined,
 		editor_state: normalizeEditorState((item as PendingImageItem).editor_state, item.saved_modes),
 		folder: safeFolderName(item.folder),
@@ -156,6 +156,7 @@ function normalizeEditorState(value: PendingImageItem["editor_state"], savedMode
 	return {
 		polygon: normalizeEditorModeState(state.polygon, savedModeSet.has("polygon")),
 		knob: normalizeEditorModeState(state.knob, savedModeSet.has("knob")),
+		swap: normalizeEditorModeState(state.swap, savedModeSet.has("swap")),
 	};
 }
 

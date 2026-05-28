@@ -9,7 +9,6 @@ const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
 const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
-const ICON_ROTATE_PATH := "res://assets/icons/rotate.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
 const ICON_CAT_PAW_PATH := "res://assets/icons/status/cat_paw.png"
 const ICON_MODE_PUZZLE_DONE_PATH := "res://assets/icons/status/mode_puzzle_done.png"
@@ -21,10 +20,9 @@ const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
 const GAME_FOOTER_MARGIN := 18.0
-const HUD_BLOCKER_PADDING := 0.0
+const HUD_BLOCKER_PADDING := 18.0
 const HUD_DEBUG_MEASUREMENTS := true
 const HUD_TEXT_BUTTON_FONT_SIZE := 22
-const HUD_ZOOM_LABEL_HEIGHT := 34.0
 
 var cream := Color("#F6EBD4")
 var paper := Color("#FFF6E6")
@@ -47,7 +45,6 @@ var icon_album: Texture2D
 var icon_left_arrow: Texture2D
 var icon_lightbulb: Texture2D
 var icon_pause: Texture2D
-var icon_rotate: Texture2D
 var icon_setting: Texture2D
 var icon_cat_paw: Texture2D
 var icon_mode_puzzle_done: Texture2D
@@ -88,7 +85,6 @@ func _ready() -> void:
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
 	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
 	icon_pause = load(ICON_PAUSE_PATH)
-	icon_rotate = load(ICON_ROTATE_PATH)
 	icon_setting = load(ICON_SETTING_PATH)
 	icon_cat_paw = repository.cached_texture(ICON_CAT_PAW_PATH)
 	icon_mode_puzzle_done = repository.cached_texture(ICON_MODE_PUZZLE_DONE_PATH)
@@ -524,7 +520,7 @@ func _show_topics() -> void:
 	grid.add_theme_constant_override("v_separation", 24)
 	center.add_child(grid)
 	for topic in topics:
-		var total: int = topic["levels"].size() * 2
+		var total: int = topic["levels"].size() * 3
 		var done: int = progress_store.topic_done_count(topic)
 		var card := _topic_card_button(topic, "%d/%d" % [done, total], func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
 		grid.add_child(card)
@@ -561,7 +557,8 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	footer.add_theme_constant_override("separation", 18)
 	footer.add_child(_summary_item(icon_mode_polygon_done, "%d/%d" % [progress_store.mode_done_count(topic, "polygon"), topic["levels"].size()]))
 	footer.add_child(_summary_item(icon_mode_puzzle_done, "%d/%d" % [progress_store.mode_done_count(topic, "knob"), topic["levels"].size()]))
-	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [progress_store.topic_done_count(topic), topic["levels"].size() * 2]))
+	footer.add_child(_summary_text_item("3x4", "%d/%d" % [progress_store.mode_done_count(topic, "swap"), topic["levels"].size()]))
+	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [progress_store.topic_done_count(topic), topic["levels"].size() * 3]))
 	wrap.add_child(footer)
 	if focus_card != null:
 		call_deferred("_scroll_level_card_into_view", scroll, focus_card)
@@ -599,6 +596,7 @@ func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	content.add_child(row)
 	row.add_child(_status_icon("polygon", progress_store.is_done(level["id"], "polygon"), 42))
 	row.add_child(_status_icon("knob", progress_store.is_done(level["id"], "knob"), 42))
+	row.add_child(_status_icon("swap", progress_store.is_done(level["id"], "swap"), 42))
 	if preview_texture != null:
 		card.pressed.connect(action)
 		_wire_button_animation(card)
@@ -720,7 +718,9 @@ func _apply_card_style(card: Button) -> void:
 	card.add_theme_stylebox_override("pressed", pressed)
 
 
-func _status_icon(mode: String, done: bool, size: float) -> TextureRect:
+func _status_icon(mode: String, done: bool, size: float) -> Control:
+	if _mode_key(mode) == "swap":
+		return _swap_mode_badge(done, size)
 	var rect := TextureRect.new()
 	rect.texture = _mode_icon_texture(mode, done)
 	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -728,6 +728,34 @@ func _status_icon(mode: String, done: bool, size: float) -> TextureRect:
 	rect.custom_minimum_size = Vector2(size, size)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return rect
+
+
+func _swap_mode_badge(done: bool, size: float) -> Panel:
+	var badge := Panel.new()
+	badge.custom_minimum_size = Vector2(size, size)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#6f9d67") if done else Color("#d0cac0")
+	style.border_color = Color("#5f8d55") if done else Color("#aaa49a")
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 10
+	style.corner_radius_top_right = 10
+	style.corner_radius_bottom_left = 10
+	style.corner_radius_bottom_right = 10
+	badge.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.text = "3x4"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", max(12, int(size * 0.28)))
+	label.add_theme_color_override("font_color", Color.WHITE if done else Color("#756e65"))
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_child(label)
+	return badge
 
 
 func _mode_icon_texture(mode: String, done: bool) -> Texture2D:
@@ -738,7 +766,12 @@ func _mode_icon_texture(mode: String, done: bool) -> Texture2D:
 
 
 func _mode_label(mode: String) -> String:
-	return "多边形模式" if _mode_key(mode) == "polygon" else "凹凸拼图模式"
+	var key := _mode_key(mode)
+	if key == "polygon":
+		return "多边形模式"
+	if key == "swap":
+		return "方格交换模式"
+	return "凹凸拼图模式"
 
 
 func _summary_item(icon: Texture2D, text: String) -> HBoxContainer:
@@ -762,6 +795,21 @@ func _summary_item(icon: Texture2D, text: String) -> HBoxContainer:
 	return row
 
 
+func _summary_text_item(mark: String, text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(_swap_mode_badge(true, 30))
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", brown)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	return row
+
+
 func _show_mode_dialog(level: Dictionary) -> void:
 	current_level = level
 	progress_store.mark_last_played(current_topic, level, progress_store.preferred_mode(level))
@@ -771,6 +819,7 @@ func _show_mode_dialog(level: Dictionary) -> void:
 	box.add_child(_mode_title_block(str(level["title"])))
 	box.add_child(_mode_choice_card(level, "polygon"))
 	box.add_child(_mode_choice_card(level, "knob"))
+	box.add_child(_mode_choice_card(level, "swap"))
 
 
 func _mode_title_block(text: String) -> Control:
@@ -945,7 +994,12 @@ func _complete_check_badge() -> Panel:
 
 
 func _mode_accent_color(mode: String) -> Color:
-	return Color("#6f9d67") if _mode_key(mode) == "polygon" else orange
+	var key := _mode_key(mode)
+	if key == "polygon":
+		return Color("#6f9d67")
+	if key == "swap":
+		return Color("#7f9fb8")
+	return orange
 
 
 func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
@@ -958,10 +1012,11 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	_apply_level_media(active_level_config)
 	_clear_ui()
 	_clear_board()
-	var loaded: bool = puzzle_board.start(active_level_config, play_mode, texture, source_image, source_size, _icon_button_size())
+	var random_rotation := progress_store.random_rotation_enabled() and current_mode != "swap"
+	var loaded: bool = puzzle_board.start(active_level_config, play_mode, texture, source_image, source_size, _icon_button_size(), random_rotation)
 	_build_game_hud(level["title"])
 	if not loaded:
-		status_label.text = "关卡 JSON 缺少当前模式的预生成碎片。"
+		status_label.text = "关卡 JSON 缺少当前模式配置。"
 	elif not progress_store.tutorial_seen():
 		_show_tutorial_modal()
 
@@ -1015,41 +1070,25 @@ func _build_game_hud(level_title: String) -> void:
 	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, "暂停"))
 	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
 	var bottom_tools := HBoxContainer.new()
-	bottom_tools.alignment = BoxContainer.ALIGNMENT_BEGIN
-	bottom_tools.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bottom_tools.offset_left = 0
-	bottom_tools.offset_top = -_icon_button_size()
-	bottom_tools.offset_right = _hud_bottom_icons_width()
-	bottom_tools.offset_bottom = 0
-	bottom_tools.add_theme_constant_override("separation", button_separation)
-	screen_root.add_child(bottom_tools)
-	bottom_tools.add_child(_icon_button(icon_rotate, puzzle_board.align_all, "转正"))
-	bottom_tools.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
-	bottom_tools.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
-	var zoom_tools := VBoxContainer.new()
-	zoom_tools.alignment = BoxContainer.ALIGNMENT_END
-	zoom_tools.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	zoom_tools.offset_left = -_hud_zoom_tools_width()
-	zoom_tools.offset_top = -_hud_zoom_tools_height()
-	zoom_tools.offset_right = 0
-	zoom_tools.offset_bottom = 0
-	zoom_tools.add_theme_constant_override("separation", 2)
-	screen_root.add_child(zoom_tools)
-	zoom_tools.add_child(_tool_text_button("+", puzzle_board.zoom_in, "放大"))
-	zoom_label = Label.new()
-	zoom_label.text = "100%"
-	zoom_label.custom_minimum_size = Vector2(_hud_zoom_tools_width(), HUD_ZOOM_LABEL_HEIGHT)
-	zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	zoom_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	zoom_label.add_theme_font_size_override("font_size", 18)
-	zoom_label.add_theme_color_override("font_color", brown)
-	if _show_hud_debug_measurements():
-		_apply_debug_control_background(zoom_label, Color(0.36, 0.86, 0.48, 0.22))
-	zoom_tools.add_child(zoom_label)
-	zoom_tools.add_child(_tool_text_button("-", puzzle_board.zoom_out, "缩小"))
-	zoom_tools.add_child(_tool_text_button("重置", puzzle_board.reset_view, "重置视角"))
+	if current_mode != "swap":
+		bottom_tools.alignment = BoxContainer.ALIGNMENT_BEGIN
+		bottom_tools.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		bottom_tools.offset_left = 0
+		bottom_tools.offset_top = -_icon_button_size()
+		bottom_tools.offset_right = _hud_bottom_icons_width()
+		bottom_tools.offset_bottom = 0
+		bottom_tools.add_theme_constant_override("separation", button_separation)
+		screen_root.add_child(bottom_tools)
+		bottom_tools.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
+		bottom_tools.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
+	zoom_label = null
 	status_label = Label.new()
-	status_label.text = "拖动碎片。空白处拖动桌布，双指缩放。"
+	if current_mode == "swap":
+		status_label.text = "拖动图片块到另一块上交换位置。"
+	elif progress_store.random_rotation_enabled():
+		status_label.text = "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。"
+	else:
+		status_label.text = "拖动碎片。空白处拖动桌布，双指缩放。"
 	status_label.position = Vector2(20, viewport_size.y - _game_bottom_reserved_height() + 10.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
@@ -1061,9 +1100,6 @@ func _build_game_hud(level_title: String) -> void:
 	for control in bottom_tools.get_children():
 		if control is Control:
 			hud_blocker_controls.append(control)
-	for control in zoom_tools.get_children():
-		if control is Control:
-			hud_blocker_controls.append(control)
 	_queue_game_drag_blocker_refresh()
 	_animate_screen_in(screen_root)
 
@@ -1073,15 +1109,7 @@ func _hud_top_icons_width() -> float:
 
 
 func _hud_bottom_icons_width() -> float:
-	return _icon_button_size() * 2.0 + _hud_text_button_width("整理") + _hud_button_separation() * 2.0
-
-
-func _hud_zoom_tools_width() -> float:
-	return maxf(_icon_button_size(), _hud_text_button_width("重置"))
-
-
-func _hud_zoom_tools_height() -> float:
-	return _hud_text_button_height() * 3.0 + HUD_ZOOM_LABEL_HEIGHT + 2.0 * 3.0
+	return _icon_button_size() + _hud_text_button_width("整理") + _hud_button_separation()
 
 
 func _hud_title_size(text: String) -> Vector2:
@@ -1173,7 +1201,7 @@ func _show_restart_confirm() -> void:
 
 func _show_settings_modal() -> void:
 	_show_modal()
-	var box := _modal_box(Vector2(380, 330))
+	var box := _modal_box(Vector2(420, 390))
 	box.add_child(_modal_title("设置"))
 	for name in ["音乐", "音效", "震动反馈"]:
 		var check := CheckBox.new()
@@ -1181,6 +1209,16 @@ func _show_settings_modal() -> void:
 		check.button_pressed = true
 		check.add_theme_color_override("font_color", brown)
 		box.add_child(check)
+	var rotation_check := CheckBox.new()
+	rotation_check.text = "碎片随机旋转（多边形 / 凹凸）"
+	rotation_check.button_pressed = progress_store.random_rotation_enabled()
+	rotation_check.add_theme_color_override("font_color", brown)
+	rotation_check.toggled.connect(func(enabled: bool) -> void:
+		progress_store.set_random_rotation_enabled(enabled)
+		if current_screen == "game":
+			_set_game_status("随机旋转设置将在重新开始或进入下一关后生效。")
+	)
+	box.add_child(rotation_check)
 	box.add_child(_button("关闭", _close_modal))
 
 
@@ -1189,7 +1227,12 @@ func _show_tutorial_modal() -> void:
 	var box := _modal_box(Vector2(420, 290))
 	box.add_child(_modal_title("怎么玩"))
 	var text := Label.new()
-	text.text = "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
+	if current_mode == "swap":
+		text.text = "拖动一块图片到另一块上，可以交换它们的位置。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n所有方格回到正确顺序后就会通关。"
+	elif progress_store.random_rotation_enabled():
+		text.text = "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
+	else:
+		text.text = "单指按住碎片并拖动。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.add_theme_font_size_override("font_size", 20)
 	text.add_theme_color_override("font_color", brown)
@@ -1261,13 +1304,22 @@ func _complete_actions() -> HBoxContainer:
 	row.add_child(_button("下一个", _play_next_level, true, Vector2(138, 48)))
 	row.add_child(_button("换个模式", func() -> void:
 		_close_modal()
-		_show_game(current_topic, current_level, "knob" if _mode_key(current_mode) == "polygon" else "polygon")
+		_show_game(current_topic, current_level, _next_mode_key(current_mode))
 	, false, Vector2(138, 48)))
 	row.add_child(_button("返回关卡列表", func() -> void:
 		_close_modal()
 		_show_levels(current_topic, str(current_level.get("id", "")))
 	, false, Vector2(154, 48)))
 	return row
+
+
+func _next_mode_key(mode: String) -> String:
+	var modes := ["polygon", "knob", "swap"]
+	var key := _mode_key(mode)
+	var index := modes.find(key)
+	if index < 0:
+		return "polygon"
+	return modes[(index + 1) % modes.size()]
 
 
 func _add_complete_paw_marks(panel: Control) -> void:

@@ -1,6 +1,6 @@
 import type { CutLine, LevelConfig, LevelPiece, PieceCell, Point } from "../../types";
 
-export type EditMode = "polygon" | "knob";
+export type EditMode = "polygon" | "knob" | "swap";
 export type PolygonViewMode = "result" | "edit" | "inspect";
 
 export type LevelTarget = {

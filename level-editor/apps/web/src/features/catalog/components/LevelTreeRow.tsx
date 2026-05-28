@@ -26,7 +26,7 @@ export function LevelTreeRow({
   checked: boolean;
   editing: boolean;
   active: boolean;
-  modes?: { polygon: boolean; knob: boolean };
+  modes?: { polygon: boolean; knob: boolean; swap?: boolean };
   onSelect: () => void;
   onToggle: (checked: boolean) => void;
   onStartRename: () => void;
@@ -57,10 +57,11 @@ export function LevelTreeRow({
           onCommit={onRename}
         />
       </div>
-      {(modes?.polygon || modes?.knob) && (
+      {(modes?.polygon || modes?.knob || modes?.swap) && (
         <div className="flex shrink-0 items-center gap-1 text-clay" aria-label="已保存模式">
           {modes.polygon && <Hexagon size={14} aria-label="多边形模式" />}
           {modes.knob && <Puzzle size={14} aria-label="凹凸模式" />}
+          {modes.swap && <span className="rounded bg-clay/10 px-1 text-[10px] font-bold leading-4 text-clay" aria-label="方格交换模式">3x4</span>}
         </div>
       )}
     </div>

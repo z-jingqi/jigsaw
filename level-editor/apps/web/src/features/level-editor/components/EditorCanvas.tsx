@@ -257,6 +257,28 @@ export const EditorCanvas = forwardRef<SVGSVGElement, Omit<Props, "svgRef">>(fun
         onDrop={onCanvasDrop}
       >
         {image && <image href={imageUrl} x="0" y="0" width={image.naturalWidth} height={image.naturalHeight} preserveAspectRatio="xMidYMid meet" />}
+        {activeMode === "swap" && image && (
+          <g className="swapGridPreview">
+            {[1, 2].map((col) => (
+              <line
+                key={`swap_col_${col}`}
+                x1={(image.naturalWidth * col) / 3}
+                y1="0"
+                x2={(image.naturalWidth * col) / 3}
+                y2={image.naturalHeight}
+              />
+            ))}
+            {[1, 2, 3].map((row) => (
+              <line
+                key={`swap_row_${row}`}
+                x1="0"
+                y1={(image.naturalHeight * row) / 4}
+                x2={image.naturalWidth}
+                y2={(image.naturalHeight * row) / 4}
+              />
+            ))}
+          </g>
+        )}
         {activeMode === "polygon" && polygonView !== "edit" && actualPreview?.dataUrl && (
           <image
             href={actualPreview.dataUrl}

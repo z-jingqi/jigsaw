@@ -106,7 +106,7 @@ export type LevelCatalog = {
   topics: CatalogTopic[];
 };
 
-export type ImageTarget = "polygon" | "knob";
+export type ImageTarget = "polygon" | "knob" | "swap";
 
 export type ProcessStepType = "convert_jpg" | "remove_background" | "trim_transparent" | "compress";
 
@@ -162,6 +162,7 @@ export type PendingImageEditorModeState = {
 export type PendingImageEditorState = {
   polygon?: PendingImageEditorModeState;
   knob?: PendingImageEditorModeState;
+  swap?: PendingImageEditorModeState;
 };
 
 export type PythonTool = {
@@ -227,6 +228,11 @@ export type LevelConfig = {
       piece_size: number;
       knob_size: number;
       pieces: LevelPiece[];
+    };
+    swap: {
+      image?: LevelImageConfig;
+      rows: number;
+      cols: number;
     };
   };
   editor: {

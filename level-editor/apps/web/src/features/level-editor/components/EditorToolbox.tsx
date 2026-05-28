@@ -36,6 +36,16 @@ export function EditorToolbox({
   onRemoveSelected,
   onClearCuts,
 }: Props) {
+  if (activeMode === "swap") {
+    return (
+      <section className="grid gap-3">
+        <PanelTitle>工具</PanelTitle>
+        <div className="rounded-md border border-stone-200 bg-white/70 px-3 py-3 text-sm text-muted">
+          方格交换模式使用固定 3x4 网格，不需要手动切割。选择图片后直接标记完成并保存模式。
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="grid gap-3">
       <PanelTitle>工具</PanelTitle>

@@ -261,6 +261,7 @@ function normalizePendingEditorState(value: any) {
 	return {
 		polygon: normalizePendingEditorModeState(state.polygon, false),
 		knob: normalizePendingEditorModeState(state.knob, true),
+		swap: normalizePendingEditorModeState(state.swap, false),
 	};
 }
 

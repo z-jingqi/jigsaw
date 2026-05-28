@@ -37,8 +37,8 @@ export function EditorTopBar({
         <ToggleGroup
           type="single"
           value={activeMode}
-          onValueChange={(value) => {
-            if (value === "polygon" || value === "knob") onModeChange(value);
+          onValueChange={(value: string) => {
+            if (value === "polygon" || value === "knob" || value === "swap") onModeChange(value);
           }}
         >
           <WithTooltip label="多边形">
@@ -61,6 +61,17 @@ export function EditorTopBar({
               <Puzzle size={18} />
               <span>凹凸</span>
               {(completedModes.knob || dirtyModes.knob) && <span className={completedModes.knob ? "statusDot done" : "statusDot dirty"} />}
+            </ToggleGroupItem>
+          </WithTooltip>
+          <WithTooltip label="方格交换">
+            <ToggleGroupItem
+              value="swap"
+              aria-label="方格交换"
+              className={`relative gap-2 px-3 ${activeMode === "swap" ? "bg-clay text-white shadow-[inset_0_0_0_1px_#a95f25] hover:bg-clay hover:text-white" : ""}`}
+            >
+              <span className="text-xs font-bold leading-none">3x4</span>
+              <span>交换</span>
+              {(completedModes.swap || dirtyModes.swap) && <span className={completedModes.swap ? "statusDot done" : "statusDot dirty"} />}
             </ToggleGroupItem>
           </WithTooltip>
         </ToggleGroup>

@@ -10,16 +10,24 @@ const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
 const PIECE_SPAWN_EDGE_PADDING := 22.0
-const VIEW_MIN_RATIO := 0.5
-const VIEW_MAX_RATIO := 3.0
-const VIEW_BUTTON_STEP := 0.10
-const VIEW_MANUAL_STEP := 0.01
+const PIECE_SPAWN_SEPARATION := 34.0
+const VIEW_MIN_RATIO := 1.0
+const VIEW_MAX_RATIO := 2.0
+const VIEW_WHEEL_STEP := 0.08
+const TRACKPAD_MAGNIFY_MIN := 0.86
+const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
 const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
+const HINT_GLOW_COLOR := Color(1.0, 0.72, 0.16, 0.34)
+const HINT_OUTLINE_COLOR := Color(1.0, 0.82, 0.26, 0.96)
+const SWAP_COLS := 3
+const SWAP_ROWS := 4
+const SWAP_ANIMATION_TIME := 0.20
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
 const ORGANIZE_GAP := 22.0
+const ORGANIZE_MIN_SCREEN_GAP := 48.0
 const GROUP_Z_STEP := 64
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const PieceGroupScript := preload("res://scripts/PieceGroup.gd")
@@ -43,8 +51,12 @@ var base_view_offset := Vector2.ZERO
 var view_offset := Vector2.ZERO
 var view_tween: Tween
 var groups: Array = []
+var swap_tiles: Array = []
 var spawn_bounds: Array[Rect2] = []
 var dragging = null
+var swap_dragging = null
+var swap_drag_start_slot := -1
+var swap_drag_offset := Vector2.ZERO
 var selected_group = null
 var hint_highlighted_groups: Array = []
 var hint_highlighted_lines: Array[Line2D] = []
@@ -61,13 +73,15 @@ var pinch_start_world_midpoint := Vector2.ZERO
 var hud_icon_size := 56.0
 var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
+var randomize_piece_rotation := false
+var hint_highlight_token := 0
 
 
 func _ready() -> void:
 	rng.seed = 7
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, icon_size: float) -> bool:
+func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, icon_size: float, random_rotation_enabled := false) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -75,6 +89,7 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	source_image = image
 	source_size = image_size
 	hud_icon_size = icon_size
+	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
 	world_root = Node2D.new()
@@ -88,11 +103,16 @@ func clear() -> void:
 	for child in get_children():
 		child.queue_free()
 	groups.clear()
+	swap_tiles.clear()
 	spawn_bounds.clear()
 	dragging = null
+	swap_dragging = null
+	swap_drag_start_slot = -1
+	swap_drag_offset = Vector2.ZERO
 	selected_group = null
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
+	hint_highlight_token = 0
 	drag_blockers.clear()
 	active_touch_index = -1
 	active_touches.clear()
@@ -108,25 +128,35 @@ func clear() -> void:
 	view_offset = Vector2.ZERO
 	view_tween = null
 	completion_emitted = false
+	randomize_piece_rotation = false
 
 
 func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	if modal_open:
 		return false
+	if event is InputEventMagnifyGesture:
+		var magnify := event as InputEventMagnifyGesture
+		var factor := clampf(magnify.factor, TRACKPAD_MAGNIFY_MIN, TRACKPAD_MAGNIFY_MAX)
+		_zoom_view_at(magnify.position, view_scale * factor)
+		return true
+	if event is InputEventPanGesture:
+		var pan := event as InputEventPanGesture
+		_pan_view(-pan.delta)
+		return true
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
-			_zoom_view_at(mouse_event.position, view_scale + base_view_scale * VIEW_MANUAL_STEP)
+			_zoom_view_at(mouse_event.position, view_scale + base_view_scale * VIEW_WHEEL_STEP)
 			return true
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
-			_zoom_view_at(mouse_event.position, view_scale - base_view_scale * VIEW_MANUAL_STEP)
+			_zoom_view_at(mouse_event.position, view_scale - base_view_scale * VIEW_WHEEL_STEP)
 			return true
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
 			var double_group = _group_at_world(_screen_to_world(mouse_event.position))
-			if double_group != null:
+			if double_group != null and randomize_piece_rotation:
 				_select_group(double_group)
 				_rotate_group(double_group)
-			else:
+			elif double_group == null:
 				reset_view()
 			return true
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -138,6 +168,9 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
+		if swap_dragging != null:
+			_move_swap_tile_to(swap_dragging, _screen_to_world(motion.position) + swap_drag_offset)
+			return true
 		if dragging != null:
 			_move_group_to(dragging, _screen_to_world(motion.position) + drag_offset)
 			return true
@@ -153,10 +186,10 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 				return true
 			if touch.double_tap:
 				var double_group = _group_at_world(_screen_to_world(touch.position))
-				if double_group != null:
+				if double_group != null and randomize_piece_rotation:
 					_select_group(double_group)
 					_rotate_group(double_group)
-				else:
+				elif double_group == null:
 					reset_view()
 			else:
 				active_touch_index = touch.index
@@ -177,6 +210,9 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 		if pinch_active and active_touches.size() >= 2:
 			_update_pinch()
 			return true
+		if swap_dragging != null and drag_event.index == active_touch_index:
+			_move_swap_tile_to(swap_dragging, _screen_to_world(drag_event.position) + swap_drag_offset)
+			return true
 		if dragging != null and drag_event.index == active_touch_index:
 			_move_group_to(dragging, _screen_to_world(drag_event.position) + drag_offset)
 			return true
@@ -187,6 +223,10 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 
 
 func organize_pieces() -> void:
+	if current_mode == "swap":
+		reset_view()
+		status_changed.emit("方格交换模式只需要拖动两块图片互换位置。")
+		return
 	if groups.is_empty():
 		return
 	_clear_hint_highlights()
@@ -194,7 +234,6 @@ func organize_pieces() -> void:
 	if movable.is_empty():
 		movable = _organizable_groups(true)
 	if movable.is_empty():
-		fit_view_to_pieces()
 		status_changed.emit("当前碎片已经很接近完成位置。")
 		return
 	movable.sort_custom(func(a, b) -> bool:
@@ -206,7 +245,6 @@ func organize_pieces() -> void:
 			continue
 		_animate_group_to(group, placements[group])
 	await _wait_for_group_layout_animation()
-	fit_view_to_pieces()
 	status_changed.emit("已整理未完成的碎片。")
 
 
@@ -220,14 +258,6 @@ func fit_view_to_pieces(animate := true) -> void:
 
 func reset_view() -> void:
 	_animate_view_to(base_view_scale, base_view_offset, 0.18)
-
-
-func zoom_in() -> void:
-	_zoom_by_button_step(VIEW_BUTTON_STEP)
-
-
-func zoom_out() -> void:
-	_zoom_by_button_step(-VIEW_BUTTON_STEP)
 
 
 func _reset_view_transform() -> void:
@@ -276,18 +306,6 @@ func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
 	view_offset = screen_anchor - before * view_scale
 	_clamp_view_to_table()
 	_apply_view_transform()
-
-
-func _zoom_by_button_step(step: float) -> void:
-	var next_ratio := clampf(view_target_ratio + step, VIEW_MIN_RATIO, VIEW_MAX_RATIO)
-	_animate_zoom_view_at(get_viewport_rect().size * 0.5, base_view_scale * next_ratio)
-
-
-func _animate_zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
-	var before := _screen_to_world(screen_anchor)
-	var final_scale := _clamped_actual_scale(target_scale)
-	var final_offset := screen_anchor - before * final_scale
-	_animate_view_to(final_scale, final_offset, 0.16)
 
 
 func _animate_view_to(target_scale: float, target_offset: Vector2, duration: float) -> void:
@@ -395,9 +413,10 @@ func _clamped_view_offset(offset: Vector2, scale: float) -> Vector2:
 
 func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX_RATIO, set_baseline := false) -> void:
 	var viewport := get_viewport_rect().size
+	var target_center := bounds.get_center()
 	var target_scale := minf(viewport.x / maxf(1.0, bounds.size.x), viewport.y / maxf(1.0, bounds.size.y))
 	target_scale = maxf(0.001, target_scale)
-	var target_offset := viewport * 0.5 - bounds.get_center() * target_scale
+	var target_offset := viewport * 0.5 - target_center * target_scale
 	target_offset = _clamped_view_offset(target_offset, target_scale)
 	if set_baseline:
 		base_view_scale = target_scale
@@ -405,6 +424,8 @@ func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX
 		view_target_ratio = 1.0
 	else:
 		target_scale = clampf(target_scale, base_view_scale * VIEW_MIN_RATIO, base_view_scale * minf(max_ratio, VIEW_MAX_RATIO))
+		target_offset = viewport * 0.5 - target_center * target_scale
+		target_offset = _clamped_view_offset(target_offset, target_scale)
 	if animate:
 		_animate_view_to(target_scale, target_offset, 0.22)
 	else:
@@ -424,6 +445,12 @@ func _base_view_bounds() -> Rect2:
 func _world_content_bounds() -> Rect2:
 	var bounds := Rect2(board_origin, source_size * source_scale)
 	var has_bounds := bounds.size.x > 0.0 and bounds.size.y > 0.0
+	for tile in swap_tiles:
+		var tile_bounds := _swap_tile_bounds(tile, tile["node"].position)
+		if tile_bounds.size.x <= 0.0 or tile_bounds.size.y <= 0.0:
+			continue
+		bounds = bounds.merge(tile_bounds) if has_bounds else tile_bounds
+		has_bounds = true
 	for group in groups:
 		var group_bounds := _group_bounds_at(group, group.node.position)
 		if group_bounds.size.x <= 0.0 or group_bounds.size.y <= 0.0:
@@ -473,30 +500,31 @@ func _organized_group_positions(movable: Array) -> Dictionary:
 			break
 		remaining = _pack_groups_in_area(remaining, area, placements)
 	if not remaining.is_empty():
-		var fallback := _virtual_table_area().grow(-ORGANIZE_GAP)
+		var fallback := _safe_organize_area()
 		_pack_groups_in_area(remaining, fallback, placements)
 	return placements
 
 
 func _organize_areas() -> Array[Rect2]:
-	var table := _piece_drag_area(false)
-	var board := Rect2(board_origin, source_size * source_scale).grow(ORGANIZE_GAP)
+	var gap := _organize_gap()
+	var table := _safe_organize_area()
+	var board := Rect2(board_origin, source_size * source_scale).grow(gap)
 	var areas: Array[Rect2] = []
 	var bottom := Rect2(
-		Vector2(table.position.x, board.end.y + ORGANIZE_GAP),
-		Vector2(table.size.x, table.end.y - board.end.y - ORGANIZE_GAP)
+		Vector2(table.position.x, board.end.y + gap),
+		Vector2(table.size.x, table.end.y - board.end.y - gap)
 	)
 	var left := Rect2(
 		table.position,
-		Vector2(board.position.x - table.position.x - ORGANIZE_GAP, table.size.y)
+		Vector2(board.position.x - table.position.x - gap, table.size.y)
 	)
 	var right := Rect2(
-		Vector2(board.end.x + ORGANIZE_GAP, table.position.y),
-		Vector2(table.end.x - board.end.x - ORGANIZE_GAP, table.size.y)
+		Vector2(board.end.x + gap, table.position.y),
+		Vector2(table.end.x - board.end.x - gap, table.size.y)
 	)
 	var top := Rect2(
 		table.position,
-		Vector2(table.size.x, board.position.y - table.position.y - ORGANIZE_GAP)
+		Vector2(table.size.x, board.position.y - table.position.y - gap)
 	)
 	for area in [bottom, left, right, top]:
 		if area.size.x >= 96.0 and area.size.y >= 96.0:
@@ -504,19 +532,62 @@ func _organize_areas() -> Array[Rect2]:
 	return areas
 
 
+func _safe_organize_area() -> Rect2:
+	var gap := _organize_gap()
+	var organize_scale := maxf(0.001, view_scale)
+	var organize_offset := view_offset
+	var area := _visible_world_area_for_view(organize_scale, organize_offset).grow(-PIECE_DRAG_PADDING / organize_scale).grow(-gap)
+	if area.size.x < 140.0 or area.size.y < 140.0:
+		area = _piece_drag_area(false).grow(-gap)
+	if drag_blockers.is_empty():
+		return area
+	var trimmed := area
+	var viewport := get_viewport_rect().size
+	for blocker in drag_blockers:
+		if blocker.size.x <= 0.0 or blocker.size.y <= 0.0:
+			continue
+		var world_blocker := _screen_rect_to_world_for_view(blocker.grow(8.0), organize_scale, organize_offset)
+		if not trimmed.intersects(world_blocker):
+			continue
+		var touches_left := blocker.position.x <= 6.0
+		var touches_top := blocker.position.y <= 6.0
+		var touches_right := blocker.end.x >= viewport.x - 6.0
+		var touches_bottom := blocker.end.y >= viewport.y - 6.0
+		if touches_bottom:
+			trimmed.size.y = minf(trimmed.size.y, maxf(0.0, world_blocker.position.y - trimmed.position.y - gap))
+		if touches_top:
+			var bottom := trimmed.end.y
+			trimmed.position.y = minf(bottom, maxf(trimmed.position.y, world_blocker.end.y + gap))
+			trimmed.size.y = maxf(0.0, bottom - trimmed.position.y)
+		if touches_right:
+			trimmed.size.x = minf(trimmed.size.x, maxf(0.0, world_blocker.position.x - trimmed.position.x - gap))
+		if touches_left:
+			var right := trimmed.end.x
+			trimmed.position.x = minf(right, maxf(trimmed.position.x, world_blocker.end.x + gap))
+			trimmed.size.x = maxf(0.0, right - trimmed.position.x)
+	if trimmed.size.x >= 140.0 and trimmed.size.y >= 140.0:
+		return trimmed
+	return area
+
+
+func _organize_gap() -> float:
+	return maxf(ORGANIZE_GAP, ORGANIZE_MIN_SCREEN_GAP / maxf(0.001, view_scale))
+
+
 func _pack_groups_in_area(candidates: Array, area: Rect2, placements: Dictionary) -> Array:
 	var remaining := []
-	var cursor := area.position + Vector2(ORGANIZE_GAP, ORGANIZE_GAP)
+	var gap := _organize_gap()
+	var cursor := area.position + Vector2(gap, gap)
 	var row_height := 0.0
 	for group in candidates:
 		var bounds := _group_bounds_at(group, group.node.position)
-		var size := bounds.size + Vector2(ORGANIZE_GAP, ORGANIZE_GAP)
+		var size := bounds.size + Vector2(gap, gap)
 		if size.x > area.size.x or size.y > area.size.y:
 			remaining.append(group)
 			continue
 		if cursor.x + size.x > area.end.x:
-			cursor.x = area.position.x + ORGANIZE_GAP
-			cursor.y += row_height + ORGANIZE_GAP
+			cursor.x = area.position.x + gap
+			cursor.y += row_height + gap
 			row_height = 0.0
 		if cursor.y + size.y > area.end.y:
 			remaining.append(group)
@@ -534,7 +605,7 @@ func _animate_group_to(group, target_position: Vector2) -> void:
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "position", _clamped_group_position(group, target_position, false), 0.24)
+	tween.tween_property(group.node, "position", _clamped_group_position(group, target_position, true), 0.24)
 	tween.finished.connect(func(g = group) -> void:
 		if is_instance_valid(g.node):
 			g.is_animating = false
@@ -545,23 +616,10 @@ func _wait_for_group_layout_animation() -> void:
 	await get_tree().create_timer(0.26).timeout
 
 
-func align_all() -> void:
-	for group in groups:
-		if group.is_animating:
-			continue
-		group.is_animating = true
-		var tween := create_tween()
-		tween.set_ease(Tween.EASE_OUT)
-		tween.set_trans(Tween.TRANS_CUBIC)
-		tween.tween_property(group.node, "rotation_degrees", 0.0, 0.16)
-		tween.finished.connect(func(g = group) -> void:
-			if is_instance_valid(g.node):
-				g.is_animating = false
-		)
-	status_changed.emit("所有碎片已转正。")
-
-
 func show_hint() -> void:
+	if current_mode == "swap":
+		status_changed.emit("拖动任意一块图片到另一块上，即可交换它们的位置。")
+		return
 	var pair := _find_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
@@ -579,6 +637,8 @@ func set_drag_blockers(blockers: Array[Rect2]) -> void:
 
 
 func _start_play_session(play_mode: String) -> bool:
+	if _mode_key(play_mode) == "swap":
+		return _start_swap_session()
 	var level := _level_from_mode_pieces(play_mode)
 	if level.is_empty():
 		return false
@@ -663,6 +723,116 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 	}
 
 
+func _start_swap_session() -> bool:
+	if source_size.x <= 0.0 or source_size.y <= 0.0:
+		return false
+	var config := _mode_config(active_level_config, "swap")
+	var cols: int = max(1, int(config.get("cols", SWAP_COLS)))
+	var rows: int = max(1, int(config.get("rows", SWAP_ROWS)))
+	var layout := _mobile_board_layout()
+	source_scale = layout["source_scale"]
+	board_origin = layout["board_origin"]
+	var order := _swap_shuffled_order(cols, rows)
+	for slot_index in range(order.size()):
+		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)
+	fit_view_to_pieces(false)
+	status_changed.emit("拖动一块图片到另一块上交换位置。")
+	return true
+
+
+func _create_swap_tile(correct_index: int, slot_index: int, cols: int, rows: int) -> void:
+	var tile_source_size := Vector2(source_size.x / float(cols), source_size.y / float(rows))
+	var source_col := correct_index % cols
+	var source_row := int(correct_index / cols)
+	var source_rect := Rect2(Vector2(source_col, source_row) * tile_source_size, tile_source_size)
+	var display_size := tile_source_size * source_scale
+	var polygon := PackedVector2Array([
+		Vector2.ZERO,
+		Vector2(display_size.x, 0.0),
+		display_size,
+		Vector2(0.0, display_size.y),
+	])
+	var uv := PackedVector2Array([
+		source_rect.position,
+		Vector2(source_rect.end.x, source_rect.position.y),
+		source_rect.end,
+		Vector2(source_rect.position.x, source_rect.end.y),
+	])
+	var node := Node2D.new()
+	node.name = "swap_tile_%02d" % correct_index
+	node.z_index = swap_tiles.size() * GROUP_Z_STEP
+	world_root.add_child(node)
+	var piece := {
+		"id": node.name,
+		"polygon": polygon,
+		"uv": uv,
+		"cut_lines": [],
+	}
+	node.add_child(PieceVisualFactoryScript.create_piece_visual(piece, texture))
+	var tile := {
+		"node": node,
+		"correct_index": correct_index,
+		"slot_index": slot_index,
+		"size": display_size,
+		"is_animating": false,
+	}
+	swap_tiles.append(tile)
+	node.position = _swap_slot_position(slot_index, cols, rows)
+
+
+func _swap_shuffled_order(cols: int, rows: int) -> Array:
+	var total := cols * rows
+	var base := []
+	for index in range(total):
+		base.append(index)
+	var local_rng := RandomNumberGenerator.new()
+	local_rng.randomize()
+	for attempt in range(3000):
+		var candidate := base.duplicate()
+		_shuffle_array(candidate, local_rng)
+		if _is_valid_swap_order(candidate, cols, rows):
+			return candidate
+	var fallback := []
+	for index in range(total - 1, -1, -2):
+		fallback.append(index)
+	for index in range(total - 2, -1, -2):
+		fallback.append(index)
+	return fallback if _is_valid_swap_order(fallback, cols, rows) else base
+
+
+func _shuffle_array(items: Array, local_rng: RandomNumberGenerator) -> void:
+	for index in range(items.size() - 1, 0, -1):
+		var other := local_rng.randi_range(0, index)
+		var value = items[index]
+		items[index] = items[other]
+		items[other] = value
+
+
+func _is_valid_swap_order(order: Array, cols: int, rows: int) -> bool:
+	for slot in range(order.size()):
+		if int(order[slot]) == slot:
+			return false
+		var col := slot % cols
+		var row := int(slot / cols)
+		var current := int(order[slot])
+		if col < cols - 1:
+			var right := int(order[slot + 1])
+			if right == current + 1 and int(current / cols) == int(right / cols):
+				return false
+		if row < rows - 1:
+			var below := int(order[slot + cols])
+			if below == current + cols:
+				return false
+	return true
+
+
+func _swap_slot_position(slot_index: int, cols := SWAP_COLS, rows := SWAP_ROWS) -> Vector2:
+	var tile_size := Vector2(source_size.x / float(cols), source_size.y / float(rows)) * source_scale
+	var col := slot_index % cols
+	var row := int(slot_index / cols)
+	return board_origin + Vector2(col * tile_size.x, row * tile_size.y)
+
+
 func _mobile_board_layout() -> Dictionary:
 	return BoardLayoutScript.mobile_board_layout(
 		source_size,
@@ -674,6 +844,9 @@ func _mobile_board_layout() -> Dictionary:
 
 
 func _current_mode_piece_count() -> int:
+	if current_mode == "swap":
+		var swap_config := _mode_config(active_level_config, current_mode)
+		return int(swap_config.get("cols", SWAP_COLS)) * int(swap_config.get("rows", SWAP_ROWS))
 	var config := _mode_config(active_level_config, current_mode)
 	if config.has("pieces") and typeof(config["pieces"]) == TYPE_ARRAY:
 		return (config["pieces"] as Array).size()
@@ -834,7 +1007,7 @@ func _level_background_color(level_config: Dictionary) -> Color:
 func _create_group(piece: Dictionary) -> void:
 	var group_node := Node2D.new()
 	group_node.name = piece["id"]
-	group_node.rotation_degrees = [0, 90, 180, 270][int(rng.randi_range(0, 3))]
+	group_node.rotation_degrees = [0, 90, 180, 270][int(rng.randi_range(0, 3))] if randomize_piece_rotation else 0.0
 	group_node.z_index = groups.size() * GROUP_Z_STEP
 	world_root.add_child(group_node)
 	var visual := PieceVisualFactoryScript.create_piece_visual(piece, texture)
@@ -843,7 +1016,7 @@ func _create_group(piece: Dictionary) -> void:
 	var group = PieceGroupScript.new(group_node, piece)
 	groups.append(group)
 	_move_group_to(group, _scatter_position_for_group(group), false)
-	spawn_bounds.append(_group_bounds_at(group, group.node.position).grow(8.0))
+	spawn_bounds.append(_group_bounds_at(group, group.node.position).grow(PIECE_SPAWN_SEPARATION))
 
 
 func _scatter_position_for_group(group) -> Vector2:
@@ -851,11 +1024,11 @@ func _scatter_position_for_group(group) -> Vector2:
 	var clamp_area := _piece_drag_area(false)
 	var best_position := area.get_center()
 	var best_score := INF
-	var attempts := 96
+	var attempts := 160
 	for attempt in range(attempts):
 		var candidate := _spawn_candidate(area, attempt, attempts)
 		var clamped := _clamped_group_position(group, candidate, false)
-		var bounds := _group_bounds_at(group, clamped).grow(8.0)
+		var bounds := _group_bounds_at(group, clamped).grow(PIECE_SPAWN_SEPARATION)
 		var score := _spawn_overlap_score(bounds, clamp_area)
 		if score <= 0.001:
 			return clamped
@@ -992,6 +1165,16 @@ func _world_rect_to_screen(rect: Rect2) -> Rect2:
 	return Rect2(top_left.min(bottom_right), (bottom_right - top_left).abs())
 
 
+func _screen_to_world_for_view(screen_pos: Vector2, scale: float, offset: Vector2) -> Vector2:
+	return (screen_pos - offset) / maxf(0.001, scale)
+
+
+func _screen_rect_to_world_for_view(rect: Rect2, scale: float, offset: Vector2) -> Rect2:
+	var top_left := _screen_to_world_for_view(rect.position, scale, offset)
+	var bottom_right := _screen_to_world_for_view(rect.end, scale, offset)
+	return Rect2(top_left.min(bottom_right), (bottom_right - top_left).abs())
+
+
 func _piece_drag_area(use_visible_area := false) -> Rect2:
 	var table := _virtual_table_area().grow(-PIECE_DRAG_PADDING)
 	if not use_visible_area:
@@ -1003,9 +1186,13 @@ func _piece_drag_area(use_visible_area := false) -> Rect2:
 
 
 func _visible_world_area() -> Rect2:
+	return _visible_world_area_for_view(view_scale, view_offset)
+
+
+func _visible_world_area_for_view(scale: float, offset: Vector2) -> Rect2:
 	var viewport := get_viewport_rect().size
-	var top_left := _screen_to_world(Vector2.ZERO)
-	var bottom_right := _screen_to_world(viewport)
+	var top_left := _screen_to_world_for_view(Vector2.ZERO, scale, offset)
+	var bottom_right := _screen_to_world_for_view(viewport, scale, offset)
 	var position := top_left.min(bottom_right)
 	var size := (bottom_right - top_left).abs()
 	return Rect2(position, size)
@@ -1052,6 +1239,9 @@ func _member_bounds_points_list(member: Dictionary) -> Array[PackedVector2Array]
 
 
 func _begin_drag(screen_pos: Vector2) -> void:
+	if current_mode == "swap":
+		_begin_swap_drag(screen_pos)
+		return
 	var world_pos := _screen_to_world(screen_pos)
 	var group = _group_at_world(world_pos)
 	if group == null:
@@ -1068,6 +1258,9 @@ func _begin_drag(screen_pos: Vector2) -> void:
 
 
 func _end_drag() -> void:
+	if current_mode == "swap":
+		_end_swap_drag()
+		return
 	if dragging == null:
 		return
 	var released_group = dragging
@@ -1129,12 +1322,136 @@ func _visible_cut_line_segments(source_line: PackedVector2Array, home: Vector2, 
 	return segments
 
 
+func _begin_swap_drag(screen_pos: Vector2) -> void:
+	var world_pos := _screen_to_world(screen_pos)
+	var tile = _swap_tile_at_world(world_pos)
+	if tile == null:
+		_begin_pan(screen_pos, active_touch_index)
+		return
+	if bool(tile.get("is_animating", false)):
+		return
+	_clear_hint_highlights()
+	swap_dragging = tile
+	swap_drag_start_slot = int(tile["slot_index"])
+	swap_drag_offset = tile["node"].position - world_pos
+	_bring_swap_tile_to_front(tile)
+	_set_swap_tile_lifted(tile, true)
+
+
+func _end_swap_drag() -> void:
+	if swap_dragging == null:
+		return
+	var released = swap_dragging
+	var center: Vector2 = released["node"].position + released["size"] * 0.5
+	var target = _swap_tile_at_world(center, released)
+	if target == null:
+		_animate_swap_tile_to(released, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
+	else:
+		var target_slot := int(target["slot_index"])
+		released["slot_index"] = target_slot
+		target["slot_index"] = swap_drag_start_slot
+		_animate_swap_tile_to(released, _swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
+		_animate_swap_tile_to(target, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
+		status_changed.emit("已交换两块图片。")
+	_set_swap_tile_lifted(released, false)
+	swap_dragging = null
+	swap_drag_start_slot = -1
+
+
+func _move_swap_tile_to(tile, target_position: Vector2) -> void:
+	if tile == null or not is_instance_valid(tile["node"]):
+		return
+	var area := _piece_drag_area(true)
+	var bounds := _swap_tile_bounds(tile, target_position)
+	var delta := Vector2.ZERO
+	if bounds.position.x < area.position.x:
+		delta.x = area.position.x - bounds.position.x
+	elif bounds.end.x > area.end.x:
+		delta.x = area.end.x - bounds.end.x
+	if bounds.position.y < area.position.y:
+		delta.y = area.position.y - bounds.position.y
+	elif bounds.end.y > area.end.y:
+		delta.y = area.end.y - bounds.end.y
+	tile["node"].position = target_position + delta
+
+
+func _swap_tile_at_world(world_pos: Vector2, exclude = null):
+	for index in range(swap_tiles.size() - 1, -1, -1):
+		var tile = swap_tiles[index]
+		if tile == exclude:
+			continue
+		var node: Node2D = tile["node"]
+		if not is_instance_valid(node):
+			continue
+		var local: Vector2 = node.transform.affine_inverse() * world_pos
+		if Rect2(Vector2.ZERO, tile["size"]).has_point(local):
+			return tile
+	return null
+
+
+func _swap_tile_bounds(tile, target_position: Vector2) -> Rect2:
+	return Rect2(target_position, tile.get("size", Vector2.ZERO))
+
+
+func _bring_swap_tile_to_front(tile) -> void:
+	swap_tiles.erase(tile)
+	swap_tiles.append(tile)
+	for index in swap_tiles.size():
+		swap_tiles[index]["node"].z_index = index * GROUP_Z_STEP
+
+
+func _set_swap_tile_lifted(tile, lifted: bool) -> void:
+	if tile == null:
+		return
+	var node: Node2D = tile["node"]
+	if not is_instance_valid(node):
+		return
+	var target_scale := Vector2(1.025, 1.025) if lifted else Vector2.ONE
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(node, "scale", target_scale, 0.12)
+
+
+func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
+	if tile == null or not is_instance_valid(tile["node"]):
+		return
+	tile["is_animating"] = true
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(tile["node"], "position", target_position, SWAP_ANIMATION_TIME)
+	tween.finished.connect(func(t = tile) -> void:
+		if is_instance_valid(t["node"]):
+			t["is_animating"] = false
+		_check_swap_complete()
+	)
+
+
+func _check_swap_complete() -> void:
+	if completion_emitted or swap_tiles.is_empty():
+		return
+	for tile in swap_tiles:
+		if int(tile["slot_index"]) != int(tile["correct_index"]):
+			return
+	completion_emitted = true
+	completed.emit()
+
+
+func _swap_cols() -> int:
+	return max(1, int(_mode_config(active_level_config, "swap").get("cols", SWAP_COLS)))
+
+
+func _swap_rows() -> int:
+	return max(1, int(_mode_config(active_level_config, "swap").get("rows", SWAP_ROWS)))
+
+
 func _select_group(group) -> void:
 	selected_group = group
 
 
 func _rotate_group(group) -> void:
-	if group == null or group.is_animating:
+	if not randomize_piece_rotation or group == null or group.is_animating:
 		return
 	group.is_animating = true
 	var target: float = snappedf(group.node.rotation_degrees + 90.0, 90.0)
@@ -1192,97 +1509,57 @@ func _check_complete() -> void:
 
 func _set_hint_highlights(pair: Array) -> void:
 	_clear_hint_highlights()
-	hint_highlighted_groups.append(pair[0])
-	hint_highlighted_groups.append(pair[1])
-	_add_hint_edge_highlights(pair[2], pair[3])
+	hint_highlight_token += 1
+	var token := hint_highlight_token
+	var first = pair[0]
+	var second = pair[1]
+	_bring_to_front(first)
+	_bring_to_front(second)
+	hint_highlighted_groups.append(first)
+	hint_highlighted_groups.append(second)
+	_add_hint_outline_to_group(first)
+	_add_hint_outline_to_group(second)
+	_auto_clear_hint_highlights(token)
 
 
-func _add_hint_edge_highlights(a_member: Dictionary, b_member: Dictionary) -> void:
-	var a_segments := _shared_edge_segments(a_member, b_member)
-	var b_segments := _shared_edge_segments(b_member, a_member)
-	if a_segments.is_empty() or b_segments.is_empty():
-		a_segments = _nearest_edge_segments(a_member, b_member)
-		b_segments = _nearest_edge_segments(b_member, a_member)
-	_add_hint_lines_to_member(a_member, a_segments)
-	_add_hint_lines_to_member(b_member, b_segments)
+func _add_hint_outline_to_group(group) -> void:
+	for member in group.members:
+		var visual: Node2D = member["visual"]
+		var polygon: PackedVector2Array = member["polygon"]
+		_add_hint_outline_line(visual, polygon, 9.0, HINT_GLOW_COLOR, 30)
+		_add_hint_outline_line(visual, polygon, 4.0, HINT_OUTLINE_COLOR, 31)
 
 
-func _shared_edge_segments(member: Dictionary, other_member: Dictionary) -> Array[PackedVector2Array]:
-	var segments: Array[PackedVector2Array] = []
-	var polygon: PackedVector2Array = member["polygon"]
-	var other_solved := _member_solved_polygon(other_member)
-	var tolerance := maxf(5.0, source_scale * 8.0)
-	for index in range(polygon.size()):
-		var a: Vector2 = polygon[index]
-		var b: Vector2 = polygon[(index + 1) % polygon.size()]
-		var solved_a: Vector2 = member["home"] + a
-		var solved_b: Vector2 = member["home"] + b
-		var midpoint := (solved_a + solved_b) * 0.5
-		var distance := _point_to_polygon_boundary_distance(midpoint, other_solved)
-		if distance <= tolerance:
-			segments.append(PackedVector2Array([a, b]))
-	return segments
+func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int) -> void:
+	var line := Line2D.new()
+	line.name = "hint_highlight"
+	line.width = width
+	line.default_color = color
+	line.closed = true
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	line.antialiased = true
+	line.points = polygon
+	line.z_index = z_index
+	visual.add_child(line)
+	hint_highlighted_lines.append(line)
+	var tween := create_tween()
+	tween.set_loops(3)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_property(line, "modulate:a", 0.38, 0.28)
+	tween.tween_property(line, "modulate:a", 1.0, 0.28)
 
 
-func _nearest_edge_segments(member: Dictionary, other_member: Dictionary) -> Array[PackedVector2Array]:
-	var polygon: PackedVector2Array = member["polygon"]
-	var other_solved := _member_solved_polygon(other_member)
-	var best_distance := INF
-	var best_segment := PackedVector2Array()
-	for index in range(polygon.size()):
-		var a: Vector2 = polygon[index]
-		var b: Vector2 = polygon[(index + 1) % polygon.size()]
-		var midpoint: Vector2 = member["home"] + (a + b) * 0.5
-		var distance := _point_to_polygon_boundary_distance(midpoint, other_solved)
-		if distance < best_distance:
-			best_distance = distance
-			best_segment = PackedVector2Array([a, b])
-	return [best_segment] if best_segment.size() >= 2 else []
-
-
-func _add_hint_lines_to_member(member: Dictionary, segments: Array[PackedVector2Array]) -> void:
-	var visual: Node2D = member["visual"]
-	for segment in segments:
-		if segment.size() < 2:
-			continue
-		var line := Line2D.new()
-		line.name = "hint_highlight"
-		line.width = 5.0
-		line.default_color = Color(1.0, 0.82, 0.30, 0.94)
-		line.closed = false
-		line.points = segment
-		line.z_index = 20
-		visual.add_child(line)
-		hint_highlighted_lines.append(line)
-
-
-func _member_solved_polygon(member: Dictionary) -> PackedVector2Array:
-	var solved := PackedVector2Array()
-	var polygon: PackedVector2Array = member["polygon"]
-	for point in polygon:
-		solved.append(member["home"] + point)
-	return solved
-
-
-func _point_to_polygon_boundary_distance(point: Vector2, polygon: PackedVector2Array) -> float:
-	var best := INF
-	for index in range(polygon.size()):
-		var a := polygon[index]
-		var b := polygon[(index + 1) % polygon.size()]
-		best = minf(best, _point_to_segment_distance(point, a, b))
-	return best
-
-
-func _point_to_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
-	var ab := b - a
-	var length_squared := ab.length_squared()
-	if length_squared <= 0.0001:
-		return point.distance_to(a)
-	var t := clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
-	return point.distance_to(a + ab * t)
+func _auto_clear_hint_highlights(token: int) -> void:
+	await get_tree().create_timer(1.85).timeout
+	if token == hint_highlight_token:
+		_clear_hint_highlights()
 
 
 func _clear_hint_highlights() -> void:
+	hint_highlight_token += 1
 	for line in hint_highlighted_lines:
 		if is_instance_valid(line):
 			line.queue_free()

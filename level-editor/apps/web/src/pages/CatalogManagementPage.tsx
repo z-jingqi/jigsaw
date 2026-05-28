@@ -78,6 +78,7 @@ function CatalogManagementPage({ onUnsavedChange }: Props) {
     const previews = ([
       { mode: "polygon", label: "多边形", icon: Hexagon, image: selectedLevelDraft.modes?.polygon?.image, path: imagePath(selectedLevelDraft.modes?.polygon?.image) },
       { mode: "knob", label: "凹凸", icon: Puzzle, image: selectedLevelDraft.modes?.knob?.image, path: imagePath(selectedLevelDraft.modes?.knob?.image) },
+      { mode: "swap", label: "方格交换", icon: null, image: selectedLevelDraft.modes?.swap?.image, path: imagePath(selectedLevelDraft.modes?.swap?.image) },
     ] as const)
       .filter((item) => item.path)
       .map((item) => ({ ...item, name: imageName(item.image), url: levelAssetUrl(selectedTopic.id, selectedLevel.id, item.path) }));

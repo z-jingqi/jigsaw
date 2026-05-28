@@ -39,7 +39,7 @@ export function TopicTree({
   selectedLevelKeys: Set<string>;
   editingTopicId: string;
   editingLevelKey: string;
-  levelModeStatus: Record<string, { polygon: boolean; knob: boolean }>;
+  levelModeStatus: Record<string, { polygon: boolean; knob: boolean; swap?: boolean }>;
   onToggle: () => void;
   onSelectTopic: () => void;
   onSelectLevel: (topicId: string, levelId: string) => void;

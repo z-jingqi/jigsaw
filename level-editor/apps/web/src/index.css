@@ -306,6 +306,12 @@
   fill: rgba(90, 58, 34, 0.025);
 }
 
+.swapGridPreview line {
+  stroke: rgba(90, 58, 34, 0.58);
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
 .selected .cutPath,
 .selected .shapePath {
   stroke: #3f7f72 !important;

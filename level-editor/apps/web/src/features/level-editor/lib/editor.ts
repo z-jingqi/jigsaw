@@ -107,6 +107,13 @@ export function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: strin
         rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
         piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
       },
+      swap: {
+        ...defaults.modes.swap,
+        ...(data.modes?.swap || {}),
+        image: data.modes?.swap?.image || defaults.modes.swap.image,
+        cols: 3,
+        rows: 4,
+      },
     },
     editor: { ...defaults.editor, ...data.editor },
   };

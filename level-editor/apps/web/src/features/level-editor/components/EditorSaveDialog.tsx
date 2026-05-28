@@ -41,6 +41,7 @@ export function EditorSaveDialog({
   onLevelChange,
 }: Props) {
   if (!state.open) return null;
+  const activeModeLabel = activeMode === "polygon" ? "多边形" : activeMode === "knob" ? "凹凸" : "方格交换";
 
   const setBackgroundType = (value: string) => {
     if (value === "color") onChange({ ...state, newBackgroundType: "color" });
@@ -165,7 +166,7 @@ export function EditorSaveDialog({
             </>
           )}
           <div className="px-1 py-1 text-sm text-muted">
-            写入模式：{activeMode === "polygon" ? "多边形" : "凹凸"}；图片：
+            写入模式：{activeModeLabel}；图片：
             {activePendingImage ? displayPendingImageName(activePendingImage) : "未选择"}
           </div>
         </div>

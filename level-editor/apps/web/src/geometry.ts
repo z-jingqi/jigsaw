@@ -63,6 +63,16 @@ export function makeEmptyLevel(): LevelConfig {
         knob_size: 0.24,
         pieces: [],
       },
+      swap: {
+        image: {
+          path: EMPTY_IMAGE_PATH,
+          name: "",
+          width: 0,
+          height: 0,
+        },
+        cols: 3,
+        rows: 4,
+      },
     },
     editor: {
       outline: [],

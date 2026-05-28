@@ -18,7 +18,7 @@ export function normalizeLevelImageModes(level: any, topicId: string, levelId: s
 		default_image: defaultImage,
 	};
 	level.modes = level.modes || {};
-	for (const mode of ["polygon", "knob"] as const) {
+	for (const mode of ["polygon", "knob", "swap"] as const) {
 		const modeData = level.modes[mode] || {};
 		const configured = modeData.image;
 		const configuredPath = typeof configured === "string" ? configured : configured?.path || "";
@@ -34,13 +34,13 @@ export function normalizeLevelForModeSave(
 	incomingLevel: any,
 	topicId: string,
 	levelId: string,
-	mode: "polygon" | "knob",
+	mode: "polygon" | "knob" | "swap",
 	modeImage: { path: string; name: string; width: number; height: number },
 	title: string,
 	description: string,
-	sharedModes: Array<"polygon" | "knob"> = [mode],
+	sharedModes: Array<"polygon" | "knob" | "swap"> = [mode],
 ) {
-	const modesSharingImage = new Set<"polygon" | "knob">([...sharedModes, mode]);
+	const modesSharingImage = new Set<"polygon" | "knob" | "swap">([...sharedModes, mode]);
 	const base = {
 		...existingLevel,
 		id: levelId,
@@ -122,6 +122,7 @@ export function makeLevelJson(topicId: string, levelId: string, title: string, d
 		modes: {
 			polygon: { image, pieces: [] },
 			knob: { image, cols: 8, rows: 8, piece_size: 190, knob_size: 0.24, pieces: [] },
+			swap: { image, cols: 3, rows: 4 },
 		},
 		editor: { outline: [], cuts: [], shapes: [], pieces: [] },
 	};

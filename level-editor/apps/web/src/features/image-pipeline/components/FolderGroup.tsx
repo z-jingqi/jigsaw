@@ -133,6 +133,7 @@ export function FolderGroup({
                 {item.processed_path && <span className="mr-1 shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">待确认</span>}
                 {modeStatusIcon(item, "polygon")}
                 {modeStatusIcon(item, "knob")}
+                {modeStatusIcon(item, "swap")}
                 {item.processed && !item.processed_path && <CheckCircle2 className="mr-1 shrink-0 text-emerald-700" size={16} />}
               </div>
             </div>
@@ -145,12 +146,15 @@ export function FolderGroup({
   );
 }
 
-function modeStatusIcon(item: PendingImageItem, mode: "polygon" | "knob") {
+function modeStatusIcon(item: PendingImageItem, mode: "polygon" | "knob" | "swap") {
   const state = item.editor_state?.[mode];
   const saved = Boolean((item.saved_modes || []).includes(mode) || state?.saved);
   const edited = Boolean(saved || state?.dirty || state?.completed || state?.cuts?.length || state?.pieces?.length || state?.knob_pieces?.length);
   if (!edited) return null;
   const Icon = mode === "polygon" ? Hexagon : Puzzle;
-  const label = `${mode === "polygon" ? "多边形" : "凹凸"}${saved ? "已保存" : "已编辑未保存"}`;
+  const label = `${mode === "polygon" ? "多边形" : mode === "knob" ? "凹凸" : "方格交换"}${saved ? "已保存" : "已编辑未保存"}`;
+  if (mode === "swap") {
+    return <span className={`shrink-0 rounded px-1 text-[10px] font-bold leading-4 ${saved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`} aria-label={label}>3x4</span>;
+  }
   return <Icon className={`shrink-0 ${saved ? "text-emerald-700" : "text-amber-700"}`} size={15} aria-label={label} />;
 }

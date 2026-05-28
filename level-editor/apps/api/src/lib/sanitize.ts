@@ -17,10 +17,10 @@ export function safeId(value: unknown) {
 	return id;
 }
 
-export function safeMode(value: unknown): "polygon" | "knob" {
+export function safeMode(value: unknown): "polygon" | "knob" | "swap" {
 	const mode = String(value || "").trim();
-	if (mode !== "polygon" && mode !== "knob") {
-		throw new Error("mode must be polygon or knob");
+	if (mode !== "polygon" && mode !== "knob" && mode !== "swap") {
+		throw new Error("mode must be polygon, knob, or swap");
 	}
 	return mode;
 }

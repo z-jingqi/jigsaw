@@ -19,7 +19,7 @@ export type PendingImageItem = {
 	pending_step_types?: ProcessStepType[];
 	compression_stable?: boolean;
 	was_processed_before_preview?: boolean;
-	saved_modes?: Array<"polygon" | "knob">;
+	saved_modes?: Array<"polygon" | "knob" | "swap">;
 	editor_state?: PendingImageEditorState;
 	folder?: string;
 	created_at: string;
@@ -38,6 +38,7 @@ export type PendingImageEditorModeState = {
 export type PendingImageEditorState = {
 	polygon?: PendingImageEditorModeState;
 	knob?: PendingImageEditorModeState;
+	swap?: PendingImageEditorModeState;
 };
 
 export type PendingImagesData = {
