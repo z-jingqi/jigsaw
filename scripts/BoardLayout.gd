@@ -45,7 +45,7 @@ static func game_top_reserved_height(viewport_size: Vector2, icon_button_size: f
 
 
 static func game_bottom_reserved_height(icon_button_size: float) -> float:
-	return icon_button_size + GAME_FOOTER_MARGIN + 42.0
+	return 0.0
 
 
 static func board_margin_ratio_for_layout(

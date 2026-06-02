@@ -21,8 +21,9 @@ const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(1.0, 0.72, 0.16, 0.34)
 const HINT_OUTLINE_COLOR := Color(1.0, 0.82, 0.26, 0.96)
-const SWAP_COLS := 3
-const SWAP_ROWS := 4
+const SWAP_FALLBACK_COLS := 3
+const SWAP_FALLBACK_ROWS := 4
+const SWAP_MAX_TILES := 25
 const SWAP_ANIMATION_TIME := 0.20
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
@@ -726,9 +727,9 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 func _start_swap_session() -> bool:
 	if source_size.x <= 0.0 or source_size.y <= 0.0:
 		return false
-	var config := _mode_config(active_level_config, "swap")
-	var cols: int = max(1, int(config.get("cols", SWAP_COLS)))
-	var rows: int = max(1, int(config.get("rows", SWAP_ROWS)))
+	var grid := _swap_grid_config()
+	var cols: int = grid["cols"]
+	var rows: int = grid["rows"]
 	var layout := _mobile_board_layout()
 	source_scale = layout["source_scale"]
 	board_origin = layout["board_origin"]
@@ -826,7 +827,7 @@ func _is_valid_swap_order(order: Array, cols: int, rows: int) -> bool:
 	return true
 
 
-func _swap_slot_position(slot_index: int, cols := SWAP_COLS, rows := SWAP_ROWS) -> Vector2:
+func _swap_slot_position(slot_index: int, cols := SWAP_FALLBACK_COLS, rows := SWAP_FALLBACK_ROWS) -> Vector2:
 	var tile_size := Vector2(source_size.x / float(cols), source_size.y / float(rows)) * source_scale
 	var col := slot_index % cols
 	var row := int(slot_index / cols)
@@ -845,12 +846,53 @@ func _mobile_board_layout() -> Dictionary:
 
 func _current_mode_piece_count() -> int:
 	if current_mode == "swap":
-		var swap_config := _mode_config(active_level_config, current_mode)
-		return int(swap_config.get("cols", SWAP_COLS)) * int(swap_config.get("rows", SWAP_ROWS))
+		var grid := _swap_grid_config()
+		return int(grid["cols"]) * int(grid["rows"])
 	var config := _mode_config(active_level_config, current_mode)
 	if config.has("pieces") and typeof(config["pieces"]) == TYPE_ARRAY:
 		return (config["pieces"] as Array).size()
 	return 0
+
+
+func _swap_grid_config() -> Dictionary:
+	var config := _mode_config(active_level_config, "swap")
+	var configured_cols := int(config.get("cols", 0))
+	var configured_rows := int(config.get("rows", 0))
+	if configured_cols > 0 and configured_rows > 0:
+		return {
+			"cols": configured_cols,
+			"rows": configured_rows,
+		}
+	return _auto_swap_grid()
+
+
+func _auto_swap_grid() -> Dictionary:
+	if source_size.x <= 0.0 or source_size.y <= 0.0:
+		return {
+			"cols": SWAP_FALLBACK_COLS,
+			"rows": SWAP_FALLBACK_ROWS,
+		}
+	var best_cols := 1
+	var best_rows := 1
+	var best_square_error := INF
+	var best_count := 0
+	for rows in range(1, SWAP_MAX_TILES + 1):
+		for cols in range(1, SWAP_MAX_TILES + 1):
+			var count := cols * rows
+			if count > SWAP_MAX_TILES or count <= 1:
+				continue
+			var tile_width := source_size.x / float(cols)
+			var tile_height := source_size.y / float(rows)
+			var square_error := absf(tile_width - tile_height) / maxf(tile_width, tile_height)
+			if square_error < best_square_error - 0.0001 or (absf(square_error - best_square_error) <= 0.0001 and count > best_count):
+				best_square_error = square_error
+				best_count = count
+				best_cols = cols
+				best_rows = rows
+	return {
+		"cols": best_cols,
+		"rows": best_rows,
+	}
 
 
 func _mode_key(play_mode: String) -> String:
@@ -1439,11 +1481,11 @@ func _check_swap_complete() -> void:
 
 
 func _swap_cols() -> int:
-	return max(1, int(_mode_config(active_level_config, "swap").get("cols", SWAP_COLS)))
+	return int(_swap_grid_config()["cols"])
 
 
 func _swap_rows() -> int:
-	return max(1, int(_mode_config(active_level_config, "swap").get("rows", SWAP_ROWS)))
+	return int(_swap_grid_config()["rows"])
 
 
 func _select_group(group) -> void:

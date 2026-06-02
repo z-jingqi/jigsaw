@@ -1,27 +1,31 @@
 extends Node2D
 
-const MENU_BACKGROUND_PATH := "res://assets/source/menu_background.png"
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
-const START_BUTTON_IMAGE_PATH := "res://assets/ui/start-game.png"
-const CHOOSE_LEVEL_PANEL_PATH := "res://assets/ui/choose-level.png"
-const COMPLETE_RIBBON_PATH := "res://assets/ui/complete_ribbon.png"
+const LEVEL_NAME_BANNER_PATH := "res://assets/ui/level_name_banner.png"
+const OLIVE_BRANCH_PATH := "res://assets/ui/olive_branch.png"
 const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
 const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
 const ICON_CAT_PAW_PATH := "res://assets/icons/status/cat_paw.png"
-const ICON_MODE_PUZZLE_DONE_PATH := "res://assets/icons/status/mode_puzzle_done.png"
-const ICON_MODE_PUZZLE_TODO_PATH := "res://assets/icons/status/mode_puzzle_todo.png"
+const ICON_MODE_KNOB_DONE_PATH := "res://assets/icons/status/mode_knob_done.png"
+const ICON_MODE_KNOB_TODO_PATH := "res://assets/icons/status/mode_knob_todo.png"
 const ICON_MODE_POLYGON_DONE_PATH := "res://assets/icons/status/mode_polygon_done.png"
 const ICON_MODE_POLYGON_TODO_PATH := "res://assets/icons/status/mode_polygon_todo.png"
+const ICON_MODE_SWAP_DONE_PATH := "res://assets/icons/status/mode_swap_done.png"
+const ICON_MODE_SWAP_TODO_PATH := "res://assets/icons/status/mode_swap_todo.png"
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
+const PLAY_MODES := ["polygon", "knob", "swap"]
+const LEVEL_THUMBNAIL_SIZE := Vector2i(164, 164)
+const UI_ICON_BUTTON_SIZE := 44.0
+const UI_ICON_INSET := 10.0
 const GAME_FOOTER_MARGIN := 18.0
 const HUD_BLOCKER_PADDING := 18.0
-const HUD_DEBUG_MEASUREMENTS := true
+const HUD_DEBUG_MEASUREMENTS := false
 const HUD_TEXT_BUTTON_FONT_SIZE := 22
 
 var cream := Color("#F6EBD4")
@@ -36,21 +40,21 @@ var muted := Color("#b7aa97")
 
 var texture: Texture2D
 var repository = LevelRepositoryScript.new()
-var menu_background: Texture2D
 var title_texture: Texture2D
-var start_button_texture: Texture2D
-var choose_level_panel_texture: Texture2D
-var complete_ribbon_texture: Texture2D
+var level_name_banner_texture: Texture2D
+var olive_branch_texture: Texture2D
 var icon_album: Texture2D
 var icon_left_arrow: Texture2D
 var icon_lightbulb: Texture2D
 var icon_pause: Texture2D
 var icon_setting: Texture2D
 var icon_cat_paw: Texture2D
-var icon_mode_puzzle_done: Texture2D
-var icon_mode_puzzle_todo: Texture2D
+var icon_mode_knob_done: Texture2D
+var icon_mode_knob_todo: Texture2D
 var icon_mode_polygon_done: Texture2D
 var icon_mode_polygon_todo: Texture2D
+var icon_mode_swap_done: Texture2D
+var icon_mode_swap_todo: Texture2D
 var source_image: Image
 var source_size := Vector2.ZERO
 var source_scale := 1.0
@@ -72,25 +76,30 @@ var modal_open := false
 var status_label: Label
 var zoom_label: Label
 var hud_blocker_controls: Array[Control] = []
+var lazy_thumbnail_items: Array[Dictionary] = []
+var lazy_thumbnail_queue: Array[Dictionary] = []
+var lazy_thumbnail_processing := false
+var rounded_image_shader: Shader
 
 
 func _ready() -> void:
 	_lock_portrait_orientation()
-	menu_background = load(MENU_BACKGROUND_PATH)
-	title_texture = load(TITLE_IMAGE_PATH)
-	start_button_texture = load(START_BUTTON_IMAGE_PATH)
-	choose_level_panel_texture = load(CHOOSE_LEVEL_PANEL_PATH)
-	complete_ribbon_texture = repository.cached_texture(COMPLETE_RIBBON_PATH)
+	rounded_image_shader = _make_rounded_image_shader()
+	title_texture = repository.cached_texture(TITLE_IMAGE_PATH)
+	level_name_banner_texture = repository.cached_texture(LEVEL_NAME_BANNER_PATH)
+	olive_branch_texture = repository.cached_texture(OLIVE_BRANCH_PATH)
 	icon_album = load(ICON_ALBUM_PATH)
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
 	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
 	icon_pause = load(ICON_PAUSE_PATH)
 	icon_setting = load(ICON_SETTING_PATH)
 	icon_cat_paw = repository.cached_texture(ICON_CAT_PAW_PATH)
-	icon_mode_puzzle_done = repository.cached_texture(ICON_MODE_PUZZLE_DONE_PATH)
-	icon_mode_puzzle_todo = repository.cached_texture(ICON_MODE_PUZZLE_TODO_PATH)
+	icon_mode_knob_done = repository.cached_texture(ICON_MODE_KNOB_DONE_PATH)
+	icon_mode_knob_todo = repository.cached_texture(ICON_MODE_KNOB_TODO_PATH)
 	icon_mode_polygon_done = repository.cached_texture(ICON_MODE_POLYGON_DONE_PATH)
 	icon_mode_polygon_todo = repository.cached_texture(ICON_MODE_POLYGON_TODO_PATH)
+	icon_mode_swap_done = repository.cached_texture(ICON_MODE_SWAP_DONE_PATH)
+	icon_mode_swap_todo = repository.cached_texture(ICON_MODE_SWAP_TODO_PATH)
 	puzzle_board = PuzzleBoardScript.new()
 	puzzle_board.status_changed.connect(_set_game_status)
 	puzzle_board.zoom_changed.connect(_set_zoom_label)
@@ -102,7 +111,7 @@ func _ready() -> void:
 	_build_catalog()
 	_apply_level_media({})
 	progress_store.load_from_disk()
-	_show_last_topic_levels()
+	_show_topics()
 
 
 func _lock_portrait_orientation() -> void:
@@ -121,6 +130,9 @@ func _build_catalog() -> void:
 
 
 func _clear_ui() -> void:
+	lazy_thumbnail_items.clear()
+	lazy_thumbnail_queue.clear()
+	lazy_thumbnail_processing = false
 	for child in ui_layer.get_children():
 		child.queue_free()
 	screen_root = Control.new()
@@ -187,6 +199,35 @@ func _tween_control_scale(control: Control, target: Vector2, duration: float) ->
 	tween.tween_property(control, "scale", target, duration)
 
 
+func _make_rounded_image_shader() -> Shader:
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+
+uniform float radius = 0.06;
+uniform float aspect = 2.4;
+
+void fragment() {
+	vec2 p = UV - vec2(0.5);
+	vec2 q = abs(vec2(p.x * aspect, p.y)) - vec2(0.5 * aspect - radius, 0.5 - radius);
+	float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+	if (d > 0.0) {
+		discard;
+	}
+	COLOR = texture(TEXTURE, UV) * COLOR;
+}
+"""
+	return shader
+
+
+func _rounded_image_material(radius: float, aspect: float) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = rounded_image_shader
+	material.set_shader_parameter("radius", radius)
+	material.set_shader_parameter("aspect", aspect)
+	return material
+
+
 func _pulse_node(node: Node2D) -> void:
 	if not is_instance_valid(node):
 		return
@@ -208,30 +249,19 @@ func _hint_pulse_node(node: Node2D) -> void:
 		tween.tween_property(node, "scale", Vector2.ONE, 0.34)
 
 
-func _base_screen(bg_color: Color = Color("#F6EBD4"), use_menu_background := false) -> VBoxContainer:
+func _base_screen(bg_color: Color = Color("#F6EBD4")) -> VBoxContainer:
 	_clear_ui()
 	_clear_board()
-	if use_menu_background:
-		var bg_image := TextureRect.new()
-		bg_image.texture = menu_background
-		bg_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		bg_image.set_anchors_preset(Control.PRESET_FULL_RECT)
-		screen_root.add_child(bg_image)
-		var veil := ColorRect.new()
-		veil.color = Color(0.96, 0.90, 0.80, 0.34)
-		veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-		screen_root.add_child(veil)
-	else:
-		var bg := ColorRect.new()
-		bg.color = bg_color
-		bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-		screen_root.add_child(bg)
+	var bg := ColorRect.new()
+	bg.color = bg_color
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	screen_root.add_child(bg)
 	var wrap := VBoxContainer.new()
 	wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	wrap.offset_left = 36
+	var margin := _screen_margin()
+	wrap.offset_left = margin
 	wrap.offset_top = 28
-	wrap.offset_right = -36
+	wrap.offset_right = -margin
 	wrap.offset_bottom = -28
 	wrap.add_theme_constant_override("separation", 18)
 	screen_root.add_child(wrap)
@@ -239,34 +269,32 @@ func _base_screen(bg_color: Color = Color("#F6EBD4"), use_menu_background := fal
 	return wrap
 
 
+func _screen_margin() -> float:
+	var width := get_viewport_rect().size.x
+	if width < 430.0:
+		return 16.0
+	if width < 700.0:
+		return 24.0
+	return 36.0
+
+
 func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) -> void:
 	var row := Control.new()
-	row.custom_minimum_size.y = 112
+	row.custom_minimum_size.y = 84
 	parent.add_child(row)
 	if back.is_valid():
 		var back_button := _icon_button(icon_left_arrow, back, "返回")
-		back_button.position = Vector2(0, 22)
+		back_button.position = Vector2(0, 12)
 		row.add_child(back_button)
-	var panel := TextureRect.new()
-	panel.texture = choose_level_panel_texture
-	panel.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	panel.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	panel.custom_minimum_size = Vector2(560, 112)
-	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	panel.offset_left = -280
-	panel.offset_top = 0
-	panel.offset_right = 280
-	panel.offset_bottom = 112
-	row.add_child(panel)
 	var label := Label.new()
 	label.text = title
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	label.offset_left = -220
-	label.offset_top = 22
+	label.offset_top = 12
 	label.offset_right = 220
-	label.offset_bottom = 84
+	label.offset_bottom = 72
 	label.add_theme_font_size_override("font_size", 30)
 	label.add_theme_color_override("font_color", brown)
 	row.add_child(label)
@@ -274,18 +302,18 @@ func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) 
 
 func _root_title(parent: VBoxContainer) -> void:
 	var row := Control.new()
-	row.custom_minimum_size.y = 150
+	row.custom_minimum_size.y = 84
 	parent.add_child(row)
 	var title := TextureRect.new()
 	title.texture = title_texture
 	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	title.custom_minimum_size = Vector2(360, 128)
-	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.offset_left = -180
-	title.offset_top = 4
-	title.offset_right = 180
-	title.offset_bottom = 132
+	title.custom_minimum_size = Vector2(168, 60)
+	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	title.offset_left = 0
+	title.offset_top = 10
+	title.offset_right = 168
+	title.offset_bottom = 70
 	row.add_child(title)
 
 
@@ -302,6 +330,9 @@ func _button(text: String, action: Callable, primary := true, min_size := Vector
 	normal.corner_radius_top_right = 10
 	normal.corner_radius_bottom_left = 10
 	normal.corner_radius_bottom_right = 10
+	normal.shadow_color = Color(0.42, 0.24, 0.07, 0.16) if primary else Color(0.42, 0.24, 0.07, 0.08)
+	normal.shadow_size = 5 if primary else 3
+	normal.shadow_offset = Vector2(0, 2)
 	button.add_theme_stylebox_override("normal", normal)
 	var hover := normal.duplicate()
 	hover.bg_color = deep_orange if primary else paper
@@ -318,24 +349,31 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.tooltip_text = tooltip
-	var icon_size := _texture_size(icon)
+	var icon_size := Vector2(UI_ICON_BUTTON_SIZE, UI_ICON_BUTTON_SIZE)
 	button.custom_minimum_size = icon_size
 	if _show_hud_debug_measurements():
 		_apply_debug_control_background(button, Color(0.18, 0.52, 0.95, 0.24))
 	else:
-		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-			var empty := StyleBoxEmpty.new()
-			button.add_theme_stylebox_override(state, empty)
+		var normal := _round_icon_style(Color(1.0, 0.96, 0.88, 0.92))
+		button.add_theme_stylebox_override("normal", normal)
+		var hover := normal.duplicate()
+		hover.bg_color = Color("#FFF2D8")
+		button.add_theme_stylebox_override("hover", hover)
+		var pressed := normal.duplicate()
+		pressed.bg_color = Color("#F8E7C7")
+		button.add_theme_stylebox_override("pressed", pressed)
+		for state in ["disabled", "focus"]:
+			button.add_theme_stylebox_override(state, normal.duplicate())
 	var icon_rect := TextureRect.new()
 	icon_rect.texture = icon
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.custom_minimum_size = icon_size
+	icon_rect.custom_minimum_size = Vector2(UI_ICON_BUTTON_SIZE - UI_ICON_INSET * 2.0, UI_ICON_BUTTON_SIZE - UI_ICON_INSET * 2.0)
 	icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	icon_rect.offset_left = 0
-	icon_rect.offset_top = 0
-	icon_rect.offset_right = 0
-	icon_rect.offset_bottom = 0
+	icon_rect.offset_left = UI_ICON_INSET
+	icon_rect.offset_top = UI_ICON_INSET
+	icon_rect.offset_right = -UI_ICON_INSET
+	icon_rect.offset_bottom = -UI_ICON_INSET
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_rect.modulate = soft_brown
 	button.add_child(icon_rect)
@@ -354,6 +392,29 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
+
+
+func _round_icon_style(bg_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg_color
+	style.corner_radius_top_left = int(UI_ICON_BUTTON_SIZE * 0.5)
+	style.corner_radius_top_right = int(UI_ICON_BUTTON_SIZE * 0.5)
+	style.corner_radius_bottom_left = int(UI_ICON_BUTTON_SIZE * 0.5)
+	style.corner_radius_bottom_right = int(UI_ICON_BUTTON_SIZE * 0.5)
+	style.shadow_color = Color(0.42, 0.24, 0.07, 0.14)
+	style.shadow_size = 5
+	style.shadow_offset = Vector2(0, 2)
+	return style
+
+
+func _rounded_panel_style(bg_color: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg_color
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	return style
 
 
 func _tool_text_button(text: String, action: Callable, tooltip: String) -> Button:
@@ -418,62 +479,11 @@ func _home_image_button(
 	label_color := Color.WHITE,
 	min_size := Vector2(420, 94),
 ) -> Button:
-	var button := Button.new()
-	button.text = ""
-	button.custom_minimum_size = min_size
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		var empty := StyleBoxEmpty.new()
-		button.add_theme_stylebox_override(state, empty)
-	var bg := TextureRect.new()
-	bg.texture = bg_texture if bg_texture != null else start_button_texture
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(bg)
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 26)
-	label.add_theme_color_override("font_color", label_color)
-	label.add_theme_color_override("font_shadow_color", Color(0.36, 0.20, 0.08, 0.28))
-	label.add_theme_constant_override("shadow_offset_x", 0)
-	label.add_theme_constant_override("shadow_offset_y", 2)
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(label)
-	button.pressed.connect(action)
-	_wire_button_animation(button)
-	return button
+	return _button(text, action, label_color == Color.WHITE, min_size)
 
 
 func _show_home() -> void:
-	current_screen = "home"
-	var wrap := _base_screen(cream, true)
-	var top := HBoxContainer.new()
-	top.alignment = BoxContainer.ALIGNMENT_END
-	wrap.add_child(top)
-	top.add_child(_icon_button(icon_album, _show_album, "相册"))
-	top.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
-	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 18
-	wrap.add_child(spacer)
-	var title_holder := HBoxContainer.new()
-	title_holder.alignment = BoxContainer.ALIGNMENT_CENTER
-	wrap.add_child(title_holder)
-	title_holder.add_child(_texture_rect(title_texture, Vector2(430, 154)))
-	var title_spacer := Control.new()
-	title_spacer.custom_minimum_size.y = 58
-	wrap.add_child(title_spacer)
-	var buttons := VBoxContainer.new()
-	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 18)
-	wrap.add_child(buttons)
-	var has_record := not progress_store.last_completed_level(topics).is_empty()
-	var play_text := "继续游戏" if has_record else "开始游戏"
-	buttons.add_child(_home_image_button(play_text, _start_from_home, start_button_texture, Color.WHITE))
-	buttons.add_child(_home_image_button("选择关卡", _show_topics, choose_level_panel_texture, brown))
+	_show_topics()
 
 
 func _start_from_home() -> void:
@@ -494,20 +504,21 @@ func _show_last_topic_levels() -> void:
 
 func _show_topics() -> void:
 	current_screen = "topics"
-	var wrap := _base_screen(cream, true)
+	var wrap := _base_screen(cream)
 	_root_title(wrap)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -150
-	top_actions.offset_top = 28
-	top_actions.offset_right = -36
-	top_actions.offset_bottom = 82
-	top_actions.add_theme_constant_override("separation", 8)
+	top_actions.offset_left = -120
+	top_actions.offset_top = 26
+	top_actions.offset_right = -_screen_margin()
+	top_actions.offset_bottom = 70
+	top_actions.add_theme_constant_override("separation", 10)
 	screen_root.add_child(top_actions)
 	top_actions.add_child(_icon_button(icon_album, _show_album, "相册"))
 	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
 	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_child(scroll)
 	var center := CenterContainer.new()
@@ -515,22 +526,24 @@ func _show_topics() -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var grid := GridContainer.new()
-	grid.columns = _wide_grid_columns(2, 1)
-	grid.add_theme_constant_override("h_separation", 28)
-	grid.add_theme_constant_override("v_separation", 24)
+	var columns := _wide_grid_columns(2, 1)
+	grid.columns = columns
+	grid.add_theme_constant_override("h_separation", _screen_margin())
+	grid.add_theme_constant_override("v_separation", _screen_margin())
 	center.add_child(grid)
 	for topic in topics:
-		var total: int = topic["levels"].size() * 3
-		var done: int = progress_store.topic_done_count(topic)
-		var card := _topic_card_button(topic, "%d/%d" % [done, total], func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
+		var total: int = _topic_available_mode_total(topic)
+		var done: int = _topic_available_done_count(topic)
+		var card := _topic_card_button(topic, "%d/%d" % [done, total], _topic_card_width(columns), func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
 		grid.add_child(card)
 
 
 func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	current_screen = "levels"
 	current_topic = topic
-	var wrap := _base_screen(cream, true)
+	var wrap := _base_screen(cream)
 	_header(wrap, topic["name"], _show_topics)
+	wrap.add_child(_topic_progress_block(topic))
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_child(scroll)
@@ -539,9 +552,9 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var grid := GridContainer.new()
-	grid.columns = _wide_grid_columns(2, 1)
-	grid.add_theme_constant_override("h_separation", 28)
-	grid.add_theme_constant_override("v_separation", 24)
+	grid.columns = 1
+	grid.add_theme_constant_override("h_separation", 0)
+	grid.add_theme_constant_override("v_separation", 14)
 	center.add_child(grid)
 	var focus_card: Control = null
 	for level in topic["levels"]:
@@ -555,76 +568,280 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	var footer := HBoxContainer.new()
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	footer.add_theme_constant_override("separation", 18)
-	footer.add_child(_summary_item(icon_mode_polygon_done, "%d/%d" % [progress_store.mode_done_count(topic, "polygon"), topic["levels"].size()]))
-	footer.add_child(_summary_item(icon_mode_puzzle_done, "%d/%d" % [progress_store.mode_done_count(topic, "knob"), topic["levels"].size()]))
-	footer.add_child(_summary_text_item("3x4", "%d/%d" % [progress_store.mode_done_count(topic, "swap"), topic["levels"].size()]))
-	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [progress_store.topic_done_count(topic), topic["levels"].size() * 3]))
+	var polygon_total := _topic_mode_total(topic, "polygon")
+	if polygon_total > 0:
+		footer.add_child(_summary_item(icon_mode_polygon_done, "%d/%d" % [_topic_mode_done_count(topic, "polygon"), polygon_total]))
+	var knob_total := _topic_mode_total(topic, "knob")
+	if knob_total > 0:
+		footer.add_child(_summary_item(icon_mode_knob_done, "%d/%d" % [_topic_mode_done_count(topic, "knob"), knob_total]))
+	var swap_total := _topic_mode_total(topic, "swap")
+	if swap_total > 0:
+		footer.add_child(_summary_item(icon_mode_swap_done, "%d/%d" % [_topic_mode_done_count(topic, "swap"), swap_total]))
+	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [_topic_available_done_count(topic), _topic_available_mode_total(topic)]))
 	wrap.add_child(footer)
+	_register_level_thumbnail_lazy_loader(scroll)
 	if focus_card != null:
 		call_deferred("_scroll_level_card_into_view", scroll, focus_card)
+
+
+func _topic_progress_block(topic: Dictionary) -> Control:
+	var holder := HBoxContainer.new()
+	holder.custom_minimum_size.y = 44
+	holder.alignment = BoxContainer.ALIGNMENT_CENTER
+	holder.add_theme_constant_override("separation", 14)
+	var label := Label.new()
+	label.text = "系列进度"
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", brown)
+	holder.add_child(label)
+	holder.add_child(_progress_bar(_topic_available_done_count(topic), _topic_available_mode_total(topic), Vector2(250, 12)))
+	var count := Label.new()
+	count.text = "%d/%d" % [_topic_available_done_count(topic), _topic_available_mode_total(topic)]
+	count.add_theme_font_size_override("font_size", 16)
+	count.add_theme_color_override("font_color", brown)
+	holder.add_child(count)
+	return holder
+
+
+func _topic_card_progress(topic: Dictionary, card_width: float) -> Control:
+	return _progress_bar(_topic_available_done_count(topic), _topic_available_mode_total(topic), Vector2(maxf(96.0, card_width * 0.30), 12), true)
+
+
+func _progress_bar(done: int, total: int, size: Vector2, light_track := false) -> Control:
+	var holder := Panel.new()
+	holder.custom_minimum_size = size
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(1.0, 0.96, 0.86, 0.72) if light_track else Color(0.78, 0.64, 0.48, 0.20)
+	track.corner_radius_top_left = int(size.y * 0.5)
+	track.corner_radius_top_right = int(size.y * 0.5)
+	track.corner_radius_bottom_left = int(size.y * 0.5)
+	track.corner_radius_bottom_right = int(size.y * 0.5)
+	holder.add_theme_stylebox_override("panel", track)
+	var ratio := 0.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
+	var fill_panel := Panel.new()
+	fill_panel.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	fill_panel.offset_left = 0
+	fill_panel.offset_top = 0
+	fill_panel.offset_right = maxf(size.y, size.x * ratio)
+	fill_panel.offset_bottom = 0
+	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = orange
+	fill_style.border_color = Color(1.0, 0.78, 0.34, 0.38)
+	fill_style.border_width_top = 1
+	fill_style.corner_radius_top_left = int(size.y * 0.5)
+	fill_style.corner_radius_top_right = int(size.y * 0.5)
+	fill_style.corner_radius_bottom_left = int(size.y * 0.5)
+	fill_style.corner_radius_bottom_right = int(size.y * 0.5)
+	fill_panel.add_theme_stylebox_override("panel", fill_style)
+	holder.add_child(fill_panel)
+	return holder
 
 
 func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(360, 260)
+	card.custom_minimum_size = Vector2(380, 118)
 	_apply_card_style(card)
-	var preview_texture := repository.level_thumbnail(level)
-	if preview_texture == null:
+	var available_modes := _available_modes_for_level(level)
+	var level_config := repository.load_level_config(level)
+	var thumbnail_source_path := repository.level_thumbnail_source_path(level_config)
+	if thumbnail_source_path.is_empty() or available_modes.is_empty():
 		card.disabled = true
-	var content := VBoxContainer.new()
+	var content := HBoxContainer.new()
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = 18
-	content.offset_top = 16
-	content.offset_right = -18
-	content.offset_bottom = -14
-	content.add_theme_constant_override("separation", 8)
+	content.offset_left = 14
+	content.offset_top = 12
+	content.offset_right = -14
+	content.offset_bottom = -12
+	content.add_theme_constant_override("separation", 16)
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(content)
-	content.add_child(_preview_panel(preview_texture, Vector2(300, 142), "暂无关卡图片"))
+	content.add_child(_lazy_level_preview(thumbnail_source_path, Vector2(82, 82)))
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.add_theme_constant_override("separation", 10)
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(text_box)
 	var title := Label.new()
 	title.text = str(level["title"])
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", brown)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(title)
+	text_box.add_child(title)
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 18)
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 10)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(row)
-	row.add_child(_status_icon("polygon", progress_store.is_done(level["id"], "polygon"), 42))
-	row.add_child(_status_icon("knob", progress_store.is_done(level["id"], "knob"), 42))
-	row.add_child(_status_icon("swap", progress_store.is_done(level["id"], "swap"), 42))
-	if preview_texture != null:
+	text_box.add_child(row)
+	for play_mode in available_modes:
+		row.add_child(_status_icon(play_mode, progress_store.is_done(level["id"], play_mode), 38))
+	if not thumbnail_source_path.is_empty() and not available_modes.is_empty():
 		card.pressed.connect(action)
 		_wire_button_animation(card)
 	return card
 
 
-func _topic_card_button(topic: Dictionary, status_text: String, action: Callable) -> Button:
+func _lazy_level_preview(image_path: String, min_size: Vector2) -> Control:
+	var holder := _preview_panel(null, min_size, "")
+	var item := {
+		"holder": holder,
+		"path": image_path,
+		"size": LEVEL_THUMBNAIL_SIZE,
+		"min_size": min_size,
+		"queued": false,
+		"loaded": false,
+	}
+	lazy_thumbnail_items.append(item)
+	return holder
+
+
+func _register_level_thumbnail_lazy_loader(scroll: ScrollContainer) -> void:
+	var scrollbar := scroll.get_v_scroll_bar()
+	if scrollbar != null:
+		scrollbar.value_changed.connect(func(_value: float) -> void:
+			_refresh_lazy_level_thumbnails(scroll)
+		)
+	scroll.resized.connect(func() -> void:
+		_refresh_lazy_level_thumbnails(scroll)
+	)
+	call_deferred("_refresh_lazy_level_thumbnails", scroll)
+
+
+func _refresh_lazy_level_thumbnails(scroll: ScrollContainer) -> void:
+	if current_screen != "levels" or not is_instance_valid(scroll):
+		return
+	var viewport := Rect2(scroll.global_position, scroll.size).grow(220.0)
+	for item in lazy_thumbnail_items:
+		if bool(item.get("loaded", false)) or bool(item.get("queued", false)):
+			continue
+		var holder: Control = item.get("holder")
+		if not is_instance_valid(holder):
+			item["loaded"] = true
+			continue
+		var holder_rect := Rect2(holder.global_position, holder.size)
+		if viewport.intersects(holder_rect):
+			item["queued"] = true
+			lazy_thumbnail_queue.append(item)
+	_process_lazy_thumbnail_queue()
+
+
+func _process_lazy_thumbnail_queue() -> void:
+	if lazy_thumbnail_processing:
+		return
+	lazy_thumbnail_processing = true
+	call_deferred("_process_next_lazy_thumbnail")
+
+
+func _process_next_lazy_thumbnail() -> void:
+	if lazy_thumbnail_queue.is_empty():
+		lazy_thumbnail_processing = false
+		return
+	var item: Dictionary = lazy_thumbnail_queue.pop_front()
+	var holder: Control = item.get("holder")
+	if is_instance_valid(holder) and not bool(item.get("loaded", false)):
+		var texture := repository.cached_runtime_thumbnail(str(item.get("path", "")), item.get("size", LEVEL_THUMBNAIL_SIZE))
+		if texture != null:
+			_set_preview_texture(holder, texture, item.get("min_size", Vector2(82, 82)))
+		item["loaded"] = true
+	item["queued"] = false
+	call_deferred("_process_next_lazy_thumbnail")
+
+
+func _set_preview_texture(holder: Control, preview_texture: Texture2D, min_size: Vector2) -> void:
+	for child in holder.get_children():
+		child.queue_free()
+	var preview := TextureRect.new()
+	preview.texture = preview_texture
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	preview.custom_minimum_size = min_size
+	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(preview)
+
+
+func _topic_card_width(columns: int) -> float:
+	var available := get_viewport_rect().size.x - _screen_margin() * 2.0 - _screen_margin() * float(max(0, columns - 1)) - 8.0
+	return maxf(240.0, floor(available / float(max(1, columns))))
+
+
+func _topic_card_button(topic: Dictionary, status_text: String, card_width: float, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(360, 260)
-	_apply_card_style(card)
+	card.custom_minimum_size = Vector2(card_width, card_width * 0.416)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		card.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var frame := Panel.new()
+	frame.clip_contents = true
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var frame_style := StyleBoxFlat.new()
+	frame_style.bg_color = paper
+	frame_style.corner_radius_top_left = 22
+	frame_style.corner_radius_top_right = 22
+	frame_style.corner_radius_bottom_left = 22
+	frame_style.corner_radius_bottom_right = 22
+	frame_style.shadow_color = Color(0.43, 0.24, 0.07, 0.16)
+	frame_style.shadow_size = 10
+	frame_style.shadow_offset = Vector2(0, 3)
+	frame.add_theme_stylebox_override("panel", frame_style)
+	card.add_child(frame)
+	var cover := TextureRect.new()
+	cover.texture = repository.topic_cover_texture(topic)
+	cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cover.offset_left = 0
+	cover.offset_top = 0
+	cover.offset_right = 0
+	cover.offset_bottom = 0
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.material = _rounded_image_material(0.065, card.custom_minimum_size.x / card.custom_minimum_size.y)
+	frame.add_child(cover)
+	var veil := Panel.new()
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.add_theme_stylebox_override("panel", _rounded_panel_style(Color(0.32, 0.16, 0.04, 0.18), 22))
+	frame.add_child(veil)
+	var gloss := Panel.new()
+	gloss.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	gloss.offset_left = 0
+	gloss.offset_top = 0
+	gloss.offset_right = 0
+	gloss.offset_bottom = maxf(28.0, card.custom_minimum_size.y * 0.32)
+	gloss.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gloss.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1.0, 0.94, 0.78, 0.12), 22))
+	frame.add_child(gloss)
 	var content := VBoxContainer.new()
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = 18
-	content.offset_top = 16
-	content.offset_right = -18
-	content.offset_bottom = -14
-	content.add_theme_constant_override("separation", 8)
+	content.offset_left = 20
+	content.offset_top = 18
+	content.offset_right = -20
+	content.offset_bottom = -16
+	content.add_theme_constant_override("separation", 7)
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(content)
-	content.add_child(_preview_panel(repository.topic_cover_texture(topic), Vector2(300, 142), "暂无主题封面"))
 	var title := Label.new()
-	title.text = "%s\n%s" % [str(topic["name"]), status_text]
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", brown)
+	title.text = str(topic["name"])
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_shadow_color", Color(0.32, 0.13, 0.02, 0.52))
+	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(title)
+	var status := Label.new()
+	status.text = "已完成  %s" % status_text
+	status.add_theme_font_size_override("font_size", 18)
+	status.add_theme_color_override("font_color", Color.WHITE)
+	status.add_theme_color_override("font_shadow_color", Color(0.32, 0.13, 0.02, 0.44))
+	status.add_theme_constant_override("shadow_offset_y", 1)
+	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(status)
+	content.add_child(_topic_card_progress(topic, card_width))
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card
@@ -719,8 +936,6 @@ func _apply_card_style(card: Button) -> void:
 
 
 func _status_icon(mode: String, done: bool, size: float) -> Control:
-	if _mode_key(mode) == "swap":
-		return _swap_mode_badge(done, size)
 	var rect := TextureRect.new()
 	rect.texture = _mode_icon_texture(mode, done)
 	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -762,7 +977,9 @@ func _mode_icon_texture(mode: String, done: bool) -> Texture2D:
 	var key := _mode_key(mode)
 	if key == "polygon":
 		return icon_mode_polygon_done if done else icon_mode_polygon_todo
-	return icon_mode_puzzle_done if done else icon_mode_puzzle_todo
+	if key == "swap":
+		return icon_mode_swap_done if done else icon_mode_swap_todo
+	return icon_mode_knob_done if done else icon_mode_knob_todo
 
 
 func _mode_label(mode: String) -> String:
@@ -812,38 +1029,70 @@ func _summary_text_item(mark: String, text: String) -> HBoxContainer:
 
 func _show_mode_dialog(level: Dictionary) -> void:
 	current_level = level
-	progress_store.mark_last_played(current_topic, level, progress_store.preferred_mode(level))
+	var available_modes := _available_modes_for_level(level)
+	var preferred := _preferred_available_mode(level, available_modes)
+	if not preferred.is_empty():
+		progress_store.mark_last_played(current_topic, level, preferred)
 	_show_modal()
-	var box := _mode_modal_box(Vector2(560, 690))
+	var box_height := 410.0 + float(max(1, available_modes.size())) * 104.0
+	var box := _mode_modal_box(Vector2(520, minf(680.0, box_height)))
 	box.add_child(_mode_dialog_image(level))
 	box.add_child(_mode_title_block(str(level["title"])))
-	box.add_child(_mode_choice_card(level, "polygon"))
-	box.add_child(_mode_choice_card(level, "knob"))
-	box.add_child(_mode_choice_card(level, "swap"))
+	if available_modes.is_empty():
+		box.add_child(_mode_empty_label())
+		return
+	var selected := {"mode": preferred}
+	var checks := {}
+	for play_mode in available_modes:
+		box.add_child(_mode_select_card(level, play_mode, selected, checks))
+	_refresh_mode_checks(checks, selected["mode"])
+	var spacer := Control.new()
+	spacer.custom_minimum_size.y = 6
+	box.add_child(spacer)
+	box.add_child(_button("开始游戏", func() -> void:
+		_close_modal()
+		_show_game(current_topic, level, str(selected["mode"]))
+	, true, Vector2(220, 58)))
+
+
+func _mode_empty_label() -> Label:
+	var label := Label.new()
+	label.text = "这个关卡还没有可玩的模式。"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", soft_brown)
+	return label
 
 
 func _mode_title_block(text: String) -> Control:
 	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(472, 70)
+	holder.custom_minimum_size = Vector2(432, 76)
+	var banner := TextureRect.new()
+	banner.texture = level_name_banner_texture
+	banner.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	banner.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	banner.offset_left = -156
+	banner.offset_top = -4
+	banner.offset_right = 156
+	banner.offset_bottom = 72
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(banner)
 	var title := Label.new()
 	title.text = text
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", brown)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top = 2
-	title.offset_bottom = 44
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.42))
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	title.offset_left = -128
+	title.offset_top = 8
+	title.offset_right = 128
+	title.offset_bottom = 58
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(title)
-	var line := Line2D.new()
-	line.width = 2.0
-	line.default_color = Color(0.73, 0.50, 0.28, 0.32)
-	line.points = PackedVector2Array([Vector2(114, 58), Vector2(358, 58)])
-	holder.add_child(line)
-	var left_paw := _decor_paw(Vector2(96, 49), 22, -0.22)
-	var right_paw := _decor_paw(Vector2(376, 49), 22, 0.22)
-	holder.add_child(left_paw)
-	holder.add_child(right_paw)
 	return holder
 
 
@@ -860,14 +1109,96 @@ func _decor_paw(position: Vector2, size: float, rotation_value: float) -> Textur
 	return paw
 
 
-func _mode_dialog_image(level: Dictionary) -> TextureRect:
+func _mode_dialog_image(level: Dictionary) -> Control:
+	var holder := CenterContainer.new()
+	holder.custom_minimum_size = Vector2(432, 148)
 	var rect := TextureRect.new()
 	rect.texture = repository.level_thumbnail(level)
 	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	rect.custom_minimum_size = Vector2(472, 210)
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	rect.custom_minimum_size = Vector2(136, 136)
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return rect
+	holder.add_child(rect)
+	return holder
+
+
+func _mode_select_card(level: Dictionary, play_mode: String, selected: Dictionary, checks: Dictionary) -> Button:
+	var done := progress_store.is_done(level["id"], play_mode)
+	var card := Button.new()
+	card.text = ""
+	card.custom_minimum_size = Vector2(432, 90)
+	var normal := _mode_select_style(play_mode, false)
+	card.add_theme_stylebox_override("normal", normal)
+	card.add_theme_stylebox_override("hover", _mode_select_style(play_mode, true))
+	card.add_theme_stylebox_override("pressed", _mode_select_style(play_mode, true))
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 16
+	row.offset_top = 12
+	row.offset_right = -16
+	row.offset_bottom = -12
+	row.add_theme_constant_override("separation", 14)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(row)
+	row.add_child(_status_icon(play_mode, done, 58))
+	var text_box := VBoxContainer.new()
+	text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(text_box)
+	var name := Label.new()
+	name.text = _mode_label(play_mode)
+	name.add_theme_font_size_override("font_size", 24)
+	name.add_theme_color_override("font_color", brown)
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(name)
+	var state := Label.new()
+	state.text = "已完成" if done else "未完成"
+	state.add_theme_font_size_override("font_size", 17)
+	state.add_theme_color_override("font_color", green if done else orange)
+	state.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(state)
+	var check := Label.new()
+	check.custom_minimum_size = Vector2(38, 38)
+	check.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	check.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	check.add_theme_font_size_override("font_size", 30)
+	check.add_theme_color_override("font_color", green)
+	check.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(check)
+	checks[play_mode] = check
+	card.pressed.connect(func() -> void:
+		selected["mode"] = play_mode
+		_refresh_mode_checks(checks, play_mode)
+	)
+	_wire_button_animation(card)
+	return card
+
+
+func _mode_select_style(play_mode: String, hover: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#FFF9EC") if not hover else Color("#FFF2D8")
+	style.border_color = _mode_accent_color(play_mode).lightened(0.08)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	style.shadow_color = Color(0.42, 0.24, 0.07, 0.12)
+	style.shadow_size = 5
+	style.shadow_offset = Vector2(0, 2)
+	return style
+
+
+func _refresh_mode_checks(checks: Dictionary, selected_mode: String) -> void:
+	for mode in checks.keys():
+		var check: Label = checks[mode]
+		if is_instance_valid(check):
+			check.text = "✓" if str(mode) == selected_mode else "○"
 
 
 func _mode_choice_card(level: Dictionary, play_mode: String) -> Panel:
@@ -1006,14 +1337,20 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	current_screen = "game"
 	current_topic = topic
 	current_level = level
-	current_mode = _mode_key(play_mode)
-	progress_store.mark_last_played(topic, level, current_mode)
 	active_level_config = repository.load_level_config(current_level)
+	var available_modes := _available_modes_for_config(active_level_config)
+	current_mode = _mode_key(play_mode)
+	if not available_modes.has(current_mode):
+		current_mode = available_modes[0] if not available_modes.is_empty() else ""
+	if current_mode.is_empty():
+		_show_levels(topic, str(level.get("id", "")))
+		return
+	progress_store.mark_last_played(topic, level, current_mode)
 	_apply_level_media(active_level_config)
 	_clear_ui()
 	_clear_board()
 	var random_rotation := progress_store.random_rotation_enabled() and current_mode != "swap"
-	var loaded: bool = puzzle_board.start(active_level_config, play_mode, texture, source_image, source_size, _icon_button_size(), random_rotation)
+	var loaded: bool = puzzle_board.start(active_level_config, current_mode, texture, source_image, source_size, _icon_button_size(), random_rotation)
 	_build_game_hud(level["title"])
 	if not loaded:
 		status_label.text = "关卡 JSON 缺少当前模式配置。"
@@ -1038,49 +1375,52 @@ func _on_puzzle_completed() -> void:
 
 func _build_game_hud(level_title: String) -> void:
 	var viewport_size := get_viewport_rect().size
-	var button_separation := _hud_button_separation()
-	var title_size := _hud_title_size(level_title)
-	var title_area_width := viewport_size.x - _hud_top_icons_width()
-	var title_left := maxf(0.0, (title_area_width - title_size.x) * 0.5)
+	var bar_height := _game_top_bar_height()
+	var top_bar := Control.new()
+	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_bar.offset_left = 0
+	top_bar.offset_top = 0
+	top_bar.offset_right = 0
+	top_bar.offset_bottom = bar_height
+	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(top_bar)
+	var bg := ColorRect.new()
+	bg.color = cream
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_bar.add_child(bg)
+	var back_button := _icon_button(icon_left_arrow, func() -> void:
+		_show_levels(current_topic, str(current_level.get("id", "")))
+	, "返回")
+	back_button.position = Vector2(10, (bar_height - _icon_button_size()) * 0.5)
+	top_bar.add_child(back_button)
 	var title := Label.new()
 	title.text = level_title
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	title.custom_minimum_size = title_size
-	title.offset_left = title_left
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.custom_minimum_size = Vector2(120, bar_height)
+	title.offset_left = 82
 	title.offset_top = 0
-	title.offset_right = title_left + title_size.x
-	title.offset_bottom = title_size.y
-	title.visible = _show_hud_debug_measurements() or viewport_size.x >= 640.0
+	title.offset_right = -220 if current_mode != "swap" else -170
+	title.offset_bottom = bar_height
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", brown)
-	if _show_hud_debug_measurements():
-		_apply_debug_control_background(title, Color(0.36, 0.86, 0.48, 0.22))
-	screen_root.add_child(title)
+	top_bar.add_child(title)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -_hud_top_icons_width()
-	top_actions.offset_top = 0
-	top_actions.offset_right = 0
-	top_actions.offset_bottom = _icon_button_size()
-	top_actions.add_theme_constant_override("separation", button_separation)
-	screen_root.add_child(top_actions)
-	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, "暂停"))
-	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
-	var bottom_tools := HBoxContainer.new()
+	top_actions.offset_left = -_game_top_actions_width()
+	top_actions.offset_top = (bar_height - _icon_button_size()) * 0.5
+	top_actions.offset_right = -10
+	top_actions.offset_bottom = top_actions.offset_top + _icon_button_size()
+	top_actions.add_theme_constant_override("separation", 6)
+	top_bar.add_child(top_actions)
+	top_actions.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
 	if current_mode != "swap":
-		bottom_tools.alignment = BoxContainer.ALIGNMENT_BEGIN
-		bottom_tools.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-		bottom_tools.offset_left = 0
-		bottom_tools.offset_top = -_icon_button_size()
-		bottom_tools.offset_right = _hud_bottom_icons_width()
-		bottom_tools.offset_bottom = 0
-		bottom_tools.add_theme_constant_override("separation", button_separation)
-		screen_root.add_child(bottom_tools)
-		bottom_tools.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
-		bottom_tools.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
+		top_actions.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
+	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
+	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, "暂停"))
 	zoom_label = null
 	status_label = Label.new()
 	if current_mode == "swap":
@@ -1089,27 +1429,31 @@ func _build_game_hud(level_title: String) -> void:
 		status_label.text = "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。"
 	else:
 		status_label.text = "拖动碎片。空白处拖动桌布，双指缩放。"
-	status_label.position = Vector2(20, viewport_size.y - _game_bottom_reserved_height() + 10.0)
+	status_label.position = Vector2(20, bar_height + 8.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
 	hud_blocker_controls.clear()
-	hud_blocker_controls.append(title)
-	for control in top_actions.get_children():
-		if control is Control:
-			hud_blocker_controls.append(control)
-	for control in bottom_tools.get_children():
-		if control is Control:
-			hud_blocker_controls.append(control)
+	hud_blocker_controls.append(top_bar)
 	_queue_game_drag_blocker_refresh()
 	_animate_screen_in(screen_root)
 
 
 func _hud_top_icons_width() -> float:
-	return _icon_button_size() * 2.0 + _hud_button_separation()
+	return _game_top_actions_width()
 
 
 func _hud_bottom_icons_width() -> float:
 	return _icon_button_size() + _hud_text_button_width("整理") + _hud_button_separation()
+
+
+func _game_top_bar_height() -> float:
+	return _icon_button_size() + 22.0
+
+
+func _game_top_actions_width() -> float:
+	var icon_count := 3.0 if current_mode == "swap" else 3.0
+	var text_width := 0.0 if current_mode == "swap" else _hud_text_button_width("整理")
+	return icon_count * _icon_button_size() + text_width + 6.0 * 4.0 + 20.0
 
 
 func _hud_title_size(text: String) -> Vector2:
@@ -1121,8 +1465,7 @@ func _hud_button_separation() -> float:
 
 
 func _icon_button_size() -> float:
-	var size := _texture_size(icon_pause)
-	return maxf(size.x, size.y)
+	return UI_ICON_BUTTON_SIZE
 
 
 func _texture_size(icon: Texture2D) -> Vector2:
@@ -1142,6 +1485,71 @@ func _hud_text_button_height() -> float:
 
 func _mode_key(play_mode: String) -> String:
 	return "knob" if play_mode == "classic" else play_mode
+
+
+func _available_modes_for_level(level: Dictionary) -> Array[String]:
+	var level_config := repository.load_level_config(level)
+	return _available_modes_for_config(level_config)
+
+
+func _available_modes_for_config(level_config: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for play_mode in PLAY_MODES:
+		if _level_has_mode_data(level_config, play_mode):
+			result.append(play_mode)
+	return result
+
+
+func _level_has_mode_data(level_config: Dictionary, play_mode: String) -> bool:
+	if _mode_key(play_mode) == "swap":
+		return not repository.level_image_path(level_config, "swap").is_empty()
+	var mode_data := repository.mode_config(level_config, play_mode)
+	if mode_data.is_empty():
+		return false
+	var pieces = mode_data.get("pieces", [])
+	return typeof(pieces) == TYPE_ARRAY and not pieces.is_empty()
+
+
+func _preferred_available_mode(level: Dictionary, available_modes: Array[String]) -> String:
+	if available_modes.is_empty():
+		return ""
+	var preferred := _mode_key(progress_store.preferred_mode(level))
+	if available_modes.has(preferred):
+		return preferred
+	return available_modes[0]
+
+
+func _topic_available_mode_total(topic: Dictionary) -> int:
+	var total := 0
+	for level in topic.get("levels", []):
+		total += _available_modes_for_level(level).size()
+	return total
+
+
+func _topic_available_done_count(topic: Dictionary) -> int:
+	var done := 0
+	for level in topic.get("levels", []):
+		for play_mode in _available_modes_for_level(level):
+			if progress_store.is_done(level["id"], play_mode):
+				done += 1
+	return done
+
+
+func _topic_mode_total(topic: Dictionary, play_mode: String) -> int:
+	var total := 0
+	for level in topic.get("levels", []):
+		if _available_modes_for_level(level).has(_mode_key(play_mode)):
+			total += 1
+	return total
+
+
+func _topic_mode_done_count(topic: Dictionary, play_mode: String) -> int:
+	var done := 0
+	var key := _mode_key(play_mode)
+	for level in topic.get("levels", []):
+		if _available_modes_for_level(level).has(key) and progress_store.is_done(level["id"], key):
+			done += 1
+	return done
 
 
 func _game_bottom_reserved_height() -> float:
@@ -1245,14 +1653,12 @@ func _show_tutorial_modal() -> void:
 
 func _show_complete_modal() -> void:
 	_show_modal()
-	var box := _complete_modal_box(Vector2(560, 640))
-	box.add_theme_constant_override("separation", 16)
-	box.add_child(_complete_ribbon("恭喜完成！"))
-	var top_spacer := Control.new()
-	top_spacer.custom_minimum_size.y = 16
-	box.add_child(top_spacer)
-	box.add_child(_image_rect(Vector2(460, 260)))
-	box.add_child(_modal_title(current_level["title"]))
+	var box := _complete_modal_box(Vector2(520, 620))
+	box.add_theme_constant_override("separation", 12)
+	box.add_child(_mode_dialog_image(current_level))
+	box.add_child(_mode_title_block(str(current_level["title"])))
+	box.add_child(_complete_heading())
+	box.add_child(_complete_mode_badge())
 	var desc := Label.new()
 	desc.text = current_level["description"]
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1263,62 +1669,82 @@ func _show_complete_modal() -> void:
 	box.add_child(_complete_actions())
 
 
-func _complete_ribbon(text: String) -> Control:
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(500, 86)
-	holder.clip_contents = false
-	var ribbon := TextureRect.new()
-	ribbon.texture = complete_ribbon_texture
-	ribbon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	ribbon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	ribbon.offset_left = -260
-	ribbon.offset_top = -86
-	ribbon.offset_right = 260
-	ribbon.offset_bottom = 92
-	ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(ribbon)
+func _complete_heading() -> Control:
+	var holder := HBoxContainer.new()
+	holder.custom_minimum_size.y = 54
+	holder.alignment = BoxContainer.ALIGNMENT_CENTER
+	holder.add_theme_constant_override("separation", 10)
+	var left := _olive_branch(true)
+	holder.add_child(left)
 	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.text = "恭喜完成"
 	label.add_theme_font_size_override("font_size", 34)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.add_theme_color_override("font_shadow_color", Color(0.48, 0.24, 0.06, 0.46))
-	label.add_theme_constant_override("shadow_offset_x", 0)
-	label.add_theme_constant_override("shadow_offset_y", 3)
-	label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	label.offset_left = -190
-	label.offset_top = -40
-	label.offset_right = 190
-	label.offset_bottom = 42
+	label.add_theme_color_override("font_color", brown)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(label)
+	holder.add_child(_olive_branch(false))
 	return holder
+
+
+func _olive_branch(mirrored: bool) -> TextureRect:
+	var branch := TextureRect.new()
+	branch.texture = olive_branch_texture
+	branch.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	branch.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	branch.custom_minimum_size = Vector2(52, 44)
+	branch.flip_h = mirrored
+	branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return branch
+
+
+func _complete_mode_badge() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(_status_icon(current_mode, true, 30))
+	var label := Label.new()
+	label.text = "已完成：%s" % _mode_label(current_mode)
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", soft_brown)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(label)
+	return row
 
 
 func _complete_actions() -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 24)
-	row.add_child(_button("下一个", _play_next_level, true, Vector2(138, 48)))
-	row.add_child(_button("换个模式", func() -> void:
-		_close_modal()
-		_show_game(current_topic, current_level, _next_mode_key(current_mode))
-	, false, Vector2(138, 48)))
+	row.add_theme_constant_override("separation", 14)
+	var next := _next_level_target()
+	if not next.is_empty():
+		row.add_child(_button("下一关", _play_next_level, true, Vector2(132, 50)))
+	if _has_unfinished_alternate_mode():
+		row.add_child(_button("换个模式", func() -> void:
+			_close_modal()
+			_show_game(current_topic, current_level, _next_mode_key(current_mode))
+		, false, Vector2(132, 50)))
 	row.add_child(_button("返回关卡列表", func() -> void:
 		_close_modal()
 		_show_levels(current_topic, str(current_level.get("id", "")))
-	, false, Vector2(154, 48)))
+	, false, Vector2(150, 50)))
 	return row
 
 
+func _has_unfinished_alternate_mode() -> bool:
+	for play_mode in _available_modes_for_level(current_level):
+		if _mode_key(play_mode) != current_mode and not progress_store.is_done(current_level["id"], play_mode):
+			return true
+	return false
+
+
 func _next_mode_key(mode: String) -> String:
-	var modes := ["polygon", "knob", "swap"]
+	var modes := _available_modes_for_level(current_level)
+	if modes.is_empty():
+		return _mode_key(mode)
 	var key := _mode_key(mode)
 	var index := modes.find(key)
 	if index < 0:
-		return "polygon"
+		return modes[0]
 	return modes[(index + 1) % modes.size()]
 
 
@@ -1343,11 +1769,27 @@ func _add_complete_paw_marks(panel: Control) -> void:
 
 
 func _play_next_level() -> void:
-	var levels: Array = current_topic["levels"]
-	var idx := levels.find(current_level)
-	var next_level: Dictionary = levels[(idx + 1) % levels.size()]
+	var target := _next_level_target()
+	if target.is_empty():
+		_close_modal()
+		_show_levels(current_topic, str(current_level.get("id", "")))
+		return
 	_close_modal()
-	_show_game(current_topic, next_level, current_mode)
+	_show_game(target["topic"], target["level"], target["mode"])
+
+
+func _next_level_target() -> Dictionary:
+	var seen_current := false
+	for topic in topics:
+		for level in topic.get("levels", []):
+			if seen_current:
+				var modes := _available_modes_for_level(level)
+				if not modes.is_empty():
+					var next_mode := current_mode if modes.has(current_mode) else modes[0]
+					return {"topic": topic, "level": level, "mode": next_mode}
+			elif str(topic.get("id", "")) == str(current_topic.get("id", "")) and str(level.get("id", "")) == str(current_level.get("id", "")):
+				seen_current = true
+	return {}
 
 
 func _show_album() -> void:

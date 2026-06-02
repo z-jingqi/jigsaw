@@ -1,0 +1,39 @@
+{
+	"version": 2,
+	"id": "golden_retriever",
+	"title": "金毛",
+	"title_i18n": {
+		"zh-Hans": "金毛",
+		"_": "金毛"
+	},
+	"description": "金毛带着温顺的笑意，像阳光落在柔软的草地上。",
+	"description_i18n": {
+		"zh-Hans": "金毛带着温顺的笑意，像阳光落在柔软的草地上。",
+		"_": "金毛带着温顺的笑意，像阳光落在柔软的草地上。"
+	},
+	"image": {
+		"path": "res://levels/dogs/golden_retriever/source.jpg",
+		"width": 1086,
+		"height": 1448
+	},
+	"assets": {
+		"default_image": {
+			"path": "res://levels/dogs/golden_retriever/source.jpg",
+			"width": 1086,
+			"height": 1448
+		}
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"swap": {
+			"image": {
+				"path": "res://levels/dogs/golden_retriever/source.jpg",
+				"width": 1086,
+				"height": 1448
+			}
+		}
+	}
+}

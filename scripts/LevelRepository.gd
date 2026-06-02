@@ -4,6 +4,7 @@ class_name LevelRepository
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 
 var texture_cache: Dictionary = {}
+var thumbnail_cache: Dictionary = {}
 var source_image_cache: Dictionary = {}
 var config_cache: Dictionary = {}
 
@@ -66,10 +67,10 @@ func load_config_path(config_path: String) -> Dictionary:
 	return config
 
 
-func level_thumbnail(level: Dictionary) -> Texture2D:
+func level_thumbnail(level: Dictionary, target_size := Vector2i(260, 260)) -> Texture2D:
 	var level_config := load_level_config(level)
-	var image_path := level_list_image_path(level_config)
-	return cached_texture(image_path) if not image_path.is_empty() else null
+	var image_path := level_thumbnail_source_path(level_config)
+	return cached_runtime_thumbnail(image_path, target_size)
 
 
 func topic_cover_texture(topic: Dictionary) -> Texture2D:
@@ -101,16 +102,51 @@ func cached_texture(path: String) -> Texture2D:
 		return null
 	if texture_cache.has(path):
 		return texture_cache[path]
+	var extension := path.get_extension().to_lower()
+	if ["png", "jpg", "jpeg", "webp"].has(extension):
+		var file_path := image_file_path(path)
+		var image := Image.load_from_file(file_path)
+		if image != null and not image.is_empty():
+			var image_texture := ImageTexture.create_from_image(image)
+			texture_cache[path] = image_texture
+			return image_texture
 	var loaded: Texture2D = load(path)
 	if loaded != null:
 		texture_cache[path] = loaded
 		return loaded
-	var image := Image.load_from_file(path)
+	var file_path := image_file_path(path)
+	var image := Image.load_from_file(file_path)
 	if image != null and not image.is_empty():
 		var image_texture := ImageTexture.create_from_image(image)
 		texture_cache[path] = image_texture
 		return image_texture
 	return null
+
+
+func cached_runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
+	if path.is_empty() or target_size.x <= 0 or target_size.y <= 0:
+		return null
+	var key := "%s@%dx%d" % [path, target_size.x, target_size.y]
+	if thumbnail_cache.has(key):
+		return thumbnail_cache[key]
+	var image: Image = Image.load_from_file(image_file_path(path))
+	if image == null or image.is_empty():
+		return null
+	var ratio: float = minf(float(target_size.x) / float(image.get_width()), float(target_size.y) / float(image.get_height()))
+	var width: int = max(1, int(round(float(image.get_width()) * ratio)))
+	var height: int = max(1, int(round(float(image.get_height()) * ratio)))
+	image.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	var texture := ImageTexture.create_from_image(image)
+	thumbnail_cache[key] = texture
+	return texture
+
+
+func has_runtime_thumbnail(path: String, target_size: Vector2i) -> bool:
+	return thumbnail_cache.has("%s@%dx%d" % [path, target_size.x, target_size.y])
+
+
+func image_file_path(path: String) -> String:
+	return ProjectSettings.globalize_path(path) if path.begins_with("res://") or path.begins_with("user://") else path
 
 
 func placeholder_texture() -> Texture2D:
@@ -139,6 +175,10 @@ func level_list_image_path(level_config: Dictionary) -> String:
 	if not polygon_path.is_empty():
 		return polygon_path
 	return ""
+
+
+func level_thumbnail_source_path(level_config: Dictionary) -> String:
+	return level_list_image_path(level_config)
 
 
 func level_image_path(level_config: Dictionary, mode := "") -> String:

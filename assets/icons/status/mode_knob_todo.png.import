@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqmlfjk7otjin"
-path="res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"
+uid="uid://decmnpgdjpalr"
+path="res://.godot/imported/mode_knob_todo.png-a2b67733223735ba3124dd687b6482f3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/status/mode_polygon_todo.png"
-dest_files=["res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"]
+source_file="res://assets/icons/status/mode_knob_todo.png"
+dest_files=["res://.godot/imported/mode_knob_todo.png-a2b67733223735ba3124dd687b6482f3.ctex"]
 
 [params]
 

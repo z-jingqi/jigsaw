@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqmlfjk7otjin"
-path="res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"
+uid="uid://dpxmwylvny02g"
+path="res://.godot/imported/source.jpg-1d48f21a39e5c80b268b221effa7a83d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/status/mode_polygon_todo.png"
-dest_files=["res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"]
+source_file="res://levels/dogs/golden_retriever/source.jpg"
+dest_files=["res://.godot/imported/source.jpg-1d48f21a39e5c80b268b221effa7a83d.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqmlfjk7otjin"
-path="res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"
+uid="uid://dgpxlbuiefu7k"
+path="res://.godot/imported/mode_swap_done.png-5f5046435b84876547fca8bb13386d98.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/icons/status/mode_polygon_todo.png"
-dest_files=["res://.godot/imported/mode_polygon_todo.png-d179e54793424a02506bc2ff08b04f17.ctex"]
+source_file="res://assets/icons/status/mode_swap_done.png"
+dest_files=["res://.godot/imported/mode_swap_done.png-5f5046435b84876547fca8bb13386d98.ctex"]
 
 [params]
 

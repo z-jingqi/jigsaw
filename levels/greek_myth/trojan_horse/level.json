@@ -1,0 +1,39 @@
+{
+	"version": 2,
+	"id": "trojan_horse",
+	"title": "特洛伊木马",
+	"title_i18n": {
+		"zh-Hans": "特洛伊木马",
+		"_": "特洛伊木马"
+	},
+	"description": "古老木马静立城前，传说的转折藏在沉默的轮廓里。",
+	"description_i18n": {
+		"zh-Hans": "古老木马静立城前，传说的转折藏在沉默的轮廓里。",
+		"_": "古老木马静立城前，传说的转折藏在沉默的轮廓里。"
+	},
+	"image": {
+		"path": "res://levels/greek_myth/trojan_horse/source.jpg",
+		"width": 1440,
+		"height": 1080
+	},
+	"assets": {
+		"default_image": {
+			"path": "res://levels/greek_myth/trojan_horse/source.jpg",
+			"width": 1440,
+			"height": 1080
+		}
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"swap": {
+			"image": {
+				"path": "res://levels/greek_myth/trojan_horse/source.jpg",
+				"width": 1440,
+				"height": 1080
+			}
+		}
+	}
+}

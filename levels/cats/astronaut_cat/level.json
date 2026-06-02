@@ -1,0 +1,39 @@
+{
+	"version": 2,
+	"id": "astronaut_cat",
+	"title": "宇航员猫",
+	"title_i18n": {
+		"zh-Hans": "宇航员猫",
+		"_": "宇航员猫"
+	},
+	"description": "戴上头盔的小猫准备出发，把好奇心带到星星之间。",
+	"description_i18n": {
+		"zh-Hans": "戴上头盔的小猫准备出发，把好奇心带到星星之间。",
+		"_": "戴上头盔的小猫准备出发，把好奇心带到星星之间。"
+	},
+	"image": {
+		"path": "res://levels/cats/astronaut_cat/source.jpg",
+		"width": 1086,
+		"height": 1448
+	},
+	"assets": {
+		"default_image": {
+			"path": "res://levels/cats/astronaut_cat/source.jpg",
+			"width": 1086,
+			"height": 1448
+		}
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"swap": {
+			"image": {
+				"path": "res://levels/cats/astronaut_cat/source.jpg",
+				"width": 1086,
+				"height": 1448
+			}
+		}
+	}
+}

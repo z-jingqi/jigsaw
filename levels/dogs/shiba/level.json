@@ -1,0 +1,39 @@
+{
+	"version": 2,
+	"id": "shiba",
+	"title": "柴犬",
+	"title_i18n": {
+		"zh-Hans": "柴犬",
+		"_": "柴犬"
+	},
+	"description": "柴犬在暖光里望向远处，神情轻快而专注。",
+	"description_i18n": {
+		"zh-Hans": "柴犬在暖光里望向远处，神情轻快而专注。",
+		"_": "柴犬在暖光里望向远处，神情轻快而专注。"
+	},
+	"image": {
+		"path": "res://levels/dogs/shiba/source.jpg",
+		"width": 1086,
+		"height": 1448
+	},
+	"assets": {
+		"default_image": {
+			"path": "res://levels/dogs/shiba/source.jpg",
+			"width": 1086,
+			"height": 1448
+		}
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"swap": {
+			"image": {
+				"path": "res://levels/dogs/shiba/source.jpg",
+				"width": 1086,
+				"height": 1448
+			}
+		}
+	}
+}
