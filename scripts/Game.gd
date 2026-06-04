@@ -22,7 +22,9 @@ const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
 const PLAY_MODES := ["polygon", "knob", "swap"]
 const LEVEL_THUMBNAIL_SIZE := Vector2i(164, 164)
 const UI_ICON_BUTTON_SIZE := 44.0
-const UI_ICON_INSET := 10.0
+const UI_ICON_INSET := 7.0
+const HOME_ICON_BUTTON_SIZE := 54.0
+const HOME_ICON_INSET := 2.0
 const GAME_FOOTER_MARGIN := 18.0
 const HUD_BLOCKER_PADDING := 18.0
 const HUD_DEBUG_MEASUREMENTS := false
@@ -79,12 +81,11 @@ var hud_blocker_controls: Array[Control] = []
 var lazy_thumbnail_items: Array[Dictionary] = []
 var lazy_thumbnail_queue: Array[Dictionary] = []
 var lazy_thumbnail_processing := false
-var rounded_image_shader: Shader
+var rounded_topic_cover_cache: Dictionary = {}
 
 
 func _ready() -> void:
 	_lock_portrait_orientation()
-	rounded_image_shader = _make_rounded_image_shader()
 	title_texture = repository.cached_texture(TITLE_IMAGE_PATH)
 	level_name_banner_texture = repository.cached_texture(LEVEL_NAME_BANNER_PATH)
 	olive_branch_texture = repository.cached_texture(OLIVE_BRANCH_PATH)
@@ -199,33 +200,55 @@ func _tween_control_scale(control: Control, target: Vector2, duration: float) ->
 	tween.tween_property(control, "scale", target, duration)
 
 
-func _make_rounded_image_shader() -> Shader:
-	var shader := Shader.new()
-	shader.code = """
-shader_type canvas_item;
+func _rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
+	var cache_key := "%s@%dx%d@%d" % [str(topic.get("id", "")), target_size.x, target_size.y, radius]
+	if rounded_topic_cover_cache.has(cache_key):
+		return rounded_topic_cover_cache[cache_key]
+	var source_texture := repository.topic_cover_texture(topic)
+	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
+		return source_texture
+	var image := source_texture.get_image()
+	if image == null or image.is_empty():
+		return source_texture
+	var scale_factor := maxf(
+		float(target_size.x) / float(image.get_width()),
+		float(target_size.y) / float(image.get_height())
+	)
+	image.resize(
+		maxi(target_size.x, int(ceil(float(image.get_width()) * scale_factor))),
+		maxi(target_size.y, int(ceil(float(image.get_height()) * scale_factor))),
+		Image.INTERPOLATE_LANCZOS
+	)
+	var offset := Vector2i(
+		maxi(0, (image.get_width() - target_size.x) / 2),
+		maxi(0, (image.get_height() - target_size.y) / 2)
+	)
+	image = image.get_region(Rect2i(offset, target_size))
+	image.convert(Image.FORMAT_RGBA8)
+	_apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
+	var result := ImageTexture.create_from_image(image)
+	rounded_topic_cover_cache[cache_key] = result
+	return result
 
-uniform float radius = 0.06;
-uniform float aspect = 2.4;
 
-void fragment() {
-	vec2 p = UV - vec2(0.5);
-	vec2 q = abs(vec2(p.x * aspect, p.y)) - vec2(0.5 * aspect - radius, 0.5 - radius);
-	float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
-	if (d > 0.0) {
-		discard;
-	}
-	COLOR = texture(TEXTURE, UV) * COLOR;
-}
-"""
-	return shader
-
-
-func _rounded_image_material(radius: float, aspect: float) -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = rounded_image_shader
-	material.set_shader_parameter("radius", radius)
-	material.set_shader_parameter("aspect", aspect)
-	return material
+func _apply_rounded_image_alpha(image: Image, radius: int) -> void:
+	if radius <= 0:
+		return
+	var width := image.get_width()
+	var height := image.get_height()
+	var corner_center := Vector2(radius, radius)
+	for y in height:
+		for x in width:
+			var edge_x := minf(float(x) + 0.5, float(width - x) - 0.5)
+			var edge_y := minf(float(y) + 0.5, float(height - y) - 0.5)
+			if edge_x >= radius or edge_y >= radius:
+				continue
+			var coverage := clampf(float(radius) + 0.5 - Vector2(edge_x, edge_y).distance_to(corner_center), 0.0, 1.0)
+			if coverage >= 1.0:
+				continue
+			var color := image.get_pixel(x, y)
+			color.a *= coverage
+			image.set_pixel(x, y, color)
 
 
 func _pulse_node(node: Node2D) -> void:
@@ -301,20 +324,26 @@ func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) 
 
 
 func _root_title(parent: VBoxContainer) -> void:
-	var row := Control.new()
-	row.custom_minimum_size.y = 84
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 72
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	parent.add_child(row)
 	var title := TextureRect.new()
 	title.texture = title_texture
 	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	title.custom_minimum_size = Vector2(168, 60)
-	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	title.offset_left = 0
-	title.offset_top = 10
-	title.offset_right = 168
-	title.offset_bottom = 70
 	row.add_child(title)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	actions.add_theme_constant_override("separation", 10)
+	actions.add_child(_icon_button(icon_album, _show_album, "相册", HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
+	actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置", HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
+	row.add_child(actions)
 
 
 func _button(text: String, action: Callable, primary := true, min_size := Vector2(120, 42)) -> Button:
@@ -345,16 +374,25 @@ func _button(text: String, action: Callable, primary := true, min_size := Vector
 	return button
 
 
-func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
+func _icon_button(
+	icon: Texture2D,
+	action: Callable,
+	tooltip: String,
+	button_size := UI_ICON_BUTTON_SIZE,
+	icon_inset := UI_ICON_INSET,
+	subtle_shadow := false,
+) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.tooltip_text = tooltip
-	var icon_size := Vector2(UI_ICON_BUTTON_SIZE, UI_ICON_BUTTON_SIZE)
+	var icon_size := Vector2(button_size, button_size)
 	button.custom_minimum_size = icon_size
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if _show_hud_debug_measurements():
 		_apply_debug_control_background(button, Color(0.18, 0.52, 0.95, 0.24))
 	else:
-		var normal := _round_icon_style(Color(1.0, 0.96, 0.88, 0.92))
+		var normal := _round_icon_style(Color(1.0, 0.96, 0.88, 0.92), button_size, subtle_shadow)
 		button.add_theme_stylebox_override("normal", normal)
 		var hover := normal.duplicate()
 		hover.bg_color = Color("#FFF2D8")
@@ -368,12 +406,12 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	icon_rect.texture = icon
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_rect.custom_minimum_size = Vector2(UI_ICON_BUTTON_SIZE - UI_ICON_INSET * 2.0, UI_ICON_BUTTON_SIZE - UI_ICON_INSET * 2.0)
+	icon_rect.custom_minimum_size = Vector2(button_size - icon_inset * 2.0, button_size - icon_inset * 2.0)
 	icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	icon_rect.offset_left = UI_ICON_INSET
-	icon_rect.offset_top = UI_ICON_INSET
-	icon_rect.offset_right = -UI_ICON_INSET
-	icon_rect.offset_bottom = -UI_ICON_INSET
+	icon_rect.offset_left = icon_inset
+	icon_rect.offset_top = icon_inset
+	icon_rect.offset_right = -icon_inset
+	icon_rect.offset_bottom = -icon_inset
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_rect.modulate = soft_brown
 	button.add_child(icon_rect)
@@ -394,16 +432,21 @@ func _icon_button(icon: Texture2D, action: Callable, tooltip: String) -> Button:
 	return button
 
 
-func _round_icon_style(bg_color: Color) -> StyleBoxFlat:
+func _round_icon_style(bg_color: Color, button_size := UI_ICON_BUTTON_SIZE, subtle_shadow := false) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = bg_color
-	style.corner_radius_top_left = int(UI_ICON_BUTTON_SIZE * 0.5)
-	style.corner_radius_top_right = int(UI_ICON_BUTTON_SIZE * 0.5)
-	style.corner_radius_bottom_left = int(UI_ICON_BUTTON_SIZE * 0.5)
-	style.corner_radius_bottom_right = int(UI_ICON_BUTTON_SIZE * 0.5)
-	style.shadow_color = Color(0.42, 0.24, 0.07, 0.14)
-	style.shadow_size = 5
-	style.shadow_offset = Vector2(0, 2)
+	style.border_color = Color(0.72, 0.50, 0.27, 0.20)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = int(button_size * 0.5)
+	style.corner_radius_top_right = int(button_size * 0.5)
+	style.corner_radius_bottom_left = int(button_size * 0.5)
+	style.corner_radius_bottom_right = int(button_size * 0.5)
+	style.shadow_color = Color(0.42, 0.24, 0.07, 0.06 if subtle_shadow else 0.14)
+	style.shadow_size = 2 if subtle_shadow else 5
+	style.shadow_offset = Vector2(0, 1 if subtle_shadow else 2)
 	return style
 
 
@@ -506,19 +549,9 @@ func _show_topics() -> void:
 	current_screen = "topics"
 	var wrap := _base_screen(cream)
 	_root_title(wrap)
-	var top_actions := HBoxContainer.new()
-	top_actions.alignment = BoxContainer.ALIGNMENT_END
-	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -120
-	top_actions.offset_top = 26
-	top_actions.offset_right = -_screen_margin()
-	top_actions.offset_bottom = 70
-	top_actions.add_theme_constant_override("separation", 10)
-	screen_root.add_child(top_actions)
-	top_actions.add_child(_icon_button(icon_album, _show_album, "相册"))
-	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_child(scroll)
 	var center := CenterContainer.new()
@@ -532,9 +565,7 @@ func _show_topics() -> void:
 	grid.add_theme_constant_override("v_separation", _screen_margin())
 	center.add_child(grid)
 	for topic in topics:
-		var total: int = _topic_available_mode_total(topic)
-		var done: int = _topic_available_done_count(topic)
-		var card := _topic_card_button(topic, "%d/%d" % [done, total], _topic_card_width(columns), func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
+		var card := _topic_card_button(topic, _topic_card_width(columns), func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
 		grid.add_child(card)
 
 
@@ -603,13 +634,10 @@ func _topic_progress_block(topic: Dictionary) -> Control:
 	return holder
 
 
-func _topic_card_progress(topic: Dictionary, card_width: float) -> Control:
-	return _progress_bar(_topic_available_done_count(topic), _topic_available_mode_total(topic), Vector2(maxf(96.0, card_width * 0.30), 12), true)
-
-
 func _progress_bar(done: int, total: int, size: Vector2, light_track := false) -> Control:
 	var holder := Panel.new()
 	holder.custom_minimum_size = size
+	holder.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var track := StyleBoxFlat.new()
 	track.bg_color = Color(1.0, 0.96, 0.86, 0.72) if light_track else Color(0.78, 0.64, 0.48, 0.20)
@@ -625,6 +653,7 @@ func _progress_bar(done: int, total: int, size: Vector2, light_track := false) -
 	fill_panel.offset_top = 0
 	fill_panel.offset_right = maxf(size.y, size.x * ratio)
 	fill_panel.offset_bottom = 0
+	fill_panel.visible = ratio > 0.0
 	fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var fill_style := StyleBoxFlat.new()
 	fill_style.bg_color = orange
@@ -765,11 +794,11 @@ func _set_preview_texture(holder: Control, preview_texture: Texture2D, min_size:
 
 
 func _topic_card_width(columns: int) -> float:
-	var available := get_viewport_rect().size.x - _screen_margin() * 2.0 - _screen_margin() * float(max(0, columns - 1)) - 8.0
+	var available := get_viewport_rect().size.x - _screen_margin() * 2.0 - _screen_margin() * float(max(0, columns - 1))
 	return maxf(240.0, floor(available / float(max(1, columns))))
 
 
-func _topic_card_button(topic: Dictionary, status_text: String, card_width: float, action: Callable) -> Button:
+func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
 	card.custom_minimum_size = Vector2(card_width, card_width * 0.416)
@@ -780,33 +809,24 @@ func _topic_card_button(topic: Dictionary, status_text: String, card_width: floa
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = paper
+	frame_style.bg_color = Color.TRANSPARENT
 	frame_style.corner_radius_top_left = 22
 	frame_style.corner_radius_top_right = 22
 	frame_style.corner_radius_bottom_left = 22
 	frame_style.corner_radius_bottom_right = 22
-	frame_style.shadow_color = Color(0.43, 0.24, 0.07, 0.16)
-	frame_style.shadow_size = 10
-	frame_style.shadow_offset = Vector2(0, 3)
 	frame.add_theme_stylebox_override("panel", frame_style)
 	card.add_child(frame)
 	var cover := TextureRect.new()
-	cover.texture = repository.topic_cover_texture(topic)
+	cover.texture = _rounded_topic_cover_texture(topic, Vector2i(card.custom_minimum_size), 22)
 	cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	cover.stretch_mode = TextureRect.STRETCH_SCALE
 	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
 	cover.offset_left = 0
 	cover.offset_top = 0
 	cover.offset_right = 0
 	cover.offset_bottom = 0
 	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cover.material = _rounded_image_material(0.065, card.custom_minimum_size.x / card.custom_minimum_size.y)
 	frame.add_child(cover)
-	var veil := Panel.new()
-	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	veil.add_theme_stylebox_override("panel", _rounded_panel_style(Color(0.32, 0.16, 0.04, 0.18), 22))
-	frame.add_child(veil)
 	var gloss := Panel.new()
 	gloss.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	gloss.offset_left = 0
@@ -814,34 +834,30 @@ func _topic_card_button(topic: Dictionary, status_text: String, card_width: floa
 	gloss.offset_right = 0
 	gloss.offset_bottom = maxf(28.0, card.custom_minimum_size.y * 0.32)
 	gloss.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gloss.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1.0, 0.94, 0.78, 0.12), 22))
+	gloss.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1.0, 0.94, 0.78, 0.05), 22))
 	frame.add_child(gloss)
-	var content := VBoxContainer.new()
+	var content := Control.new()
 	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = 20
-	content.offset_top = 18
+	content.offset_left = 34
+	content.offset_top = 0
 	content.offset_right = -20
-	content.offset_bottom = -16
-	content.add_theme_constant_override("separation", 7)
+	content.offset_bottom = 0
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(content)
 	var title := Label.new()
 	title.text = str(topic["name"])
-	title.add_theme_font_size_override("font_size", 32)
+	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	title.offset_left = 0
+	title.offset_top = 22
+	title.offset_right = 300
+	title.offset_bottom = 98
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 42)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.add_theme_color_override("font_shadow_color", Color(0.32, 0.13, 0.02, 0.52))
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(title)
-	var status := Label.new()
-	status.text = "已完成  %s" % status_text
-	status.add_theme_font_size_override("font_size", 18)
-	status.add_theme_color_override("font_color", Color.WHITE)
-	status.add_theme_color_override("font_shadow_color", Color(0.32, 0.13, 0.02, 0.44))
-	status.add_theme_constant_override("shadow_offset_y", 1)
-	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(status)
-	content.add_child(_topic_card_progress(topic, card_width))
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card

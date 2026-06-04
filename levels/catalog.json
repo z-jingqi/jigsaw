@@ -3,10 +3,10 @@
 	"topics": [
 		{
 			"id": "cats",
-			"name": "猫系列",
+			"name": "猫",
 			"name_i18n": {
-				"zh-Hans": "猫系列",
-				"_": "猫系列"
+				"zh-Hans": "猫",
+				"_": "猫"
 			},
 			"cover": "res://levels/cats/cover.jpg",
 			"cover_size": {
@@ -41,10 +41,10 @@
 		},
 		{
 			"id": "dogs",
-			"name": "狗系列",
+			"name": "狗",
 			"name_i18n": {
-				"zh-Hans": "狗系列",
-				"_": "狗系列"
+				"zh-Hans": "狗",
+				"_": "狗"
 			},
 			"cover": "res://levels/dogs/cover.jpg",
 			"cover_size": {
