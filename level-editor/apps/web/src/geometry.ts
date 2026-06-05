@@ -4,11 +4,12 @@ export const EMPTY_IMAGE_PATH = "";
 
 export function makeEmptyLevel(): LevelConfig {
   return {
-    schema: "jigsaw.level.v1" as const,
-    version: 1,
+    schema: "jigsaw.level.v3" as const,
+    version: 3,
     id: "",
     topic_id: "",
-    locale: "zh-cn",
+    group_id: "",
+    locale: "en",
     title: "",
     description: "",
     title_i18n: {},
@@ -18,6 +19,8 @@ export function makeEmptyLevel(): LevelConfig {
       name: "",
       width: 0,
       height: 0,
+      aspect_ratio: 0.75,
+      preset: "mobile_portrait_3x4",
     },
     assets: {},
     background: {
@@ -42,21 +45,10 @@ export function makeEmptyLevel(): LevelConfig {
     component_overrides: {},
     modes: {
       polygon: {
-        image: {
-          path: EMPTY_IMAGE_PATH,
-          name: "",
-          width: 0,
-          height: 0,
-        },
         pieces: [],
+        generator: null,
       },
       knob: {
-        image: {
-          path: EMPTY_IMAGE_PATH,
-          name: "",
-          width: 0,
-          height: 0,
-        },
         cols: 8,
         rows: 8,
         piece_size: 190,
@@ -64,12 +56,8 @@ export function makeEmptyLevel(): LevelConfig {
         pieces: [],
       },
       swap: {
-        image: {
-          path: EMPTY_IMAGE_PATH,
-          name: "",
-          width: 0,
-          height: 0,
-        },
+        auto: true,
+        max_pieces: 25,
         cols: 3,
         rows: 4,
       },

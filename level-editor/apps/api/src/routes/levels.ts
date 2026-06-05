@@ -1,168 +1,100 @@
-import { copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Hono } from "hono";
 import { catalogPath, projectRoot } from "../config/paths.js";
 import { makeEmptyCatalog, normalizeCatalog } from "../catalog/service.js";
+import { imageInfoForPath } from "../image/probe.js";
 import { contentTypeForFile } from "../lib/http-body.js";
 import { readJson, writeJson } from "../lib/fs-json.js";
-import { safeFileName, safeId } from "../lib/sanitize.js";
-import { normalizeLevelImageModes } from "../level/service.js";
-import { levelAssetPath, levelDir, levelPath, sourcePath, topicDir } from "../paths/levels.js";
-import { readPendingImages } from "../pending/store.js";
-
-function levelFileNameFromGodotPath(value: unknown, topicId: string, levelId: string) {
-	const pathValue = typeof value === "string" ? value : value && typeof value === "object" ? String((value as { path?: string }).path || "") : "";
-	const prefix = `res://levels/${topicId}/${levelId}/`;
-	if (!pathValue.startsWith(prefix)) return "";
-	return safeFileName(path.basename(pathValue.slice(prefix.length)));
-}
-
-function collectReferencedLevelFiles(value: unknown, topicId: string, levelId: string, files = new Set<string>()) {
-	const fileName = levelFileNameFromGodotPath(value, topicId, levelId);
-	if (fileName) files.add(fileName);
-	if (Array.isArray(value)) {
-		for (const item of value) collectReferencedLevelFiles(item, topicId, levelId, files);
-	} else if (value && typeof value === "object") {
-		for (const item of Object.values(value)) collectReferencedLevelFiles(item, topicId, levelId, files);
-	}
-	return files;
-}
-
-function replaceSharedImagePath(value: unknown, oldPath: string, nextPath: string, nextName: string): unknown {
-	if (typeof value === "string") return value === oldPath ? nextPath : value;
-	if (Array.isArray(value)) return value.map((item) => replaceSharedImagePath(item, oldPath, nextPath, nextName));
-	if (value && typeof value === "object") {
-		for (const [key, item] of Object.entries(value)) {
-			(value as Record<string, unknown>)[key] = key === "name" && (value as { path?: string }).path === nextPath ? nextName : replaceSharedImagePath(item, oldPath, nextPath, nextName);
-		}
-	}
-	return value;
-}
-
-async function normalizeSharedModeImage(level: any, topicId: string, levelId: string) {
-	const polygonPath = typeof level.modes?.polygon?.image === "string" ? level.modes.polygon.image : String(level.modes?.polygon?.image?.path || "");
-	const knobPath = typeof level.modes?.knob?.image === "string" ? level.modes.knob.image : String(level.modes?.knob?.image?.path || "");
-	const swapPath = typeof level.modes?.swap?.image === "string" ? level.modes.swap.image : String(level.modes?.swap?.image?.path || "");
-	const sharedPaths = [polygonPath, knobPath, swapPath].filter(Boolean);
-	if (sharedPaths.length < 2 || !sharedPaths.every((item) => item === sharedPaths[0])) return;
-	const sharedPath = sharedPaths[0];
-	const currentName = levelFileNameFromGodotPath(sharedPath, topicId, levelId);
-	const match = currentName.match(/^(?:polygon_source|knob_source|swap_source)\.(png|jpe?g|webp)$/i);
-	if (!match) return;
-	const nextName = `source.${match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase()}`;
-	const nextPath = `res://levels/${topicId}/${levelId}/${nextName}`;
-	await copyFile(levelAssetPath(topicId, levelId, currentName), levelAssetPath(topicId, levelId, nextName)).catch(() => undefined);
-	replaceSharedImagePath(level, sharedPath, nextPath, nextName);
-}
-
-async function normalizeTableclothBackground(level: any, topicId: string, levelId: string) {
-	if (level.background?.type !== "image") return;
-	const configuredPath = String(level.background?.path || "");
-	if (!configuredPath) {
-		level.background = { ...(level.background || {}), type: "color", path: "" };
-		return;
-	}
-	const levelPrefix = `res://levels/${topicId}/${levelId}/`;
-	if (configuredPath.startsWith(levelPrefix)) return;
-	const pendingItem = (await readPendingImages()).find((item) => item.path === configuredPath);
-	if (!pendingItem) return;
-	const input = path.resolve(projectRoot, pendingItem.path);
-	const extension = path.extname(input).toLowerCase() || ".png";
-	const finalName = `tablecloth${extension === ".jpeg" ? ".jpg" : extension}`;
-	const finalPath = levelAssetPath(topicId, levelId, finalName);
-	await mkdir(path.dirname(finalPath), { recursive: true });
-	await copyFile(input, finalPath);
-	level.background = {
-		...(level.background || {}),
-		type: "image",
-		color: String(level.background?.color || "#ead8bd"),
-		path: `res://levels/${topicId}/${levelId}/${finalName}`,
-	};
-	level.assets = {
-		...(level.assets || {}),
-		cover: level.background.path,
-	};
-}
-
-async function cleanupUnreferencedLevelImages(level: unknown, topicId: string, levelId: string) {
-	const referencedFiles = collectReferencedLevelFiles(level, topicId, levelId);
-	const dir = levelDir(topicId, levelId);
-	const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-	const removableSourceFile = /^(source|polygon_source|knob_source|swap_source|tablecloth)\.(png|jpe?g|webp)$/i;
-	await Promise.all(
-		entries
-			.filter((entry) => entry.isFile())
-			.filter((entry) => {
-				const sourceName = entry.name.endsWith(".import") ? entry.name.slice(0, -".import".length) : entry.name;
-				return removableSourceFile.test(sourceName) && !referencedFiles.has(sourceName);
-			})
-			.map((entry) => rm(levelAssetPath(topicId, levelId, entry.name), { force: true })),
-	);
-}
+import { safeFileName } from "../lib/sanitize.js";
+import { levelAssetPath, levelDir, levelPath, sourcePath } from "../paths/levels.js";
+import { readPendingImage } from "../pending/store.js";
+import { makeLevelJson, normalizeLevelJson } from "../level/service.js";
 
 export function registerLevelRoutes(app: Hono) {
-	app.get("/api/levels/:topicId/:levelId", async (c) => {
-		const topicId = safeId(c.req.param("topicId"));
-		const levelId = safeId(c.req.param("levelId"));
-		const target = levelPath(topicId, levelId);
-		const level = await readJson(target, null);
-		if (!level) return c.json({ ok: false, error: "level not found" }, 404);
-		return c.json(level);
+	app.get("/api/levels/:topicId/:groupId/:levelId", async (c) => {
+		const { topicId, groupId, levelId } = safeParams(c.req.param());
+		const target = levelPath(topicId, groupId, levelId);
+		const data = await readJson(target, makeLevelJson(topicId, groupId, levelId, levelId));
+		return c.json(normalizeLevelJson(data, topicId, groupId, levelId));
 	});
 
-	app.post("/api/levels/:topicId/:levelId", async (c) => {
-		const topicId = safeId(c.req.param("topicId"));
-		const levelId = safeId(c.req.param("levelId"));
+	app.post("/api/levels/:topicId/:groupId/:levelId", async (c) => {
+		const { topicId, groupId, levelId } = safeParams(c.req.param());
 		const payload = await c.req.json();
-		const level = payload.level ?? payload;
-		const target = levelPath(topicId, levelId);
-		level.id = levelId;
-		level.topic_id = topicId;
-		normalizeLevelImageModes(level, topicId, levelId);
-		await normalizeTableclothBackground(level, topicId, levelId);
-		await normalizeSharedModeImage(level, topicId, levelId);
-		await writeJson(target, level);
-		await cleanupUnreferencedLevelImages(level, topicId, levelId);
-		const catalog = normalizeCatalog(payload.catalog ?? (await readJson(catalogPath, makeEmptyCatalog())));
-		await writeJson(catalogPath, catalog);
-		return c.json({ ok: true, path: path.relative(projectRoot, target), catalogPath: path.relative(projectRoot, catalogPath) });
+		const dir = levelDir(topicId, groupId, levelId);
+		await mkdir(dir, { recursive: true });
+
+		let imageInfo = payload.level?.image || {};
+		if (payload.sourcePendingId) {
+			const pending = await readPendingImage(String(payload.sourcePendingId));
+			if (!pending) return c.json({ ok: false, error: "source image not found" }, 404);
+			const sourceFile = path.resolve(projectRoot, pending.path);
+			const targetSource = sourcePath(topicId, groupId, levelId);
+			await copyFile(sourceFile, targetSource);
+			const info = await imageInfoForPath(targetSource);
+			imageInfo = {
+				path: `res://levels/${topicId}/${groupId}/${levelId}/source.jpg`,
+				width: info.width,
+				height: info.height,
+				aspect_ratio: info.width && info.height ? info.width / info.height : 0.75,
+				preset: "mobile_portrait_3x4",
+			};
+		}
+
+		const nextLevel = normalizeLevelJson(
+			{
+				...(payload.level || {}),
+				image: {
+					...(payload.level?.image || {}),
+					...imageInfo,
+					path: `res://levels/${topicId}/${groupId}/${levelId}/source.jpg`,
+				},
+			},
+			topicId,
+			groupId,
+			levelId,
+		);
+		await writeJson(levelPath(topicId, groupId, levelId), nextLevel);
+		if (payload.catalog) {
+			await writeJson(catalogPath, normalizeCatalog(payload.catalog));
+		}
+		return c.json({ ok: true, level: nextLevel, path: path.relative(projectRoot, levelPath(topicId, groupId, levelId)) });
 	});
 
 	app.post("/api/levels/cleanup", async (c) => {
-		const payload = await c.req.json();
-		const removedTopics = Array.isArray(payload.removedTopics) ? payload.removedTopics.map((topicId: string) => safeId(topicId)).filter(Boolean) : [];
-		const removedLevels = Array.isArray(payload.removedLevels)
-			? payload.removedLevels
-					.map((target: any) => ({ topicId: safeId(target?.topicId), levelId: safeId(target?.levelId) }))
-					.filter((target: any) => target.topicId && target.levelId && !removedTopics.includes(target.topicId))
-			: [];
-		await Promise.all(removedLevels.map((target: any) => rm(levelDir(target.topicId, target.levelId), { recursive: true, force: true })));
-		await Promise.all(removedTopics.map((topicId: string) => rm(topicDir(topicId), { recursive: true, force: true })));
-		return c.json({ ok: true, removedTopics, removedLevels });
+		const payload = await c.req.json().catch(() => ({}));
+		const removed = Array.isArray(payload.removed) ? payload.removed : [];
+		await Promise.all(
+			removed.map((item: any) => {
+				const topicId = safeFileName(item.topicId || "");
+				const groupId = safeFileName(item.groupId || "");
+				const levelId = safeFileName(item.levelId || "");
+				return topicId && groupId && levelId ? rm(levelDir(topicId, groupId, levelId), { recursive: true, force: true }) : Promise.resolve();
+			}),
+		);
+		return c.json({ ok: true });
 	});
 
-	app.get("/api/levels/:topicId/:levelId/source", async (c) => {
-		const topicId = safeId(c.req.param("topicId"));
-		const levelId = safeId(c.req.param("levelId"));
-		const bytes = await readFile(sourcePath(topicId, levelId));
-		return new Response(bytes, {
-			headers: {
-				"content-type": "image/png",
-				"cache-control": "no-store",
-			},
-		});
+	app.get("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
+		const { topicId, groupId, levelId } = safeParams(c.req.param());
+		const bytes = await readFile(sourcePath(topicId, groupId, levelId));
+		return new Response(bytes, { headers: { "content-type": "image/jpeg", "cache-control": "no-store" } });
 	});
 
-	app.get("/api/levels/:topicId/:levelId/assets/:fileName", async (c) => {
-		const topicId = safeId(c.req.param("topicId"));
-		const levelId = safeId(c.req.param("levelId"));
+	app.get("/api/levels/:topicId/:groupId/:levelId/assets/:fileName", async (c) => {
+		const { topicId, groupId, levelId } = safeParams(c.req.param());
 		const fileName = safeFileName(c.req.param("fileName"));
-		const bytes = await readFile(levelAssetPath(topicId, levelId, fileName));
-		return new Response(bytes, {
-			headers: {
-				"content-type": contentTypeForFile(fileName),
-				"cache-control": "no-store",
-			},
-		});
+		const target = levelAssetPath(topicId, groupId, levelId, fileName);
+		const bytes = await readFile(target);
+		return new Response(bytes, { headers: { "content-type": contentTypeForFile(target), "cache-control": "no-store" } });
 	});
+}
+
+function safeParams(params: Record<string, string>) {
+	return {
+		topicId: safeFileName(params.topicId || ""),
+		groupId: safeFileName(params.groupId || ""),
+		levelId: safeFileName(params.levelId || ""),
+	};
 }

@@ -7,11 +7,22 @@ import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 
 type Route = "/editor" | "/images" | "/catalog";
+type EditLevelModeTarget = {
+  topicId: string;
+  groupId: string;
+  levelId: string;
+  mode: "polygon" | "knob" | "swap";
+};
 
 type NavigationGuardState = {
   dirty: boolean;
   title: string;
   message: string;
+};
+
+type PendingNavigation = {
+  route: Route;
+  url: string;
 };
 
 function routeFromPath(): Route {
@@ -35,7 +46,7 @@ const navItems: Route[] = ["/images", "/editor", "/catalog"];
 function App() {
   const [route, setRoute] = useState<Route>(() => routeFromPath());
   const [imageSelection, setImageSelection] = useState<ImagePipelineSelectionState | null>(null);
-  const [pendingRoute, setPendingRoute] = useState<Route | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
   const [editorDirty, setEditorDirty] = useState(false);
   const [catalogDirty, setCatalogDirty] = useState(false);
@@ -65,7 +76,7 @@ function App() {
       const nextRoute = routeFromPath();
       if (nextRoute !== route && activeGuard.dirty) {
         window.history.pushState({}, "", currentUrlForRoute(route));
-        setPendingRoute(nextRoute);
+        setPendingNavigation({ route: nextRoute, url: currentUrlForRoute(nextRoute) });
         return;
       }
       setRoute(nextRoute);
@@ -92,7 +103,7 @@ function App() {
   function navigate(nextRoute: Route, url: string = nextRoute) {
     if (nextRoute === route) return;
     if (activeGuard.dirty) {
-      setPendingRoute(nextRoute);
+      setPendingNavigation({ route: nextRoute, url });
       return;
     }
     window.history.pushState({}, "", url);
@@ -119,12 +130,17 @@ function App() {
     window.setTimeout(() => setOpeningEditor(false), 0);
   }
 
+  function editLevelMode(target: EditLevelModeTarget) {
+    const editorUrl = `/editor?topic=${encodeURIComponent(target.topicId)}&group=${encodeURIComponent(target.groupId)}&level=${encodeURIComponent(target.levelId)}&mode=${encodeURIComponent(target.mode)}`;
+    navigate("/editor", editorUrl);
+  }
+
   function confirmRouteChange() {
-    const nextRoute = pendingRoute;
-    setPendingRoute(null);
-    if (!nextRoute) return;
-    window.history.pushState({}, "", nextRoute);
-    setRoute(nextRoute);
+    const next = pendingNavigation;
+    setPendingNavigation(null);
+    if (!next) return;
+    window.history.pushState({}, "", next.url);
+    setRoute(next.route);
   }
 
   return (
@@ -179,19 +195,19 @@ function App() {
           {route === "/images" ? (
             <ImagePipelinePage onSelectionStateChange={setImageSelection} />
           ) : route === "/catalog" ? (
-            <CatalogManagementPage onUnsavedChange={setCatalogDirty} />
+            <CatalogManagementPage onUnsavedChange={setCatalogDirty} onEditLevelMode={editLevelMode} />
           ) : (
             <LevelEditorPage onUnsavedChange={setEditorDirty} />
           )}
         </main>
       </div>
-      {pendingRoute && (
+      {pendingNavigation && (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-black/35 px-4">
           <div className="w-full max-w-md rounded-md border border-stone-300 bg-paper p-5 text-ink shadow-xl">
             <h2 className="text-lg font-semibold">{activeGuard.title}</h2>
             <p className="mt-2 text-sm text-muted">{activeGuard.message}</p>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <button className="btn" onClick={() => setPendingRoute(null)}>
+              <button className="btn" onClick={() => setPendingNavigation(null)}>
                 留在当前
               </button>
               <button className="btnPrimary" onClick={confirmRouteChange}>

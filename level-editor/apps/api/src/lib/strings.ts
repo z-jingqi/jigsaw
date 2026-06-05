@@ -17,6 +17,6 @@ export function pendingNameKey(folder: string, name: string) {
 export function withReservedI18n(value: Record<string, string>, primary: string) {
 	return {
 		...value,
-		"zh-cn": value["zh-cn"] ?? primary,
+		en: value.en ?? primary,
 	};
 }

@@ -66,15 +66,11 @@ export type LevelImageConfig =
       name?: string;
       width?: number;
       height?: number;
+      aspect_ratio?: number;
+      preset?: string;
     };
 
 export type LevelAssets = {
-  default_image?: {
-    path: string;
-    name: string;
-    width: number;
-    height: number;
-  };
   cover?: LevelImageConfig;
 };
 
@@ -89,6 +85,14 @@ export type CatalogLevel = {
   source: string;
 };
 
+export type CatalogGroup = {
+  id: string;
+  name: string;
+  name_i18n?: Record<LocaleCode, string>;
+  sort_order: number;
+  levels: CatalogLevel[];
+};
+
 export type CatalogTopic = {
   id: string;
   name: string;
@@ -96,13 +100,20 @@ export type CatalogTopic = {
   sort_order: number;
   cover: string;
   levels: CatalogLevel[];
+  groups: CatalogGroup[];
 };
 
 export type LevelCatalog = {
-  schema: "jigsaw.catalog.v1";
+  schema?: "jigsaw.catalog.v3";
   version: number;
   default_locale: LocaleCode;
   locales: LocaleCode[];
+  image_presets?: Array<{
+    id: string;
+    name: string;
+    aspect_ratio: number;
+    default?: boolean;
+  }>;
   topics: CatalogTopic[];
 };
 
@@ -143,26 +154,8 @@ export type PendingImageItem = {
   applied_step_types?: ProcessStepType[];
   pending_step_types?: ProcessStepType[];
   compression_stable?: boolean;
-  saved_modes?: ImageTarget[];
-  editor_state?: PendingImageEditorState;
   folder?: string;
   created_at: string;
-};
-
-export type PendingImageEditorModeState = {
-  dirty?: boolean;
-  completed?: boolean;
-  saved?: boolean;
-  cuts?: CutLine[];
-  pieces?: PieceCell[];
-  knob_pieces?: LevelPiece[];
-  analysis_dirty?: boolean;
-};
-
-export type PendingImageEditorState = {
-  polygon?: PendingImageEditorModeState;
-  knob?: PendingImageEditorModeState;
-  swap?: PendingImageEditorModeState;
 };
 
 export type PythonTool = {
@@ -180,10 +173,11 @@ export type OutlineAnalysis = {
 };
 
 export type LevelConfig = {
-  schema: "jigsaw.level.v1";
+  schema?: "jigsaw.level.v3";
   version: number;
   id: string;
   topic_id?: string;
+  group_id?: string;
   locale?: LocaleCode;
   title: string;
   description: string;
@@ -191,9 +185,11 @@ export type LevelConfig = {
   description_i18n?: Record<LocaleCode, string>;
   image: {
     path: string;
-    name: string;
+    name?: string;
     width: number;
     height: number;
+    aspect_ratio?: number;
+    preset?: string;
   };
   assets?: LevelAssets;
   background: {
@@ -218,11 +214,10 @@ export type LevelConfig = {
   component_overrides: Record<string, string>;
   modes: {
     polygon: {
-      image?: LevelImageConfig;
       pieces: LevelPiece[];
+      generator?: unknown;
     };
     knob: {
-      image?: LevelImageConfig;
       rows: number;
       cols: number;
       piece_size: number;
@@ -230,7 +225,8 @@ export type LevelConfig = {
       pieces: LevelPiece[];
     };
     swap: {
-      image?: LevelImageConfig;
+      auto?: boolean;
+      max_pieces?: number;
       rows: number;
       cols: number;
     };

@@ -1,7 +1,7 @@
 import { uid } from "../../geometry";
 import type { ProcessStep, ProcessStepType, PythonTool } from "../../types";
 
-export const defaultStepTypes: ProcessStepType[] = ["convert_jpg", "remove_background", "trim_transparent", "compress"];
+export const defaultStepTypes: ProcessStepType[] = ["convert_jpg", "compress"];
 
 export function createProcessStep(type: ProcessStepType): ProcessStep {
   return {
@@ -9,7 +9,7 @@ export function createProcessStep(type: ProcessStepType): ProcessStep {
     type,
     tolerance: 35,
     padding: 0,
-    quality: 88,
+    quality: 92,
     background: "#F6EBD4",
   };
 }

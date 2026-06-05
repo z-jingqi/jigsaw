@@ -3,17 +3,18 @@ import { defaultLocale } from "./i18n";
 
 export type LevelTarget = {
   topicId: string;
+  groupId?: string;
   levelId: string;
 };
 
 export function makeDefaultCatalog(): LevelCatalog {
-  return {
-    schema: "jigsaw.catalog.v1",
-    version: 1,
-    default_locale: defaultLocale,
-    locales: [defaultLocale],
-    topics: [],
-  };
+	return {
+		version: 3,
+		default_locale: defaultLocale,
+		locales: ["en", "zh", "ja"],
+		image_presets: [{ id: "mobile_portrait_3x4", name: "Mobile portrait 3:4", aspect_ratio: 0.75, default: true }],
+		topics: [],
+	};
 }
 
 export function normalizeOrder<T extends { sort_order: number }>(items: T[]): T[] {

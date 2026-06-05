@@ -4,6 +4,7 @@ class_name PuzzleBoard
 signal status_changed(text: String)
 signal zoom_changed(percent: int)
 signal completed
+signal state_changed(state: Dictionary)
 
 const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
@@ -76,13 +77,194 @@ var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
 var randomize_piece_rotation := false
 var hint_highlight_token := 0
+var texts := {}
+var state_emit_pending := false
+var last_state_emit_msec := 0
 
 
 func _ready() -> void:
 	rng.seed = 7
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, icon_size: float, random_rotation_enabled := false) -> bool:
+func set_texts(next_texts: Dictionary) -> void:
+	texts = next_texts.duplicate()
+
+
+func _bt(key: String) -> String:
+	return str(texts.get(key, key))
+
+
+func state_snapshot() -> Dictionary:
+	var snapshot := {
+		"version": 1,
+		"mode": current_mode,
+		"view": {
+			"ratio": _view_ratio(),
+			"offset": _vector_to_json(view_offset),
+		},
+	}
+	if current_mode == "swap":
+		var tiles := []
+		for tile in swap_tiles:
+			var node: Node2D = tile["node"]
+			if not is_instance_valid(node):
+				continue
+			tiles.append({
+				"correct_index": int(tile["correct_index"]),
+				"slot_index": int(tile["slot_index"]),
+				"position": _vector_to_json(node.position),
+				"z": int(node.z_index),
+			})
+		snapshot["tiles"] = tiles
+	else:
+		var group_states := []
+		for group in groups:
+			if group == null or not is_instance_valid(group.node):
+				continue
+			var ids := []
+			for member in group.members:
+				ids.append(str(member["id"]))
+			group_states.append({
+				"members": ids,
+				"position": _vector_to_json(group.node.position),
+				"rotation": float(group.node.rotation_degrees),
+				"z": int(group.node.z_index),
+			})
+		snapshot["groups"] = group_states
+	return snapshot
+
+
+func apply_state_snapshot(snapshot: Dictionary) -> void:
+	if str(snapshot.get("mode", current_mode)) != current_mode:
+		return
+	if current_mode == "swap":
+		_restore_swap_state(snapshot)
+	else:
+		_restore_group_state(snapshot)
+	_restore_view_state(snapshot)
+	_check_complete()
+	_check_swap_complete()
+
+
+func _restore_group_state(snapshot: Dictionary) -> void:
+	var group_states: Array = snapshot.get("groups", [])
+	if group_states.is_empty():
+		return
+	var piece_to_group := {}
+	for group in groups:
+		for member in group.members:
+			piece_to_group[str(member["id"])] = group
+	for item in group_states:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var ids: Array = item.get("members", [])
+		if ids.is_empty():
+			continue
+		var active = piece_to_group.get(str(ids[0]), null)
+		if active == null or not groups.has(active):
+			continue
+		for index in range(1, ids.size()):
+			var other = piece_to_group.get(str(ids[index]), null)
+			if other != null and other != active and groups.has(other):
+				active.absorb(other)
+				groups.erase(other)
+				for member in active.members:
+					piece_to_group[str(member["id"])] = active
+		active.node.position = _json_vector(item.get("position", _vector_to_json(active.node.position)))
+		active.node.rotation_degrees = float(item.get("rotation", active.node.rotation_degrees))
+	var ordered := []
+	for item in group_states:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var ids: Array = item.get("members", [])
+		if ids.is_empty():
+			continue
+		var group = piece_to_group.get(str(ids[0]), null)
+		if group != null and groups.has(group) and not ordered.has(group):
+			ordered.append(group)
+	for group in groups:
+		if not ordered.has(group):
+			ordered.append(group)
+	groups = ordered
+	_refresh_group_z_indices()
+
+
+func _restore_swap_state(snapshot: Dictionary) -> void:
+	var tile_states: Array = snapshot.get("tiles", [])
+	if tile_states.is_empty():
+		return
+	var by_correct := {}
+	for tile in swap_tiles:
+		by_correct[int(tile["correct_index"])] = tile
+	for item in tile_states:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var tile = by_correct.get(int(item.get("correct_index", -1)), null)
+		if tile == null:
+			continue
+		tile["slot_index"] = int(item.get("slot_index", tile["slot_index"]))
+		var node: Node2D = tile["node"]
+		if is_instance_valid(node):
+			node.position = _json_vector(item.get("position", _vector_to_json(_swap_slot_position(int(tile["slot_index"]), _swap_cols(), _swap_rows()))))
+	var ordered := tile_states.duplicate()
+	ordered.sort_custom(func(a, b) -> bool:
+		return int(a.get("z", 0)) < int(b.get("z", 0))
+	)
+	var next_tiles := []
+	for item in ordered:
+		var tile = by_correct.get(int(item.get("correct_index", -1)), null)
+		if tile != null and swap_tiles.has(tile) and not next_tiles.has(tile):
+			next_tiles.append(tile)
+	for tile in swap_tiles:
+		if not next_tiles.has(tile):
+			next_tiles.append(tile)
+	swap_tiles = next_tiles
+	for index in swap_tiles.size():
+		swap_tiles[index]["node"].z_index = index * GROUP_Z_STEP
+
+
+func _restore_view_state(snapshot: Dictionary) -> void:
+	var view: Dictionary = snapshot.get("view", {})
+	if view.is_empty():
+		return
+	view_scale = _clamped_actual_scale(base_view_scale * float(view.get("ratio", 1.0)))
+	view_target_scale = view_scale
+	view_target_ratio = _view_ratio_for_scale(view_scale)
+	view_offset = _json_vector(view.get("offset", _vector_to_json(base_view_offset)))
+	_clamp_view_to_table()
+	_apply_view_transform()
+
+
+func _notify_state_changed(immediate := false) -> void:
+	if completion_emitted:
+		return
+	var now := Time.get_ticks_msec()
+	if immediate or now - last_state_emit_msec >= 250:
+		last_state_emit_msec = now
+		state_changed.emit(state_snapshot())
+		return
+	if state_emit_pending:
+		return
+	state_emit_pending = true
+	get_tree().create_timer(0.25).timeout.connect(func() -> void:
+		state_emit_pending = false
+		last_state_emit_msec = Time.get_ticks_msec()
+		if not completion_emitted:
+			state_changed.emit(state_snapshot())
+	)
+
+
+func _vector_to_json(value: Vector2) -> Array:
+	return [float(value.x), float(value.y)]
+
+
+func _json_vector(value, fallback := Vector2.ZERO) -> Vector2:
+	if typeof(value) == TYPE_ARRAY and value.size() >= 2:
+		return Vector2(float(value[0]), float(value[1]))
+	return fallback
+
+
+func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, icon_size: float, random_rotation_enabled := false, restore_state := {}) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -97,7 +279,10 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	world_root.name = "world_root"
 	add_child(world_root)
 	_reset_view_transform()
-	return _start_play_session(current_mode)
+	var loaded := _start_play_session(current_mode)
+	if loaded and typeof(restore_state) == TYPE_DICTIONARY and not restore_state.is_empty():
+		apply_state_snapshot(restore_state)
+	return loaded
 
 
 func clear() -> void:
@@ -130,6 +315,8 @@ func clear() -> void:
 	view_tween = null
 	completion_emitted = false
 	randomize_piece_rotation = false
+	state_emit_pending = false
+	last_state_emit_msec = 0
 
 
 func handle_input(event: InputEvent, modal_open: bool) -> bool:
@@ -226,7 +413,7 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 func organize_pieces() -> void:
 	if current_mode == "swap":
 		reset_view()
-		status_changed.emit("方格交换模式只需要拖动两块图片互换位置。")
+		status_changed.emit(_bt("organize_swap"))
 		return
 	if groups.is_empty():
 		return
@@ -235,7 +422,7 @@ func organize_pieces() -> void:
 	if movable.is_empty():
 		movable = _organizable_groups(true)
 	if movable.is_empty():
-		status_changed.emit("当前碎片已经很接近完成位置。")
+		status_changed.emit(_bt("organize_done"))
 		return
 	movable.sort_custom(func(a, b) -> bool:
 		return _group_sort_area(a) > _group_sort_area(b)
@@ -246,7 +433,8 @@ func organize_pieces() -> void:
 			continue
 		_animate_group_to(group, placements[group])
 	await _wait_for_group_layout_animation()
-	status_changed.emit("已整理未完成的碎片。")
+	status_changed.emit(_bt("organized"))
+	_notify_state_changed(true)
 
 
 func fit_view_to_pieces(animate := true) -> void:
@@ -307,6 +495,7 @@ func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
 	view_offset = screen_anchor - before * view_scale
 	_clamp_view_to_table()
 	_apply_view_transform()
+	_notify_state_changed()
 
 
 func _animate_view_to(target_scale: float, target_offset: Vector2, duration: float) -> void:
@@ -332,6 +521,7 @@ func _animate_view_to(target_scale: float, target_offset: Vector2, duration: flo
 		view_offset = final_offset
 		_clamp_view_to_table()
 		_apply_view_transform()
+		_notify_state_changed(true)
 	)
 
 
@@ -339,13 +529,14 @@ func _pan_view(delta: Vector2) -> void:
 	view_offset += delta
 	_clamp_view_to_table()
 	_apply_view_transform()
+	_notify_state_changed()
 
 
 func _begin_pan(screen_pos: Vector2, touch_index: int) -> void:
 	panning = true
 	pan_touch_index = touch_index
 	pan_last_screen = screen_pos
-	status_changed.emit("拖动桌布可移动视角，双指可缩放。")
+	status_changed.emit(_bt("pan_hint"))
 
 
 func _end_pan() -> void:
@@ -619,18 +810,18 @@ func _wait_for_group_layout_animation() -> void:
 
 func show_hint() -> void:
 	if current_mode == "swap":
-		status_changed.emit("拖动任意一块图片到另一块上，即可交换它们的位置。")
+		status_changed.emit(_bt("swap_hint"))
 		return
 	var pair := _find_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
-		status_changed.emit("暂时没有可提示的相邻碎片。")
+		status_changed.emit(_bt("hint_none"))
 		return
 	_set_hint_highlights(pair)
 	_focus_hint_pair(pair)
 	_hint_pulse_node(pair[0].node)
 	_hint_pulse_node(pair[1].node)
-	status_changed.emit("高亮的两块可以拼在一起。")
+	status_changed.emit(_bt("hint_pair"))
 
 
 func set_drag_blockers(blockers: Array[Rect2]) -> void:
@@ -737,7 +928,7 @@ func _start_swap_session() -> bool:
 	for slot_index in range(order.size()):
 		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)
 	fit_view_to_pieces(false)
-	status_changed.emit("拖动一块图片到另一块上交换位置。")
+	status_changed.emit(_bt("status_swap"))
 	return true
 
 
@@ -1122,6 +1313,8 @@ func _move_group_to(group, target_position: Vector2, use_visible_area := true) -
 	if group == null or not is_instance_valid(group.node):
 		return
 	group.node.position = _clamped_group_position(group, target_position, use_visible_area)
+	if use_visible_area:
+		_notify_state_changed()
 
 
 func _clamped_group_position(group, target_position: Vector2, use_visible_area := true) -> Vector2:
@@ -1297,6 +1490,7 @@ func _begin_drag(screen_pos: Vector2) -> void:
 	drag_offset = group.node.position - world_pos
 	_bring_to_front(group)
 	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	_notify_state_changed()
 
 
 func _end_drag() -> void:
@@ -1310,6 +1504,7 @@ func _end_drag() -> void:
 	_check_complete()
 	PieceVisualFactoryScript.set_group_lifted(released_group, false, self)
 	dragging = null
+	_notify_state_changed(true)
 
 
 func _group_at_world(world_pos: Vector2):
@@ -1378,6 +1573,7 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	swap_drag_offset = tile["node"].position - world_pos
 	_bring_swap_tile_to_front(tile)
 	_set_swap_tile_lifted(tile, true)
+	_notify_state_changed()
 
 
 func _end_swap_drag() -> void:
@@ -1394,10 +1590,11 @@ func _end_swap_drag() -> void:
 		target["slot_index"] = swap_drag_start_slot
 		_animate_swap_tile_to(released, _swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
 		_animate_swap_tile_to(target, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
-		status_changed.emit("已交换两块图片。")
+		status_changed.emit(_bt("swapped"))
 	_set_swap_tile_lifted(released, false)
 	swap_dragging = null
 	swap_drag_start_slot = -1
+	_notify_state_changed(true)
 
 
 func _move_swap_tile_to(tile, target_position: Vector2) -> void:
@@ -1415,6 +1612,7 @@ func _move_swap_tile_to(tile, target_position: Vector2) -> void:
 	elif bounds.end.y > area.end.y:
 		delta.y = area.end.y - bounds.end.y
 	tile["node"].position = target_position + delta
+	_notify_state_changed()
 
 
 func _swap_tile_at_world(world_pos: Vector2, exclude = null):
@@ -1440,6 +1638,7 @@ func _bring_swap_tile_to_front(tile) -> void:
 	swap_tiles.append(tile)
 	for index in swap_tiles.size():
 		swap_tiles[index]["node"].z_index = index * GROUP_Z_STEP
+	_notify_state_changed()
 
 
 func _set_swap_tile_lifted(tile, lifted: bool) -> void:
@@ -1467,6 +1666,7 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 		if is_instance_valid(t["node"]):
 			t["is_animating"] = false
 		_check_swap_complete()
+		_notify_state_changed(true)
 	)
 
 
@@ -1507,6 +1707,7 @@ func _rotate_group(group) -> void:
 		group.is_animating = false
 		_try_snap_chain(group)
 		_check_complete()
+		_notify_state_changed(true)
 	)
 
 
@@ -1514,6 +1715,7 @@ func _bring_to_front(group) -> void:
 	groups.erase(group)
 	groups.append(group)
 	_refresh_group_z_indices()
+	_notify_state_changed()
 
 
 func _refresh_group_z_indices() -> void:

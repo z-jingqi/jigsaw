@@ -6,9 +6,9 @@ import { readJson, writeJson } from "../lib/fs-json.js";
 import { safeFileName, safeFolderName } from "../lib/sanitize.js";
 import { uniqueStrings } from "../lib/strings.js";
 import { normalizeStepTypeList } from "../image/pipeline.js";
-import type { PendingImageEditorModeState, PendingImageItem, PendingImagesData } from "../types/pending.js";
+import type { PendingImageItem, PendingImagesData } from "../types/pending.js";
 
-const PENDING_INDEX_SCHEMA = "jigsaw.pending-images.v2";
+const PENDING_INDEX_SCHEMA = "jigsaw.pending-images.v3";
 
 type PendingIndex = {
 	folders: string[];
@@ -83,10 +83,6 @@ async function normalizeItem(item: PendingImageItem): Promise<PendingImageItem> 
 		pending_step_types: normalizeStepTypeList(item.pending_step_types),
 		compression_stable: Boolean(item.compression_stable),
 		was_processed_before_preview: Boolean(item.was_processed_before_preview),
-		saved_modes: Array.isArray(item.saved_modes)
-			? item.saved_modes.filter((mode) => mode === "polygon" || mode === "knob" || mode === "swap")
-			: undefined,
-		editor_state: normalizeEditorState((item as PendingImageItem).editor_state, item.saved_modes),
 		folder: safeFolderName(item.folder),
 		created_at: String(item.created_at || new Date().toISOString()),
 	};
@@ -148,27 +144,4 @@ export async function writePendingData(items: PendingImageItem[], folders: strin
 	);
 	await Promise.all(items.map((item) => writeRawItem({ ...item, id: safeFileName(item.id) })));
 	await writePendingIndex({ folders: uniqueStrings(folders), ids: newIds });
-}
-
-function normalizeEditorState(value: PendingImageItem["editor_state"], savedModes?: PendingImageItem["saved_modes"]) {
-	const state = value && typeof value === "object" ? value : {};
-	const savedModeSet = new Set(Array.isArray(savedModes) ? savedModes : []);
-	return {
-		polygon: normalizeEditorModeState(state.polygon, savedModeSet.has("polygon")),
-		knob: normalizeEditorModeState(state.knob, savedModeSet.has("knob")),
-		swap: normalizeEditorModeState(state.swap, savedModeSet.has("swap")),
-	};
-}
-
-function normalizeEditorModeState(value: PendingImageEditorModeState | undefined, saved: boolean) {
-	const state = value && typeof value === "object" ? value : {};
-	return {
-		dirty: Boolean(state.dirty),
-		completed: Boolean(state.completed),
-		saved: Boolean(state.saved || saved),
-		cuts: Array.isArray(state.cuts) ? state.cuts : [],
-		pieces: Array.isArray(state.pieces) ? state.pieces : [],
-		knob_pieces: Array.isArray(state.knob_pieces) ? state.knob_pieces : [],
-		analysis_dirty: Boolean(state.analysis_dirty),
-	};
 }

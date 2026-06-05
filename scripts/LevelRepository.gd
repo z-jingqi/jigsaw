@@ -7,6 +7,11 @@ var texture_cache: Dictionary = {}
 var thumbnail_cache: Dictionary = {}
 var source_image_cache: Dictionary = {}
 var config_cache: Dictionary = {}
+var locale := "en"
+
+
+func set_locale(next_locale: String) -> void:
+	locale = normalize_locale(next_locale)
 
 
 func build_catalog() -> Array[Dictionary]:
@@ -21,28 +26,50 @@ func build_catalog() -> Array[Dictionary]:
 			if typeof(topic_data) != TYPE_DICTIONARY:
 				continue
 			var topic: Dictionary = topic_data
-			var levels: Array[Dictionary] = []
-			var catalog_levels: Array = topic.get("levels", [])
-			catalog_levels.sort_custom(func(a, b) -> bool:
+			var groups: Array[Dictionary] = []
+			var flat_levels: Array[Dictionary] = []
+			var catalog_groups: Array = topic.get("groups", [])
+			if catalog_groups.is_empty() and topic.has("levels"):
+				catalog_groups = [{"id": "default", "name": "Default", "sort_order": 0, "levels": topic.get("levels", [])}]
+			catalog_groups.sort_custom(func(a, b) -> bool:
 				return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
 			)
-			for level_data in catalog_levels:
-				if typeof(level_data) != TYPE_DICTIONARY:
+			for group_data in catalog_groups:
+				if typeof(group_data) != TYPE_DICTIONARY:
 					continue
-				var level_entry: Dictionary = level_data
-				var config_path := str(level_entry.get("path", ""))
-				var level_config := load_config_path(config_path)
-				levels.append({
-					"id": str(level_entry.get("id", level_config.get("id", ""))),
-					"title": config_string(level_config, "title", str(level_entry.get("title", ""))),
-					"description": config_string(level_config, "description", ""),
-					"config_path": config_path,
+				var group: Dictionary = group_data
+				var levels: Array[Dictionary] = []
+				var catalog_levels: Array = group.get("levels", [])
+				catalog_levels.sort_custom(func(a, b) -> bool:
+					return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+				)
+				for level_data in catalog_levels:
+					if typeof(level_data) != TYPE_DICTIONARY:
+						continue
+					var level_entry: Dictionary = level_data
+					var config_path := str(level_entry.get("path", ""))
+					var level_config := load_config_path(config_path)
+					var level := {
+						"id": str(level_entry.get("id", level_config.get("id", ""))),
+						"title": localized_config_string(level_config, "title", str(level_entry.get("title", "")), level_entry),
+						"description": localized_config_string(level_config, "description", "", level_entry),
+						"config_path": config_path,
+						"group_id": str(group.get("id", "")),
+						"group_name": localized_named(group, str(group.get("name", group.get("id", "")))),
+					}
+					levels.append(level)
+					flat_levels.append(level)
+				groups.append({
+					"id": str(group.get("id", "")),
+					"name": localized_named(group, str(group.get("name", group.get("id", "")))),
+					"levels": levels,
 				})
 			next_topics.append({
 				"id": str(topic.get("id", "")),
-				"name": str(topic.get("name", topic.get("id", ""))),
+				"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 				"cover": str(topic.get("cover", "")),
-				"levels": levels,
+				"groups": groups,
+				"levels": flat_levels,
 			})
 		return next_topics
 	return []
@@ -78,8 +105,8 @@ func topic_cover_texture(topic: Dictionary) -> Texture2D:
 	return cached_texture(cover_path) if not cover_path.is_empty() else null
 
 
-func apply_level_media(level_config: Dictionary, mode: String) -> Dictionary:
-	var image_path := level_image_path(level_config, mode)
+func apply_level_media(level_config: Dictionary) -> Dictionary:
+	var image_path := level_image_path(level_config)
 	var next_texture := cached_texture(image_path) if not image_path.is_empty() else null
 	if next_texture == null:
 		var fallback_path := default_level_image_path(level_config)
@@ -165,39 +192,18 @@ func cached_source_image(path: String, source_texture: Texture2D) -> Image:
 
 
 func level_list_image_path(level_config: Dictionary) -> String:
-	var swap_path := image_path_from_value(mode_config(level_config, "swap").get("image", null), "")
-	if not swap_path.is_empty():
-		return swap_path
-	var knob_path := image_path_from_value(mode_config(level_config, "knob").get("image", null), "")
-	if not knob_path.is_empty():
-		return knob_path
-	var polygon_path := image_path_from_value(mode_config(level_config, "polygon").get("image", null), "")
-	if not polygon_path.is_empty():
-		return polygon_path
-	return ""
+	return default_level_image_path(level_config)
 
 
 func level_thumbnail_source_path(level_config: Dictionary) -> String:
 	return level_list_image_path(level_config)
 
 
-func level_image_path(level_config: Dictionary, mode := "") -> String:
-	for candidate_mode in [mode, "swap", "knob", "polygon"]:
-		if str(candidate_mode).is_empty():
-			continue
-		var mode_data := mode_config(level_config, str(candidate_mode))
-		var mode_image_path := image_path_from_value(mode_data.get("image", null), "")
-		if not mode_image_path.is_empty():
-			return mode_image_path
+func level_image_path(level_config: Dictionary) -> String:
 	return default_level_image_path(level_config)
 
 
 func default_level_image_path(level_config: Dictionary) -> String:
-	if level_config.has("assets") and typeof(level_config["assets"]) == TYPE_DICTIONARY:
-		var assets: Dictionary = level_config["assets"]
-		var default_image_path := image_path_from_value(assets.get("default_image", null), "")
-		if not default_image_path.is_empty():
-			return default_image_path
 	return image_path_from_value(level_config.get("image", null), "")
 
 
@@ -215,6 +221,38 @@ func config_string(config: Dictionary, key: String, fallback: String) -> String:
 	if config.has("metadata") and typeof(config["metadata"]) == TYPE_DICTIONARY:
 		return str(config["metadata"].get(key, fallback))
 	return fallback
+
+
+func localized_config_string(config: Dictionary, key: String, fallback: String, entry := {}) -> String:
+	var i18n_key := "%s_i18n" % key
+	if config.has(i18n_key) and typeof(config[i18n_key]) == TYPE_DICTIONARY:
+		return localized_value(config[i18n_key], config_string(config, key, fallback))
+	if typeof(entry) == TYPE_DICTIONARY and entry.has(i18n_key) and typeof(entry[i18n_key]) == TYPE_DICTIONARY:
+		return localized_value(entry[i18n_key], str(entry.get(key, fallback)))
+	return config_string(config, key, fallback)
+
+
+func localized_named(data: Dictionary, fallback: String) -> String:
+	if data.has("name_i18n") and typeof(data["name_i18n"]) == TYPE_DICTIONARY:
+		return localized_value(data["name_i18n"], fallback)
+	return fallback
+
+
+func localized_value(values: Dictionary, fallback: String) -> String:
+	var key := normalize_locale(locale)
+	for candidate in [key, "en", "en-US", "en_US", "zh", "zh-Hans", "zh-cn", "zh_CN", "ja", "ja-JP", "_"]:
+		if values.has(candidate) and not str(values[candidate]).is_empty():
+			return str(values[candidate])
+	return fallback
+
+
+func normalize_locale(value: String) -> String:
+	var lower := value.replace("_", "-").to_lower()
+	if lower.begins_with("zh"):
+		return "zh"
+	if lower.begins_with("ja"):
+		return "ja"
+	return "en"
 
 
 func mode_config(level_config: Dictionary, play_mode: String) -> Dictionary:

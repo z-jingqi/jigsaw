@@ -29,6 +29,176 @@ const GAME_FOOTER_MARGIN := 18.0
 const HUD_BLOCKER_PADDING := 18.0
 const HUD_DEBUG_MEASUREMENTS := false
 const HUD_TEXT_BUTTON_FONT_SIZE := 22
+const UI_TEXT := {
+	"en": {
+		"back": "Back",
+		"album": "Album",
+		"settings": "Settings",
+		"hint": "Hint",
+		"no_topics": "No topics yet",
+		"no_levels": "No levels yet",
+		"series_progress": "Progress",
+		"mode_empty": "This level has no playable modes yet.",
+		"start_game": "Start",
+		"mode_polygon": "Polygon",
+		"mode_knob": "Jigsaw",
+		"mode_swap": "Swap",
+		"done": "Completed",
+		"todo": "Not completed",
+		"replay": "Play again",
+		"status_swap": "Drag one tile onto another to swap positions.",
+		"status_drag_rotate": "Drag pieces. Double tap a piece to rotate. Drag the tablecloth and pinch to zoom.",
+		"status_drag": "Drag pieces. Drag the tablecloth and pinch to zoom.",
+		"status_missing_mode": "This level JSON is missing data for the current mode.",
+		"organize": "Organize",
+		"organize_tip": "Organize pieces",
+		"pause": "Paused",
+		"resume": "Resume",
+		"restart": "Restart",
+		"return_levels": "Level list",
+		"return_topics": "Topics",
+		"confirm_restart": "Restart this level?",
+		"confirm": "Confirm",
+		"settings_title": "Settings",
+		"music": "Music",
+		"sfx": "Sound effects",
+		"haptics": "Haptics",
+		"random_rotation": "Random piece rotation (polygon / jigsaw)",
+		"random_rotation_next": "Random rotation changes apply after restarting or entering another level.",
+		"close": "Close",
+		"tutorial_title": "How to play",
+		"tutorial_swap": "Drag one tile onto another to swap their positions.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nRestore every tile to the correct order to finish.",
+		"tutorial_rotate": "Hold and drag a piece.\n\nDouble tap a piece to rotate 90 degrees.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nIf pieces get messy, tap Organize in the lower-left.",
+		"tutorial_drag": "Hold and drag a piece.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nIf pieces get messy, tap Organize in the lower-left.",
+		"got_it": "Got it",
+		"complete": "Completed!",
+		"completed_mode": "Completed: %s",
+		"next": "Next",
+		"switch_mode": "Other mode",
+		"album_hint": "Album only stores completed puzzles. Finish more levels to unlock more.",
+		"completed_modes": "Completed modes: %s",
+		"swap_hint": "Drag any tile onto another tile to swap them.",
+		"hint_none": "No nearby pieces can be hinted right now.",
+		"hint_pair": "The highlighted pieces fit together.",
+		"organize_swap": "Swap mode only needs dragging two tiles to exchange positions.",
+		"organize_done": "Current pieces are already close to their target positions.",
+		"organized": "Unfinished pieces organized.",
+		"swapped": "Two tiles swapped.",
+		"pan_hint": "Drag the tablecloth to move the view. Pinch to zoom."
+	},
+	"zh": {
+		"back": "返回",
+		"album": "相册",
+		"settings": "设置",
+		"hint": "提示",
+		"no_topics": "暂无主题",
+		"no_levels": "暂无关卡",
+		"series_progress": "进度",
+		"mode_empty": "这个关卡还没有可玩的模式。",
+		"start_game": "开始游戏",
+		"mode_polygon": "多边形模式",
+		"mode_knob": "经典拼图模式",
+		"mode_swap": "方格交换",
+		"done": "已完成",
+		"todo": "未完成",
+		"replay": "再玩一次",
+		"status_swap": "拖动图片块到另一块上交换位置。",
+		"status_drag_rotate": "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。",
+		"status_drag": "拖动碎片。空白处拖动桌布，双指缩放。",
+		"status_missing_mode": "关卡 JSON 缺少当前模式配置。",
+		"organize": "整理",
+		"organize_tip": "整理碎片",
+		"pause": "已暂停",
+		"resume": "继续游戏",
+		"restart": "重新开始",
+		"return_levels": "返回关卡列表",
+		"return_topics": "返回主题选择",
+		"confirm_restart": "确认重新开始？",
+		"confirm": "确认",
+		"settings_title": "设置",
+		"music": "音乐",
+		"sfx": "音效",
+		"haptics": "震动反馈",
+		"random_rotation": "碎片随机旋转（多边形 / 凹凸）",
+		"random_rotation_next": "随机旋转设置将在重新开始或进入下一关后生效。",
+		"close": "关闭",
+		"tutorial_title": "怎么玩",
+		"tutorial_swap": "拖动一块图片到另一块上，可以交换它们的位置。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n所有方格回到正确顺序后就会通关。",
+		"tutorial_rotate": "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。",
+		"tutorial_drag": "单指按住碎片并拖动。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。",
+		"got_it": "知道了",
+		"complete": "恭喜完成",
+		"completed_mode": "已完成：%s",
+		"next": "下一关",
+		"switch_mode": "换个模式",
+		"album_hint": "相册只收录已完成的拼图，继续完成关卡可解锁更多收藏。",
+		"completed_modes": "已完成模式：%s",
+		"swap_hint": "拖动任意一块图片到另一块上，即可交换它们的位置。",
+		"hint_none": "暂时没有可提示的相邻碎片。",
+		"hint_pair": "高亮的两块可以拼在一起。",
+		"organize_swap": "方格交换模式只需要拖动两块图片互换位置。",
+		"organize_done": "当前碎片已经很接近完成位置。",
+		"organized": "已整理未完成的碎片。",
+		"swapped": "已交换两块图片。",
+		"pan_hint": "拖动桌布可移动视角，双指可缩放。"
+	},
+	"ja": {
+		"back": "戻る",
+		"album": "アルバム",
+		"settings": "設定",
+		"hint": "ヒント",
+		"no_topics": "テーマはまだありません",
+		"no_levels": "レベルはまだありません",
+		"series_progress": "進行度",
+		"mode_empty": "このレベルにはまだ遊べるモードがありません。",
+		"start_game": "スタート",
+		"mode_polygon": "ポリゴン",
+		"mode_knob": "ジグソー",
+		"mode_swap": "入れ替え",
+		"done": "完成済み",
+		"todo": "未完成",
+		"replay": "もう一度",
+		"status_swap": "画像タイルを別のタイルにドラッグして入れ替えます。",
+		"status_drag_rotate": "ピースをドラッグ。ダブルタップで回転。背景をドラッグし、ピンチでズーム。",
+		"status_drag": "ピースをドラッグ。背景をドラッグし、ピンチでズーム。",
+		"status_missing_mode": "このレベル JSON には現在のモード設定がありません。",
+		"organize": "整理",
+		"organize_tip": "ピースを整理",
+		"pause": "一時停止",
+		"resume": "続ける",
+		"restart": "最初から",
+		"return_levels": "レベル一覧",
+		"return_topics": "テーマへ",
+		"confirm_restart": "このレベルをやり直しますか？",
+		"confirm": "確認",
+		"settings_title": "設定",
+		"music": "音楽",
+		"sfx": "効果音",
+		"haptics": "振動",
+		"random_rotation": "ピースをランダム回転（ポリゴン / ジグソー）",
+		"random_rotation_next": "ランダム回転の変更は再開または次のレベルから反映されます。",
+		"close": "閉じる",
+		"tutorial_title": "遊び方",
+		"tutorial_swap": "タイルを別のタイルにドラッグして位置を入れ替えます。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\nすべて正しい順番に戻すと完成です。",
+		"tutorial_rotate": "ピースを長押ししてドラッグします。\n\nダブルタップで 90 度回転します。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\n散らかったら左下の整理を使います。",
+		"tutorial_drag": "ピースを長押ししてドラッグします。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\n散らかったら左下の整理を使います。",
+		"got_it": "OK",
+		"complete": "完成！",
+		"completed_mode": "完成：%s",
+		"next": "次へ",
+		"switch_mode": "別モード",
+		"album_hint": "アルバムには完成したパズルだけが保存されます。さらに完成させると増えます。",
+		"completed_modes": "完成モード：%s",
+		"swap_hint": "任意のタイルを別のタイルへドラッグして入れ替えます。",
+		"hint_none": "今はヒントにできる隣接ピースがありません。",
+		"hint_pair": "ハイライトされた 2 つはつながります。",
+		"organize_swap": "入れ替えモードでは 2 枚のタイルをドラッグして交換します。",
+		"organize_done": "ピースはすでに完成位置に近いです。",
+		"organized": "未完成のピースを整理しました。",
+		"swapped": "2 枚のタイルを交換しました。",
+		"pan_hint": "背景をドラッグして移動し、ピンチでズームできます。"
+	}
+}
 
 var cream := Color("#F6EBD4")
 var paper := Color("#FFF6E6")
@@ -82,6 +252,7 @@ var lazy_thumbnail_items: Array[Dictionary] = []
 var lazy_thumbnail_queue: Array[Dictionary] = []
 var lazy_thumbnail_processing := false
 var rounded_topic_cover_cache: Dictionary = {}
+var active_locale := "en"
 
 
 func _ready() -> void:
@@ -101,17 +272,21 @@ func _ready() -> void:
 	icon_mode_polygon_todo = repository.cached_texture(ICON_MODE_POLYGON_TODO_PATH)
 	icon_mode_swap_done = repository.cached_texture(ICON_MODE_SWAP_DONE_PATH)
 	icon_mode_swap_todo = repository.cached_texture(ICON_MODE_SWAP_TODO_PATH)
+	progress_store.load_from_disk()
+	active_locale = _detect_locale()
+	repository.set_locale(active_locale)
 	puzzle_board = PuzzleBoardScript.new()
+	puzzle_board.set_texts(_puzzle_board_texts())
 	puzzle_board.status_changed.connect(_set_game_status)
 	puzzle_board.zoom_changed.connect(_set_zoom_label)
 	puzzle_board.completed.connect(_on_puzzle_completed)
+	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
 	add_child(puzzle_board)
 	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
 	ui_layer = CanvasLayer.new()
 	add_child(ui_layer)
 	_build_catalog()
 	_apply_level_media({})
-	progress_store.load_from_disk()
 	_show_topics()
 
 
@@ -128,6 +303,34 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _build_catalog() -> void:
 	topics = repository.build_catalog()
+
+
+func _detect_locale() -> String:
+	var locale := OS.get_locale().replace("_", "-").to_lower()
+	if locale.begins_with("zh"):
+		return "zh"
+	if locale.begins_with("ja"):
+		return "ja"
+	return "en"
+
+
+func _t(key: String) -> String:
+	var table: Dictionary = UI_TEXT.get(active_locale, UI_TEXT["en"])
+	return str(table.get(key, UI_TEXT["en"].get(key, key)))
+
+
+func _puzzle_board_texts() -> Dictionary:
+	return {
+		"swap_hint": _t("swap_hint"),
+		"hint_none": _t("hint_none"),
+		"hint_pair": _t("hint_pair"),
+		"organize_swap": _t("organize_swap"),
+		"organize_done": _t("organize_done"),
+		"organized": _t("organized"),
+		"swapped": _t("swapped"),
+		"status_swap": _t("status_swap"),
+		"pan_hint": _t("pan_hint"),
+	}
 
 
 func _clear_ui() -> void:
@@ -306,7 +509,7 @@ func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) 
 	row.custom_minimum_size.y = 84
 	parent.add_child(row)
 	if back.is_valid():
-		var back_button := _icon_button(icon_left_arrow, back, "返回")
+		var back_button := _icon_button(icon_left_arrow, back, _t("back"))
 		back_button.position = Vector2(0, 12)
 		row.add_child(back_button)
 	var label := Label.new()
@@ -341,8 +544,8 @@ func _root_title(parent: VBoxContainer) -> void:
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	actions.add_theme_constant_override("separation", 10)
-	actions.add_child(_icon_button(icon_album, _show_album, "相册", HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
-	actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置", HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
+	actions.add_child(_icon_button(icon_album, _show_album, _t("album"), HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
+	actions.add_child(_icon_button(icon_setting, _show_settings_modal, _t("settings"), HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
 	row.add_child(actions)
 
 
@@ -564,6 +767,9 @@ func _show_topics() -> void:
 	grid.add_theme_constant_override("h_separation", _screen_margin())
 	grid.add_theme_constant_override("v_separation", _screen_margin())
 	center.add_child(grid)
+	if topics.is_empty():
+		grid.add_child(_empty_topic_message())
+		return
 	for topic in topics:
 		var card := _topic_card_button(topic, _topic_card_width(columns), func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
 		grid.add_child(card)
@@ -588,14 +794,25 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	grid.add_theme_constant_override("v_separation", 14)
 	center.add_child(grid)
 	var focus_card: Control = null
-	for level in topic["levels"]:
-		var card := _level_card_button(
-			level,
-			func(l: Dictionary = level) -> void: _show_mode_dialog(l)
-		)
-		grid.add_child(card)
-		if str(level.get("id", "")) == focus_level_id:
-			focus_card = card
+	var groups: Array = topic.get("groups", [])
+	if groups.is_empty() and topic.has("levels"):
+		groups = [{"id": "default", "name": "", "levels": topic.get("levels", [])}]
+	for group in groups:
+		if typeof(group) != TYPE_DICTIONARY:
+			continue
+		var group_levels: Array = group.get("levels", [])
+		if not str(group.get("name", "")).is_empty():
+			grid.add_child(_level_group_header(str(group.get("name", ""))))
+		for level in group_levels:
+			var card := _level_card_button(
+				level,
+				func(l: Dictionary = level) -> void: _show_mode_dialog(l)
+			)
+			grid.add_child(card)
+			if str(level.get("id", "")) == focus_level_id:
+				focus_card = card
+	if topic.get("levels", []).is_empty():
+		grid.add_child(_empty_level_message())
 	var footer := HBoxContainer.new()
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
 	footer.add_theme_constant_override("separation", 18)
@@ -615,13 +832,45 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 		call_deferred("_scroll_level_card_into_view", scroll, focus_card)
 
 
+func _level_group_header(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(380, 42)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 22)
+	label.add_theme_color_override("font_color", brown)
+	return label
+
+
+func _empty_level_message() -> Label:
+	var label := Label.new()
+	label.text = _t("no_levels")
+	label.custom_minimum_size = Vector2(380, 110)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", soft_brown)
+	return label
+
+
+func _empty_topic_message() -> Label:
+	var label := Label.new()
+	label.text = _t("no_topics")
+	label.custom_minimum_size = Vector2(380, 160)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", soft_brown)
+	return label
+
+
 func _topic_progress_block(topic: Dictionary) -> Control:
 	var holder := HBoxContainer.new()
 	holder.custom_minimum_size.y = 44
 	holder.alignment = BoxContainer.ALIGNMENT_CENTER
 	holder.add_theme_constant_override("separation", 14)
 	var label := Label.new()
-	label.text = "系列进度"
+	label.text = _t("series_progress")
 	label.add_theme_font_size_override("font_size", 16)
 	label.add_theme_color_override("font_color", brown)
 	holder.add_child(label)
@@ -1001,10 +1250,10 @@ func _mode_icon_texture(mode: String, done: bool) -> Texture2D:
 func _mode_label(mode: String) -> String:
 	var key := _mode_key(mode)
 	if key == "polygon":
-		return "多边形模式"
+		return _t("mode_polygon")
 	if key == "swap":
-		return "方格交换模式"
-	return "凹凸拼图模式"
+		return _t("mode_swap")
+	return _t("mode_knob")
 
 
 func _summary_item(icon: Texture2D, text: String) -> HBoxContainer:
@@ -1065,7 +1314,7 @@ func _show_mode_dialog(level: Dictionary) -> void:
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 6
 	box.add_child(spacer)
-	box.add_child(_button("开始游戏", func() -> void:
+	box.add_child(_button(_t("start_game"), func() -> void:
 		_close_modal()
 		_show_game(current_topic, level, str(selected["mode"]))
 	, true, Vector2(220, 58)))
@@ -1073,7 +1322,7 @@ func _show_mode_dialog(level: Dictionary) -> void:
 
 func _mode_empty_label() -> Label:
 	var label := Label.new()
-	label.text = "这个关卡还没有可玩的模式。"
+	label.text = _t("mode_empty")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 22)
 	label.add_theme_color_override("font_color", soft_brown)
@@ -1170,7 +1419,7 @@ func _mode_select_card(level: Dictionary, play_mode: String, selected: Dictionar
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(name)
 	var state := Label.new()
-	state.text = "已完成" if done else "未完成"
+	state.text = _t("done") if done else _t("todo")
 	state.add_theme_font_size_override("font_size", 17)
 	state.add_theme_color_override("font_color", green if done else orange)
 	state.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1260,12 +1509,12 @@ func _mode_choice_card(level: Dictionary, play_mode: String) -> Panel:
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(name)
 	var status := Label.new()
-	status.text = "已完成" if done else "未完成"
+	status.text = _t("done") if done else _t("todo")
 	status.add_theme_font_size_override("font_size", 18)
 	status.add_theme_color_override("font_color", Color("#6f9d67") if done else orange)
 	status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(status)
-	row.add_child(_mode_action_button("再玩一次" if done else "开始", play_mode, func() -> void:
+	row.add_child(_mode_action_button(_t("replay") if done else _t("start_game"), play_mode, func() -> void:
 		_close_modal()
 		_show_game(current_topic, level, play_mode)
 	))
@@ -1284,7 +1533,7 @@ func _mode_action_button(text: String, play_mode: String, action: Callable) -> B
 	button.add_theme_color_override("font_pressed_color", Color.WHITE)
 	var accent := _mode_accent_color(play_mode)
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = accent if text == "再玩一次" else Color(1, 0.95, 0.84, 0.94)
+	normal.bg_color = accent if text == _t("replay") else Color(1, 0.95, 0.84, 0.94)
 	normal.border_color = accent
 	normal.border_width_left = 2
 	normal.border_width_top = 2
@@ -1298,12 +1547,12 @@ func _mode_action_button(text: String, play_mode: String, action: Callable) -> B
 	normal.shadow_size = 4
 	normal.shadow_offset = Vector2(0, 2)
 	button.add_theme_stylebox_override("normal", normal)
-	if text != "再玩一次":
+	if text != _t("replay"):
 		button.add_theme_color_override("font_color", brown)
 		button.add_theme_color_override("font_hover_color", brown)
 		button.add_theme_color_override("font_pressed_color", brown)
 	var hover := normal.duplicate()
-	hover.bg_color = accent.lightened(0.08) if text == "再玩一次" else Color(1, 0.91, 0.76, 0.98)
+	hover.bg_color = accent.lightened(0.08) if text == _t("replay") else Color(1, 0.91, 0.76, 0.98)
 	button.add_theme_stylebox_override("hover", hover)
 	var pressed := normal.duplicate()
 	pressed.bg_color = accent.darkened(0.08)
@@ -1362,14 +1611,15 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 		_show_levels(topic, str(level.get("id", "")))
 		return
 	progress_store.mark_last_played(topic, level, current_mode)
+	var restore_state := progress_store.play_state(topic, level, current_mode)
 	_apply_level_media(active_level_config)
 	_clear_ui()
 	_clear_board()
 	var random_rotation := progress_store.random_rotation_enabled() and current_mode != "swap"
-	var loaded: bool = puzzle_board.start(active_level_config, current_mode, texture, source_image, source_size, _icon_button_size(), random_rotation)
+	var loaded: bool = puzzle_board.start(active_level_config, current_mode, texture, source_image, source_size, _icon_button_size(), random_rotation, restore_state)
 	_build_game_hud(level["title"])
 	if not loaded:
-		status_label.text = "关卡 JSON 缺少当前模式配置。"
+		status_label.text = _t("status_missing_mode")
 	elif not progress_store.tutorial_seen():
 		_show_tutorial_modal()
 
@@ -1386,7 +1636,14 @@ func _set_zoom_label(percent: int) -> void:
 
 func _on_puzzle_completed() -> void:
 	progress_store.mark_completed(current_level["id"], current_mode)
+	progress_store.clear_play_state(current_topic, current_level, current_mode)
 	_show_complete_modal()
+
+
+func _on_puzzle_state_changed(state: Dictionary) -> void:
+	if current_screen != "game" or current_topic.is_empty() or current_level.is_empty() or current_mode.is_empty():
+		return
+	progress_store.save_play_state(current_topic, current_level, current_mode, state)
 
 
 func _build_game_hud(level_title: String) -> void:
@@ -1407,7 +1664,7 @@ func _build_game_hud(level_title: String) -> void:
 	top_bar.add_child(bg)
 	var back_button := _icon_button(icon_left_arrow, func() -> void:
 		_show_levels(current_topic, str(current_level.get("id", "")))
-	, "返回")
+	, _t("back"))
 	back_button.position = Vector2(10, (bar_height - _icon_button_size()) * 0.5)
 	top_bar.add_child(back_button)
 	var title := Label.new()
@@ -1432,19 +1689,19 @@ func _build_game_hud(level_title: String) -> void:
 	top_actions.offset_bottom = top_actions.offset_top + _icon_button_size()
 	top_actions.add_theme_constant_override("separation", 6)
 	top_bar.add_child(top_actions)
-	top_actions.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, "提示"))
+	top_actions.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint")))
 	if current_mode != "swap":
-		top_actions.add_child(_tool_text_button("整理", puzzle_board.organize_pieces, "整理碎片"))
-	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, "设置"))
-	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, "暂停"))
+		top_actions.add_child(_tool_text_button(_t("organize"), puzzle_board.organize_pieces, _t("organize_tip")))
+	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, _t("settings")))
+	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, _t("pause")))
 	zoom_label = null
 	status_label = Label.new()
 	if current_mode == "swap":
-		status_label.text = "拖动图片块到另一块上交换位置。"
+		status_label.text = _t("status_swap")
 	elif progress_store.random_rotation_enabled():
-		status_label.text = "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。"
+		status_label.text = _t("status_drag_rotate")
 	else:
-		status_label.text = "拖动碎片。空白处拖动桌布，双指缩放。"
+		status_label.text = _t("status_drag")
 	status_label.position = Vector2(20, bar_height + 8.0)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
@@ -1459,7 +1716,7 @@ func _hud_top_icons_width() -> float:
 
 
 func _hud_bottom_icons_width() -> float:
-	return _icon_button_size() + _hud_text_button_width("整理") + _hud_button_separation()
+	return _icon_button_size() + _hud_text_button_width(_t("organize")) + _hud_button_separation()
 
 
 func _game_top_bar_height() -> float:
@@ -1468,7 +1725,7 @@ func _game_top_bar_height() -> float:
 
 func _game_top_actions_width() -> float:
 	var icon_count := 3.0 if current_mode == "swap" else 3.0
-	var text_width := 0.0 if current_mode == "swap" else _hud_text_button_width("整理")
+	var text_width := 0.0 if current_mode == "swap" else _hud_text_button_width(_t("organize"))
 	return icon_count * _icon_button_size() + text_width + 6.0 * 4.0 + 20.0
 
 
@@ -1518,7 +1775,7 @@ func _available_modes_for_config(level_config: Dictionary) -> Array[String]:
 
 func _level_has_mode_data(level_config: Dictionary, play_mode: String) -> bool:
 	if _mode_key(play_mode) == "swap":
-		return not repository.level_image_path(level_config, "swap").is_empty()
+		return not repository.level_image_path(level_config).is_empty()
 	var mode_data := repository.mode_config(level_config, play_mode)
 	if mode_data.is_empty():
 		return false
@@ -1590,7 +1847,7 @@ func _refresh_game_drag_blockers() -> void:
 
 
 func _apply_level_media(level_config: Dictionary) -> void:
-	var media := repository.apply_level_media(level_config, current_mode)
+	var media := repository.apply_level_media(level_config)
 	texture = media["texture"]
 	source_image = media["image"]
 	source_size = media["source_size"]
@@ -1599,14 +1856,14 @@ func _apply_level_media(level_config: Dictionary) -> void:
 func _show_pause_modal() -> void:
 	_show_modal()
 	var box := _modal_box(Vector2(360, 360))
-	box.add_child(_modal_title("已暂停"))
-	box.add_child(_button("继续游戏", _close_modal))
-	box.add_child(_button("重新开始", _show_restart_confirm, false))
-	box.add_child(_button("返回关卡列表", func() -> void:
+	box.add_child(_modal_title(_t("pause")))
+	box.add_child(_button(_t("resume"), _close_modal))
+	box.add_child(_button(_t("restart"), _show_restart_confirm, false))
+	box.add_child(_button(_t("return_levels"), func() -> void:
 		_close_modal()
 		_show_levels(current_topic, str(current_level.get("id", "")))
 	, false))
-	box.add_child(_button("返回主题选择", func() -> void:
+	box.add_child(_button(_t("return_topics"), func() -> void:
 		_close_modal()
 		_show_topics()
 	, false))
@@ -1615,53 +1872,54 @@ func _show_pause_modal() -> void:
 func _show_restart_confirm() -> void:
 	_show_modal()
 	var box := _modal_box(Vector2(360, 230))
-	box.add_child(_modal_title("确认重新开始？"))
-	box.add_child(_button("确认", func() -> void:
+	box.add_child(_modal_title(_t("confirm_restart")))
+	box.add_child(_button(_t("confirm"), func() -> void:
+		progress_store.clear_play_state(current_topic, current_level, current_mode)
 		_close_modal()
 		_show_game(current_topic, current_level, current_mode)
 	))
-	box.add_child(_button("返回", _show_pause_modal, false))
+	box.add_child(_button(_t("back"), _show_pause_modal, false))
 
 
 func _show_settings_modal() -> void:
 	_show_modal()
 	var box := _modal_box(Vector2(420, 390))
-	box.add_child(_modal_title("设置"))
-	for name in ["音乐", "音效", "震动反馈"]:
+	box.add_child(_modal_title(_t("settings_title")))
+	for name in [_t("music"), _t("sfx"), _t("haptics")]:
 		var check := CheckBox.new()
 		check.text = name
 		check.button_pressed = true
 		check.add_theme_color_override("font_color", brown)
 		box.add_child(check)
 	var rotation_check := CheckBox.new()
-	rotation_check.text = "碎片随机旋转（多边形 / 凹凸）"
+	rotation_check.text = _t("random_rotation")
 	rotation_check.button_pressed = progress_store.random_rotation_enabled()
 	rotation_check.add_theme_color_override("font_color", brown)
 	rotation_check.toggled.connect(func(enabled: bool) -> void:
 		progress_store.set_random_rotation_enabled(enabled)
 		if current_screen == "game":
-			_set_game_status("随机旋转设置将在重新开始或进入下一关后生效。")
+			_set_game_status(_t("random_rotation_next"))
 	)
 	box.add_child(rotation_check)
-	box.add_child(_button("关闭", _close_modal))
+	box.add_child(_button(_t("close"), _close_modal))
 
 
 func _show_tutorial_modal() -> void:
 	_show_modal()
 	var box := _modal_box(Vector2(420, 290))
-	box.add_child(_modal_title("怎么玩"))
+	box.add_child(_modal_title(_t("tutorial_title")))
 	var text := Label.new()
 	if current_mode == "swap":
-		text.text = "拖动一块图片到另一块上，可以交换它们的位置。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n所有方格回到正确顺序后就会通关。"
+		text.text = _t("tutorial_swap")
 	elif progress_store.random_rotation_enabled():
-		text.text = "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
+		text.text = _t("tutorial_rotate")
 	else:
-		text.text = "单指按住碎片并拖动。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。"
+		text.text = _t("tutorial_drag")
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.add_theme_font_size_override("font_size", 20)
 	text.add_theme_color_override("font_color", brown)
 	box.add_child(text)
-	box.add_child(_button("知道了", func() -> void:
+	box.add_child(_button(_t("got_it"), func() -> void:
 		progress_store.mark_tutorial_seen()
 		_close_modal()
 	))
@@ -1693,7 +1951,7 @@ func _complete_heading() -> Control:
 	var left := _olive_branch(true)
 	holder.add_child(left)
 	var label := Label.new()
-	label.text = "恭喜完成"
+	label.text = _t("complete")
 	label.add_theme_font_size_override("font_size", 34)
 	label.add_theme_color_override("font_color", brown)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1719,7 +1977,7 @@ func _complete_mode_badge() -> HBoxContainer:
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(_status_icon(current_mode, true, 30))
 	var label := Label.new()
-	label.text = "已完成：%s" % _mode_label(current_mode)
+	label.text = _t("completed_mode") % _mode_label(current_mode)
 	label.add_theme_font_size_override("font_size", 18)
 	label.add_theme_color_override("font_color", soft_brown)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1733,13 +1991,13 @@ func _complete_actions() -> HBoxContainer:
 	row.add_theme_constant_override("separation", 14)
 	var next := _next_level_target()
 	if not next.is_empty():
-		row.add_child(_button("下一关", _play_next_level, true, Vector2(132, 50)))
+		row.add_child(_button(_t("next"), _play_next_level, true, Vector2(132, 50)))
 	if _has_unfinished_alternate_mode():
-		row.add_child(_button("换个模式", func() -> void:
+		row.add_child(_button(_t("switch_mode"), func() -> void:
 			_close_modal()
 			_show_game(current_topic, current_level, _next_mode_key(current_mode))
 		, false, Vector2(132, 50)))
-	row.add_child(_button("返回关卡列表", func() -> void:
+	row.add_child(_button(_t("return_levels"), func() -> void:
 		_close_modal()
 		_show_levels(current_topic, str(current_level.get("id", "")))
 	, false, Vector2(150, 50)))
@@ -1811,9 +2069,9 @@ func _next_level_target() -> Dictionary:
 func _show_album() -> void:
 	current_screen = "album"
 	var wrap := _base_screen()
-	_header(wrap, "相册", _show_topics)
+	_header(wrap, _t("album"), _show_topics)
 	var hint := Label.new()
-	hint.text = "相册只收录已完成的拼图，继续完成关卡可解锁更多收藏。"
+	hint.text = _t("album_hint")
 	hint.add_theme_color_override("font_color", brown)
 	wrap.add_child(hint)
 	var scroll := ScrollContainer.new()
@@ -1826,7 +2084,7 @@ func _show_album() -> void:
 	scroll.add_child(grid)
 	for topic in topics:
 		for level in topic["levels"]:
-			var modes := progress_store.completed_modes(level["id"])
+			var modes := _completed_mode_labels(level)
 			if modes.is_empty():
 				continue
 			var card := _card_button(
@@ -1846,10 +2104,18 @@ func _show_album_detail(topic: Dictionary, level: Dictionary, modes: Array) -> v
 	_header(wrap, level["title"], _show_album)
 	wrap.add_child(_image_rect(Vector2(560, 420)))
 	var desc := Label.new()
-	desc.text = "%s\n已完成模式：%s" % [level["description"], " / ".join(modes)]
+	desc.text = "%s\n%s" % [level["description"], _t("completed_modes") % " / ".join(modes)]
 	desc.add_theme_font_size_override("font_size", 20)
 	desc.add_theme_color_override("font_color", brown)
 	wrap.add_child(desc)
+
+
+func _completed_mode_labels(level: Dictionary) -> Array:
+	var modes := []
+	for play_mode in PLAY_MODES:
+		if progress_store.is_done(level["id"], play_mode):
+			modes.append(_mode_label(play_mode))
+	return modes
 
 
 func _scroll_level_card_into_view(scroll: ScrollContainer, card: Control) -> void:

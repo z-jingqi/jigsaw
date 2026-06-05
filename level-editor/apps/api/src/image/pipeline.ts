@@ -15,7 +15,7 @@ export function normalizeProcessStep(value: any): ProcessStep {
 		type,
 		tolerance: clampInt(value?.tolerance, 0, 441, 35),
 		padding: clampInt(value?.padding, 0, 256, 0),
-		quality: clampInt(value?.quality, 1, 100, 88),
+		quality: clampInt(value?.quality, 1, 100, 92),
 		background: safeColor(value?.background || "#F6EBD4"),
 	};
 }
@@ -79,7 +79,7 @@ export async function runImagePipeline(input: string, workDir: string, steps: Pr
 				"--suffix",
 				"",
 				"--quality",
-				String(step.quality ?? 88),
+				String(step.quality ?? 92),
 				"--background",
 				step.background || "#F6EBD4",
 				"--overwrite",
@@ -93,10 +93,28 @@ export async function runImagePipeline(input: string, workDir: string, steps: Pr
 				"-o",
 				outDir,
 				"--jpeg-quality",
-				String(step.quality ?? 88),
+				String(step.quality ?? 92),
 			]);
 			current = await outputOrCopied(current, path.join(outDir, parsed.base));
 		}
+	}
+	if (![".jpg", ".jpeg"].includes(path.extname(current).toLowerCase())) {
+		const outDir = path.join(workDir, "final-jpg");
+		await mkdir(outDir, { recursive: true });
+		const parsed = path.parse(current);
+		await execTool("convert_to_jpg.py", [
+			current,
+			"-o",
+			outDir,
+			"--suffix",
+			"",
+			"--quality",
+			"92",
+			"--background",
+			"#F6EBD4",
+			"--overwrite",
+		]);
+		current = await outputOrCopied(current, path.join(outDir, `${parsed.name}.jpg`));
 	}
 	return current;
 }

@@ -1,119 +1,18 @@
 {
-	"version": 2,
-	"topics": [
+	"version": 3,
+	"default_locale": "en",
+	"locales": [
+		"en",
+		"zh",
+		"ja"
+	],
+	"image_presets": [
 		{
-			"id": "cats",
-			"name": "猫",
-			"name_i18n": {
-				"zh-Hans": "猫",
-				"_": "猫"
-			},
-			"cover": "res://levels/cats/cover.jpg",
-			"cover_size": {
-				"width": 1024,
-				"height": 576
-			},
-			"levels": [
-				{
-					"id": "calico_cat",
-					"title": "三花猫",
-					"title_i18n": {
-						"zh-Hans": "三花猫",
-						"_": "三花猫"
-					},
-					"path": "res://levels/cats/calico_cat/level.json",
-					"source": "res://levels/cats/calico_cat/source.jpg",
-					"sort_order": 0
-				},
-				{
-					"id": "astronaut_cat",
-					"title": "宇航员猫",
-					"title_i18n": {
-						"zh-Hans": "宇航员猫",
-						"_": "宇航员猫"
-					},
-					"path": "res://levels/cats/astronaut_cat/level.json",
-					"source": "res://levels/cats/astronaut_cat/source.jpg",
-					"sort_order": 1
-				}
-			],
-			"sort_order": 0
-		},
-		{
-			"id": "dogs",
-			"name": "狗",
-			"name_i18n": {
-				"zh-Hans": "狗",
-				"_": "狗"
-			},
-			"cover": "res://levels/dogs/cover.jpg",
-			"cover_size": {
-				"width": 1024,
-				"height": 576
-			},
-			"levels": [
-				{
-					"id": "shiba",
-					"title": "柴犬",
-					"title_i18n": {
-						"zh-Hans": "柴犬",
-						"_": "柴犬"
-					},
-					"path": "res://levels/dogs/shiba/level.json",
-					"source": "res://levels/dogs/shiba/source.jpg",
-					"sort_order": 0
-				},
-				{
-					"id": "golden_retriever",
-					"title": "金毛",
-					"title_i18n": {
-						"zh-Hans": "金毛",
-						"_": "金毛"
-					},
-					"path": "res://levels/dogs/golden_retriever/level.json",
-					"source": "res://levels/dogs/golden_retriever/source.jpg",
-					"sort_order": 1
-				}
-			],
-			"sort_order": 1
-		},
-		{
-			"id": "greek_myth",
-			"name": "希腊神话",
-			"name_i18n": {
-				"zh-Hans": "希腊神话",
-				"_": "希腊神话"
-			},
-			"cover": "res://levels/greek_myth/cover.jpg",
-			"cover_size": {
-				"width": 1024,
-				"height": 576
-			},
-			"levels": [
-				{
-					"id": "trojan_horse",
-					"title": "特洛伊木马",
-					"title_i18n": {
-						"zh-Hans": "特洛伊木马",
-						"_": "特洛伊木马"
-					},
-					"path": "res://levels/greek_myth/trojan_horse/level.json",
-					"source": "res://levels/greek_myth/trojan_horse/source.jpg",
-					"sort_order": 0
-				},
-				{
-					"id": "prometheus_fire",
-					"title": "普罗米修斯盗火",
-					"title_i18n": {
-						"zh-Hans": "普罗米修斯盗火",
-						"_": "普罗米修斯盗火"
-					},
-					"path": "res://levels/greek_myth/prometheus_fire/level.json",
-					"source": "res://levels/greek_myth/prometheus_fire/source.jpg",
-					"sort_order": 1
-				}
-			],
-			"sort_order": 2
+			"id": "mobile_portrait_3x4",
+			"name": "Mobile portrait 3:4",
+			"aspect_ratio": 0.75,
+			"default": true
 		}
-	]
+	],
+	"topics": []
 }

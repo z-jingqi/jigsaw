@@ -45,12 +45,45 @@ func mark_completed(level_id: String, play_mode: String) -> void:
 
 func mark_last_played(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
 	progress["last_topic_id"] = str(topic.get("id", ""))
+	progress["last_group_id"] = str(level.get("group_id", ""))
 	progress["last_level_id"] = str(level.get("id", ""))
 	progress["last_mode"] = mode_key(play_mode)
 	progress["_last_topic_id"] = progress["last_topic_id"]
+	progress["_last_group_id"] = progress["last_group_id"]
 	progress["_last_level_id"] = progress["last_level_id"]
 	progress["_last_mode"] = progress["last_mode"]
 	save_to_disk()
+
+
+func play_state(topic: Dictionary, level: Dictionary, play_mode: String) -> Dictionary:
+	var states: Dictionary = progress.get("play_states", {})
+	var state = states.get(play_state_key(topic, level, play_mode), {})
+	return state if typeof(state) == TYPE_DICTIONARY else {}
+
+
+func save_play_state(topic: Dictionary, level: Dictionary, play_mode: String, state: Dictionary) -> void:
+	if topic.is_empty() or level.is_empty() or state.is_empty():
+		return
+	var states: Dictionary = progress.get("play_states", {})
+	states[play_state_key(topic, level, play_mode)] = state
+	progress["play_states"] = states
+	mark_last_played(topic, level, play_mode)
+
+
+func clear_play_state(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
+	var states: Dictionary = progress.get("play_states", {})
+	states.erase(play_state_key(topic, level, play_mode))
+	progress["play_states"] = states
+	save_to_disk()
+
+
+func play_state_key(topic: Dictionary, level: Dictionary, play_mode: String) -> String:
+	return "%s/%s/%s:%s" % [
+		str(topic.get("id", "")),
+		str(level.get("group_id", "")),
+		str(level.get("id", "")),
+		mode_key(play_mode),
+	]
 
 
 func tutorial_seen() -> bool:
@@ -75,11 +108,11 @@ func set_random_rotation_enabled(enabled: bool) -> void:
 func completed_modes(level_id: String) -> Array:
 	var modes := []
 	if is_done(level_id, "polygon"):
-		modes.append("多边形")
+		modes.append("polygon")
 	if is_done(level_id, "knob"):
-		modes.append("凹凸拼图")
+		modes.append("knob")
 	if is_done(level_id, "swap"):
-		modes.append("方格交换")
+		modes.append("swap")
 	return modes
 
 
@@ -118,8 +151,9 @@ func topic_by_id(topics: Array[Dictionary], topic_id: String) -> Dictionary:
 
 
 func level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
+	var group_id := str(progress.get("last_group_id", progress.get("_last_group_id", "")))
 	for level in topic.get("levels", []):
-		if str(level.get("id", "")) == level_id:
+		if str(level.get("id", "")) == level_id and (group_id.is_empty() or str(level.get("group_id", "")) == group_id):
 			return level
 	return {}
 

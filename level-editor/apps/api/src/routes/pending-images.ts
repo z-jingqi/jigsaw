@@ -11,7 +11,6 @@ import { globalPendingDir, globalPendingImagePath } from "../paths/pending.js";
 import {
 	readPendingData,
 	readPendingFolders,
-	readPendingImage,
 	readPendingImages,
 	writePendingData,
 	writePendingImage,
@@ -40,14 +39,14 @@ export function registerPendingImageRoutes(app: Hono) {
 		const skipped: Array<{ name: string; folder: string; reason: string }> = [];
 		for (const [index, file] of files.entries()) {
 			const folder = safeFolderName(folders[index] || "");
-			const name = path.basename(file.name || "source.png");
+			const name = path.basename(file.name || "source.jpg");
 			const nameKey = pendingNameKey(folder, name);
 			if (usedNames.has(nameKey)) {
 				skipped.push({ name, folder, reason: "duplicate_name" });
 				continue;
 			}
 			usedNames.add(nameKey);
-			const extension = imageExtension(file.name || "source.png");
+			const extension = imageExtension(file.name || "source.jpg");
 			const id = `${Date.now()}-${index}-${safeStem(file.name || "source")}`;
 			const fileName = `original${extension}`;
 			const target = globalPendingImagePath(id, fileName);
@@ -119,17 +118,6 @@ export function registerPendingImageRoutes(app: Hono) {
 		return c.json({ ok: true, item: items[index] });
 	});
 
-	app.patch("/api/pending-images/:pendingId/editor-state", async (c) => {
-		const pendingId = safeFileName(c.req.param("pendingId"));
-		const payload = await c.req.json();
-		// 仅读写单张图片的 JSON 文件，避免每次编辑都重写整个图片库索引。
-		const item = await readPendingImage(pendingId);
-		if (!item) return c.json({ ok: false, error: "pending image not found" }, 404);
-		const next: PendingImageItem = { ...item, editor_state: normalizePendingEditorState(payload.editor_state) };
-		await writePendingImage(next);
-		return c.json({ ok: true, item: next });
-	});
-
 	app.get("/api/pending-images/:pendingId/source", async (c) => {
 		const pendingId = safeFileName(c.req.param("pendingId"));
 		const item = (await readPendingImages()).find((candidate) => candidate.id === pendingId);
@@ -173,9 +161,7 @@ export function registerPendingImageRoutes(app: Hono) {
 		const workDir = await mkdtemp(path.join(globalPendingDir(pendingId), "_process-"));
 		try {
 			const processed = await runImagePipeline(input, workDir, runnableSteps);
-			const processedExt = path.extname(processed).toLowerCase();
-			const extension = processedExt === ".jpeg" ? ".jpg" : processedExt || imageExtension(processed);
-			const finalPath = globalPendingImagePath(pendingId, `processed${extension || ".png"}`);
+			const finalPath = globalPendingImagePath(pendingId, "processed.jpg");
 			const pendingStepTypes = uniqueStepTypes(runnableSteps.map((step) => step.type));
 			await copyFile(processed, finalPath);
 			items[index] = {
@@ -254,26 +240,4 @@ export function registerPendingImageRoutes(app: Hono) {
 		await writePendingImages(items);
 		return c.json({ ok: true, item: items[index] });
 	});
-}
-
-function normalizePendingEditorState(value: any) {
-	const state = value && typeof value === "object" ? value : {};
-	return {
-		polygon: normalizePendingEditorModeState(state.polygon, false),
-		knob: normalizePendingEditorModeState(state.knob, true),
-		swap: normalizePendingEditorModeState(state.swap, false),
-	};
-}
-
-function normalizePendingEditorModeState(value: any, knob: boolean) {
-	const state = value && typeof value === "object" ? value : {};
-	return {
-		dirty: Boolean(state.dirty),
-		completed: Boolean(state.completed),
-		saved: Boolean(state.saved),
-		cuts: knob ? [] : Array.isArray(state.cuts) ? state.cuts : [],
-		pieces: knob ? [] : Array.isArray(state.pieces) ? state.pieces : [],
-		knob_pieces: knob && Array.isArray(state.knob_pieces) ? state.knob_pieces : [],
-		analysis_dirty: Boolean(state.analysis_dirty),
-	};
 }

@@ -1,10 +1,10 @@
 import { makeEmptyLevel } from "../../../geometry";
-import type { CutLine, LevelConfig, LevelImageConfig, PendingImageItem, Point } from "../../../types";
+import type { CutLine, LevelConfig, PendingImageItem, Point } from "../../../types";
 import { pointBounds } from "./polygonPieces";
 import type { EditMode, EditorSnapshot, PolygonViewMode } from "../types";
 
 export const SNAP_THRESHOLD = 18;
-export const EDITOR_LOCALE = "zh-cn";
+export const EDITOR_LOCALE = "en";
 export const DEFAULT_CUT_COLOR = "#5a3a22";
 
 export function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
@@ -17,29 +17,18 @@ export function isTextEditingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
 }
 
-export function modeImageConfig(level: LevelConfig, mode: EditMode): LevelImageConfig {
-  return level.modes[mode].image as LevelImageConfig;
-}
-
-export function modeImagePath(level: LevelConfig, mode: EditMode): string {
-  return imageConfigPath(modeImageConfig(level, mode));
-}
-
 export function levelImageUrl(topicId: string, levelId: string, path: string) {
   if (!topicId || !levelId || !path) return "";
-  const prefix = `res://levels/${topicId}/${levelId}/`;
+  const prefix = `res://levels/${topicId}/`;
   if (!path.startsWith(prefix)) return "";
   const fileName = path.slice(prefix.length);
-  return fileName ? `/api/levels/${encodeURIComponent(topicId)}/${encodeURIComponent(levelId)}/assets/${encodeURIComponent(fileName)}?mtime=${Date.now()}` : "";
+  const parts = fileName.split("/");
+  if (parts.length < 3) return "";
+  return `/api/levels/${encodeURIComponent(topicId)}/${encodeURIComponent(parts[0])}/${encodeURIComponent(parts[1])}/assets/${encodeURIComponent(parts.slice(2).join("/"))}?mtime=${Date.now()}`;
 }
 
 export function displayPendingImageName(item: PendingImageItem) {
   return item.name.replace(/\.[^.]+$/, "");
-}
-
-export function imageConfigPath(value?: LevelImageConfig): string {
-  if (!value) return "";
-  return typeof value === "string" ? value : value.path || "";
 }
 
 export function polygonViewLabel(view: PolygonViewMode): string {
@@ -87,22 +76,17 @@ export function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: strin
     id: levelId || data.id || defaults.id,
     topic_id: topicId || data.topic_id || defaults.topic_id,
     image: { ...defaults.image, ...(data.image || {}) },
-    assets: {
-      ...(defaults.assets || {}),
-      ...(data.assets || {}),
-    },
+    assets: { ...(defaults.assets || {}), ...(data.assets || {}) },
     background: { ...defaults.background, ...data.background },
     grid: { ...defaults.grid, ...data.grid },
     modes: {
       polygon: {
         ...defaults.modes.polygon,
         ...(data.modes?.polygon || {}),
-        image: data.modes?.polygon?.image || defaults.modes.polygon.image,
       },
       knob: {
         ...defaults.modes.knob,
         ...(data.modes?.knob || {}),
-        image: data.modes?.knob?.image || defaults.modes.knob.image,
         cols: data.modes?.knob?.cols ?? data.grid?.cols ?? defaults.grid.cols,
         rows: data.modes?.knob?.rows ?? data.grid?.rows ?? defaults.grid.rows,
         piece_size: data.modes?.knob?.piece_size ?? data.grid?.piece_size ?? defaults.grid.piece_size,
@@ -110,7 +94,6 @@ export function normalizeLevelConfig(data: Partial<LevelConfig>, topicId?: strin
       swap: {
         ...defaults.modes.swap,
         ...(data.modes?.swap || {}),
-        image: data.modes?.swap?.image || defaults.modes.swap.image,
         cols: 3,
         rows: 4,
       },
