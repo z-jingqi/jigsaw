@@ -849,9 +849,13 @@ func _start_play_session(play_mode: String) -> bool:
 
 func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 	var config := _mode_config(active_level_config, play_mode)
-	if config.is_empty() or not config.has("pieces") or typeof(config["pieces"]) != TYPE_ARRAY:
+	if config.is_empty():
 		return {}
-	var source_pieces: Array = config["pieces"]
+	var source_pieces: Array = []
+	if config.has("pieces") and typeof(config["pieces"]) == TYPE_ARRAY:
+		source_pieces = config["pieces"]
+	if source_pieces.is_empty() and _mode_key(play_mode) == "knob":
+		source_pieces = _generated_knob_source_pieces(config)
 	if source_pieces.is_empty():
 		return {}
 	var layout := _mobile_board_layout()
@@ -913,6 +917,79 @@ func _level_from_mode_pieces(play_mode: String) -> Dictionary:
 		"source_scale": mode_source_scale,
 		"play_area": layout["play_area"],
 	}
+
+
+func _generated_knob_source_pieces(config: Dictionary) -> Array:
+	if source_size.x <= 0.0 or source_size.y <= 0.0:
+		return []
+	var cols: int = maxi(1, int(config.get("cols", 6)))
+	var rows: int = maxi(1, int(config.get("rows", 8)))
+	var cell_size := Vector2(source_size.x / float(cols), source_size.y / float(rows))
+	var knob_amount := minf(cell_size.x, cell_size.y) * float(config.get("knob_size", 0.24))
+	var pieces := []
+	for row in range(rows):
+		for col in range(cols):
+			var x0 := float(col) * cell_size.x
+			var y0 := float(row) * cell_size.y
+			var x1 := float(col + 1) * cell_size.x
+			var y1 := float(row + 1) * cell_size.y
+			var points: Array = []
+			_append_knob_edge(points, Vector2(x0, y0), Vector2(x1, y0), Vector2(0, -1), 0 if row == 0 else -_knob_horizontal_sign(col, row), knob_amount)
+			_append_knob_edge(points, Vector2(x1, y0), Vector2(x1, y1), Vector2(1, 0), 0 if col == cols - 1 else _knob_vertical_sign(col + 1, row), knob_amount)
+			_append_knob_edge(points, Vector2(x1, y1), Vector2(x0, y1), Vector2(0, 1), 0 if row == rows - 1 else _knob_horizontal_sign(col, row + 1), knob_amount)
+			_append_knob_edge(points, Vector2(x0, y1), Vector2(x0, y0), Vector2(-1, 0), 0 if col == 0 else -_knob_vertical_sign(col, row), knob_amount)
+			var neighbors := []
+			if col > 0:
+				neighbors.append("knob_%d_%d" % [row, col - 1])
+			if col < cols - 1:
+				neighbors.append("knob_%d_%d" % [row, col + 1])
+			if row > 0:
+				neighbors.append("knob_%d_%d" % [row - 1, col])
+			if row < rows - 1:
+				neighbors.append("knob_%d_%d" % [row + 1, col])
+			pieces.append({
+				"id": "knob_%d_%d" % [row, col],
+				"points": points,
+				"home": [x0 + cell_size.x * 0.5, y0 + cell_size.y * 0.5],
+				"neighbors": neighbors,
+				"visible_bounds": [x0 - knob_amount, y0 - knob_amount, cell_size.x + knob_amount * 2.0, cell_size.y + knob_amount * 2.0],
+				"cell": [col, row],
+			})
+	return pieces
+
+
+func _append_knob_edge(target: Array, start: Vector2, end: Vector2, normal: Vector2, sign: int, amount: float) -> void:
+	var edge_points := _knob_edge_points(start, end, normal, sign, amount)
+	for index in range(edge_points.size()):
+		if target.size() > 0 and index == 0:
+			continue
+		var point: Vector2 = edge_points[index]
+		target.append([point.x, point.y])
+
+
+func _knob_edge_points(start: Vector2, end: Vector2, normal: Vector2, sign: int, amount: float) -> Array[Vector2]:
+	if sign == 0:
+		return [start, end]
+	var points: Array[Vector2] = [start]
+	var before := start.lerp(end, 0.34)
+	var after := start.lerp(end, 0.66)
+	points.append(before)
+	for step in range(1, 8):
+		var t := float(step) / 8.0
+		var base := before.lerp(after, t)
+		var offset := sin(t * PI) * amount * float(sign)
+		points.append(base + normal * offset)
+	points.append(after)
+	points.append(end)
+	return points
+
+
+func _knob_vertical_sign(edge_col: int, row: int) -> int:
+	return 1 if int(edge_col + row) % 2 == 0 else -1
+
+
+func _knob_horizontal_sign(col: int, edge_row: int) -> int:
+	return 1 if int(col + edge_row) % 2 == 0 else -1
 
 
 func _start_swap_session() -> bool:
@@ -1041,7 +1118,11 @@ func _current_mode_piece_count() -> int:
 		return int(grid["cols"]) * int(grid["rows"])
 	var config := _mode_config(active_level_config, current_mode)
 	if config.has("pieces") and typeof(config["pieces"]) == TYPE_ARRAY:
-		return (config["pieces"] as Array).size()
+		var pieces: Array = config["pieces"]
+		if not pieces.is_empty():
+			return pieces.size()
+	if current_mode == "knob":
+		return max(1, int(config.get("cols", 6))) * max(1, int(config.get("rows", 8)))
 	return 0
 
 

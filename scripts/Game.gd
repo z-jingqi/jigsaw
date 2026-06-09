@@ -1774,8 +1774,12 @@ func _available_modes_for_config(level_config: Dictionary) -> Array[String]:
 
 
 func _level_has_mode_data(level_config: Dictionary, play_mode: String) -> bool:
-	if _mode_key(play_mode) == "swap":
+	var mode := _mode_key(play_mode)
+	if mode == "swap":
 		return not repository.level_image_path(level_config).is_empty()
+	if mode == "knob":
+		var knob_config := repository.mode_config(level_config, play_mode)
+		return not knob_config.is_empty() and not repository.level_image_path(level_config).is_empty()
 	var mode_data := repository.mode_config(level_config, play_mode)
 	if mode_data.is_empty():
 		return false
