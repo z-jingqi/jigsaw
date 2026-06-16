@@ -14,5 +14,87 @@
 			"default": true
 		}
 	],
-	"topics": []
+	"topics": [
+		{
+			"id": "topic_01",
+			"name": "山海经",
+			"name_i18n": {
+				"zh": "山海经",
+				"zh-Hans": "山海经",
+				"_": "山海经"
+			},
+			"cover": "res://levels/topic_01/cover.png",
+			"color": "#6CA4A6",
+			"icon": "res://levels/topic_01/icon.png",
+			"sort_order": 0,
+			"groups": [
+				{
+					"id": "group_01",
+					"name": "异兽",
+					"name_i18n": {
+						"zh": "异兽",
+						"zh-Hans": "异兽",
+						"_": "异兽"
+					},
+					"color": "#F6EBD4",
+					"sort_order": 0,
+					"levels": []
+				},
+				{
+					"id": "group_02",
+					"name": "神话故事",
+					"name_i18n": {
+						"zh": "神话故事",
+						"zh-Hans": "神话故事",
+						"_": "神话故事"
+					},
+					"color": "#F6EBD4",
+					"sort_order": 1,
+					"levels": []
+				}
+			]
+		},
+		{
+			"id": "topic_02",
+			"name": "希腊神话",
+			"name_i18n": {
+				"zh": "希腊神话",
+				"zh-Hans": "希腊神话",
+				"_": "希腊神话"
+			},
+			"cover": "res://levels/topic_02/cover.png",
+			"color": "#A38DBE",
+			"icon": "res://levels/topic_02/icon.png",
+			"sort_order": 1,
+			"groups": []
+		},
+		{
+			"id": "topic_03",
+			"name": "猫",
+			"name_i18n": {
+				"zh": "猫",
+				"zh-Hans": "猫",
+				"_": "猫"
+			},
+			"cover": "res://levels/topic_03/cover.png",
+			"color": "#F0874D",
+			"icon": "res://levels/topic_03/icon.png",
+			"sort_order": 2,
+			"groups": []
+		},
+		{
+			"id": "topic_04",
+			"name": "狗",
+			"name_i18n": {
+				"zh": "狗",
+				"zh-Hans": "狗",
+				"_": "狗"
+			},
+			"cover": "res://levels/topic_04/cover.png",
+			"color": "#96A87F",
+			"icon": "res://levels/topic_04/icon.png",
+			"sort_order": 3,
+			"groups": []
+		}
+	]
 }

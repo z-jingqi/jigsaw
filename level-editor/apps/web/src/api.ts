@@ -48,6 +48,29 @@ export function uploadSource(target: { topicId: string; groupId: string; levelId
   });
 }
 
+export function uploadTopicAsset(topicId: string, asset: "cover" | "icon", file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return request<{ path: string }>(`/api/topics/${topicId}/${asset}`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function uploadLevelCover(target: { topicId: string; groupId: string; levelId: string }, file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return request<{ path: string }>(`/api/levels/${target.topicId}/${target.groupId}/${target.levelId}/cover`, {
+    method: "POST",
+    body,
+  });
+}
+
 export function sourceUrl(target: { topicId: string; groupId: string; levelId: string }) {
   return `/api/levels/${target.topicId}/${target.groupId}/${target.levelId}/source?mtime=${Date.now()}`;
+}
+
+export function assetUrl(path: string) {
+  if (!path) return "";
+  return `${path.replace("res://levels/", "/levels/")}?mtime=${Date.now()}`;
 }

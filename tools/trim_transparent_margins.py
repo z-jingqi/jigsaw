@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trim transparent whitespace around image content.
+"""Trim transparent margins around image content.
 
 The crop keeps every meaningful alpha-visible component. Tiny isolated alpha
 specks are ignored by default so invisible border noise does not block trimming.
@@ -225,7 +225,7 @@ def print_result(result: Result) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Trim transparent whitespace while keeping all alpha-visible pixels inside the crop.",
+        description="Trim transparent margins while keeping all alpha-visible pixels inside the crop.",
     )
     parser.add_argument("inputs", type=Path, nargs="+", help="Image files or directories to scan")
     parser.add_argument("-r", "--recursive", action="store_true", help="Scan directories recursively")

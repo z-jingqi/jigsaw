@@ -4,6 +4,7 @@ export type CatalogLevel = {
   id: string;
   title: string;
   title_i18n?: I18nText;
+  cover: string;
   sort_order: number;
   path: string;
   source: string;
@@ -13,6 +14,7 @@ export type CatalogGroup = {
   id: string;
   name: string;
   name_i18n?: I18nText;
+  color: string;
   sort_order: number;
   levels: CatalogLevel[];
 };
@@ -22,6 +24,8 @@ export type CatalogTopic = {
   name: string;
   name_i18n?: I18nText;
   cover: string;
+  color: string;
+  icon: string;
   sort_order: number;
   groups: CatalogGroup[];
 };

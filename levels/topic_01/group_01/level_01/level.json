@@ -1,0 +1,46 @@
+{
+	"version": 3,
+	"id": "level_01",
+	"topic_id": "topic_01",
+	"group_id": "group_01",
+	"title": "九尾狐",
+	"title_i18n": {
+		"zh": "九尾狐",
+		"zh-Hans": "九尾狐",
+		"_": "九尾狐"
+	},
+	"description": "",
+	"description_i18n": {
+		"zh": "",
+		"zh-Hans": "",
+		"_": ""
+	},
+	"image": {
+		"path": "res://levels/topic_01/group_01/level_01/source.jpg",
+		"width": 1086,
+		"height": 1448,
+		"aspect_ratio": 0.75,
+		"preset": "mobile_portrait_3x4"
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"polygon": {
+			"pieces": [],
+			"generator": null
+		},
+		"knob": {
+			"auto": true,
+			"cols": 6,
+			"rows": 8,
+			"knob_size": 0.24
+		},
+		"swap": {
+			"auto": true,
+			"cols": 5,
+			"rows": 7
+		}
+	}
+}

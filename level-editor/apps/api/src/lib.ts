@@ -9,6 +9,13 @@ export const defaultPreset = {
   aspect_ratio: 0.75,
   default: true,
 };
+const DEFAULT_KNOB_COLS = 6;
+const DEFAULT_KNOB_ROWS = 8;
+const DEFAULT_KNOB_SIZE = 0.24;
+const DEFAULT_SWAP_COLS = 5;
+const DEFAULT_SWAP_ROWS = 7;
+const DEFAULT_TOPIC_COLOR = "#D9933F";
+const DEFAULT_GROUP_COLOR = "#F6EBD4";
 
 export function safeId(input: string, fallback: string) {
   const cleaned = String(input || "")
@@ -60,6 +67,8 @@ function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
     name,
     name_i18n: topic.name_i18n || zhI18n(name),
     cover: String(topic.cover || ""),
+    color: String(topic.color || DEFAULT_TOPIC_COLOR),
+    icon: String(topic.icon || ""),
     sort_order: Number(topic.sort_order ?? index),
     groups: Array.isArray(topic.groups)
       ? topic.groups.map((group, groupIndex) => normalizeGroup(group, id, groupIndex)).sort((a, b) => a.sort_order - b.sort_order)
@@ -74,6 +83,7 @@ function normalizeGroup(group: CatalogGroup, topicId: string, index: number): Ca
     id,
     name,
     name_i18n: group.name_i18n || zhI18n(name),
+    color: String(group.color || DEFAULT_GROUP_COLOR),
     sort_order: Number(group.sort_order ?? index),
     levels: Array.isArray(group.levels)
       ? group.levels.map((level, levelIndex) => normalizeLevel(level, topicId, id, levelIndex)).sort((a, b) => a.sort_order - b.sort_order)
@@ -88,10 +98,19 @@ function normalizeLevel(level: CatalogLevel, topicId: string, groupId: string, i
     id,
     title,
     title_i18n: level.title_i18n || zhI18n(title),
+    cover: String(level.cover || ""),
     sort_order: Number(level.sort_order ?? index),
     path: String(level.path || levelResPath(topicId, groupId, id)),
     source: String(level.source || sourceResPath(topicId, groupId, id)),
   };
+}
+
+export function extensionFromFile(file: File, allowed: string[]) {
+  const mimeExtension = file.type === "image/svg+xml" ? "svg" : file.type.split("/")[1]?.toLowerCase();
+  const nameExtension = path.extname(file.name).slice(1).toLowerCase();
+  const extension = (mimeExtension || nameExtension).replace("jpeg", "jpg");
+  if (allowed.includes(extension)) return extension;
+  throw new Error(`文件格式不支持，请使用 ${allowed.join(" / ")}。`);
 }
 
 export async function readJson<T>(filePath: string, fallback: T): Promise<T> {
@@ -115,32 +134,64 @@ export async function writeCatalog(catalog: LevelCatalog) {
   await writeJson(catalogPath, normalizeCatalog(catalog));
 }
 
-async function renameIfNeeded(fromPath: string, toPath: string) {
-  if (fromPath === toPath) return;
-  if (!(await exists(fromPath))) return;
-  if (await exists(toPath)) {
-    throw new Error(`无法修改 ID，目标路径已存在：${toPath}`);
+type RenamePathPair = { fromPath: string; toPath: string };
+
+async function renameBatch(pairs: RenamePathPair[]) {
+  const timestamp = Date.now();
+  const planned = pairs.filter((pair) => pair.fromPath !== pair.toPath);
+  const existingPairs: Array<RenamePathPair & { tempPath: string }> = [];
+  const movingSources = new Set(planned.map((pair) => pair.fromPath));
+  const targets = new Set<string>();
+
+  for (const pair of planned) {
+    if (targets.has(pair.toPath)) {
+      throw new Error(`无法修改 ID，目标路径重复：${pair.toPath}`);
+    }
+    targets.add(pair.toPath);
+    if (!(await exists(pair.fromPath))) continue;
+    if ((await exists(pair.toPath)) && !movingSources.has(pair.toPath)) {
+      throw new Error(`无法修改 ID，目标路径已存在：${pair.toPath}`);
+    }
+    existingPairs.push({
+      ...pair,
+      tempPath: `${pair.fromPath}.__renaming_${timestamp}_${existingPairs.length}`,
+    });
   }
-  await fs.mkdir(path.dirname(toPath), { recursive: true });
-  await fs.rename(fromPath, toPath);
+
+  for (const pair of existingPairs) {
+    await fs.rename(pair.fromPath, pair.tempPath);
+  }
+  for (const pair of existingPairs) {
+    await fs.mkdir(path.dirname(pair.toPath), { recursive: true });
+    await fs.rename(pair.tempPath, pair.toPath);
+  }
 }
 
 export async function applyCatalogRenames(renames: CatalogRenameOperation[]) {
-  for (const rename of renames) {
-    if (rename.kind === "topic") {
-      await renameIfNeeded(topicDir(rename.fromTopicId), topicDir(rename.toTopicId));
-    }
-  }
-  for (const rename of renames) {
-    if (rename.kind === "group") {
-      await renameIfNeeded(groupDir(rename.topicId, rename.fromGroupId), groupDir(rename.topicId, rename.toGroupId));
-    }
-  }
-  for (const rename of renames) {
-    if (rename.kind === "level") {
-      await renameIfNeeded(levelDir(rename.topicId, rename.groupId, rename.fromLevelId), levelDir(rename.topicId, rename.groupId, rename.toLevelId));
-    }
-  }
+  await renameBatch(
+    renames
+      .filter((rename) => rename.kind === "topic")
+      .map((rename) => ({
+        fromPath: topicDir(rename.fromTopicId),
+        toPath: topicDir(rename.toTopicId),
+      })),
+  );
+  await renameBatch(
+    renames
+      .filter((rename) => rename.kind === "group")
+      .map((rename) => ({
+        fromPath: groupDir(rename.topicId, rename.fromGroupId),
+        toPath: groupDir(rename.topicId, rename.toGroupId),
+      })),
+  );
+  await renameBatch(
+    renames
+      .filter((rename) => rename.kind === "level")
+      .map((rename) => ({
+        fromPath: levelDir(rename.topicId, rename.groupId, rename.fromLevelId),
+        toPath: levelDir(rename.topicId, rename.groupId, rename.toLevelId),
+      })),
+  );
 }
 
 export function defaultLevelConfig(topicId: string, groupId: string, levelId: string, title = levelId, description = ""): LevelConfig {
@@ -163,8 +214,8 @@ export function defaultLevelConfig(topicId: string, groupId: string, levelId: st
     background: { type: "color", color: "#F6EBD4" },
     modes: {
       polygon: { pieces: [], generator: null },
-      knob: { auto: true, cols: 6, rows: 8, knob_size: 0.24 },
-      swap: { auto: true, cols: 3, rows: 4 },
+      knob: { auto: true, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE },
+      swap: { auto: true, cols: DEFAULT_SWAP_COLS, rows: DEFAULT_SWAP_ROWS },
     },
   };
 }
@@ -200,8 +251,17 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
         pieces: Array.isArray(raw.modes?.polygon?.pieces) ? raw.modes.polygon.pieces : [],
         generator: raw.modes?.polygon?.generator ?? null,
       },
-      knob: { auto: true, cols: 6, rows: 8, knob_size: Number(raw.modes?.knob?.knob_size || 0.24) },
-      swap: { auto: true, cols: 3, rows: 4 },
+      knob: {
+        auto: true,
+        cols: Number(raw.modes?.knob?.cols || DEFAULT_KNOB_COLS),
+        rows: Number(raw.modes?.knob?.rows || DEFAULT_KNOB_ROWS),
+        knob_size: Number(raw.modes?.knob?.knob_size || DEFAULT_KNOB_SIZE),
+      },
+      swap: {
+        auto: true,
+        cols: DEFAULT_SWAP_COLS,
+        rows: DEFAULT_SWAP_ROWS,
+      },
     },
   };
 }

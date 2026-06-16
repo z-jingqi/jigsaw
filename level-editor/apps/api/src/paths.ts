@@ -26,8 +26,32 @@ export function sourceImagePath(topicId: string, groupId: string, levelId: strin
   return path.join(levelDir(topicId, groupId, levelId), "source.jpg");
 }
 
+export function topicCoverPath(topicId: string, extension: string) {
+  return path.join(topicDir(topicId), `cover.${extension}`);
+}
+
+export function topicIconPath(topicId: string, extension: string) {
+  return path.join(topicDir(topicId), `icon.${extension}`);
+}
+
+export function levelCoverPath(topicId: string, groupId: string, levelId: string, extension: string) {
+  return path.join(levelDir(topicId, groupId, levelId), `cover.${extension}`);
+}
+
 export function sourceResPath(topicId: string, groupId: string, levelId: string) {
   return `res://levels/${topicId}/${groupId}/${levelId}/source.jpg`;
+}
+
+export function topicCoverResPath(topicId: string, extension: string) {
+  return `res://levels/${topicId}/cover.${extension}`;
+}
+
+export function topicIconResPath(topicId: string, extension: string) {
+  return `res://levels/${topicId}/icon.${extension}`;
+}
+
+export function levelCoverResPath(topicId: string, groupId: string, levelId: string, extension: string) {
+  return `res://levels/${topicId}/${groupId}/${levelId}/cover.${extension}`;
 }
 
 export function levelResPath(topicId: string, groupId: string, levelId: string) {

@@ -22,9 +22,8 @@ const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(1.0, 0.72, 0.16, 0.34)
 const HINT_OUTLINE_COLOR := Color(1.0, 0.82, 0.26, 0.96)
-const SWAP_FALLBACK_COLS := 3
-const SWAP_FALLBACK_ROWS := 4
-const SWAP_MAX_TILES := 25
+const SWAP_FALLBACK_COLS := 5
+const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
@@ -1139,31 +1138,9 @@ func _swap_grid_config() -> Dictionary:
 
 
 func _auto_swap_grid() -> Dictionary:
-	if source_size.x <= 0.0 or source_size.y <= 0.0:
-		return {
-			"cols": SWAP_FALLBACK_COLS,
-			"rows": SWAP_FALLBACK_ROWS,
-		}
-	var best_cols := 1
-	var best_rows := 1
-	var best_square_error := INF
-	var best_count := 0
-	for rows in range(1, SWAP_MAX_TILES + 1):
-		for cols in range(1, SWAP_MAX_TILES + 1):
-			var count := cols * rows
-			if count > SWAP_MAX_TILES or count <= 1:
-				continue
-			var tile_width := source_size.x / float(cols)
-			var tile_height := source_size.y / float(rows)
-			var square_error := absf(tile_width - tile_height) / maxf(tile_width, tile_height)
-			if square_error < best_square_error - 0.0001 or (absf(square_error - best_square_error) <= 0.0001 and count > best_count):
-				best_square_error = square_error
-				best_count = count
-				best_cols = cols
-				best_rows = rows
 	return {
-		"cols": best_cols,
-		"rows": best_rows,
+		"cols": SWAP_FALLBACK_COLS,
+		"rows": SWAP_FALLBACK_ROWS,
 	}
 
 

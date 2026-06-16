@@ -1,13 +1,15 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import fs from "node:fs/promises";
 import { serveStatic } from "@hono/node-server/serve-static";
+import path from "node:path";
 import type { CatalogRenameOperation, LevelCatalog, LevelConfig } from "./types.js";
 import {
   applyCatalogRenames,
   assertPortrait3x4,
   ensureLevelDir,
+  extensionFromFile,
   levelStatuses,
   normalizeCatalog,
   readCatalog,
@@ -16,7 +18,7 @@ import {
   writeCatalog,
   writeLevel,
 } from "./lib.js";
-import { repoRoot, sourceImagePath } from "./paths.js";
+import { levelCoverPath, levelCoverResPath, repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath } from "./paths.js";
 
 const app = new Hono();
 
@@ -62,6 +64,52 @@ app.put("/api/levels/:topicId/:groupId/:levelId", async (c) => {
   const payload = (await c.req.json()) as LevelConfig;
   await writeLevel({ ...payload, topic_id: topicId, group_id: groupId, id: levelId });
   return c.json(await readLevel(topicId, groupId, levelId, payload.title));
+});
+
+async function readUploadFile(c: Context) {
+  const body = await c.req.parseBody();
+  const file = body.file;
+  if (!(file instanceof File)) {
+    throw new Error("请选择文件。");
+  }
+  return file;
+}
+
+async function writeUpload(filePath: string, file: File) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, Buffer.from(await file.arrayBuffer()));
+}
+
+app.post("/api/topics/:topicId/:asset", async (c) => {
+  const topicId = c.req.param("topicId");
+  const asset = c.req.param("asset");
+  if (asset !== "cover" && asset !== "icon") {
+    return c.json({ error: "未知的主题资源。" }, 400);
+  }
+  try {
+    const file = await readUploadFile(c);
+    const extension = extensionFromFile(file, asset === "icon" ? ["svg", "png"] : ["jpg", "png", "webp"]);
+    const filePath = asset === "icon" ? topicIconPath(topicId, extension) : topicCoverPath(topicId, extension);
+    await writeUpload(filePath, file);
+    return c.json({ path: asset === "icon" ? topicIconResPath(topicId, extension) : topicCoverResPath(topicId, extension) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);
+  }
+});
+
+app.post("/api/levels/:topicId/:groupId/:levelId/cover", async (c) => {
+  const topicId = c.req.param("topicId");
+  const groupId = c.req.param("groupId");
+  const levelId = c.req.param("levelId");
+  try {
+    const file = await readUploadFile(c);
+    const extension = extensionFromFile(file, ["jpg", "png", "webp"]);
+    await ensureLevelDir(topicId, groupId, levelId);
+    await writeUpload(levelCoverPath(topicId, groupId, levelId, extension), file);
+    return c.json({ path: levelCoverResPath(topicId, groupId, levelId, extension) });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);
+  }
 });
 
 app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
