@@ -38,7 +38,13 @@
 					},
 					"color": "#F6EBD4",
 					"sort_order": 0,
-					"levels": []
+					"levels": [
+						{
+							"id": "level_01",
+							"sort_order": 0,
+							"path": "res://levels/topic_01/group_01/level_01/level.json"
+						}
+					]
 				},
 				{
 					"id": "group_02",

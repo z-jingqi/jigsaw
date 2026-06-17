@@ -2,30 +2,30 @@ export type I18nText = Record<string, string>;
 
 export type CatalogLevel = {
   id: string;
-  title: string;
+  title?: string;
   title_i18n?: I18nText;
-  cover: string;
+  cover?: string;
   sort_order: number;
   path: string;
-  source: string;
+  source?: string;
 };
 
 export type CatalogGroup = {
   id: string;
-  name: string;
+  name?: string;
   name_i18n?: I18nText;
-  color: string;
+  color?: string;
   sort_order: number;
   levels: CatalogLevel[];
 };
 
 export type CatalogTopic = {
   id: string;
-  name: string;
+  name?: string;
   name_i18n?: I18nText;
-  cover: string;
-  color: string;
-  icon: string;
+  cover?: string;
+  color?: string;
+  icon?: string;
   sort_order: number;
   groups: CatalogGroup[];
 };
@@ -63,6 +63,7 @@ export type LevelConfig = {
   title_i18n: I18nText;
   description: string;
   description_i18n: I18nText;
+  cover: string;
   image: {
     path: string;
     width: number;

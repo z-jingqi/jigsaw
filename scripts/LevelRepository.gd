@@ -41,13 +41,13 @@ func build_catalog() -> Array[Dictionary]:
 				var levels: Array[Dictionary] = []
 				var catalog_levels: Array = group.get("levels", [])
 				catalog_levels.sort_custom(func(a, b) -> bool:
-					return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+					return _catalog_level_sort_order(a) < _catalog_level_sort_order(b)
 				)
 				for level_data in catalog_levels:
-					if typeof(level_data) != TYPE_DICTIONARY:
+					var level_entry := _catalog_level_entry(level_data)
+					if level_entry.is_empty():
 						continue
-					var level_entry: Dictionary = level_data
-					var config_path := str(level_entry.get("path", ""))
+					var config_path := str(level_entry.get("path", levelResPath(str(topic.get("id", "")), str(group.get("id", "")), str(level_entry.get("id", "")))))
 					var level_config := load_config_path(config_path)
 					var level := {
 						"id": str(level_entry.get("id", level_config.get("id", ""))),
@@ -73,6 +73,29 @@ func build_catalog() -> Array[Dictionary]:
 			})
 		return next_topics
 	return []
+
+
+func _catalog_level_entry(level_data) -> Dictionary:
+	if typeof(level_data) == TYPE_STRING:
+		var path := str(level_data)
+		return {
+			"id": path.get_base_dir().get_file(),
+			"path": path,
+			"sort_order": 0,
+		}
+	if typeof(level_data) == TYPE_DICTIONARY:
+		return level_data
+	return {}
+
+
+func _catalog_level_sort_order(level_data) -> int:
+	if typeof(level_data) == TYPE_DICTIONARY:
+		return int(level_data.get("sort_order", 0))
+	return 0
+
+
+func levelResPath(topic_id: String, group_id: String, level_id: String) -> String:
+	return "res://levels/%s/%s/%s/level.json" % [topic_id, group_id, level_id]
 
 
 func load_level_config(level: Dictionary) -> Dictionary:

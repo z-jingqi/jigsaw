@@ -10,11 +10,13 @@ import {
   assertPortrait3x4,
   ensureLevelDir,
   extensionFromFile,
+  hydrateCatalog,
   levelStatuses,
   normalizeCatalog,
   readCatalog,
   readJpegSize,
   readLevel,
+  upsertCatalogLevel,
   writeCatalog,
   writeLevel,
 } from "./lib.js";
@@ -27,8 +29,9 @@ app.use("/levels/*", serveStatic({ root: repoRoot }));
 
 app.get("/api/catalog", async (c) => {
   const catalog = await readCatalog();
-  const statuses = await levelStatuses(catalog);
-  return c.json({ catalog, statuses });
+  const hydrated = await hydrateCatalog(catalog);
+  const statuses = await levelStatuses(hydrated);
+  return c.json({ catalog: hydrated, statuses });
 });
 
 app.put("/api/catalog", async (c) => {
@@ -37,16 +40,23 @@ app.put("/api/catalog", async (c) => {
   const renames = "catalog" in body && Array.isArray(body.renames) ? body.renames : [];
   const catalog = normalizeCatalog(payload);
   await applyCatalogRenames(renames as CatalogRenameOperation[]);
-  await writeCatalog(catalog);
   for (const topic of catalog.topics) {
     for (const group of topic.groups) {
       for (const level of group.levels) {
         await ensureLevelDir(topic.id, group.id, level.id);
-        await writeLevel(await readLevel(topic.id, group.id, level.id, level.title));
+        const config = await readLevel(topic.id, group.id, level.id, level.title || level.id);
+        await writeLevel({
+          ...config,
+          title: level.title || config.title,
+          title_i18n: level.title_i18n || config.title_i18n,
+          cover: level.cover || config.cover,
+        });
       }
     }
   }
-  return c.json({ catalog, statuses: await levelStatuses(catalog) });
+  await writeCatalog(catalog);
+  const hydrated = await hydrateCatalog(await readCatalog());
+  return c.json({ catalog: hydrated, statuses: await levelStatuses(hydrated) });
 });
 
 app.get("/api/levels/:topicId/:groupId/:levelId", async (c) => {
@@ -63,7 +73,9 @@ app.put("/api/levels/:topicId/:groupId/:levelId", async (c) => {
   const levelId = c.req.param("levelId");
   const payload = (await c.req.json()) as LevelConfig;
   await writeLevel({ ...payload, topic_id: topicId, group_id: groupId, id: levelId });
-  return c.json(await readLevel(topicId, groupId, levelId, payload.title));
+  const level = await readLevel(topicId, groupId, levelId, payload.title);
+  await upsertCatalogLevel(level);
+  return c.json(level);
 });
 
 async function readUploadFile(c: Context) {
@@ -132,6 +144,7 @@ app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
     level.image.height = size.height;
     level.image.aspect_ratio = size.width / size.height;
     await writeLevel(level);
+    await upsertCatalogLevel(level);
     return c.json(level);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);

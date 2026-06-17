@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronRight, Edit3, Eye, FolderPlus, Gamepad2, GripVertical, Hexagon, ImageIcon, ImageUp, Pencil, Plus, Save, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { HexColorPicker } from "react-colorful";
 import { toast } from "sonner";
 import { assetUrl, loadCatalog, loadLevel, saveCatalog, saveLevel, sourceUrl, uploadLevelCover, uploadSource, uploadTopicAsset } from "./api";
 import { Button } from "./components/ui/button";
@@ -35,7 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
-import { generatePieces, mergePieces, sequentialId, withNeighbors, zhI18n } from "./geometry";
+import { generatePieces, mergePieces, sequentialId, withNeighbors, zhI18n, type ShapeKind, type ShapeRequest } from "./geometry";
 import { cn } from "./lib/utils";
 import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelPiece, LevelStatus, Point, SelectedLevel } from "./types";
 import "./styles.css";
@@ -56,6 +57,12 @@ const DEFAULT_SWAP_ROWS = 7;
 const DEFAULT_TOPIC_COLOR = "#D9933F";
 const DEFAULT_GROUP_COLOR = "#F6EBD4";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const SHAPE_OPTIONS: Array<{ kind: ShapeKind; label: string }> = [
+  { kind: "circle", label: "圆形" },
+  { kind: "square", label: "正方形" },
+  { kind: "heart", label: "心形" },
+  { kind: "triangle", label: "三角形" },
+];
 
 type DeleteTarget =
   | { kind: "topic"; topic: CatalogTopic }
@@ -201,7 +208,7 @@ function App() {
           {editingPolygon && selected && level ? (
             <PolygonEditor
               target={selected}
-              title={`${names.topic?.name || ""} / ${names.group?.name || ""} / ${level.title}`}
+              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${level.title}`}
               level={level}
               onBack={async () => {
                 setEditingPolygon(false);
@@ -429,7 +436,8 @@ function TreePanel(props: {
     };
   }
 
-  function remapResPath(value: string, fromPrefix: string, toPrefix: string) {
+  function remapResPath(value: string | undefined, fromPrefix: string, toPrefix: string) {
+    if (!value) return "";
     return value.startsWith(fromPrefix) ? value.replace(fromPrefix, toPrefix) : value;
   }
 
@@ -783,7 +791,7 @@ function TreePanel(props: {
                         editMode={editMode}
                         isDraggingTree={draggingId !== null}
                         expanded={expanded[topicKey]}
-                        name={topic.name}
+                        name={topic.name || topic.id}
                         color={topic.color}
                         cover={topic.cover}
                         icon={topic.icon}
@@ -827,7 +835,7 @@ function TreePanel(props: {
                                   editMode={editMode}
                                   isDraggingTree={draggingId !== null}
                                   expanded={expanded[groupKey]}
-                                  name={group.name}
+                                  name={group.name || group.id}
                                   color={group.color}
                                   handleProps={handleProps}
                                   onToggle={() => toggle(groupKey)}
@@ -905,9 +913,9 @@ function TreePanel(props: {
 }
 
 function deleteMessage(target: DeleteTarget) {
-  if (target.kind === "topic") return `删除主题「${target.topic.name}」？主题下的分组和关卡也会从结构中移除。`;
-  if (target.kind === "group") return `删除分组「${target.group.name}」？该分组下的关卡也会从结构中移除。`;
-  return `删除关卡「${target.level.title}」？`;
+  if (target.kind === "topic") return `删除主题「${target.topic.name || target.topic.id}」？主题下的分组和关卡也会从结构中移除。`;
+  if (target.kind === "group") return `删除分组「${target.group.name || target.group.id}」？该分组下的关卡也会从结构中移除。`;
+  return `删除关卡「${target.level.title || target.level.id}」？`;
 }
 
 function SortableTreeRow(props: {
@@ -951,6 +959,7 @@ function ColorField(props: {
 }) {
   const normalized = HEX_COLOR_RE.test(props.value) ? props.value.toUpperCase() : props.fallback;
   const [draft, setDraft] = React.useState(normalized);
+  const [open, setOpen] = React.useState(false);
 
   React.useEffect(() => {
     setDraft(normalized);
@@ -969,16 +978,13 @@ function ColorField(props: {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <input
-        className="h-6 w-8 cursor-pointer rounded border border-input bg-transparent p-0"
-        type="color"
-        value={normalized}
-        onChange={(event) => {
-          const next = event.target.value.toUpperCase();
-          setDraft(next);
-          props.onChange(next);
-        }}
+    <span className="relative inline-flex items-center gap-1.5">
+      <button
+        className="h-7 w-8 rounded-md border border-input shadow-sm"
+        style={{ backgroundColor: normalized }}
+        type="button"
+        aria-label="选择颜色"
+        onClick={() => setOpen((value) => !value)}
       />
       <Input
         className="h-7 w-24 font-mono text-[11px]"
@@ -993,6 +999,23 @@ function ColorField(props: {
           }
         }}
       />
+      {open && (
+        <div className="absolute left-0 top-9 z-50 rounded-lg border bg-popover p-3 shadow-lg">
+          <HexColorPicker
+            color={normalized}
+            onChange={(value) => {
+              const next = value.toUpperCase();
+              setDraft(next);
+              props.onChange(next);
+            }}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button size="sm" variant="outline" type="button" onClick={() => setOpen(false)}>
+              完成
+            </Button>
+          </div>
+        </div>
+      )}
     </span>
   );
 }
@@ -1149,7 +1172,7 @@ function LevelTreeRow(props: {
         </button>
       )}
       <Gamepad2 className="h-4 w-4 shrink-0 text-primary" />
-      <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title}</button>
+      <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
       {props.level.cover && <ImageIcon className="h-4 w-4 shrink-0 text-success" aria-label="已有封面" />}
       {props.status?.hasSource && <ImageUp className="h-4 w-4 shrink-0 text-success" aria-label="已有原图" />}
       {props.status?.hasPolygon && <Hexagon className="h-4 w-4 shrink-0 text-success" aria-label="已有多边形" />}
@@ -1286,6 +1309,13 @@ function StatusLine(props: { label: string; value: string }) {
   );
 }
 
+function shapeRequests(counts: Record<ShapeKind, number>): ShapeRequest[] {
+  return SHAPE_OPTIONS.map((option) => ({
+    kind: option.kind,
+    count: counts[option.kind] || 0,
+  })).filter((shape) => shape.count > 0);
+}
+
 function PolygonEditor(props: {
   target: SelectedLevel;
   title: string;
@@ -1297,6 +1327,17 @@ function PolygonEditor(props: {
   const [pieces, setPieces] = React.useState<LevelPiece[]>(() => level.modes.polygon?.pieces || []);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [targetCount, setTargetCount] = React.useState(Math.max(DEFAULT_POLYGON_TARGET_COUNT, level.modes.polygon?.pieces?.length || DEFAULT_POLYGON_TARGET_COUNT));
+  const [shapeCounts, setShapeCounts] = React.useState<Record<ShapeKind, number>>(() => {
+    const raw = level.modes.polygon?.generator;
+    const shapes = raw && typeof raw === "object" && "shapes" in raw && Array.isArray((raw as { shapes?: unknown }).shapes) ? (raw as { shapes: ShapeRequest[] }).shapes : [];
+    return SHAPE_OPTIONS.reduce(
+      (acc, option) => ({
+        ...acc,
+        [option.kind]: shapes.find((shape) => shape.kind === option.kind)?.count || 0,
+      }),
+      {} as Record<ShapeKind, number>,
+    );
+  });
   const [drag, setDrag] = React.useState<{ pieceId: string; pointIndex: number } | null>(null);
   const svgRef = React.useRef<SVGSVGElement | null>(null);
   const width = level.image.width || 1080;
@@ -1342,15 +1383,25 @@ function PolygonEditor(props: {
   }
 
   async function save() {
+    const shapes = shapeRequests(shapeCounts);
     await onSave({
       ...level,
       modes: {
         ...level.modes,
-        polygon: { pieces: withNeighbors(pieces), generator: { target_count: targetCount } },
+        polygon: { pieces: withNeighbors(pieces), generator: { target_count: targetCount, shapes } },
         knob: { auto: true, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE },
         swap: { auto: true, cols: DEFAULT_SWAP_COLS, rows: DEFAULT_SWAP_ROWS },
       },
     });
+  }
+
+  function updateShape(kind: ShapeKind, delta: number) {
+    setShapeCounts((current) => ({ ...current, [kind]: Math.max(0, Math.min(12, (current[kind] || 0) + delta)) }));
+  }
+
+  function generate() {
+    setPieces(generatePieces(width, height, targetCount, shapeRequests(shapeCounts)));
+    setSelectedIds([]);
   }
 
   return (
@@ -1365,7 +1416,7 @@ function PolygonEditor(props: {
             目标块数
             <Input className="h-8 w-20" type="number" value={targetCount} min={4} max={80} onChange={(event) => setTargetCount(Number(event.target.value))} />
           </label>
-          <Button variant="outline" onClick={() => { setPieces(generatePieces(width, height, targetCount)); setSelectedIds([]); }}>
+          <Button variant="outline" onClick={generate}>
             <Wand2 size={16} />生成
           </Button>
           <Button variant="outline" disabled={selectedIds.length !== 2} onClick={mergeSelected}>合并</Button>
@@ -1425,6 +1476,21 @@ function PolygonEditor(props: {
         <aside className="border-l border-border bg-card p-4 text-sm">
           <div className="mb-2 text-sm font-semibold text-foreground">编辑说明</div>
           <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Shift 可选择两个碎片后合并。选中碎片后拖动圆点微调轮廓。</p>
+          <div className="mb-4 border-y border-border py-3">
+            <div className="mb-2 text-sm font-semibold text-foreground">指定形状</div>
+            <div className="space-y-2">
+              {SHAPE_OPTIONS.map((option) => (
+                <div key={option.kind} className="flex items-center justify-between gap-2">
+                  <span>{option.label}</span>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, -1)}>-</Button>
+                    <span className="w-6 text-center tabular-nums">{shapeCounts[option.kind] || 0}</span>
+                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, 1)}>+</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           <StatusLine label="碎片数" value={String(pieces.length)} />
           <StatusLine label="已选择" value={String(selectedIds.length)} />
           <Button variant="outline" className="mt-4 w-full" onClick={() => setPieces([])}>

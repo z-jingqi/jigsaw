@@ -61,14 +61,13 @@ export function normalizeCatalog(input: unknown): LevelCatalog {
 
 function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
   const id = safeId(topic.id, paddedId("topic", index));
-  const name = String(topic.name || id);
   return {
     id,
-    name,
-    name_i18n: topic.name_i18n || zhI18n(name),
-    cover: String(topic.cover || ""),
-    color: String(topic.color || DEFAULT_TOPIC_COLOR),
-    icon: String(topic.icon || ""),
+    name: topic.name,
+    name_i18n: topic.name_i18n,
+    cover: topic.cover,
+    color: topic.color,
+    icon: topic.icon,
     sort_order: Number(topic.sort_order ?? index),
     groups: Array.isArray(topic.groups)
       ? topic.groups.map((group, groupIndex) => normalizeGroup(group, id, groupIndex)).sort((a, b) => a.sort_order - b.sort_order)
@@ -78,12 +77,11 @@ function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
 
 function normalizeGroup(group: CatalogGroup, topicId: string, index: number): CatalogGroup {
   const id = safeId(group.id, paddedId("group", index));
-  const name = String(group.name || id);
   return {
     id,
-    name,
-    name_i18n: group.name_i18n || zhI18n(name),
-    color: String(group.color || DEFAULT_GROUP_COLOR),
+    name: group.name,
+    name_i18n: group.name_i18n,
+    color: group.color,
     sort_order: Number(group.sort_order ?? index),
     levels: Array.isArray(group.levels)
       ? group.levels.map((level, levelIndex) => normalizeLevel(level, topicId, id, levelIndex)).sort((a, b) => a.sort_order - b.sort_order)
@@ -93,15 +91,14 @@ function normalizeGroup(group: CatalogGroup, topicId: string, index: number): Ca
 
 function normalizeLevel(level: CatalogLevel, topicId: string, groupId: string, index: number): CatalogLevel {
   const id = safeId(level.id, paddedId("level", index));
-  const title = String(level.title || id);
   return {
     id,
-    title,
-    title_i18n: level.title_i18n || zhI18n(title),
-    cover: String(level.cover || ""),
+    title: level.title,
+    title_i18n: level.title_i18n,
+    cover: level.cover,
     sort_order: Number(level.sort_order ?? index),
     path: String(level.path || levelResPath(topicId, groupId, id)),
-    source: String(level.source || sourceResPath(topicId, groupId, id)),
+    source: level.source,
   };
 }
 
@@ -131,7 +128,125 @@ export async function readCatalog() {
 }
 
 export async function writeCatalog(catalog: LevelCatalog) {
-  await writeJson(catalogPath, normalizeCatalog(catalog));
+  await writeJson(catalogPath, storedCatalog(catalog));
+}
+
+function storedCatalog(catalog: LevelCatalog): LevelCatalog {
+  const normalized = normalizeCatalog(catalog);
+  return {
+    ...normalized,
+    topics: normalized.topics.map((topic, topicIndex) => ({
+      id: topic.id,
+      name: topic.name,
+      name_i18n: topic.name_i18n,
+      cover: topic.cover,
+      color: topic.color,
+      icon: topic.icon,
+      sort_order: topicIndex,
+      groups: topic.groups.map((group, groupIndex) => ({
+        id: group.id,
+        name: group.name,
+        name_i18n: group.name_i18n,
+        color: group.color,
+        sort_order: groupIndex,
+        levels: group.levels.map((level, levelIndex) => ({
+          id: level.id,
+          sort_order: levelIndex,
+          path: level.path || levelResPath(topic.id, group.id, level.id),
+        })),
+      })),
+    })),
+  };
+}
+
+function catalogLevelRef(topicId: string, groupId: string, levelId: string, sortOrder: number): CatalogLevel {
+  return normalizeLevel(
+    {
+      id: levelId,
+      sort_order: sortOrder,
+      path: levelResPath(topicId, groupId, levelId),
+    },
+    topicId,
+    groupId,
+    sortOrder,
+  );
+}
+
+export async function hydrateCatalog(catalog: LevelCatalog): Promise<LevelCatalog> {
+  const normalized = normalizeCatalog(catalog);
+  const topics: CatalogTopic[] = [];
+  for (const topic of normalized.topics) {
+    const groups: CatalogGroup[] = [];
+    for (const group of topic.groups) {
+      const levels: CatalogLevel[] = [];
+      for (const level of group.levels) {
+        const config = await readLevel(topic.id, group.id, level.id, level.title || level.id);
+        levels.push({
+          ...level,
+          title: config.title,
+          title_i18n: config.title_i18n,
+          cover: config.cover,
+          source: config.image.path,
+        });
+      }
+      groups.push({
+        ...group,
+        name: group.name || group.id,
+        name_i18n: group.name_i18n || zhI18n(group.name || group.id),
+        color: group.color || DEFAULT_GROUP_COLOR,
+        levels,
+      });
+    }
+    topics.push({
+      ...topic,
+      name: topic.name || topic.id,
+      name_i18n: topic.name_i18n || zhI18n(topic.name || topic.id),
+      cover: topic.cover || "",
+      color: topic.color || DEFAULT_TOPIC_COLOR,
+      icon: topic.icon || "",
+      groups,
+    });
+  }
+  return { ...normalized, topics };
+}
+
+export async function upsertCatalogLevel(config: LevelConfig) {
+  const catalog = await readCatalog();
+  let topic = catalog.topics.find((item) => item.id === config.topic_id);
+  if (!topic) {
+    topic = normalizeTopic(
+      {
+        id: config.topic_id,
+        sort_order: catalog.topics.length,
+        groups: [],
+      },
+      catalog.topics.length,
+    );
+    catalog.topics.push(topic);
+  }
+
+  let group = topic.groups.find((item) => item.id === config.group_id);
+  if (!group) {
+    group = normalizeGroup(
+      {
+        id: config.group_id,
+        sort_order: topic.groups.length,
+        levels: [],
+      },
+      topic.id,
+      topic.groups.length,
+    );
+    topic.groups.push(group);
+  }
+
+  const existingIndex = group.levels.findIndex((item) => item.id === config.id);
+  const existing = existingIndex >= 0 ? group.levels[existingIndex] : null;
+  const nextLevel = catalogLevelRef(topic.id, group.id, config.id, existing?.sort_order ?? group.levels.length);
+
+  if (existingIndex >= 0) group.levels[existingIndex] = nextLevel;
+  else group.levels.push(nextLevel);
+
+  await writeCatalog(catalog);
 }
 
 type RenamePathPair = { fromPath: string; toPath: string };
@@ -204,6 +319,7 @@ export function defaultLevelConfig(topicId: string, groupId: string, levelId: st
     title_i18n: zhI18n(title),
     description,
     description_i18n: zhI18n(description),
+    cover: "",
     image: {
       path: sourceResPath(topicId, groupId, levelId),
       width: 0,
@@ -226,10 +342,9 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
 	const imageWidth = Number(raw.image?.width || 0);
 	const imageHeight = Number(raw.image?.height || 0);
 	const imageAspect = Number(raw.image?.aspect_ratio || (imageWidth && imageHeight ? imageWidth / imageHeight : 0.75));
-	return {
-    ...base,
-    ...raw,
-    version: 3,
+		return {
+	    ...base,
+	    version: 3,
     id: levelId,
     topic_id: topicId,
     group_id: groupId,
@@ -237,6 +352,7 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
     title_i18n: raw.title_i18n || zhI18n(String(raw.title || title)),
     description: String(raw.description || ""),
     description_i18n: raw.description_i18n || zhI18n(String(raw.description || "")),
+    cover: String(raw.cover || ""),
 		image: {
 			...base.image,
 			...(raw.image || {}),
@@ -279,7 +395,7 @@ export async function levelStatuses(catalog: LevelCatalog): Promise<LevelStatus[
   for (const topic of catalog.topics) {
     for (const group of topic.groups) {
       for (const level of group.levels) {
-        const config = await readLevel(topic.id, group.id, level.id, level.title);
+        const config = await readLevel(topic.id, group.id, level.id, level.title || level.id);
         const hasSource = await exists(sourceImagePath(topic.id, group.id, level.id));
         const pieceCount = config.modes.polygon?.pieces?.length || 0;
         statuses.push({ topicId: topic.id, groupId: group.id, levelId: level.id, hasSource, hasPolygon: pieceCount > 0, pieceCount });
