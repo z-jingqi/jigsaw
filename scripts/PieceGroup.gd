@@ -5,6 +5,13 @@ var node: Node2D
 var anchor_home := Vector2.ZERO
 var members: Array[Dictionary] = []
 var is_animating := false
+var locked := false
+var is_seed := false
+var in_tray := false
+var tray_index := -1
+var tray_scale := 1.0
+var tray_slot := Rect2()
+var tray_tween: Tween
 
 
 func _init(group_node: Node2D, piece: Dictionary) -> void:
@@ -29,10 +36,13 @@ func contains_piece(piece_id: String) -> bool:
 	return false
 
 
-func absorb(other: PieceGroup) -> void:
+func absorb(other: PieceGroup, visual_gap := 0.0) -> void:
 	for member in other.members:
 		other.node.remove_child(member["visual"])
 		node.add_child(member["visual"])
-		member["visual"].position = member["home"] - anchor_home
+		var offset: Vector2 = member["home"] - anchor_home
+		if visual_gap > 0.0 and offset.length() > 0.001:
+			offset += offset.normalized() * visual_gap
+		member["visual"].position = offset
 		members.append(member)
 	other.node.queue_free()

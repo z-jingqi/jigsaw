@@ -8,9 +8,9 @@
 	],
 	"image_presets": [
 		{
-			"id": "mobile_portrait_3x4",
-			"name": "Mobile portrait 3:4",
-			"aspect_ratio": 0.75,
+			"id": "mobile_landscape_4x3",
+			"name": "Mobile landscape 4:3",
+			"aspect_ratio": 1.3333333333333333,
 			"default": true
 		}
 	],
@@ -38,13 +38,7 @@
 					},
 					"color": "#F6EBD4",
 					"sort_order": 0,
-					"levels": [
-						{
-							"id": "level_01",
-							"sort_order": 0,
-							"path": "res://levels/topic_01/group_01/level_01/level.json"
-						}
-					]
+					"levels": []
 				},
 				{
 					"id": "group_02",

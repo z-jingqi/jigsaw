@@ -1,6 +1,6 @@
 # JigCat Level Editor
 
-新的关卡编辑器只负责管理关卡与编辑 polygon 模式。图片需要在外部处理完成后上传为 JPG 3:4。
+新的关卡编辑器只负责管理关卡与编辑 polygon 模式。图片需要在外部处理完成后上传为 JPG 4:3。
 
 ## 启动
 
@@ -20,6 +20,6 @@ pnpm dev
 - 关卡配置包含列表封面，支持 JPG / PNG / WebP。
 - 每个关卡只有一张 `source.jpg`。
 - editor 只写入 `modes.polygon.pieces`。
-- `knob` 默认自动配置为 `6x8`。
+- `knob` 默认自动配置为 `8x6`。
 - `polygon` 默认目标块数为 `36`。
-- `swap` 默认自动配置为 `5x7`。
+- `swap` 默认自动配置为 `7x5`。

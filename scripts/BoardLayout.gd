@@ -1,7 +1,7 @@
 extends RefCounted
 class_name BoardLayout
 
-const DEFAULT_BOARD_MARGIN_RATIO := 0.76
+const DEFAULT_BOARD_MARGIN_RATIO := 0.70
 const DEFAULT_HUD_HEIGHT_RATIO := 0.0
 const DEFAULT_SIDE_MARGIN_RATIO := 0.0
 const DEFAULT_BOTTOM_MARGIN_RATIO := 0.0
@@ -56,13 +56,13 @@ static func board_margin_ratio_for_layout(
 	piece_count: int,
 ) -> float:
 	var configured_ratio := float(layout_config["board_margin_ratio"])
-	var adaptive_ratio := 0.76
+	var adaptive_ratio := 0.70
 	if viewport_width < 430.0:
 		adaptive_ratio = 0.70
 	elif viewport_width < 700.0:
-		adaptive_ratio = 0.76
+		adaptive_ratio = 0.70
 	else:
-		adaptive_ratio = 0.84
+		adaptive_ratio = 0.70
 	if source_size.x > 0.0 and source_size.y > 0.0:
 		var source_aspect := source_size.x / source_size.y
 		var play_aspect := play_area.size.x / play_area.size.y

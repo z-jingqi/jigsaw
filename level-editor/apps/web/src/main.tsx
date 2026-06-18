@@ -18,14 +18,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronRight, Edit3, Eye, FolderPlus, Gamepad2, GripVertical, Hexagon, ImageIcon, ImageUp, Pencil, Plus, Save, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Edit3, Eye, FolderPlus, Gamepad2, GripVertical, Hexagon, ImageIcon, ImageUp, Pencil, Plus, Redo2, Save, Sparkles, Trash2, Undo2, Wand2 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
+import Cropper, { type Area } from "react-easy-crop";
 import { toast } from "sonner";
 import { assetUrl, loadCatalog, loadLevel, saveCatalog, saveLevel, sourceUrl, uploadLevelCover, uploadSource, uploadTopicAsset } from "./api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Toaster } from "./components/ui/sonner";
-import { Textarea } from "./components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,24 +36,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./components/ui/dialog";
 import { generatePieces, mergePieces, sequentialId, withNeighbors, zhI18n, type ShapeKind, type ShapeRequest } from "./geometry";
 import { cn } from "./lib/utils";
-import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelPiece, LevelStatus, Point, SelectedLevel } from "./types";
+import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelPiece, LevelStatus, Point, SeedAssist, SelectedLevel } from "./types";
 import "./styles.css";
+import "react-easy-crop/react-easy-crop.css";
 
 const emptyCatalog: LevelCatalog = {
   version: 3,
   default_locale: "en",
   locales: ["en", "zh", "ja"],
-  image_presets: [{ id: "mobile_portrait_3x4", name: "Mobile portrait 3:4", aspect_ratio: 0.75, default: true }],
+  image_presets: [{ id: "mobile_landscape_4x3", name: "Mobile landscape 4:3", aspect_ratio: 4 / 3, default: true }],
   topics: [],
 };
 const DEFAULT_POLYGON_TARGET_COUNT = 36;
-const DEFAULT_KNOB_COLS = 6;
-const DEFAULT_KNOB_ROWS = 8;
+const DEFAULT_KNOB_COLS = 8;
+const DEFAULT_KNOB_ROWS = 6;
 const DEFAULT_KNOB_SIZE = 0.24;
-const DEFAULT_SWAP_COLS = 5;
-const DEFAULT_SWAP_ROWS = 7;
+const DEFAULT_SWAP_COLS = 7;
+const DEFAULT_SWAP_ROWS = 5;
+const DEFAULT_POLYGON_SEED_COUNT = 1;
+const DEFAULT_KNOB_SEED_COUNT = 1;
 const DEFAULT_TOPIC_COLOR = "#D9933F";
 const DEFAULT_GROUP_COLOR = "#F6EBD4";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -62,22 +73,76 @@ const SHAPE_OPTIONS: Array<{ kind: ShapeKind; label: string }> = [
   { kind: "square", label: "正方形" },
   { kind: "heart", label: "心形" },
   { kind: "triangle", label: "三角形" },
+  { kind: "star", label: "五角星" },
+  { kind: "sector", label: "扇形" },
+  { kind: "crescent", label: "月牙" },
+  { kind: "hexagon", label: "六边形" },
+  { kind: "blob", label: "不规则块" },
+  { kind: "shard", label: "碎片块" },
 ];
 
 type DeleteTarget =
   | { kind: "topic"; topic: CatalogTopic }
   | { kind: "group"; topic: CatalogTopic; group: CatalogGroup }
   | { kind: "level"; topic: CatalogTopic; group: CatalogGroup; level: CatalogLevel };
+type TreeSelection =
+  | { kind: "topic"; topicId: string }
+  | { kind: "group"; topicId: string; groupId: string }
+  | { kind: "level"; topicId: string; groupId: string; levelId: string };
+
+function defaultAssist(count: number): SeedAssist {
+  return {
+    outline: true,
+    seed: {
+      mode: "auto",
+      count,
+      piece_ids: [],
+    },
+  };
+}
+
+function normalizeAssist(input: SeedAssist | undefined, defaultCount: number, validIds?: Set<string>): SeedAssist {
+  const mode = input?.seed.mode === "manual" ? "manual" : "auto";
+  const count = Math.max(0, Math.floor(Number(input?.seed.count ?? defaultCount) || defaultCount));
+  const pieceIds = Array.isArray(input?.seed.piece_ids)
+    ? input.seed.piece_ids.filter((id) => !validIds || validIds.has(id))
+    : [];
+  return {
+    outline: input?.outline !== false,
+    seed: {
+      mode,
+      count,
+      piece_ids: mode === "manual" ? pieceIds : [],
+    },
+  };
+}
+
+function knobSeedIds(cols: number, rows: number) {
+  const ids = new Set<string>();
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) ids.add(`knob_${row}_${col}`);
+  }
+  return ids;
+}
+
+function filterAssistPieceIds(assist: SeedAssist, validIds: Set<string>) {
+  return normalizeAssist(assist, assist.seed.count, validIds);
+}
 
 function App() {
   const [catalog, setCatalog] = React.useState<LevelCatalog>(emptyCatalog);
   const [statuses, setStatuses] = React.useState<LevelStatus[]>([]);
-  const [selected, setSelected] = React.useState<SelectedLevel | null>(null);
+  const [selected, setSelected] = React.useState<TreeSelection | null>(null);
   const [level, setLevel] = React.useState<LevelConfig | null>(null);
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const [editingPolygon, setEditingPolygon] = React.useState(false);
+  const [editingKnob, setEditingKnob] = React.useState(false);
   const [editMode, setEditMode] = React.useState(false);
   const [renames, setRenames] = React.useState<CatalogRenameOperation[]>([]);
+  const [catalogPast, setCatalogPast] = React.useState<LevelCatalog[]>([]);
+  const [catalogFuture, setCatalogFuture] = React.useState<LevelCatalog[]>([]);
+  const [levelPast, setLevelPast] = React.useState<LevelConfig[]>([]);
+  const [levelFuture, setLevelFuture] = React.useState<LevelConfig[]>([]);
   const skipNextLevelLoad = React.useRef(false);
 
   React.useEffect(() => {
@@ -85,7 +150,7 @@ function App() {
   }, []);
 
   React.useEffect(() => {
-    if (!selected) {
+    if (!selected || selected.kind !== "level") {
       setLevel(null);
       return;
     }
@@ -132,20 +197,82 @@ function App() {
 
   function selectedNames() {
     const topic = catalog.topics.find((item) => item.id === selected?.topicId);
-    const group = topic?.groups.find((item) => item.id === selected?.groupId);
-    const levelItem = group?.levels.find((item) => item.id === selected?.levelId);
+    const group = selected && selected.kind !== "topic" ? topic?.groups.find((item) => item.id === selected.groupId) : undefined;
+    const levelItem = selected?.kind === "level" ? group?.levels.find((item) => item.id === selected.levelId) : undefined;
     return { topic, group, levelItem };
   }
 
   const names = selectedNames();
 
-  function updateSelected(next: SelectedLevel | null) {
+  function commitCatalog(next: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) {
+    setCatalog((current) => {
+      const value = typeof next === "function" ? next(current) : next;
+      setCatalogPast((history) => [...history.slice(-39), current]);
+      setCatalogFuture([]);
+      return value;
+    });
+  }
+
+  function commitLevel(next: LevelConfig | ((current: LevelConfig) => LevelConfig)) {
+    setLevel((current) => {
+      if (!current) return current;
+      const value = typeof next === "function" ? next(current) : next;
+      setLevelPast((history) => [...history.slice(-39), current]);
+      setLevelFuture([]);
+      return value;
+    });
+  }
+
+  function undoCatalog() {
+    setCatalogPast((history) => {
+      if (!history.length) return history;
+      const previous = history[history.length - 1];
+      setCatalogFuture((future) => [catalog, ...future].slice(0, 40));
+      setCatalog(previous);
+      return history.slice(0, -1);
+    });
+  }
+
+  function redoCatalog() {
+    setCatalogFuture((future) => {
+      if (!future.length) return future;
+      const next = future[0];
+      setCatalogPast((history) => [...history.slice(-39), catalog]);
+      setCatalog(next);
+      return future.slice(1);
+    });
+  }
+
+  function undoLevel() {
+    if (!level) return;
+    setLevelPast((history) => {
+      if (!history.length) return history;
+      const previous = history[history.length - 1];
+      setLevelFuture((future) => [level, ...future].slice(0, 40));
+      setLevel(previous);
+      return history.slice(0, -1);
+    });
+  }
+
+  function redoLevel() {
+    setLevelFuture((future) => {
+      if (!future.length) return future;
+      const next = future[0];
+      setLevelPast((history) => (level ? [...history.slice(-39), level] : history));
+      setLevel(next);
+      return future.slice(1);
+    });
+  }
+
+  function updateSelected(next: TreeSelection | null) {
     setSelected(next);
+    setLevelPast([]);
+    setLevelFuture([]);
   }
 
   function updateSelectedAfterIdRename(next: SelectedLevel) {
     skipNextLevelLoad.current = true;
-    setSelected(next);
+    setSelected({ kind: "level", ...next });
     setLevel((current) =>
       current
         ? {
@@ -190,13 +317,13 @@ function App() {
             onExpanded={setExpanded}
             onSelect={updateSelected}
             onClearSelection={() => setSelected(null)}
-            onChange={setCatalog}
+            onChange={commitCatalog}
             onEditMode={setEditMode}
             onRename={recordRename}
             onRenameSelection={updateSelectedAfterIdRename}
             onTopicAsset={async (topicId, asset, file) => {
               const result = await uploadTopicAsset(topicId, asset, file);
-              setCatalog((current) => ({
+              commitCatalog((current) => ({
                 ...current,
                 topics: current.topics.map((topic) => (topic.id === topicId ? { ...topic, [asset]: result.path } : topic)),
               }));
@@ -205,7 +332,7 @@ function App() {
           />
         </aside>
         <section className="min-w-0 overflow-hidden">
-          {editingPolygon && selected && level ? (
+          {editingPolygon && selected?.kind === "level" && level ? (
             <PolygonEditor
               target={selected}
               title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${level.title}`}
@@ -223,15 +350,37 @@ function App() {
                 await refresh();
               }}
             />
-          ) : selected && level ? (
+          ) : editingKnob && selected?.kind === "level" && level ? (
+            <KnobEditor
+              target={selected}
+              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${level.title}`}
+              level={level}
+              onBack={async () => {
+                setEditingKnob(false);
+                const fresh = await loadLevel(selected);
+                setLevel(fresh);
+                await refresh();
+              }}
+              onSave={async (next) => {
+                const saved = await saveLevel(next);
+                setLevel(saved);
+                toast.success("已保存凹凸 Seed");
+                await refresh();
+              }}
+            />
+          ) : selected?.kind === "level" && level ? (
             <LevelDetails
               catalog={catalog}
               target={selected}
               level={level}
               status={statusFor(selected)}
               editMode={editMode}
-              onLevel={setLevel}
-              onCatalog={setCatalog}
+              onLevel={commitLevel}
+              onCatalog={commitCatalog}
+              onUndo={undoLevel}
+              onRedo={redoLevel}
+              canUndo={levelPast.length > 0}
+              canRedo={levelFuture.length > 0}
               onUpload={async (file) => {
                 try {
                   const saved = await uploadSource(selected, file);
@@ -245,7 +394,8 @@ function App() {
               onUploadCover={async (file) => {
                 try {
                   const result = await uploadLevelCover(selected, file);
-                  setCatalog((current) => ({
+                  commitLevel((current) => ({ ...current, cover: result.path }));
+                  commitCatalog((current) => ({
                     ...current,
                     topics: current.topics.map((topic) =>
                       topic.id === selected.topicId
@@ -276,9 +426,41 @@ function App() {
                 }
               }}
               onEditPolygon={() => setEditingPolygon(true)}
+              onEditKnob={() => setEditingKnob(true)}
+            />
+          ) : selected?.kind === "topic" && names.topic ? (
+            <TopicDetails
+              topic={names.topic}
+              catalog={catalog}
+              editMode={editMode}
+              onCatalog={commitCatalog}
+              onUndo={undoCatalog}
+              onRedo={redoCatalog}
+              canUndo={catalogPast.length > 0}
+              canRedo={catalogFuture.length > 0}
+              onUploadAsset={async (asset, file) => {
+                const result = await uploadTopicAsset(selected.topicId, asset, file);
+                commitCatalog((current) => ({
+                  ...current,
+                  topics: current.topics.map((topic) => (topic.id === selected.topicId ? { ...topic, [asset]: result.path } : topic)),
+                }));
+                toast.success(asset === "cover" ? "主题封面已上传" : "主题 icon 已上传");
+              }}
+            />
+          ) : selected?.kind === "group" && names.topic && names.group ? (
+            <GroupDetails
+              topic={names.topic}
+              group={names.group}
+              catalog={catalog}
+              editMode={editMode}
+              onCatalog={commitCatalog}
+              onUndo={undoCatalog}
+              onRedo={redoCatalog}
+              canUndo={catalogPast.length > 0}
+              canRedo={catalogFuture.length > 0}
             />
           ) : (
-            <div className="grid h-full place-items-center text-muted-foreground">从左侧创建或选择一个关卡。</div>
+            <div className="grid h-full place-items-center text-muted-foreground">从左侧创建或选择主题、分组或关卡。</div>
           )}
         </section>
       </div>
@@ -393,12 +575,12 @@ function TreePanel(props: {
   catalog: LevelCatalog;
   statuses: LevelStatus[];
   expanded: Record<string, boolean>;
-  selected: SelectedLevel | null;
+  selected: TreeSelection | null;
   editMode: boolean;
   onExpanded: (value: Record<string, boolean>) => void;
-  onSelect: (value: SelectedLevel) => void;
+  onSelect: (value: TreeSelection) => void;
   onClearSelection: () => void;
-  onChange: (value: LevelCatalog) => void;
+  onChange: (value: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) => void;
   onEditMode: (value: boolean) => void;
   onRename: (operation: CatalogRenameOperation | CatalogRenameOperation[]) => void;
   onRenameSelection: (value: SelectedLevel) => void;
@@ -425,6 +607,7 @@ function TreePanel(props: {
     const id = sequentialId("topic", catalog.topics.map((topic) => topic.id));
     onChange({ ...catalog, topics: [...catalog.topics, { id, name, name_i18n: zhI18n(name), cover: "", color: DEFAULT_TOPIC_COLOR, icon: "", sort_order: catalog.topics.length, groups: [] }] });
     onExpanded({ ...expanded, [`topic:${id}`]: true });
+    onSelect({ kind: "topic", topicId: id });
     toast.success("已添加主题");
   }
 
@@ -533,6 +716,7 @@ function TreePanel(props: {
 
   function selectionWithMaps(maps: { topic?: Map<string, string>; group?: Map<string, string>; level?: Map<string, string> }) {
     if (!selected) return null;
+    if (selected.kind !== "level") return null;
     return {
       topicId: maps.topic?.get(selected.topicId) || selected.topicId,
       groupId: maps.group?.get(selected.groupId) || selected.groupId,
@@ -541,7 +725,7 @@ function TreePanel(props: {
   }
 
   function applyRenumberedSelection(next: SelectedLevel | null) {
-    if (next && selected && (next.topicId !== selected.topicId || next.groupId !== selected.groupId || next.levelId !== selected.levelId)) {
+    if (next && selected?.kind === "level" && (next.topicId !== selected.topicId || next.groupId !== selected.groupId || next.levelId !== selected.levelId)) {
       onRenameSelection(next);
     }
   }
@@ -556,6 +740,7 @@ function TreePanel(props: {
       ),
     });
     onExpanded({ ...expanded, [`topic:${topic.id}`]: true, [`group:${topic.id}:${id}`]: true });
+    onSelect({ kind: "group", topicId: topic.id, groupId: id });
     toast.success("已添加分组");
   }
 
@@ -580,7 +765,7 @@ function TreePanel(props: {
       ),
     });
     onExpanded({ ...expanded, [`topic:${topic.id}`]: true, [`group:${topic.id}:${group.id}`]: true });
-    onSelect({ topicId: topic.id, groupId: group.id, levelId: id });
+    onSelect({ kind: "level", topicId: topic.id, groupId: group.id, levelId: id });
     toast.success("已添加关卡");
   }
 
@@ -642,7 +827,7 @@ function TreePanel(props: {
       });
       onExpanded(remapExpandedKeys(expanded, { group: { topicId: target.topic.id, ids: deletedGroupIdMap } }));
       onRename(deletedGroupRenames);
-      if (selected?.topicId === target.topic.id && selected.groupId === target.group.id) {
+      if (selected?.kind !== "topic" && selected?.topicId === target.topic.id && selected.groupId === target.group.id) {
         onClearSelection();
       } else {
         applyRenumberedSelection(deletedGroupSelection);
@@ -669,7 +854,7 @@ function TreePanel(props: {
       ),
     });
     onRename(deletedLevelRenames);
-    if (selected?.topicId === target.topic.id && selected.groupId === target.group.id && selected.levelId === target.level.id) {
+    if (selected?.kind === "level" && selected.topicId === target.topic.id && selected.groupId === target.group.id && selected.levelId === target.level.id) {
       onClearSelection();
     } else {
       applyRenumberedSelection(deletedLevelSelection);
@@ -797,6 +982,7 @@ function TreePanel(props: {
                         icon={topic.icon}
                         strong
                         handleProps={handleProps}
+                        onSelect={() => onSelect({ kind: "topic", topicId: topic.id })}
                         onToggle={() => toggle(topicKey)}
                         onName={(name) => renameTopic(topic, name)}
                         onColor={(color) => updateTopicColor(topic, color)}
@@ -838,6 +1024,7 @@ function TreePanel(props: {
                                   name={group.name || group.id}
                                   color={group.color}
                                   handleProps={handleProps}
+                                  onSelect={() => onSelect({ kind: "group", topicId: topic.id, groupId: group.id })}
                                   onToggle={() => toggle(groupKey)}
                                   onName={(name) => renameGroup(topic, group, name)}
                                   onColor={(color) => updateGroupColor(topic, group, color)}
@@ -852,7 +1039,7 @@ function TreePanel(props: {
                                 {group.levels.map((level) => {
                                   const target = { topicId: topic.id, groupId: group.id, levelId: level.id };
                                   const status = statuses.find((item) => item.topicId === topic.id && item.groupId === group.id && item.levelId === level.id);
-                                  const active = selected?.topicId === topic.id && selected.groupId === group.id && selected.levelId === level.id;
+                                  const active = selected?.kind === "level" && selected.topicId === topic.id && selected.groupId === group.id && selected.levelId === level.id;
                                   return (
                                     <SortableLevelRow key={level.id} id={`level:${topic.id}:${group.id}:${level.id}`} editMode={editMode}>
                                       {({ handleProps }) => (
@@ -863,7 +1050,7 @@ function TreePanel(props: {
                                           status={status}
                                           isDraggingTree={draggingId !== null}
                                           handleProps={handleProps}
-                                          onSelect={() => onSelect(target)}
+                                          onSelect={() => onSelect({ kind: "level", ...target })}
                                           onDelete={() => setDeleteTarget({ kind: "level", topic, group, level })}
                                         />
                                       )}
@@ -955,6 +1142,7 @@ function SortableLevelRow(props: {
 function ColorField(props: {
   value: string;
   fallback: string;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   const normalized = HEX_COLOR_RE.test(props.value) ? props.value.toUpperCase() : props.fallback;
@@ -966,6 +1154,7 @@ function ColorField(props: {
   }, [normalized]);
 
   function commit(value: string) {
+    if (props.disabled) return;
     const next = value.trim();
     const withPrefix = next.startsWith("#") ? next : `#${next}`;
     if (HEX_COLOR_RE.test(withPrefix)) {
@@ -980,15 +1169,17 @@ function ColorField(props: {
   return (
     <span className="relative inline-flex items-center gap-1.5">
       <button
-        className="h-7 w-8 rounded-md border border-input shadow-sm"
+        className={cn("h-7 w-8 rounded-md border border-input shadow-sm", props.disabled && "cursor-not-allowed opacity-70")}
         style={{ backgroundColor: normalized }}
         type="button"
         aria-label="选择颜色"
-        onClick={() => setOpen((value) => !value)}
+        disabled={props.disabled}
+        onClick={() => !props.disabled && setOpen((value) => !value)}
       />
       <Input
         className="h-7 w-24 font-mono text-[11px]"
         value={draft}
+        disabled={props.disabled}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => commit(draft)}
         onKeyDown={(event) => {
@@ -1032,6 +1223,7 @@ function TreeRow(props: {
   strong?: boolean;
   handleProps: Record<string, unknown>;
   addTitle: string;
+  onSelect: () => void;
   onToggle: () => void;
   onName: (name: string) => void;
   onColor?: (color: string) => void;
@@ -1042,12 +1234,12 @@ function TreeRow(props: {
   onAdd: () => void;
   onDelete: () => void;
 }) {
+  const indent = props.depth * 20;
   if (props.editMode) {
-    const hasMetaControls = Boolean(props.onColor || props.onCoverUpload || props.onIconUpload);
     return (
       <div
-        className={cn("min-h-16 rounded-md px-1 py-1.5", !props.isDraggingTree && "hover:bg-accent")}
-        style={{ paddingLeft: `${props.depth * 18 + 4}px` }}
+        className={cn("min-h-10 rounded-md px-1 py-1.5", !props.isDraggingTree && "hover:bg-accent")}
+        style={{ paddingLeft: `${indent + 4}px` }}
       >
         <div className="flex min-w-0 items-center gap-1">
           <button className="grid h-7 w-6 shrink-0 cursor-grab place-items-center text-muted-foreground active:cursor-grabbing" {...props.handleProps} title="拖拽排序">
@@ -1056,11 +1248,10 @@ function TreeRow(props: {
           <button className="grid h-7 w-7 shrink-0 place-items-center text-muted-foreground" onClick={props.onToggle}>
             {props.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
-          <Input
-            className={cn("h-8 min-w-0 flex-1 border-transparent bg-transparent px-2 shadow-none focus-visible:bg-background", props.strong && "font-medium")}
-            value={props.name}
-            onChange={(event) => props.onName(event.target.value)}
-          />
+          <TreeMarker color={props.color} icon={props.strong ? props.icon : undefined} strong={props.strong} />
+          <button className={cn("h-8 min-w-0 flex-1 truncate px-2 text-left", props.strong && "font-medium")} onClick={props.onSelect}>
+            {props.name}
+          </button>
           <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={props.onAdd} title={props.addTitle}>
             <Plus size={14} />
           </Button>
@@ -1068,59 +1259,35 @@ function TreeRow(props: {
             <Trash2 size={14} />
           </Button>
         </div>
-        {hasMetaControls && (
-          <div className="mt-2 flex items-center gap-3 pl-[64px] text-xs text-muted-foreground">
-            {props.onColor && (
-              <label className="inline-flex items-center gap-1.5" title="颜色">
-                <span>颜色</span>
-                <ColorField
-                  value={props.color || ""}
-                  fallback={props.strong ? DEFAULT_TOPIC_COLOR : DEFAULT_GROUP_COLOR}
-                  onChange={props.onColor}
-                />
-              </label>
-            )}
-            {props.onCoverUpload && (
-              <span className="inline-flex items-center gap-1.5">
-                <AssetUploadButton
-                  title={props.cover ? "替换主题封面" : "上传主题封面"}
-                  accept="image/jpeg,image/png,image/webp"
-                  active={Boolean(props.cover)}
-                  onUpload={props.onCoverUpload}
-                >
-                  <ImageIcon size={14} />
-                </AssetUploadButton>
-                <span>封面</span>
-              </span>
-            )}
-            {props.onIconUpload && (
-              <span className="inline-flex items-center gap-1.5">
-                <AssetUploadButton
-                  title={props.icon ? "替换主题 icon" : "上传主题 icon"}
-                  accept="image/svg+xml,image/png"
-                  active={Boolean(props.icon)}
-                  onUpload={props.onIconUpload}
-                >
-                  <Sparkles size={14} />
-                </AssetUploadButton>
-                <span>Icon</span>
-              </span>
-            )}
-          </div>
-        )}
       </div>
     );
   }
 
   return (
-    <div className={cn("flex min-h-10 items-center gap-1 rounded-md px-1", !props.isDraggingTree && "hover:bg-accent")} style={{ paddingLeft: `${props.depth * 18 + 4}px` }}>
+    <div className={cn("flex min-h-10 items-center gap-1 rounded-md px-1", !props.isDraggingTree && "hover:bg-accent")} style={{ paddingLeft: `${indent + 4}px` }}>
       <button className="grid h-7 w-7 place-items-center text-muted-foreground" onClick={props.onToggle}>
         {props.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
       </button>
-      {props.strong && props.icon && <img className="h-5 w-5 shrink-0 object-contain" src={assetUrl(props.icon)} alt="" />}
-      {props.color && <span className="h-3 w-3 shrink-0 rounded-full border border-border" style={{ backgroundColor: props.color }} />}
-      <span className={cn("min-w-0 flex-1 truncate px-2", props.strong && "font-medium")}>{props.name}</span>
+      <TreeMarker color={props.color} icon={props.strong ? props.icon : undefined} strong={props.strong} />
+      <button className={cn("min-w-0 flex-1 truncate px-2 text-left", props.strong && "font-medium")} onClick={props.onSelect}>
+        {props.name}
+      </button>
     </div>
+  );
+}
+
+function TreeMarker(props: { color?: string; icon?: string; strong?: boolean }) {
+  const color = props.color || (props.strong ? DEFAULT_TOPIC_COLOR : DEFAULT_GROUP_COLOR);
+  return (
+    <span
+      className={cn(
+        "grid h-6 w-6 shrink-0 place-items-center border border-border/70",
+        props.strong ? "rounded-md" : "rounded-sm",
+      )}
+      style={{ backgroundColor: color }}
+    >
+      {props.icon && <img className="h-4 w-4 object-contain" src={assetUrl(props.icon)} alt="" />}
+    </span>
   );
 }
 
@@ -1164,16 +1331,40 @@ function LevelTreeRow(props: {
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  const [previewOpen, setPreviewOpen] = React.useState(false);
   return (
-    <div className={cn("ml-8 flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground", !props.isDraggingTree && "hover:bg-accent hover:text-foreground", props.active && "bg-accent text-foreground")}>
+    <div className={cn("flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground", !props.isDraggingTree && "hover:bg-accent hover:text-foreground", props.active && "bg-accent text-foreground")} style={{ paddingLeft: "58px" }}>
       {props.editMode && (
         <button className="grid h-7 w-5 cursor-grab place-items-center text-muted-foreground active:cursor-grabbing" {...props.handleProps} title="拖拽排序">
           <GripVertical size={14} />
         </button>
       )}
-      <Gamepad2 className="h-4 w-4 shrink-0 text-primary" />
+      {!props.editMode && <span className="h-7 w-5 shrink-0" />}
+      {props.level.cover ? (
+        <>
+          <button className="grid shrink-0 gap-0.5" type="button" onClick={() => setPreviewOpen(true)}>
+            <img className="h-6 w-6 rounded-full object-cover" src={assetUrl(props.level.cover)} alt="" />
+            <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
+          </button>
+          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>{props.level.title || props.level.id}</DialogTitle>
+                <DialogDescription>关卡封面预览</DialogDescription>
+              </DialogHeader>
+              <img className="mx-auto h-52 w-52 rounded-lg object-cover" src={assetUrl(props.level.cover)} alt="" />
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : (
+        <span className="grid shrink-0 gap-0.5">
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary">
+            <Gamepad2 className="h-3.5 w-3.5 text-primary" />
+          </span>
+          <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
+        </span>
+      )}
       <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
-      {props.level.cover && <ImageIcon className="h-4 w-4 shrink-0 text-success" aria-label="已有封面" />}
       {props.status?.hasSource && <ImageUp className="h-4 w-4 shrink-0 text-success" aria-label="已有原图" />}
       {props.status?.hasPolygon && <Hexagon className="h-4 w-4 shrink-0 text-success" aria-label="已有多边形" />}
       {props.editMode && (
@@ -1185,23 +1376,264 @@ function LevelTreeRow(props: {
   );
 }
 
+function EditorActions(props: { editMode: boolean; canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void; onSave?: () => void }) {
+  if (!props.editMode) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" disabled={!props.canUndo} onClick={props.onUndo}>
+        <Undo2 size={16} />撤销
+      </Button>
+      <Button variant="outline" disabled={!props.canRedo} onClick={props.onRedo}>
+        <Redo2 size={16} />重做
+      </Button>
+      {props.onSave && (
+        <Button onClick={props.onSave}>
+          <Save size={16} />保存
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function TopicDetails(props: {
+  topic: CatalogTopic;
+  catalog: LevelCatalog;
+  editMode: boolean;
+  onCatalog: (catalog: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUploadAsset: (asset: "cover" | "icon", file: File) => Promise<void>;
+}) {
+  function updateTopic(partial: Partial<CatalogTopic>) {
+    props.onCatalog((catalog) => ({
+      ...catalog,
+      topics: catalog.topics.map((topic) => (topic.id === props.topic.id ? { ...topic, ...partial } : topic)),
+    }));
+  }
+
+  return (
+    <div className="h-full overflow-auto p-6">
+      <div className="mb-5 flex items-center justify-between border-b border-border pb-3">
+        <div>
+          <h1 className="text-2xl font-semibold">主题</h1>
+          <p className="text-sm text-muted-foreground">{props.editMode ? "编辑主题名称、颜色、封面和 icon。" : "主题预览"}</p>
+        </div>
+        <EditorActions editMode={props.editMode} canUndo={props.canUndo} canRedo={props.canRedo} onUndo={props.onUndo} onRedo={props.onRedo} />
+      </div>
+      <div className="grid grid-cols-[1fr_320px] gap-8">
+        <div className="space-y-4">
+          <label className="block text-sm font-medium">
+            主题名称
+            <Input className="mt-1" value={props.topic.name || ""} disabled={!props.editMode} onChange={(event) => updateTopic({ name: event.target.value, name_i18n: zhI18n(event.target.value) })} />
+          </label>
+          <label className="block text-sm font-medium">
+            主题色
+            <div className="mt-1">
+              <ColorField value={props.topic.color || DEFAULT_TOPIC_COLOR} fallback={DEFAULT_TOPIC_COLOR} onChange={(color) => updateTopic({ color })} />
+            </div>
+          </label>
+        </div>
+        <div className="space-y-4">
+          <AssetPreview title="主题封面" path={props.topic.cover} />
+          {props.editMode && (
+            <AssetUploadButton title="上传主题封面" accept="image/jpeg,image/png,image/webp" active={Boolean(props.topic.cover)} onUpload={(file) => props.onUploadAsset("cover", file)}>
+              <ImageUp size={16} />
+            </AssetUploadButton>
+          )}
+          <AssetPreview title="主题 Icon" path={props.topic.icon} small />
+          {props.editMode && (
+            <AssetUploadButton title="上传主题 icon" accept="image/svg+xml,image/png" active={Boolean(props.topic.icon)} onUpload={(file) => props.onUploadAsset("icon", file)}>
+              <Sparkles size={16} />
+            </AssetUploadButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupDetails(props: {
+  topic: CatalogTopic;
+  group: CatalogGroup;
+  catalog: LevelCatalog;
+  editMode: boolean;
+  onCatalog: (catalog: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+}) {
+  function updateGroup(partial: Partial<CatalogGroup>) {
+    props.onCatalog((catalog) => ({
+      ...catalog,
+      topics: catalog.topics.map((topic) =>
+        topic.id === props.topic.id
+          ? { ...topic, groups: topic.groups.map((group) => (group.id === props.group.id ? { ...group, ...partial } : group)) }
+          : topic,
+      ),
+    }));
+  }
+
+  return (
+    <div className="h-full overflow-auto p-6">
+      <div className="mb-5 flex items-center justify-between border-b border-border pb-3">
+        <div>
+          <h1 className="text-2xl font-semibold">分组</h1>
+          <p className="text-sm text-muted-foreground">{props.topic.name || props.topic.id}</p>
+        </div>
+        <EditorActions editMode={props.editMode} canUndo={props.canUndo} canRedo={props.canRedo} onUndo={props.onUndo} onRedo={props.onRedo} />
+      </div>
+      <div className="max-w-xl space-y-4">
+        <label className="block text-sm font-medium">
+          分组名称
+          <Input className="mt-1" value={props.group.name || ""} disabled={!props.editMode} onChange={(event) => updateGroup({ name: event.target.value, name_i18n: zhI18n(event.target.value) })} />
+        </label>
+        <label className="block text-sm font-medium">
+          分组色
+          <div className="mt-1">
+            <ColorField value={props.group.color || DEFAULT_GROUP_COLOR} fallback={DEFAULT_GROUP_COLOR} onChange={(color) => updateGroup({ color })} />
+          </div>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function AssetPreview(props: { title: string; path?: string; small?: boolean }) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-medium text-foreground">{props.title}</div>
+      <div className={cn("imageBox", props.small ? "h-24" : "h-40")}>
+        {props.path ? <img src={assetUrl(props.path)} alt={props.title} /> : <span>未设置</span>}
+      </div>
+    </div>
+  );
+}
+
+function CoverCropDialog(props: {
+  open: boolean;
+  imageUrl: string;
+  title: string;
+  onOpenChange: (open: boolean) => void;
+  onSave: (file: File) => Promise<void>;
+}) {
+  const [crop, setCrop] = React.useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = React.useState(1);
+  const [area, setArea] = React.useState<Area | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (props.open) {
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setArea(null);
+    }
+  }, [props.open]);
+
+  async function save() {
+    if (!area) return;
+    setSaving(true);
+    try {
+      const blob = await cropImageToJpeg(props.imageUrl, area, 200);
+      await props.onSave(new File([blob], "cover.jpg", { type: "image/jpeg" }));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>制作封面</DialogTitle>
+          <DialogDescription>{props.title}，固定输出 200 x 200。拖拽图片调整位置，滚轮或滑块缩放，方向键每次移动 1px。</DialogDescription>
+        </DialogHeader>
+        <div
+          className="relative h-[460px] overflow-hidden rounded-lg bg-black"
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowLeft") setCrop((value) => ({ ...value, x: value.x - 1 }));
+            if (event.key === "ArrowRight") setCrop((value) => ({ ...value, x: value.x + 1 }));
+            if (event.key === "ArrowUp") setCrop((value) => ({ ...value, y: value.y - 1 }));
+            if (event.key === "ArrowDown") setCrop((value) => ({ ...value, y: value.y + 1 }));
+          }}
+        >
+          <Cropper
+            image={props.imageUrl}
+            crop={crop}
+            zoom={zoom}
+            aspect={1}
+            cropSize={{ width: 200, height: 200 }}
+            onCropChange={setCrop}
+            onZoomChange={setZoom}
+            onCropComplete={(_, croppedAreaPixels) => setArea(croppedAreaPixels)}
+            showGrid={false}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">缩放</span>
+          <input className="w-full" type="range" min={1} max={4} step={0.01} value={zoom} onChange={(event) => setZoom(Number(event.target.value))} />
+          <span className="w-12 text-right text-sm tabular-nums">{zoom.toFixed(2)}x</span>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
+          <Button disabled={!area || saving} onClick={() => void save()}>{saving ? "保存中..." : "保存封面"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+async function cropImageToJpeg(imageUrl: string, area: Area, size: number) {
+  const image = await loadImage(imageUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("无法创建裁剪画布。");
+  context.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, size, size);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("封面导出失败。"))), "image/jpeg", 0.88);
+  });
+}
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("图片加载失败。"));
+    image.src = src;
+  });
+}
+
 function LevelDetails(props: {
   catalog: LevelCatalog;
   target: SelectedLevel;
   level: LevelConfig;
   status?: LevelStatus;
   editMode: boolean;
-  onLevel: (level: LevelConfig) => void;
-  onCatalog: (catalog: LevelCatalog) => void;
+  onLevel: (level: LevelConfig | ((current: LevelConfig) => LevelConfig)) => void;
+  onCatalog: (catalog: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   onUpload: (file: File) => Promise<void>;
   onUploadCover: (file: File) => Promise<void>;
   onSave: () => Promise<void>;
   onEditPolygon: () => void;
+  onEditKnob: () => void;
 }) {
-  const { catalog, target, level, status, editMode, onLevel, onCatalog, onUpload, onUploadCover, onSave, onEditPolygon } = props;
+  const { catalog, target, level, status, editMode, onLevel, onCatalog, onUpload, onUploadCover, onSave, onEditPolygon, onEditKnob } = props;
   const topic = catalog.topics.find((item) => item.id === target.topicId);
   const group = topic?.groups.find((item) => item.id === target.groupId);
   const catalogLevel = group?.levels.find((item) => item.id === target.levelId);
+  const sourceInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [coverOpen, setCoverOpen] = React.useState(false);
+  const sourceImageUrl = React.useMemo(() => sourceUrl(target), [target.topicId, target.groupId, target.levelId, status?.hasSource, level.image.width, level.image.height]);
 
   function updateTitle(title: string) {
     onLevel({ ...level, title, title_i18n: zhI18n(title) });
@@ -1229,11 +1661,35 @@ function LevelDetails(props: {
           <h1 className="text-2xl font-semibold">关卡详情</h1>
           <p className="text-sm text-muted-foreground">这里只管理关卡基础信息和 polygon 数据。</p>
         </div>
-        {editMode && (
-          <Button onClick={() => void onSave()}>
-            <Save size={16} />保存关卡
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {catalogLevel?.cover ? (
+            <button
+              className={cn("h-12 w-12 overflow-hidden rounded-full border border-border", editMode && status?.hasSource && "hover:ring-2 hover:ring-primary/40")}
+              type="button"
+              onClick={() => editMode && status?.hasSource && setCoverOpen(true)}
+              title={editMode && status?.hasSource ? "重新制作封面" : "关卡封面"}
+            >
+              <img className="h-full w-full object-cover" src={assetUrl(catalogLevel.cover)} alt={`${level.title} 封面`} />
+            </button>
+          ) : editMode ? (
+            <Button variant="outline" disabled={!status?.hasSource} onClick={() => setCoverOpen(true)}>
+              <ImageIcon size={16} />制作封面
+            </Button>
+          ) : null}
+          {editMode && (
+            <>
+            <Button variant="outline" disabled={!props.canUndo} onClick={props.onUndo}>
+              <Undo2 size={16} />撤销
+            </Button>
+            <Button variant="outline" disabled={!props.canRedo} onClick={props.onRedo}>
+              <Redo2 size={16} />重做
+            </Button>
+            <Button onClick={() => void onSave()}>
+              <Save size={16} />保存关卡
+            </Button>
+            </>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-[1fr_320px] gap-8">
         <div className="space-y-4">
@@ -1242,60 +1698,89 @@ function LevelDetails(props: {
             <Input className="mt-1" value={level.title} disabled={!editMode} onChange={(event) => updateTitle(event.target.value)} />
           </label>
           <label className="block text-sm font-medium text-foreground">
-            中文描述
-            <Textarea className="mt-1 min-h-32" value={level.description} disabled={!editMode} onChange={(event) => onLevel({ ...level, description: event.target.value, description_i18n: zhI18n(event.target.value) })} />
+            桌布背景色
+            <div className="mt-1">
+              <ColorField
+                value={level.background.color}
+                fallback="#F6EBD4"
+                disabled={!editMode}
+                onChange={(color) => {
+                  if (!editMode) return;
+                  onLevel({ ...level, background: { type: "color", color } });
+                  onCatalog((catalog) => ({
+                    ...catalog,
+                    topics: catalog.topics.map((topic) =>
+                      topic.id === target.topicId
+                        ? {
+                            ...topic,
+                            groups: topic.groups.map((group) =>
+                              group.id === target.groupId
+                                ? {
+                                    ...group,
+                                    levels: group.levels.map((item) => (item.id === target.levelId ? { ...item, background_color: color } : item)),
+                                  }
+                                : group,
+                            ),
+                          }
+                        : topic,
+                    ),
+                  }));
+                }}
+              />
+            </div>
           </label>
           <div className="border-y border-border py-3">
             <div className="mb-2 text-sm font-semibold text-foreground">模式数据</div>
-            <StatusLine label="Polygon" value={status?.hasPolygon ? `已有 ${status.pieceCount} 块` : "未生成"} />
-            <StatusLine label="凹凸" value={`Godot 自动生成 ${DEFAULT_KNOB_COLS} x ${DEFAULT_KNOB_ROWS}`} />
+            <ModeDataLine
+              label="Polygon"
+              value={`${status?.hasPolygon ? `已有 ${status.pieceCount} 块` : "未生成"} · ${seedSummary(level.modes.polygon?.assist, DEFAULT_POLYGON_SEED_COUNT)}`}
+              actionLabel="编辑多边形"
+              disabled={!status?.hasSource}
+              onAction={onEditPolygon}
+            />
+            <ModeDataLine
+              label="凹凸"
+              value={`Godot 自动生成 ${DEFAULT_KNOB_COLS} x ${DEFAULT_KNOB_ROWS} · ${seedSummary(level.modes.knob?.assist, DEFAULT_KNOB_SEED_COUNT)}`}
+              actionLabel="编辑凹凸"
+              disabled={!status?.hasSource}
+              onAction={onEditKnob}
+            />
             <StatusLine label="Swap" value={`Godot 自动生成 ${DEFAULT_SWAP_COLS} x ${DEFAULT_SWAP_ROWS}`} />
           </div>
-          <Button disabled={!status?.hasSource} onClick={onEditPolygon}>
-            <Edit3 size={16} />编辑多边形
-          </Button>
         </div>
         <div className="space-y-4">
-          <div className="imageBox">
-            {status?.hasSource ? <img src={sourceUrl(target)} alt={level.title} /> : <span>未上传 source.jpg</span>}
-          </div>
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-foreground">关卡封面</div>
-            <div className="imageBox h-36">
-              {catalogLevel?.cover ? <img src={assetUrl(catalogLevel.cover)} alt={`${level.title} 封面`} /> : <span>未上传关卡封面</span>}
-            </div>
-            {editMode && (
-              <label className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground">
-                <ImageUp size={16} />上传封面
-                <input
-                  className="hidden"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.currentTarget.value = "";
-                    if (file) void onUploadCover(file);
-                  }}
-                />
-              </label>
-            )}
-          </div>
+          <button
+            className={cn("imageBox w-full text-left", editMode && "cursor-pointer hover:ring-2 hover:ring-primary/40")}
+            onClick={() => editMode && sourceInputRef.current?.click()}
+            type="button"
+          >
+            {status?.hasSource ? <img src={sourceImageUrl} alt={level.title} /> : <span>未上传 source.jpg</span>}
+          </button>
           {editMode && (
-            <label className="inline-flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground">
-              <ImageUp size={16} />上传 JPG 3:4
-              <input
-                className="hidden"
-                type="file"
-                accept="image/jpeg"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void onUpload(file);
-                }}
-              />
-            </label>
+            <input
+              ref={sourceInputRef}
+              className="hidden"
+              type="file"
+              accept="image/jpeg"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.currentTarget.value = "";
+                if (file) void onUpload(file);
+              }}
+            />
           )}
         </div>
       </div>
+      <CoverCropDialog
+        open={coverOpen}
+        imageUrl={sourceImageUrl}
+        title={level.title}
+        onOpenChange={setCoverOpen}
+        onSave={async (file) => {
+          await onUploadCover(file);
+          setCoverOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -1309,11 +1794,313 @@ function StatusLine(props: { label: string; value: string }) {
   );
 }
 
+function seedSummary(assist: SeedAssist | undefined, defaultCount: number) {
+  const normalized = normalizeAssist(assist, defaultCount);
+  if (normalized.seed.mode === "manual") return `手动 ${normalized.seed.piece_ids.length} 块`;
+  return `自动 ${normalized.seed.count || defaultCount} 块`;
+}
+
+function ModeDataLine(props: { label: string; value: string; actionLabel: string; disabled?: boolean; onAction: () => void }) {
+  return (
+    <div className="grid grid-cols-[92px_1fr_auto] items-center gap-3 border-b border-border/60 py-2 text-sm">
+      <span>{props.label}</span>
+      <span className="text-muted-foreground">{props.value}</span>
+      <Button size="sm" variant="outline" disabled={props.disabled} onClick={props.onAction}>
+        <Edit3 size={14} />{props.actionLabel}
+      </Button>
+    </div>
+  );
+}
+
+function SeedSettingsPanel(props: {
+  title: string;
+  description?: string;
+  assist: SeedAssist;
+  defaultCount: number;
+  disabled?: boolean;
+  onChange: (assist: SeedAssist) => void;
+  children?: (assist: SeedAssist, setAssist: (assist: SeedAssist) => void) => React.ReactNode;
+}) {
+  const { title, description, assist, defaultCount, disabled, onChange, children } = props;
+  const setAssist = React.useCallback((next: SeedAssist) => onChange(normalizeAssist(next, defaultCount)), [defaultCount, onChange]);
+
+  return (
+    <div className="rounded-md border border-border bg-background p-3">
+      <div className="mb-1 text-sm font-semibold text-foreground">{title}</div>
+      {description ? <p className="mb-3 text-xs leading-5 text-muted-foreground">{description}</p> : null}
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant={assist.seed.mode === "auto" ? "default" : "outline"}
+          disabled={disabled}
+          onClick={() => setAssist({ ...assist, seed: { mode: "auto", count: assist.seed.count || defaultCount, piece_ids: [] } })}
+        >
+          自动
+        </Button>
+        <Button
+          type="button"
+          variant={assist.seed.mode === "manual" ? "default" : "outline"}
+          disabled={disabled}
+          onClick={() => setAssist({ ...assist, seed: { ...assist.seed, mode: "manual" } })}
+        >
+          手动
+        </Button>
+      </div>
+      {assist.seed.mode === "auto" ? (
+        <label className="block text-xs font-medium text-foreground">
+          种子数量
+          <Input
+            className="mt-1 h-8"
+            type="number"
+            min={0}
+            max={99}
+            disabled={disabled}
+            value={assist.seed.count}
+            onChange={(event) => setAssist({ ...assist, seed: { ...assist.seed, count: Number(event.target.value), piece_ids: [] } })}
+          />
+        </label>
+      ) : (
+        <>
+          {children?.(assist, setAssist)}
+          <div className="mt-2 text-xs text-muted-foreground">已选 {assist.seed.piece_ids.length} 块</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function KnobSeedGrid(props: {
+  cols: number;
+  rows: number;
+  selectedIds: string[];
+  disabled?: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const cells = React.useMemo(() => {
+    const items: Array<{ id: string; row: number; col: number }> = [];
+    for (let row = 0; row < props.rows; row += 1) {
+      for (let col = 0; col < props.cols; col += 1) items.push({ id: `knob_${row}_${col}`, row, col });
+    }
+    return items;
+  }, [props.cols, props.rows]);
+  return (
+    <div className="rounded-sm border border-border bg-card p-2">
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${props.cols}, minmax(0, 1fr))` }}>
+        {cells.map((cell) => {
+          const selected = props.selectedIds.includes(cell.id);
+          return (
+            <button
+              key={cell.id}
+              type="button"
+              disabled={props.disabled}
+              className={cn(
+                "aspect-square rounded-sm border text-[10px] transition-colors",
+                selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/50",
+                props.disabled && "cursor-not-allowed opacity-70",
+              )}
+              title={cell.id}
+              onClick={() => props.onToggle(cell.id)}
+            >
+              {selected ? <Check className="mx-auto h-3 w-3" /> : `${cell.row + 1}-${cell.col + 1}`}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function shapeRequests(counts: Record<ShapeKind, number>): ShapeRequest[] {
   return SHAPE_OPTIONS.map((option) => ({
     kind: option.kind,
     count: counts[option.kind] || 0,
   })).filter((shape) => shape.count > 0);
+}
+
+function ShapeIcon(props: { kind: ShapeKind }) {
+  const common = { fill: "rgba(217, 147, 63, 0.16)", stroke: "currentColor", strokeWidth: 2.4, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
+  const paths: Record<ShapeKind, React.ReactNode> = {
+    circle: <circle cx="18" cy="18" r="10" {...common} />,
+    square: <rect x="9" y="9" width="18" height="18" rx="2" transform="rotate(12 18 18)" {...common} />,
+    heart: <path d="M18 28 C8 21 6 12 12 9 C15 7 17 9 18 12 C19 9 21 7 24 9 C30 12 28 21 18 28 Z" {...common} />,
+    triangle: <path d="M18 7 L29 27 L7 27 Z" {...common} />,
+    star: <path d="M18 6 L21.4 13.6 L29.6 14.4 L23.4 19.8 L25.2 28 L18 23.8 L10.8 28 L12.6 19.8 L6.4 14.4 L14.6 13.6 Z" {...common} />,
+    sector: <path d="M10 27 L18 8 C25 10 29 16 28 24 Z" {...common} />,
+    crescent: <path d="M24.5 7.5 C18 9.4 14.2 14.2 14.2 19.2 C14.2 23.4 17 26.6 21.2 28.2 C13.4 29.2 7 24.2 7 17.4 C7 10.8 14.2 5.6 24.5 7.5 Z" {...common} />,
+    hexagon: <path d="M18 6 L28 12 L28 24 L18 30 L8 24 L8 12 Z" {...common} />,
+    blob: <path d="M18 7 C24 6 29 11 28 17 C31 23 24 30 17 28 C11 31 6 24 8 18 C5 12 11 7 18 7 Z" {...common} />,
+    shard: <path d="M18 5 L28 13 L25 24 L15 30 L7 20 L10 10 Z" {...common} />,
+  };
+  return (
+    <svg className="h-9 w-9 text-primary" viewBox="0 0 36 36" aria-hidden="true">
+      {paths[props.kind]}
+    </svg>
+  );
+}
+
+function KnobEditor(props: {
+  target: SelectedLevel;
+  title: string;
+  level: LevelConfig;
+  onBack: () => void;
+  onSave: (level: LevelConfig) => Promise<void>;
+}) {
+  const { target, title, level, onBack, onSave } = props;
+  const knob = level.modes.knob || { auto: true as const, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE, assist: defaultAssist(DEFAULT_KNOB_SEED_COUNT) };
+  const cols = knob.cols || DEFAULT_KNOB_COLS;
+  const rows = knob.rows || DEFAULT_KNOB_ROWS;
+  const width = level.image.width || 1440;
+  const height = level.image.height || 1080;
+  const validIds = React.useMemo(() => knobSeedIds(cols, rows), [cols, rows]);
+  const [assist, setAssist] = React.useState<SeedAssist>(() => normalizeAssist(knob.assist, DEFAULT_KNOB_SEED_COUNT, validIds));
+  const cellWidth = width / cols;
+  const cellHeight = height / rows;
+  const knobAmount = Math.min(cellWidth, cellHeight) * (knob.knob_size || DEFAULT_KNOB_SIZE);
+
+  async function save() {
+    await onSave({
+      ...level,
+      modes: {
+        ...level.modes,
+        knob: {
+          auto: true,
+          cols,
+          rows,
+          knob_size: knob.knob_size || DEFAULT_KNOB_SIZE,
+          assist: filterAssistPieceIds(assist, validIds),
+        },
+      },
+    });
+  }
+
+  function toggle(id: string) {
+    setAssist((current) => {
+      const pieceIds = current.seed.piece_ids.includes(id)
+        ? current.seed.piece_ids.filter((item) => item !== id)
+        : [...current.seed.piece_ids, id];
+      return { ...current, seed: { ...current.seed, mode: "manual", piece_ids: pieceIds } };
+    });
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+        <div>
+          <div className="font-semibold">{title}</div>
+          <div className="text-xs text-muted-foreground">凹凸 Seed 编辑</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => void save()}>
+            <Save size={16} />保存
+          </Button>
+          <Button variant="outline" onClick={onBack}>返回</Button>
+        </div>
+      </div>
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
+        <div className="min-h-0 overflow-auto bg-secondary p-4">
+          <div className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white">
+            <img className="absolute inset-0 h-full w-full object-contain" src={sourceUrl(target)} alt="" draggable={false} />
+            <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`}>
+              {Array.from({ length: rows * cols }, (_, index) => {
+                const row = Math.floor(index / cols);
+                const col = index % cols;
+                const id = `knob_${row}_${col}`;
+                const selected = assist.seed.mode === "manual" && assist.seed.piece_ids.includes(id);
+                const path = knobPath(col, row, cols, rows, cellWidth, cellHeight, knobAmount);
+                return (
+                  <g key={id}>
+                    <path
+                      d={path}
+                      fill={selected ? "rgba(47, 118, 103, 0.36)" : "rgba(217, 147, 63, 0.16)"}
+                      stroke={selected ? "#2f7667" : "#5A3A22"}
+                      strokeWidth={selected ? 7 : 3}
+                      onClick={() => assist.seed.mode === "manual" && toggle(id)}
+                    />
+                    {selected ? (
+                      <g pointerEvents="none">
+                        <circle cx={(col + 0.5) * cellWidth} cy={(row + 0.5) * cellHeight} r={22} fill="#2f7667" stroke="#FFF6E6" strokeWidth={5} />
+                        <Check x={(col + 0.5) * cellWidth - 10} y={(row + 0.5) * cellHeight - 10} width={20} height={20} color="#FFF6E6" strokeWidth={4} />
+                      </g>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+        <aside className="min-h-0 overflow-auto border-l border-border bg-card p-4 text-sm">
+          <SeedSettingsPanel
+            title="Seed 设置"
+            description="自动模式只保存数量；手动模式直接在左侧凹凸预览中选择种子碎片。"
+            assist={assist}
+            defaultCount={DEFAULT_KNOB_SEED_COUNT}
+            onChange={(next) => setAssist(filterAssistPieceIds(next, validIds))}
+          >
+            {(current, setCurrent) => (
+              <div className="space-y-2">
+                <KnobSeedGrid cols={cols} rows={rows} selectedIds={current.seed.piece_ids} onToggle={toggle} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={!current.seed.piece_ids.length}
+                  onClick={() => setCurrent({ ...current, seed: { ...current.seed, piece_ids: [] } })}
+                >
+                  清空 Seed
+                </Button>
+              </div>
+            )}
+          </SeedSettingsPanel>
+          <StatusLine label="网格" value={`${cols} x ${rows}`} />
+          <StatusLine label="已选" value={String(assist.seed.piece_ids.length)} />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function knobPath(col: number, row: number, cols: number, rows: number, cellWidth: number, cellHeight: number, amount: number) {
+  const x0 = col * cellWidth;
+  const y0 = row * cellHeight;
+  const x1 = (col + 1) * cellWidth;
+  const y1 = (row + 1) * cellHeight;
+  const points: Point[] = [];
+  appendKnobEdge(points, [x0, y0], [x1, y0], [0, -1], row === 0 ? 0 : -knobHorizontalSign(col, row), amount);
+  appendKnobEdge(points, [x1, y0], [x1, y1], [1, 0], col === cols - 1 ? 0 : knobVerticalSign(col + 1, row), amount);
+  appendKnobEdge(points, [x1, y1], [x0, y1], [0, 1], row === rows - 1 ? 0 : knobHorizontalSign(col, row + 1), amount);
+  appendKnobEdge(points, [x0, y1], [x0, y0], [-1, 0], col === 0 ? 0 : -knobVerticalSign(col, row), amount);
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point[0].toFixed(2)} ${point[1].toFixed(2)}`).join(" ") + " Z";
+}
+
+function appendKnobEdge(target: Point[], start: Point, end: Point, normal: Point, sign: number, amount: number) {
+  const edgePoints = knobEdgePoints(start, end, normal, sign, amount);
+  edgePoints.forEach((point, index) => {
+    if (target.length > 0 && index === 0) return;
+    target.push(point);
+  });
+}
+
+function knobEdgePoints(start: Point, end: Point, normal: Point, sign: number, amount: number): Point[] {
+  if (sign === 0) return [start, end];
+  const before: Point = [start[0] + (end[0] - start[0]) * 0.34, start[1] + (end[1] - start[1]) * 0.34];
+  const after: Point = [start[0] + (end[0] - start[0]) * 0.66, start[1] + (end[1] - start[1]) * 0.66];
+  const points: Point[] = [start, before];
+  for (let step = 1; step < 8; step += 1) {
+    const t = step / 8;
+    const base: Point = [before[0] + (after[0] - before[0]) * t, before[1] + (after[1] - before[1]) * t];
+    const offset = Math.sin(t * Math.PI) * amount * sign;
+    points.push([base[0] + normal[0] * offset, base[1] + normal[1] * offset]);
+  }
+  points.push(after, end);
+  return points;
+}
+
+function knobVerticalSign(edgeCol: number, row: number) {
+  return ((edgeCol + row) % 2 === 0) ? 1 : -1;
+}
+
+function knobHorizontalSign(col: number, edgeRow: number) {
+  return ((col + edgeRow) % 2 === 0) ? -1 : 1;
 }
 
 function PolygonEditor(props: {
@@ -1325,7 +2112,13 @@ function PolygonEditor(props: {
 }) {
   const { target, title, level, onBack, onSave } = props;
   const [pieces, setPieces] = React.useState<LevelPiece[]>(() => level.modes.polygon?.pieces || []);
+  const [past, setPast] = React.useState<LevelPiece[][]>([]);
+  const [future, setFuture] = React.useState<LevelPiece[][]>([]);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
+  const [polygonAssist, setPolygonAssist] = React.useState<SeedAssist>(() =>
+    normalizeAssist(level.modes.polygon?.assist, DEFAULT_POLYGON_SEED_COUNT, new Set((level.modes.polygon?.pieces || []).map((piece) => piece.id))),
+  );
+  const [seedPicking, setSeedPicking] = React.useState(false);
   const [targetCount, setTargetCount] = React.useState(Math.max(DEFAULT_POLYGON_TARGET_COUNT, level.modes.polygon?.pieces?.length || DEFAULT_POLYGON_TARGET_COUNT));
   const [shapeCounts, setShapeCounts] = React.useState<Record<ShapeKind, number>>(() => {
     const raw = level.modes.polygon?.generator;
@@ -1338,10 +2131,10 @@ function PolygonEditor(props: {
       {} as Record<ShapeKind, number>,
     );
   });
-  const [drag, setDrag] = React.useState<{ pieceId: string; pointIndex: number } | null>(null);
+  const [drag, setDrag] = React.useState<{ pieceId: string; pointIndex: number; before: LevelPiece[]; moved: boolean } | null>(null);
   const svgRef = React.useRef<SVGSVGElement | null>(null);
-  const width = level.image.width || 1080;
-  const height = level.image.height || 1440;
+  const width = level.image.width || 1440;
+  const height = level.image.height || 1080;
 
   function svgPoint(event: React.PointerEvent): Point {
     const svg = svgRef.current;
@@ -1350,46 +2143,111 @@ function PolygonEditor(props: {
     return [((event.clientX - rect.left) / rect.width) * width, ((event.clientY - rect.top) / rect.height) * height];
   }
 
-  function savePieces(nextPieces: LevelPiece[]) {
-    setPieces(withNeighbors(nextPieces));
+  function normalizedPieces(nextPieces: LevelPiece[]) {
+    return withNeighbors(nextPieces);
+  }
+
+  function commitPieces(nextPieces: LevelPiece[]) {
+    const normalized = normalizedPieces(nextPieces);
+    setPast((current) => [...current.slice(-39), pieces]);
+    setFuture([]);
+    setPieces(normalized);
+    setPolygonAssist((current) => filterAssistPieceIds(current, new Set(normalized.map((piece) => piece.id))));
   }
 
   function selectPiece(id: string, additive: boolean) {
     setSelectedIds((current) => {
       if (!additive) return [id];
-      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(-2);
+      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+    });
+  }
+
+  function toggleSeedPiece(id: string) {
+    setPolygonAssist((current) => {
+      const pieceIds = current.seed.piece_ids.includes(id)
+        ? current.seed.piece_ids.filter((item) => item !== id)
+        : [...current.seed.piece_ids, id];
+      return {
+        ...current,
+        seed: {
+          ...current.seed,
+          mode: "manual",
+          piece_ids: pieceIds,
+        },
+      };
     });
   }
 
   function mergeSelected() {
-    if (selectedIds.length !== 2) return;
-    const first = pieces.find((piece) => piece.id === selectedIds[0]);
-    const second = pieces.find((piece) => piece.id === selectedIds[1]);
-    if (!first || !second) return;
-    const merged = mergePieces(first, second);
-    savePieces([...pieces.filter((piece) => piece.id !== first.id && piece.id !== second.id), merged]);
+    if (selectedIds.length < 2) return;
+    const selectedPieces = selectedIds.map((id) => pieces.find((piece) => piece.id === id)).filter((piece): piece is LevelPiece => Boolean(piece));
+    if (selectedPieces.length < 2) return;
+    const merged = selectedPieces.slice(1).reduce((acc, piece) => mergePieces(acc, piece), selectedPieces[0]);
+    commitPieces([...pieces.filter((piece) => !selectedIds.includes(piece.id)), merged]);
     setSelectedIds([merged.id]);
   }
 
   function movePoint(point: Point) {
     if (!drag) return;
-    savePieces(
-      pieces.map((piece) =>
+    setDrag({ ...drag, moved: true });
+    setPieces(
+      normalizedPieces(pieces.map((piece) =>
         piece.id === drag.pieceId
           ? { ...piece, points: piece.points.map((candidate, index) => (index === drag.pointIndex ? point : candidate)) }
           : piece,
-      ),
+      )),
     );
+  }
+
+  function finishDrag() {
+    if (drag?.moved) {
+      setPast((current) => [...current.slice(-39), drag.before]);
+      setFuture([]);
+    }
+    setDrag(null);
+  }
+
+  function undo() {
+    setPast((current) => {
+      if (!current.length) return current;
+      const previous = current[current.length - 1];
+      setFuture((next) => [pieces, ...next].slice(0, 40));
+      setPieces(previous);
+      setPolygonAssist((assist) => filterAssistPieceIds(assist, new Set(previous.map((piece) => piece.id))));
+      setSelectedIds([]);
+      return current.slice(0, -1);
+    });
+  }
+
+  function redo() {
+    setFuture((current) => {
+      if (!current.length) return current;
+      const next = current[0];
+      setPast((previous) => [...previous.slice(-39), pieces]);
+      setPieces(next);
+      setPolygonAssist((assist) => filterAssistPieceIds(assist, new Set(next.map((piece) => piece.id))));
+      setSelectedIds([]);
+      return current.slice(1);
+    });
   }
 
   async function save() {
     const shapes = shapeRequests(shapeCounts);
+    const savedPieces = withNeighbors(pieces);
+    const validPolygonIds = new Set(savedPieces.map((piece) => piece.id));
+    const knob = level.modes.knob || { auto: true as const, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE, assist: defaultAssist(DEFAULT_KNOB_SEED_COUNT) };
     await onSave({
       ...level,
       modes: {
         ...level.modes,
-        polygon: { pieces: withNeighbors(pieces), generator: { target_count: targetCount, shapes } },
-        knob: { auto: true, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE },
+        polygon: { pieces: savedPieces, generator: { target_count: targetCount, shapes }, assist: filterAssistPieceIds(polygonAssist, validPolygonIds) },
+        knob: {
+          auto: true,
+          cols: knob.cols || DEFAULT_KNOB_COLS,
+          rows: knob.rows || DEFAULT_KNOB_ROWS,
+          knob_size: knob.knob_size || DEFAULT_KNOB_SIZE,
+          assist: normalizeAssist(knob.assist, DEFAULT_KNOB_SEED_COUNT, knobSeedIds(knob.cols || DEFAULT_KNOB_COLS, knob.rows || DEFAULT_KNOB_ROWS)),
+        },
         swap: { auto: true, cols: DEFAULT_SWAP_COLS, rows: DEFAULT_SWAP_ROWS },
       },
     });
@@ -1400,7 +2258,8 @@ function PolygonEditor(props: {
   }
 
   function generate() {
-    setPieces(generatePieces(width, height, targetCount, shapeRequests(shapeCounts)));
+    const nextPieces = generatePieces(width, height, targetCount, shapeRequests(shapeCounts));
+    commitPieces(nextPieces);
     setSelectedIds([]);
   }
 
@@ -1419,39 +2278,56 @@ function PolygonEditor(props: {
           <Button variant="outline" onClick={generate}>
             <Wand2 size={16} />生成
           </Button>
-          <Button variant="outline" disabled={selectedIds.length !== 2} onClick={mergeSelected}>合并</Button>
+          <Button variant="outline" disabled={!past.length} onClick={undo}>
+            <Undo2 size={16} />撤销
+          </Button>
+          <Button variant="outline" disabled={!future.length} onClick={redo}>
+            <Redo2 size={16} />重做
+          </Button>
+          <Button variant="outline" disabled={selectedIds.length < 2} onClick={mergeSelected}>合并</Button>
           <Button onClick={() => void save()}>
             <Save size={16} />保存
           </Button>
           <Button variant="outline" onClick={onBack}>返回</Button>
         </div>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[1fr_260px]">
-        <div className="overflow-auto bg-secondary p-4">
-          <div className="relative mx-auto aspect-[3/4] max-h-full max-w-[min(72vw,720px)] bg-white">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
+        <div className="min-h-0 overflow-auto bg-secondary p-4">
+          <div className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white">
             <img className="absolute inset-0 h-full w-full object-contain" src={sourceUrl(target)} alt="" draggable={false} />
             <svg
               ref={svgRef}
               className="absolute inset-0 h-full w-full touch-none"
               viewBox={`0 0 ${width} ${height}`}
               onPointerMove={(event) => drag && movePoint(svgPoint(event))}
-              onPointerUp={() => setDrag(null)}
-              onPointerLeave={() => setDrag(null)}
+              onPointerUp={finishDrag}
+              onPointerLeave={finishDrag}
             >
               {pieces.map((piece, index) => {
                 const selected = selectedIds.includes(piece.id);
+                const seedSelected = polygonAssist.seed.mode === "manual" && polygonAssist.seed.piece_ids.includes(piece.id);
                 return (
                   <g key={piece.id}>
                     <polygon
                       points={piece.points.map((point) => point.join(",")).join(" ")}
                       fill={`hsla(${(index * 47) % 360}, 74%, 62%, 0.28)`}
-                      stroke={selected ? "#D9933F" : "#5A3A22"}
-                      strokeWidth={selected ? 7 : 3}
+                      stroke={selected ? "#D9933F" : seedSelected ? "#2f7667" : "#5A3A22"}
+                      strokeWidth={selected || seedSelected ? 7 : 3}
                       onPointerDown={(event) => {
                         event.stopPropagation();
-                        selectPiece(piece.id, event.shiftKey);
+                        if (seedPicking && polygonAssist.seed.mode === "manual") {
+                          toggleSeedPiece(piece.id);
+                          return;
+                        }
+                        selectPiece(piece.id, event.metaKey || event.ctrlKey);
                       }}
                     />
+                    {seedSelected && (
+                      <g pointerEvents="none">
+                        <circle cx={piece.home[0]} cy={piece.home[1]} r={22} fill="#2f7667" stroke="#FFF6E6" strokeWidth={5} />
+                        <Check x={piece.home[0] - 10} y={piece.home[1] - 10} width={20} height={20} color="#FFF6E6" strokeWidth={4} />
+                      </g>
+                    )}
                     {selected && piece.points.map((point, pointIndex) => (
                       <circle
                         key={pointIndex}
@@ -1463,7 +2339,7 @@ function PolygonEditor(props: {
                         strokeWidth={7}
                         onPointerDown={(event) => {
                           event.stopPropagation();
-                          setDrag({ pieceId: piece.id, pointIndex });
+                          setDrag({ pieceId: piece.id, pointIndex, before: pieces, moved: false });
                         }}
                       />
                     ))}
@@ -1473,27 +2349,65 @@ function PolygonEditor(props: {
             </svg>
           </div>
         </div>
-        <aside className="border-l border-border bg-card p-4 text-sm">
+        <aside className="min-h-0 overflow-auto border-l border-border bg-card p-4 text-sm">
           <div className="mb-2 text-sm font-semibold text-foreground">编辑说明</div>
-          <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Shift 可选择两个碎片后合并。选中碎片后拖动圆点微调轮廓。</p>
+          <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Cmd/Ctrl 可多选并合并。选中碎片后拖动圆点微调轮廓。</p>
           <div className="mb-4 border-y border-border py-3">
             <div className="mb-2 text-sm font-semibold text-foreground">指定形状</div>
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
               {SHAPE_OPTIONS.map((option) => (
-                <div key={option.kind} className="flex items-center justify-between gap-2">
-                  <span>{option.label}</span>
+                <div key={option.kind} className="rounded-md border border-border bg-background p-2">
+                  <div className="mb-1 grid place-items-center">
+                    <ShapeIcon kind={option.kind} />
+                    <span className="mt-1 text-xs text-foreground">{option.label}</span>
+                  </div>
                   <div className="flex items-center gap-1">
                     <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, -1)}>-</Button>
-                    <span className="w-6 text-center tabular-nums">{shapeCounts[option.kind] || 0}</span>
+                    <span className="min-w-6 flex-1 text-center tabular-nums">{shapeCounts[option.kind] || 0}</span>
                     <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, 1)}>+</Button>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+          <div className="mb-4">
+            <SeedSettingsPanel
+              title="Seed 设置"
+              description="Seed 是之后托盘玩法中预先放好的碎片。手动模式需要打开选择后，在预览里点选碎片。"
+              assist={polygonAssist}
+              defaultCount={DEFAULT_POLYGON_SEED_COUNT}
+              onChange={(assist) => {
+                const next = filterAssistPieceIds(assist, new Set(pieces.map((piece) => piece.id)));
+                setPolygonAssist(next);
+                if (next.seed.mode !== "manual") setSeedPicking(false);
+              }}
+            >
+              {(assist, setAssist) => (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant={seedPicking ? "default" : "outline"}
+                    className="w-full"
+                    onClick={() => setSeedPicking((current) => !current)}
+                  >
+                    {seedPicking ? "正在选择 Seed" : "选择 Seed 碎片"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={!assist.seed.piece_ids.length}
+                    onClick={() => setAssist({ ...assist, seed: { ...assist.seed, piece_ids: [] } })}
+                  >
+                    清空 Seed
+                  </Button>
+                </div>
+              )}
+            </SeedSettingsPanel>
+          </div>
           <StatusLine label="碎片数" value={String(pieces.length)} />
           <StatusLine label="已选择" value={String(selectedIds.length)} />
-          <Button variant="outline" className="mt-4 w-full" onClick={() => setPieces([])}>
+          <Button variant="outline" className="mt-4 w-full" onClick={() => { commitPieces([]); setSelectedIds([]); }}>
             <Trash2 size={16} />清空
           </Button>
         </aside>

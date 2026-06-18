@@ -50,8 +50,6 @@ const UI_TEXT := {
 		"status_drag_rotate": "Drag pieces. Double tap a piece to rotate. Drag the tablecloth and pinch to zoom.",
 		"status_drag": "Drag pieces. Drag the tablecloth and pinch to zoom.",
 		"status_missing_mode": "This level JSON is missing data for the current mode.",
-		"organize": "Organize",
-		"organize_tip": "Organize pieces",
 		"pause": "Paused",
 		"resume": "Resume",
 		"restart": "Restart",
@@ -68,8 +66,8 @@ const UI_TEXT := {
 		"close": "Close",
 		"tutorial_title": "How to play",
 		"tutorial_swap": "Drag one tile onto another to swap their positions.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nRestore every tile to the correct order to finish.",
-		"tutorial_rotate": "Hold and drag a piece.\n\nDouble tap a piece to rotate 90 degrees.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nIf pieces get messy, tap Organize in the lower-left.",
-		"tutorial_drag": "Hold and drag a piece.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nIf pieces get messy, tap Organize in the lower-left.",
+		"tutorial_rotate": "Drag a piece from the tray and place it next to a locked neighboring piece.\n\nDouble tap a piece to rotate 90 degrees.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.",
+		"tutorial_drag": "Drag a piece from the tray and place it next to a locked neighboring piece.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.",
 		"got_it": "Got it",
 		"complete": "Completed!",
 		"completed_mode": "Completed: %s",
@@ -80,9 +78,6 @@ const UI_TEXT := {
 		"swap_hint": "Drag any tile onto another tile to swap them.",
 		"hint_none": "No nearby pieces can be hinted right now.",
 		"hint_pair": "The highlighted pieces fit together.",
-		"organize_swap": "Swap mode only needs dragging two tiles to exchange positions.",
-		"organize_done": "Current pieces are already close to their target positions.",
-		"organized": "Unfinished pieces organized.",
 		"swapped": "Two tiles swapped.",
 		"pan_hint": "Drag the tablecloth to move the view. Pinch to zoom."
 	},
@@ -106,8 +101,6 @@ const UI_TEXT := {
 		"status_drag_rotate": "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。",
 		"status_drag": "拖动碎片。空白处拖动桌布，双指缩放。",
 		"status_missing_mode": "关卡 JSON 缺少当前模式配置。",
-		"organize": "整理",
-		"organize_tip": "整理碎片",
 		"pause": "已暂停",
 		"resume": "继续游戏",
 		"restart": "重新开始",
@@ -124,8 +117,8 @@ const UI_TEXT := {
 		"close": "关闭",
 		"tutorial_title": "怎么玩",
 		"tutorial_swap": "拖动一块图片到另一块上，可以交换它们的位置。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n所有方格回到正确顺序后就会通关。",
-		"tutorial_rotate": "单指按住碎片并拖动。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。",
-		"tutorial_drag": "单指按住碎片并拖动。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n碎片太乱时，点击左下角“整理”。",
+		"tutorial_rotate": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。",
+		"tutorial_drag": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n空白处拖动可以移动桌布，双指可以缩放。",
 		"got_it": "知道了",
 		"complete": "恭喜完成",
 		"completed_mode": "已完成：%s",
@@ -136,9 +129,6 @@ const UI_TEXT := {
 		"swap_hint": "拖动任意一块图片到另一块上，即可交换它们的位置。",
 		"hint_none": "暂时没有可提示的相邻碎片。",
 		"hint_pair": "高亮的两块可以拼在一起。",
-		"organize_swap": "方格交换模式只需要拖动两块图片互换位置。",
-		"organize_done": "当前碎片已经很接近完成位置。",
-		"organized": "已整理未完成的碎片。",
 		"swapped": "已交换两块图片。",
 		"pan_hint": "拖动桌布可移动视角，双指可缩放。"
 	},
@@ -162,8 +152,6 @@ const UI_TEXT := {
 		"status_drag_rotate": "ピースをドラッグ。ダブルタップで回転。背景をドラッグし、ピンチでズーム。",
 		"status_drag": "ピースをドラッグ。背景をドラッグし、ピンチでズーム。",
 		"status_missing_mode": "このレベル JSON には現在のモード設定がありません。",
-		"organize": "整理",
-		"organize_tip": "ピースを整理",
 		"pause": "一時停止",
 		"resume": "続ける",
 		"restart": "最初から",
@@ -180,8 +168,8 @@ const UI_TEXT := {
 		"close": "閉じる",
 		"tutorial_title": "遊び方",
 		"tutorial_swap": "タイルを別のタイルにドラッグして位置を入れ替えます。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\nすべて正しい順番に戻すと完成です。",
-		"tutorial_rotate": "ピースを長押ししてドラッグします。\n\nダブルタップで 90 度回転します。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\n散らかったら左下の整理を使います。",
-		"tutorial_drag": "ピースを長押ししてドラッグします。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\n散らかったら左下の整理を使います。",
+		"tutorial_rotate": "トレイからピースをドラッグし、固定済みの隣接ピースの横に置きます。\n\nダブルタップで 90 度回転します。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。",
+		"tutorial_drag": "トレイからピースをドラッグし、固定済みの隣接ピースの横に置きます。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。",
 		"got_it": "OK",
 		"complete": "完成！",
 		"completed_mode": "完成：%s",
@@ -192,9 +180,6 @@ const UI_TEXT := {
 		"swap_hint": "任意のタイルを別のタイルへドラッグして入れ替えます。",
 		"hint_none": "今はヒントにできる隣接ピースがありません。",
 		"hint_pair": "ハイライトされた 2 つはつながります。",
-		"organize_swap": "入れ替えモードでは 2 枚のタイルをドラッグして交換します。",
-		"organize_done": "ピースはすでに完成位置に近いです。",
-		"organized": "未完成のピースを整理しました。",
 		"swapped": "2 枚のタイルを交換しました。",
 		"pan_hint": "背景をドラッグして移動し、ピンチでズームできます。"
 	}
@@ -294,7 +279,7 @@ func _lock_portrait_orientation() -> void:
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if current_screen != "game":
 		return
 	if puzzle_board.handle_input(event, modal_open):
@@ -324,9 +309,6 @@ func _puzzle_board_texts() -> Dictionary:
 		"swap_hint": _t("swap_hint"),
 		"hint_none": _t("hint_none"),
 		"hint_pair": _t("hint_pair"),
-		"organize_swap": _t("organize_swap"),
-		"organize_done": _t("organize_done"),
-		"organized": _t("organized"),
 		"swapped": _t("swapped"),
 		"status_swap": _t("status_swap"),
 		"pan_hint": _t("pan_hint"),
@@ -762,7 +744,7 @@ func _show_topics() -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var grid := GridContainer.new()
-	var columns := _wide_grid_columns(2, 1)
+	var columns := 1
 	grid.columns = columns
 	grid.add_theme_constant_override("h_separation", _screen_margin())
 	grid.add_theme_constant_override("v_separation", _screen_margin())
@@ -1050,66 +1032,197 @@ func _topic_card_width(columns: int) -> float:
 func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(card_width, card_width * 0.416)
+	card.custom_minimum_size = Vector2(card_width, card_width * 0.42)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		card.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var card_size := card.custom_minimum_size
+	var inset := maxf(12.0, card_size.y * 0.055)
 	var frame := Panel.new()
-	frame.clip_contents = true
+	frame.name = "topic_card_frame"
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = Color.TRANSPARENT
+	frame_style.bg_color = paper
+	frame_style.border_color = Color(0.77, 0.56, 0.34, 0.36)
+	frame_style.border_width_left = 2
+	frame_style.border_width_top = 2
+	frame_style.border_width_right = 2
+	frame_style.border_width_bottom = 2
 	frame_style.corner_radius_top_left = 22
 	frame_style.corner_radius_top_right = 22
 	frame_style.corner_radius_bottom_left = 22
 	frame_style.corner_radius_bottom_right = 22
 	frame.add_theme_stylebox_override("panel", frame_style)
 	card.add_child(frame)
+	var content_frame := Panel.new()
+	content_frame.name = "topic_card_content_frame"
+	content_frame.clip_contents = true
+	content_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content_frame.offset_left = inset
+	content_frame.offset_top = inset
+	content_frame.offset_right = -inset
+	content_frame.offset_bottom = -inset
+	content_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content_frame.add_theme_stylebox_override("panel", _rounded_panel_style(paper, 16))
+	frame.add_child(content_frame)
+	var topic_color := _topic_color(topic)
+	var color_panel := Panel.new()
+	color_panel.name = "topic_color_panel"
+	color_panel.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	color_panel.offset_left = 0
+	color_panel.offset_top = 0
+	color_panel.offset_right = card_size.x * 0.20
+	color_panel.offset_bottom = 0
+	color_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	color_panel.add_theme_stylebox_override("panel", _left_topic_color_style(topic_color, 16))
+	content_frame.add_child(color_panel)
+	var bump := Panel.new()
+	bump.name = "topic_color_bump"
+	var bump_size := maxf(18.0, card_size.y * 0.13)
+	bump.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	bump.offset_left = color_panel.offset_right - bump_size * 0.36
+	bump.offset_top = (card_size.y - inset * 2.0 - bump_size) * 0.5
+	bump.offset_right = bump.offset_left + bump_size
+	bump.offset_bottom = bump.offset_top + bump_size
+	bump.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bump.add_theme_stylebox_override("panel", _rounded_panel_style(topic_color, int(bump_size * 0.5)))
+	content_frame.add_child(bump)
+	var icon_texture := repository.topic_icon_texture(topic)
+	if icon_texture != null:
+		var icon := TextureRect.new()
+		icon.name = "topic_icon"
+		icon.texture = icon_texture
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+		var icon_inset := maxf(16.0, card_size.y * 0.20)
+		icon.offset_left = icon_inset * 0.7
+		icon.offset_top = icon_inset
+		icon.offset_right = -(card_size.x - color_panel.offset_right + icon_inset * 0.35)
+		icon.offset_bottom = -icon_inset
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content_frame.add_child(icon)
+	var inner_width := card_size.x - inset * 2.0
+	var inner_height := card_size.y - inset * 2.0
+	var cover_width := inner_width * 0.39
+	var cover_margin := maxf(8.0, inner_height * 0.055)
+	var cover_holder := Panel.new()
+	cover_holder.name = "topic_cover_holder"
+	cover_holder.clip_contents = true
+	cover_holder.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	cover_holder.offset_left = -cover_width - cover_margin
+	cover_holder.offset_top = cover_margin
+	cover_holder.offset_right = -cover_margin
+	cover_holder.offset_bottom = -cover_margin
+	cover_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover_holder.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1, 1, 1, 0), 18))
+	content_frame.add_child(cover_holder)
 	var cover := TextureRect.new()
-	cover.texture = _rounded_topic_cover_texture(topic, Vector2i(card.custom_minimum_size), 22)
+	cover.name = "topic_cover"
+	cover.texture = repository.topic_cover_texture(topic)
 	cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	cover.stretch_mode = TextureRect.STRETCH_SCALE
+	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cover.offset_left = 0
-	cover.offset_top = 0
-	cover.offset_right = 0
-	cover.offset_bottom = 0
 	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	frame.add_child(cover)
-	var gloss := Panel.new()
-	gloss.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	gloss.offset_left = 0
-	gloss.offset_top = 0
-	gloss.offset_right = 0
-	gloss.offset_bottom = maxf(28.0, card.custom_minimum_size.y * 0.32)
-	gloss.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	gloss.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1.0, 0.94, 0.78, 0.05), 22))
-	frame.add_child(gloss)
-	var content := Control.new()
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = 34
-	content.offset_top = 0
-	content.offset_right = -20
-	content.offset_bottom = 0
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(content)
+	cover_holder.add_child(cover)
+	var text_box := Control.new()
+	text_box.name = "topic_text_box"
+	text_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	text_box.offset_left = color_panel.offset_right + bump_size * 0.45 + 22
+	text_box.offset_top = inner_height * 0.16
+	text_box.offset_right = -(cover_width + cover_margin * 2.0 + 18.0)
+	text_box.offset_bottom = -inner_height * 0.15
+	text_box.custom_minimum_size.x = maxf(170.0, inner_width * 0.30)
+	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content_frame.add_child(text_box)
 	var title := Label.new()
+	title.name = "topic_title"
 	title.text = str(topic["name"])
-	title.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.clip_text = true
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_left = 0
-	title.offset_top = 22
-	title.offset_right = 300
-	title.offset_bottom = 98
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 42)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	title.add_theme_color_override("font_shadow_color", Color(0.32, 0.13, 0.02, 0.52))
-	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.offset_top = 0
+	title.offset_right = 0
+	title.offset_bottom = inner_height * 0.36
+	title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	title.add_theme_font_size_override("font_size", max(22, int(card_size.y * 0.15)))
+	title.add_theme_color_override("font_color", brown)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(title)
+	text_box.add_child(title)
+	var done := _topic_available_done_count(topic)
+	var total := _topic_available_mode_total(topic)
+	var progress_width := maxf(128.0, minf(text_box.custom_minimum_size.x, inner_width * 0.24))
+	var progress_label := Label.new()
+	progress_label.name = "topic_progress_label"
+	progress_label.text = "%d/%d" % [done, total]
+	progress_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	progress_label.offset_left = 0
+	progress_label.offset_top = -inner_height * 0.20
+	progress_label.offset_right = progress_width
+	progress_label.offset_bottom = -inner_height * 0.12
+	progress_label.add_theme_font_size_override("font_size", max(14, int(card_size.y * 0.075)))
+	progress_label.add_theme_color_override("font_color", soft_brown)
+	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	text_box.add_child(progress_label)
+	var bar := _topic_progress_bar(done, total, Vector2(progress_width, maxf(9.0, card_size.y * 0.032)), topic_color)
+	bar.name = "topic_progress_bar"
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	bar.offset_left = 0
+	bar.offset_top = -inner_height * 0.08
+	bar.offset_right = progress_width
+	bar.offset_bottom = -inner_height * 0.08 + bar.custom_minimum_size.y
+	text_box.add_child(bar)
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card
+
+
+func _topic_color(topic: Dictionary) -> Color:
+	var value := str(topic.get("color", "#D9933F"))
+	return Color(value) if value.begins_with("#") else orange
+
+
+func _left_topic_color_style(color: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.corner_radius_top_left = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_right = 0
+	return style
+
+
+func _topic_progress_bar(done: int, total: int, size: Vector2, fill_color: Color) -> Panel:
+	var holder := Panel.new()
+	holder.custom_minimum_size = size
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.78, 0.64, 0.48, 0.22)
+	var radius := int(size.y * 0.5)
+	track.corner_radius_top_left = radius
+	track.corner_radius_top_right = radius
+	track.corner_radius_bottom_left = radius
+	track.corner_radius_bottom_right = radius
+	holder.add_theme_stylebox_override("panel", track)
+	var ratio := 0.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
+	var fill := Panel.new()
+	fill.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	fill.offset_left = 0
+	fill.offset_top = 0
+	fill.offset_right = size.x * ratio
+	fill.offset_bottom = 0
+	fill.visible = ratio > 0.0
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill_style := StyleBoxFlat.new()
+	fill_style.bg_color = fill_color
+	fill_style.corner_radius_top_left = radius
+	fill_style.corner_radius_top_right = radius
+	fill_style.corner_radius_bottom_left = radius
+	fill_style.corner_radius_bottom_right = radius
+	fill.add_theme_stylebox_override("panel", fill_style)
+	holder.add_child(fill)
+	return holder
 
 
 func _card_button(text: String, size: Vector2, action: Callable) -> Button:
@@ -1227,7 +1340,7 @@ func _swap_mode_badge(done: bool, size: float) -> Panel:
 	style.corner_radius_bottom_right = 10
 	badge.add_theme_stylebox_override("panel", style)
 	var label := Label.new()
-	label.text = "3x4"
+	label.text = "4x3"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", max(12, int(size * 0.28)))
@@ -1647,7 +1760,6 @@ func _on_puzzle_state_changed(state: Dictionary) -> void:
 
 
 func _build_game_hud(level_title: String) -> void:
-	var viewport_size := get_viewport_rect().size
 	var bar_height := _game_top_bar_height()
 	var top_bar := Control.new()
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -1657,29 +1769,6 @@ func _build_game_hud(level_title: String) -> void:
 	top_bar.offset_bottom = bar_height
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen_root.add_child(top_bar)
-	var bg := ColorRect.new()
-	bg.color = cream
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_bar.add_child(bg)
-	var back_button := _icon_button(icon_left_arrow, func() -> void:
-		_show_levels(current_topic, str(current_level.get("id", "")))
-	, _t("back"))
-	back_button.position = Vector2(10, (bar_height - _icon_button_size()) * 0.5)
-	top_bar.add_child(back_button)
-	var title := Label.new()
-	title.text = level_title
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.custom_minimum_size = Vector2(120, bar_height)
-	title.offset_left = 82
-	title.offset_top = 0
-	title.offset_right = -220 if current_mode != "swap" else -170
-	title.offset_bottom = bar_height
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", brown)
-	top_bar.add_child(title)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -1689,24 +1778,16 @@ func _build_game_hud(level_title: String) -> void:
 	top_actions.offset_bottom = top_actions.offset_top + _icon_button_size()
 	top_actions.add_theme_constant_override("separation", 6)
 	top_bar.add_child(top_actions)
-	top_actions.add_child(_icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint")))
-	if current_mode != "swap":
-		top_actions.add_child(_tool_text_button(_t("organize"), puzzle_board.organize_pieces, _t("organize_tip")))
-	top_actions.add_child(_icon_button(icon_setting, _show_settings_modal, _t("settings")))
-	top_actions.add_child(_icon_button(icon_pause, _show_pause_modal, _t("pause")))
+	var hint_button := _icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint"))
+	top_actions.add_child(hint_button)
 	zoom_label = null
 	status_label = Label.new()
-	if current_mode == "swap":
-		status_label.text = _t("status_swap")
-	elif progress_store.random_rotation_enabled():
-		status_label.text = _t("status_drag_rotate")
-	else:
-		status_label.text = _t("status_drag")
-	status_label.position = Vector2(20, bar_height + 8.0)
+	status_label.text = ""
+	status_label.visible = false
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
 	hud_blocker_controls.clear()
-	hud_blocker_controls.append(top_bar)
+	hud_blocker_controls.append(hint_button)
 	_queue_game_drag_blocker_refresh()
 	_animate_screen_in(screen_root)
 
@@ -1715,18 +1796,12 @@ func _hud_top_icons_width() -> float:
 	return _game_top_actions_width()
 
 
-func _hud_bottom_icons_width() -> float:
-	return _icon_button_size() + _hud_text_button_width(_t("organize")) + _hud_button_separation()
-
-
 func _game_top_bar_height() -> float:
 	return _icon_button_size() + 22.0
 
 
 func _game_top_actions_width() -> float:
-	var icon_count := 3.0 if current_mode == "swap" else 3.0
-	var text_width := 0.0 if current_mode == "swap" else _hud_text_button_width(_t("organize"))
-	return icon_count * _icon_button_size() + text_width + 6.0 * 4.0 + 20.0
+	return _icon_button_size() + 20.0
 
 
 func _hud_title_size(text: String) -> Vector2:

@@ -19,7 +19,6 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D
 	var node := Node2D.new()
 	node.name = piece["id"] + "_visual"
 	node.add_child(_piece_lift_shadow(piece["polygon"]))
-	node.add_child(_piece_outline_line(piece["polygon"], 4.4, SEPARATOR_COLOR, -1, "piece_separator"))
 	var poly := Polygon2D.new()
 	poly.name = "piece_texture"
 	poly.texture = texture
@@ -33,9 +32,6 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D
 	light.color = SURFACE_LIGHT_COLOR
 	light.z_index = 1
 	node.add_child(light)
-	node.add_child(_piece_outline_line(piece["polygon"], 2.4, OUTLINE_COLOR, 3, "piece_outline"))
-	node.add_child(_piece_outline_line(piece["polygon"], 1.8, INNER_SHADE_COLOR, 4, "piece_inner_shade", Vector2(0.65, 0.85)))
-	node.add_child(_piece_outline_line(piece["polygon"], 1.2, INNER_HIGHLIGHT_COLOR, 5, "piece_inner_highlight", Vector2(-0.55, -0.65)))
 	for cut_line in piece["cut_lines"]:
 		node.add_child(_piece_cut_line(cut_line, 1.7, CUT_LINE_COLOR, 6))
 	return node
@@ -57,14 +53,9 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node) -> void:
 		if shadow != null:
 			tween.parallel().tween_property(shadow, "modulate:a", 1.0 if lifted else 0.0, 0.12)
 		for child in visual.get_children():
-			if child is Line2D:
+			if child is Line2D and child.name == "piece_cut_line":
 				var line := child as Line2D
-				if line.name == "piece_separator":
-					tween.parallel().tween_property(line, "default_color", SEPARATOR_LIFT_COLOR if lifted else SEPARATOR_COLOR, 0.12)
-				elif line.name == "piece_outline":
-					tween.parallel().tween_property(line, "default_color", OUTLINE_LIFT_COLOR if lifted else OUTLINE_COLOR, 0.12)
-				elif line.name == "piece_cut_line":
-					tween.parallel().tween_property(line, "default_color", CUT_LINE_LIFT_COLOR if lifted else CUT_LINE_COLOR, 0.12)
+				tween.parallel().tween_property(line, "default_color", CUT_LINE_LIFT_COLOR if lifted else CUT_LINE_COLOR, 0.12)
 
 
 static func _piece_lift_shadow(points: PackedVector2Array) -> Node2D:

@@ -18,6 +18,12 @@ from PIL import Image, ImageSequence, UnidentifiedImageError
 
 
 @dataclass(frozen=True)
+class InputFile:
+    path: Path
+    relative_path: Path
+
+
+@dataclass(frozen=True)
 class Result:
     src: Path
     dst: Path
@@ -44,24 +50,29 @@ def bounded_int(min_value: int, max_value: int):
     return parse
 
 
-def collect_inputs(inputs: list[Path], recursive: bool) -> list[Path]:
-    files: list[Path] = []
+def collect_inputs(inputs: list[Path], recursive: bool) -> list[InputFile]:
+    files: list[InputFile] = []
     for input_path in inputs:
         path = input_path.resolve()
         if path.is_dir():
             iterator = path.rglob("*") if recursive else path.iterdir()
-            files.extend(sorted(candidate for candidate in iterator if candidate.is_file()))
+            files.extend(
+                InputFile(candidate, candidate.relative_to(path))
+                for candidate in sorted(iterator)
+                if candidate.is_file()
+            )
         elif path.is_file():
-            files.append(path)
+            files.append(InputFile(path, Path(path.name)))
         else:
             print(f"skip missing path: {path}")
     return files
 
 
-def output_path_for(src: Path, output_dir: Path | None) -> Path:
+def output_path_for(input_file: InputFile, output_dir: Path | None) -> Path:
+    src = input_file.path
     if output_dir is None:
         return src
-    return (output_dir.resolve() / src.name).resolve()
+    return (output_dir.resolve() / input_file.relative_path).resolve()
 
 
 def frame_geometry(path: Path) -> list[tuple[int, int]]:
@@ -271,8 +282,9 @@ def main() -> int:
 
     written = 0
     saved = 0
-    for src in files:
-        dst = output_path_for(src, args.output_dir)
+    for input_file in files:
+        src = input_file.path
+        dst = output_path_for(input_file, args.output_dir)
         result = compress_one(src, dst, args.min_savings, args.png_colors, args.jpeg_quality, args.webp_quality)
         print_result(result)
         if result.status == "wrote" and result.after is not None:

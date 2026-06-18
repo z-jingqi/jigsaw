@@ -20,16 +20,30 @@ const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
 const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
-const HINT_GLOW_COLOR := Color(1.0, 0.72, 0.16, 0.34)
-const HINT_OUTLINE_COLOR := Color(1.0, 0.82, 0.26, 0.96)
-const SWAP_FALLBACK_COLS := 5
-const SWAP_FALLBACK_ROWS := 7
+const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
+const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
+const SNAP_VISUAL_GAP := 0.5
+const SWAP_FALLBACK_COLS := 7
+const SWAP_FALLBACK_ROWS := 5
 const SWAP_ANIMATION_TIME := 0.20
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
-const ORGANIZE_GAP := 22.0
-const ORGANIZE_MIN_SCREEN_GAP := 48.0
 const GROUP_Z_STEP := 64
+const TRAY_HEIGHT_RATIO := 1.0 / 6.0
+const TRAY_MIN_HEIGHT := 132.0
+const TRAY_PADDING := 14.0
+const TRAY_GAP := 32.0
+const TRAY_ANIMATION_TIME := 0.20
+const TRAY_Z_INDEX := 4090
+const TRAY_HIT_PADDING := 18.0
+const TRAY_EXIT_THRESHOLD := 18.0
+const TRAY_VERTICAL_DRAG_THRESHOLD := 12.0
+const TRAY_HORIZONTAL_DRAG_THRESHOLD := 16.0
+const TRAY_LONG_PRESS_MSEC := 180
+const TRAY_DRAG_LIFT_MARGIN := 28.0
+const TRAY_DRAG_Z_INDEX := 4095
+const TRAY_INERTIA_MIN_SPEED := 90.0
+const TRAY_INERTIA_FRICTION := 9.0
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const PieceGroupScript := preload("res://scripts/PieceGroup.gd")
 const PieceVisualFactoryScript := preload("res://scripts/PieceVisualFactory.gd")
@@ -44,6 +58,8 @@ var active_level_config := {}
 var current_mode := "knob"
 var rng := RandomNumberGenerator.new()
 var world_root: Node2D
+var tray_root: Node2D
+var tray_background: ColorRect
 var view_scale := 1.0
 var view_target_scale := 1.0
 var view_target_ratio := 1.0
@@ -52,9 +68,31 @@ var base_view_offset := Vector2.ZERO
 var view_offset := Vector2.ZERO
 var view_tween: Tween
 var groups: Array = []
+var tray_groups: Array = []
+var locked_groups: Array = []
+var tray_scroll_offset := 0.0
+var tray_content_width := 0.0
+var tray_panning := false
+var tray_pan_last_x := 0.0
+var tray_pending_group = null
+var tray_pending_start_pos := Vector2.ZERO
+var tray_pending_total_delta := Vector2.ZERO
+var tray_pending_press_msec := 0
+var tray_pending_was_scrolling := false
+var tray_scroll_velocity := 0.0
+var tray_last_pan_msec := 0
+var tray_inertia_active := false
 var swap_tiles: Array = []
 var spawn_bounds: Array[Rect2] = []
 var dragging = null
+var dragging_from_tray := false
+var dragging_tray_index := -1
+var dragging_original_tray_slot := Rect2()
+var tray_drag_offset := Vector2.ZERO
+var tray_drag_screen_offset := Vector2.ZERO
+var tray_drag_target_screen_offset := Vector2.ZERO
+var tray_drag_offset_tween: Tween
+var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
 var swap_drag_start_slot := -1
 var swap_drag_offset := Vector2.ZERO
@@ -85,6 +123,23 @@ func _ready() -> void:
 	rng.seed = 7
 
 
+func _process(delta: float) -> void:
+	if not tray_inertia_active:
+		return
+	var previous := tray_scroll_offset
+	tray_scroll_offset += tray_scroll_velocity * delta
+	_clamp_tray_scroll()
+	_layout_tray(true)
+	if is_equal_approx(previous, tray_scroll_offset):
+		_stop_tray_inertia()
+		return
+	var decay := maxf(0.0, 1.0 - TRAY_INERTIA_FRICTION * delta)
+	tray_scroll_velocity *= decay
+	if absf(tray_scroll_velocity) < TRAY_INERTIA_MIN_SPEED:
+		_stop_tray_inertia()
+	_notify_state_changed()
+
+
 func set_texts(next_texts: Dictionary) -> void:
 	texts = next_texts.duplicate()
 
@@ -100,6 +155,9 @@ func state_snapshot() -> Dictionary:
 		"view": {
 			"ratio": _view_ratio(),
 			"offset": _vector_to_json(view_offset),
+		},
+		"tray": {
+			"scroll": tray_scroll_offset,
 		},
 	}
 	if current_mode == "swap":
@@ -118,7 +176,7 @@ func state_snapshot() -> Dictionary:
 	else:
 		var group_states := []
 		for group in groups:
-			if group == null or not is_instance_valid(group.node):
+			if group == null or not is_instance_valid(group.node) or group.in_tray:
 				continue
 			var ids := []
 			for member in group.members:
@@ -128,8 +186,17 @@ func state_snapshot() -> Dictionary:
 				"position": _vector_to_json(group.node.position),
 				"rotation": float(group.node.rotation_degrees),
 				"z": int(group.node.z_index),
+				"locked": bool(group.locked),
+				"seed": bool(group.is_seed),
 			})
 		snapshot["groups"] = group_states
+		var tray_order := []
+		for group in tray_groups:
+			if group == null:
+				continue
+			for member in group.members:
+				tray_order.append(str(member["id"]))
+		snapshot["tray_order"] = tray_order
 	return snapshot
 
 
@@ -147,8 +214,6 @@ func apply_state_snapshot(snapshot: Dictionary) -> void:
 
 func _restore_group_state(snapshot: Dictionary) -> void:
 	var group_states: Array = snapshot.get("groups", [])
-	if group_states.is_empty():
-		return
 	var piece_to_group := {}
 	for group in groups:
 		for member in group.members:
@@ -162,29 +227,39 @@ func _restore_group_state(snapshot: Dictionary) -> void:
 		var active = piece_to_group.get(str(ids[0]), null)
 		if active == null or not groups.has(active):
 			continue
+		_send_group_to_world(active, active.anchor_home)
 		for index in range(1, ids.size()):
 			var other = piece_to_group.get(str(ids[index]), null)
 			if other != null and other != active and groups.has(other):
+				_send_group_to_world(other, other.anchor_home)
 				active.absorb(other)
 				groups.erase(other)
+				tray_groups.erase(other)
+				locked_groups.erase(other)
 				for member in active.members:
 					piece_to_group[str(member["id"])] = active
-		active.node.position = _json_vector(item.get("position", _vector_to_json(active.node.position)))
-		active.node.rotation_degrees = float(item.get("rotation", active.node.rotation_degrees))
-	var ordered := []
-	for item in group_states:
-		if typeof(item) != TYPE_DICTIONARY:
-			continue
-		var ids: Array = item.get("members", [])
-		if ids.is_empty():
-			continue
-		var group = piece_to_group.get(str(ids[0]), null)
-		if group != null and groups.has(group) and not ordered.has(group):
-			ordered.append(group)
+		active.node.position = active.anchor_home
+		active.node.rotation_degrees = 0.0
+		active.locked = true
+		active.in_tray = false
+		if bool(item.get("seed", false)):
+			active.is_seed = true
+		if not locked_groups.has(active):
+			locked_groups.append(active)
+	tray_groups.clear()
+	var tray_order: Array = snapshot.get("tray_order", [])
+	for id_value in tray_order:
+		var group = piece_to_group.get(str(id_value), null)
+		if group != null and groups.has(group) and not group.locked and not tray_groups.has(group):
+			tray_groups.append(group)
 	for group in groups:
-		if not ordered.has(group):
-			ordered.append(group)
-	groups = ordered
+		if not group.locked and not tray_groups.has(group):
+			tray_groups.append(group)
+	for index in tray_groups.size():
+		_move_group_to_tray(tray_groups[index], index, true)
+	tray_scroll_offset = 0.0
+	_clamp_tray_scroll()
+	_layout_tray(true)
 	_refresh_group_z_indices()
 
 
@@ -277,6 +352,11 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	world_root = Node2D.new()
 	world_root.name = "world_root"
 	add_child(world_root)
+	tray_root = Node2D.new()
+	tray_root.name = "tray_root"
+	tray_root.z_index = TRAY_Z_INDEX
+	tray_root.z_as_relative = false
+	add_child(tray_root)
 	_reset_view_transform()
 	var loaded := _start_play_session(current_mode)
 	if loaded and typeof(restore_state) == TYPE_DICTIONARY and not restore_state.is_empty():
@@ -288,9 +368,31 @@ func clear() -> void:
 	for child in get_children():
 		child.queue_free()
 	groups.clear()
+	tray_groups.clear()
+	locked_groups.clear()
+	tray_scroll_offset = 0.0
+	tray_content_width = 0.0
+	tray_panning = false
+	tray_pan_last_x = 0.0
+	tray_pending_group = null
+	tray_pending_start_pos = Vector2.ZERO
+	tray_pending_total_delta = Vector2.ZERO
+	tray_pending_press_msec = 0
+	tray_pending_was_scrolling = false
+	tray_scroll_velocity = 0.0
+	tray_last_pan_msec = 0
+	tray_inertia_active = false
 	swap_tiles.clear()
 	spawn_bounds.clear()
 	dragging = null
+	dragging_from_tray = false
+	dragging_tray_index = -1
+	dragging_original_tray_slot = Rect2()
+	tray_drag_offset = Vector2.ZERO
+	tray_drag_screen_offset = Vector2.ZERO
+	tray_drag_target_screen_offset = Vector2.ZERO
+	tray_drag_offset_tween = null
+	last_drag_screen_pos = Vector2.ZERO
 	swap_dragging = null
 	swap_drag_start_slot = -1
 	swap_drag_offset = Vector2.ZERO
@@ -305,6 +407,8 @@ func clear() -> void:
 	pan_touch_index = -1
 	pinch_active = false
 	world_root = null
+	tray_root = null
+	tray_background = null
 	view_scale = 1.0
 	view_target_scale = 1.0
 	view_target_ratio = 1.0
@@ -327,11 +431,19 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 		_zoom_view_at(magnify.position, view_scale * factor)
 		return true
 	if event is InputEventPanGesture:
-		var pan := event as InputEventPanGesture
-		_pan_view(-pan.delta)
-		return true
+		return false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
+		if mouse_event.pressed and _screen_in_drag_blockers(mouse_event.position):
+			return false
+		if _tray_area().has_point(mouse_event.position) and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
+			_stop_tray_inertia()
+			_pan_tray(48.0, false)
+			return true
+		if _tray_area().has_point(mouse_event.position) and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+			_stop_tray_inertia()
+			_pan_tray(-48.0, false)
+			return true
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
 			_zoom_view_at(mouse_event.position, view_scale + base_view_scale * VIEW_WHEEL_STEP)
 			return true
@@ -355,11 +467,17 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
+		if tray_pending_group != null:
+			_update_pending_tray_drag(motion.position, motion.relative)
+			return true
+		if tray_panning:
+			_pan_tray(motion.relative.x)
+			return true
 		if swap_dragging != null:
 			_move_swap_tile_to(swap_dragging, _screen_to_world(motion.position) + swap_drag_offset)
 			return true
 		if dragging != null:
-			_move_group_to(dragging, _screen_to_world(motion.position) + drag_offset)
+			_update_drag_position(motion.position)
 			return true
 		if panning:
 			_pan_view(motion.relative)
@@ -367,6 +485,9 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
+			if _screen_in_drag_blockers(touch.position):
+				return false
+			_stop_tray_inertia()
 			active_touches[touch.index] = touch.position
 			if active_touches.size() >= 2:
 				_begin_pinch()
@@ -386,6 +507,8 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 		if touch.index == active_touch_index:
 			_end_drag()
 			active_touch_index = -1
+		if tray_panning:
+			_release_tray_pan()
 		if touch.index == pan_touch_index:
 			_end_pan()
 		if active_touches.size() < 2:
@@ -394,6 +517,12 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	elif event is InputEventScreenDrag:
 		var drag_event := event as InputEventScreenDrag
 		active_touches[drag_event.index] = drag_event.position
+		if tray_pending_group != null and drag_event.index == active_touch_index:
+			_update_pending_tray_drag(drag_event.position, drag_event.relative)
+			return true
+		if tray_panning and drag_event.index == active_touch_index:
+			_pan_tray(drag_event.relative.x)
+			return true
 		if pinch_active and active_touches.size() >= 2:
 			_update_pinch()
 			return true
@@ -401,7 +530,7 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			_move_swap_tile_to(swap_dragging, _screen_to_world(drag_event.position) + swap_drag_offset)
 			return true
 		if dragging != null and drag_event.index == active_touch_index:
-			_move_group_to(dragging, _screen_to_world(drag_event.position) + drag_offset)
+			_update_drag_position(drag_event.position)
 			return true
 		if panning and drag_event.index == pan_touch_index:
 			_pan_view(drag_event.relative)
@@ -409,34 +538,10 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	return false
 
 
-func organize_pieces() -> void:
-	if current_mode == "swap":
-		reset_view()
-		status_changed.emit(_bt("organize_swap"))
-		return
-	if groups.is_empty():
-		return
-	_clear_hint_highlights()
-	var movable := _organizable_groups(false)
-	if movable.is_empty():
-		movable = _organizable_groups(true)
-	if movable.is_empty():
-		status_changed.emit(_bt("organize_done"))
-		return
-	movable.sort_custom(func(a, b) -> bool:
-		return _group_sort_area(a) > _group_sort_area(b)
-	)
-	var placements := _organized_group_positions(movable)
-	for group in movable:
-		if not placements.has(group):
-			continue
-		_animate_group_to(group, placements[group])
-	await _wait_for_group_layout_animation()
-	status_changed.emit(_bt("organized"))
-	_notify_state_changed(true)
-
-
 func fit_view_to_pieces(animate := true) -> void:
+	if current_mode != "swap":
+		_fit_view_to_board_outline(animate, true)
+		return
 	var bounds := _world_content_bounds()
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		reset_view()
@@ -445,7 +550,7 @@ func fit_view_to_pieces(animate := true) -> void:
 
 
 func reset_view() -> void:
-	_animate_view_to(base_view_scale, base_view_offset, 0.18)
+	_animate_view_to(base_view_scale, base_view_offset, 0.18, current_mode == "swap")
 
 
 func _reset_view_transform() -> void:
@@ -463,6 +568,7 @@ func _apply_view_transform() -> void:
 		return
 	world_root.position = view_offset
 	world_root.scale = Vector2.ONE * view_scale
+	_refresh_hint_line_widths()
 	zoom_changed.emit(roundi(_view_ratio() * 100.0))
 
 
@@ -483,7 +589,9 @@ func _view_ratio_for_scale(scale: float) -> float:
 
 
 func _clamped_actual_scale(scale: float) -> float:
-	return clampf(scale, base_view_scale * VIEW_MIN_RATIO, base_view_scale * VIEW_MAX_RATIO)
+	var pixel_max_scale := 1.0 / maxf(0.001, source_scale)
+	var max_scale := minf(base_view_scale * VIEW_MAX_RATIO, pixel_max_scale)
+	return clampf(scale, base_view_scale * VIEW_MIN_RATIO, maxf(base_view_scale * VIEW_MIN_RATIO, max_scale))
 
 
 func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
@@ -497,7 +605,7 @@ func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
 	_notify_state_changed()
 
 
-func _animate_view_to(target_scale: float, target_offset: Vector2, duration: float) -> void:
+func _animate_view_to(target_scale: float, target_offset: Vector2, duration: float, clamp_target := true) -> void:
 	if view_tween != null and view_tween.is_valid():
 		view_tween.kill()
 	view_target_scale = _clamped_actual_scale(target_scale)
@@ -505,20 +613,22 @@ func _animate_view_to(target_scale: float, target_offset: Vector2, duration: flo
 	var start_scale := view_scale
 	var start_offset := view_offset
 	var final_scale := view_target_scale
-	var final_offset := _clamped_view_offset(target_offset, final_scale)
+	var final_offset := _clamped_view_offset(target_offset, final_scale) if clamp_target else target_offset
 	view_tween = create_tween()
 	view_tween.set_ease(Tween.EASE_OUT)
 	view_tween.set_trans(Tween.TRANS_CUBIC)
 	view_tween.tween_method(func(t: float) -> void:
 		view_scale = lerpf(start_scale, final_scale, t)
 		view_offset = start_offset.lerp(final_offset, t)
-		_clamp_view_to_table()
+		if clamp_target:
+			_clamp_view_to_table()
 		_apply_view_transform()
 	, 0.0, 1.0, duration)
 	view_tween.finished.connect(func() -> void:
 		view_scale = final_scale
 		view_offset = final_offset
-		_clamp_view_to_table()
+		if clamp_target:
+			_clamp_view_to_table()
 		_apply_view_transform()
 		_notify_state_changed(true)
 	)
@@ -584,22 +694,55 @@ func _clamp_view_to_table() -> void:
 
 
 func _clamped_view_offset(offset: Vector2, scale: float) -> Vector2:
-	var viewport := get_viewport_rect().size
+	var view_rect := _world_view_screen_rect()
 	var table := _virtual_table_area().grow(VIEW_FIT_PADDING)
 	var clamped := offset
-	if table.size.x * scale <= viewport.x:
-		clamped.x = viewport.x * 0.5 - table.get_center().x * scale
+	if table.size.x * scale <= view_rect.size.x:
+		clamped.x = view_rect.position.x + view_rect.size.x * 0.5 - table.get_center().x * scale
 	else:
-		var min_x := viewport.x - table.end.x * scale
-		var max_x := -table.position.x * scale
+		var min_x := view_rect.end.x - table.end.x * scale
+		var max_x := view_rect.position.x - table.position.x * scale
 		clamped.x = clampf(offset.x, min_x, max_x)
-	if table.size.y * scale <= viewport.y:
-		clamped.y = viewport.y * 0.5 - table.get_center().y * scale
+	if table.size.y * scale <= view_rect.size.y:
+		clamped.y = view_rect.position.y + view_rect.size.y * 0.5 - table.get_center().y * scale
 	else:
-		var min_y := viewport.y - table.end.y * scale
-		var max_y := -table.position.y * scale
+		var min_y := view_rect.end.y - table.end.y * scale
+		var max_y := view_rect.position.y - table.position.y * scale
 		clamped.y = clampf(offset.y, min_y, max_y)
 	return clamped
+
+
+func _world_view_screen_rect() -> Rect2:
+	var viewport := get_viewport_rect().size
+	if current_mode == "swap":
+		return Rect2(Vector2.ZERO, viewport)
+	var tray := _tray_area()
+	return Rect2(Vector2.ZERO, Vector2(viewport.x, maxf(120.0, tray.position.y)))
+
+
+func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
+	var board := Rect2(board_origin, source_size * source_scale)
+	if board.size.x <= 0.0 or board.size.y <= 0.0:
+		return
+	var view_rect := _world_view_screen_rect()
+	var target_scale := minf(
+		view_rect.size.x * 0.70 / maxf(1.0, board.size.x),
+		view_rect.size.y * 0.70 / maxf(1.0, board.size.y)
+	)
+	target_scale = clampf(target_scale, 0.001, 1.0 / maxf(0.001, source_scale))
+	var target_offset := view_rect.position + view_rect.size * 0.5 - board.get_center() * target_scale
+	if set_baseline:
+		base_view_scale = target_scale
+		base_view_offset = target_offset
+		view_target_ratio = 1.0
+	if animate:
+		_animate_view_to(target_scale, target_offset, 0.22)
+	else:
+		view_scale = target_scale
+		view_target_scale = target_scale
+		view_target_ratio = _view_ratio_for_scale(target_scale)
+		view_offset = target_offset
+		_apply_view_transform()
 
 
 func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX_RATIO, set_baseline := false) -> void:
@@ -614,7 +757,7 @@ func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX
 		base_view_offset = target_offset
 		view_target_ratio = 1.0
 	else:
-		target_scale = clampf(target_scale, base_view_scale * VIEW_MIN_RATIO, base_view_scale * minf(max_ratio, VIEW_MAX_RATIO))
+		target_scale = _clamped_actual_scale(clampf(target_scale, base_view_scale * VIEW_MIN_RATIO, base_view_scale * minf(max_ratio, VIEW_MAX_RATIO)))
 		target_offset = viewport * 0.5 - target_center * target_scale
 		target_offset = _clamped_view_offset(target_offset, target_scale)
 	if animate:
@@ -643,6 +786,8 @@ func _world_content_bounds() -> Rect2:
 		bounds = bounds.merge(tile_bounds) if has_bounds else tile_bounds
 		has_bounds = true
 	for group in groups:
+		if group.in_tray:
+			continue
 		var group_bounds := _group_bounds_at(group, group.node.position)
 		if group_bounds.size.x <= 0.0 or group_bounds.size.y <= 0.0:
 			continue
@@ -652,159 +797,13 @@ func _world_content_bounds() -> Rect2:
 
 
 func _focus_hint_pair(pair: Array) -> void:
-	var bounds := _group_bounds_at(pair[0], pair[0].node.position)
-	bounds = bounds.merge(_group_bounds_at(pair[1], pair[1].node.position))
+	var focus_group = pair[1] if pair.size() > 1 and pair[0].in_tray else pair[0]
+	var bounds := _group_bounds_at(focus_group, focus_group.node.position)
+	if pair.size() > 1 and not pair[1].in_tray:
+		bounds = bounds.merge(_group_bounds_at(pair[1], pair[1].node.position))
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return
 	_fit_view_to_world_rect(bounds.grow(VIEW_HINT_PADDING), true, VIEW_HINT_MAX_RATIO, false)
-
-
-func _organizable_groups(include_clusters: bool) -> Array:
-	var result := []
-	for group in groups:
-		if group == dragging or group.is_animating:
-			continue
-		if _group_near_home(group):
-			continue
-		if include_clusters or group.members.size() <= 1:
-			result.append(group)
-	return result
-
-
-func _group_near_home(group) -> bool:
-	var target: Vector2 = group.anchor_home
-	var distance: float = group.node.position.distance_to(target)
-	return distance <= maxf(28.0, source_scale * 34.0) and absf(wrapf(group.node.rotation_degrees, -180.0, 180.0)) <= ROTATION_TOLERANCE
-
-
-func _group_sort_area(group) -> float:
-	var bounds := _group_bounds_at(group, group.node.position)
-	return bounds.size.x * bounds.size.y
-
-
-func _organized_group_positions(movable: Array) -> Dictionary:
-	var placements := {}
-	var remaining := movable.duplicate()
-	var areas := _organize_areas()
-	for area in areas:
-		if remaining.is_empty():
-			break
-		remaining = _pack_groups_in_area(remaining, area, placements)
-	if not remaining.is_empty():
-		var fallback := _safe_organize_area()
-		_pack_groups_in_area(remaining, fallback, placements)
-	return placements
-
-
-func _organize_areas() -> Array[Rect2]:
-	var gap := _organize_gap()
-	var table := _safe_organize_area()
-	var board := Rect2(board_origin, source_size * source_scale).grow(gap)
-	var areas: Array[Rect2] = []
-	var bottom := Rect2(
-		Vector2(table.position.x, board.end.y + gap),
-		Vector2(table.size.x, table.end.y - board.end.y - gap)
-	)
-	var left := Rect2(
-		table.position,
-		Vector2(board.position.x - table.position.x - gap, table.size.y)
-	)
-	var right := Rect2(
-		Vector2(board.end.x + gap, table.position.y),
-		Vector2(table.end.x - board.end.x - gap, table.size.y)
-	)
-	var top := Rect2(
-		table.position,
-		Vector2(table.size.x, board.position.y - table.position.y - gap)
-	)
-	for area in [bottom, left, right, top]:
-		if area.size.x >= 96.0 and area.size.y >= 96.0:
-			areas.append(area)
-	return areas
-
-
-func _safe_organize_area() -> Rect2:
-	var gap := _organize_gap()
-	var organize_scale := maxf(0.001, view_scale)
-	var organize_offset := view_offset
-	var area := _visible_world_area_for_view(organize_scale, organize_offset).grow(-PIECE_DRAG_PADDING / organize_scale).grow(-gap)
-	if area.size.x < 140.0 or area.size.y < 140.0:
-		area = _piece_drag_area(false).grow(-gap)
-	if drag_blockers.is_empty():
-		return area
-	var trimmed := area
-	var viewport := get_viewport_rect().size
-	for blocker in drag_blockers:
-		if blocker.size.x <= 0.0 or blocker.size.y <= 0.0:
-			continue
-		var world_blocker := _screen_rect_to_world_for_view(blocker.grow(8.0), organize_scale, organize_offset)
-		if not trimmed.intersects(world_blocker):
-			continue
-		var touches_left := blocker.position.x <= 6.0
-		var touches_top := blocker.position.y <= 6.0
-		var touches_right := blocker.end.x >= viewport.x - 6.0
-		var touches_bottom := blocker.end.y >= viewport.y - 6.0
-		if touches_bottom:
-			trimmed.size.y = minf(trimmed.size.y, maxf(0.0, world_blocker.position.y - trimmed.position.y - gap))
-		if touches_top:
-			var bottom := trimmed.end.y
-			trimmed.position.y = minf(bottom, maxf(trimmed.position.y, world_blocker.end.y + gap))
-			trimmed.size.y = maxf(0.0, bottom - trimmed.position.y)
-		if touches_right:
-			trimmed.size.x = minf(trimmed.size.x, maxf(0.0, world_blocker.position.x - trimmed.position.x - gap))
-		if touches_left:
-			var right := trimmed.end.x
-			trimmed.position.x = minf(right, maxf(trimmed.position.x, world_blocker.end.x + gap))
-			trimmed.size.x = maxf(0.0, right - trimmed.position.x)
-	if trimmed.size.x >= 140.0 and trimmed.size.y >= 140.0:
-		return trimmed
-	return area
-
-
-func _organize_gap() -> float:
-	return maxf(ORGANIZE_GAP, ORGANIZE_MIN_SCREEN_GAP / maxf(0.001, view_scale))
-
-
-func _pack_groups_in_area(candidates: Array, area: Rect2, placements: Dictionary) -> Array:
-	var remaining := []
-	var gap := _organize_gap()
-	var cursor := area.position + Vector2(gap, gap)
-	var row_height := 0.0
-	for group in candidates:
-		var bounds := _group_bounds_at(group, group.node.position)
-		var size := bounds.size + Vector2(gap, gap)
-		if size.x > area.size.x or size.y > area.size.y:
-			remaining.append(group)
-			continue
-		if cursor.x + size.x > area.end.x:
-			cursor.x = area.position.x + gap
-			cursor.y += row_height + gap
-			row_height = 0.0
-		if cursor.y + size.y > area.end.y:
-			remaining.append(group)
-			continue
-		var top_left := cursor
-		placements[group] = top_left + group.node.position - bounds.position
-		cursor.x += size.x
-		row_height = maxf(row_height, size.y)
-	return remaining
-
-
-func _animate_group_to(group, target_position: Vector2) -> void:
-	group.is_animating = true
-	_bring_to_front(group)
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "position", _clamped_group_position(group, target_position, true), 0.24)
-	tween.finished.connect(func(g = group) -> void:
-		if is_instance_valid(g.node):
-			g.is_animating = false
-	)
-
-
-func _wait_for_group_layout_animation() -> void:
-	await get_tree().create_timer(0.26).timeout
 
 
 func show_hint() -> void:
@@ -817,14 +816,20 @@ func show_hint() -> void:
 		status_changed.emit(_bt("hint_none"))
 		return
 	_set_hint_highlights(pair)
+	_scroll_tray_group_into_view(pair[0])
 	_focus_hint_pair(pair)
-	_hint_pulse_node(pair[0].node)
-	_hint_pulse_node(pair[1].node)
 	status_changed.emit(_bt("hint_pair"))
 
 
 func set_drag_blockers(blockers: Array[Rect2]) -> void:
 	drag_blockers = blockers.duplicate()
+
+
+func _screen_in_drag_blockers(screen_pos: Vector2) -> bool:
+	for blocker in drag_blockers:
+		if blocker.has_point(screen_pos):
+			return true
+	return false
 
 
 func _start_play_session(play_mode: String) -> bool:
@@ -836,12 +841,17 @@ func _start_play_session(play_mode: String) -> bool:
 	source_scale = level["source_scale"]
 	board_origin = level["board_origin"]
 	spawn_bounds.clear()
+	_add_board_outline_shadow()
 	var sorted_pieces: Array = level["pieces"].duplicate()
 	sorted_pieces.sort_custom(func(a, b) -> bool:
 		return _points_bounds_area(a["bounds_points"]) > _points_bounds_area(b["bounds_points"])
 	)
+	var seed_ids := _seed_piece_ids(sorted_pieces, _mode_config(active_level_config, play_mode))
 	for piece in sorted_pieces:
-		_create_group(piece)
+		var is_seed := seed_ids.has(str(piece.get("id", "")))
+		_create_group(piece, is_seed)
+	tray_scroll_offset = 0.0
+	_layout_tray(true)
 	fit_view_to_pieces(false)
 	return true
 
@@ -1295,10 +1305,29 @@ func _level_background_color(level_config: Dictionary) -> Color:
 	return Color("#ead8bd")
 
 
-func _create_group(piece: Dictionary) -> void:
+func _add_board_outline_shadow() -> void:
+	if world_root == null or source_size.x <= 0.0 or source_size.y <= 0.0:
+		return
+	var shadow := ColorRect.new()
+	shadow.name = "board_outline_shadow"
+	shadow.color = Color(0.36, 0.23, 0.12, 0.12)
+	shadow.position = board_origin - Vector2(5, 5)
+	shadow.size = source_size * source_scale + Vector2(10, 10)
+	shadow.z_index = -50
+	world_root.add_child(shadow)
+	var target := ColorRect.new()
+	target.name = "board_target_area"
+	target.color = Color(1.0, 0.96, 0.86, 0.22)
+	target.position = board_origin
+	target.size = source_size * source_scale
+	target.z_index = -49
+	world_root.add_child(target)
+
+
+func _create_group(piece: Dictionary, locked_seed := false) -> void:
 	var group_node := Node2D.new()
 	group_node.name = piece["id"]
-	group_node.rotation_degrees = [0, 90, 180, 270][int(rng.randi_range(0, 3))] if randomize_piece_rotation else 0.0
+	group_node.rotation_degrees = 0.0 if locked_seed else ([0, 90, 180, 270][int(rng.randi_range(0, 3))] if randomize_piece_rotation else 0.0)
 	group_node.z_index = groups.size() * GROUP_Z_STEP
 	world_root.add_child(group_node)
 	var visual := PieceVisualFactoryScript.create_piece_visual(piece, texture)
@@ -1306,8 +1335,383 @@ func _create_group(piece: Dictionary) -> void:
 	piece["visual"] = visual
 	var group = PieceGroupScript.new(group_node, piece)
 	groups.append(group)
-	_move_group_to(group, _scatter_position_for_group(group), false)
-	spawn_bounds.append(_group_bounds_at(group, group.node.position).grow(PIECE_SPAWN_SEPARATION))
+	if locked_seed:
+		group.locked = true
+		group.is_seed = true
+		group.node.position = group.anchor_home
+		locked_groups.append(group)
+	else:
+		group.in_tray = true
+		tray_groups.append(group)
+		_move_group_to_tray(group, tray_groups.size() - 1, true)
+
+
+func _seed_piece_ids(pieces: Array, mode_config: Dictionary) -> Array[String]:
+	var valid := {}
+	for piece in pieces:
+		valid[str(piece.get("id", ""))] = true
+	var assist: Dictionary = mode_config.get("assist", {})
+	var seed: Dictionary = assist.get("seed", {}) if typeof(assist) == TYPE_DICTIONARY else {}
+	var manual_ids: Array[String] = []
+	if str(seed.get("mode", "auto")) == "manual" and seed.has("piece_ids") and typeof(seed["piece_ids"]) == TYPE_ARRAY:
+		for id_value in seed["piece_ids"]:
+			var id := str(id_value)
+			if valid.has(id) and not manual_ids.has(id):
+				manual_ids.append(id)
+	if not manual_ids.is_empty():
+		return manual_ids
+	var count := maxi(1, int(seed.get("count", 1)))
+	return _auto_seed_piece_ids(pieces, count)
+
+
+func _auto_seed_piece_ids(pieces: Array, count: int) -> Array[String]:
+	var scored := pieces.duplicate()
+	scored.sort_custom(func(a, b) -> bool:
+		return _seed_score(a) > _seed_score(b)
+	)
+	var result: Array[String] = []
+	if scored.is_empty():
+		return result
+	var step: int = maxi(1, int(ceil(float(scored.size()) / float(maxi(1, count)))))
+	var index: int = 0
+	while result.size() < count and index < scored.size():
+		var id := str(scored[index].get("id", ""))
+		if not id.is_empty():
+			result.append(id)
+		index += step
+	index = 0
+	while result.size() < count and index < scored.size():
+		var id := str(scored[index].get("id", ""))
+		if not id.is_empty() and not result.has(id):
+			result.append(id)
+		index += 1
+	return result
+
+
+func _seed_score(piece: Dictionary) -> float:
+	var home: Vector2 = piece.get("home", Vector2.ZERO)
+	var source_center := board_origin + source_size * source_scale * 0.5
+	var max_distance := maxf(1.0, (source_size * source_scale * 0.5).length())
+	var edge_score := home.distance_to(source_center) / max_distance
+	var neighbor_count := 0
+	if piece.has("neighbors") and typeof(piece["neighbors"]) == TYPE_ARRAY:
+		neighbor_count = piece["neighbors"].size()
+	return edge_score + float(4 - mini(4, neighbor_count)) * 0.25
+
+
+func _tray_area() -> Rect2:
+	var viewport := get_viewport_rect().size
+	var height := maxf(TRAY_MIN_HEIGHT, viewport.y * TRAY_HEIGHT_RATIO)
+	return Rect2(Vector2(0, maxf(0.0, viewport.y - height)), Vector2(viewport.x, height))
+
+
+func _ensure_tray_background() -> void:
+	if tray_root == null or not is_instance_valid(tray_root):
+		return
+	if tray_background == null or not is_instance_valid(tray_background):
+		tray_background = ColorRect.new()
+		tray_background.name = "tray_background"
+		tray_background.color = Color(0.18, 0.18, 0.18, 0.28)
+		tray_background.z_index = -10
+		tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tray_root.add_child(tray_background)
+	var area := _tray_area()
+	tray_background.position = area.position
+	tray_background.size = area.size
+
+
+func _layout_tray(instant := false) -> void:
+	_ensure_tray_background()
+	_layout_tray_items(instant)
+	var previous_scroll := tray_scroll_offset
+	_clamp_tray_scroll()
+	if not is_equal_approx(previous_scroll, tray_scroll_offset):
+		_layout_tray_items(instant)
+
+
+func _layout_tray_items(instant := false) -> void:
+	var area := _tray_area()
+	var cursor_x := area.position.x + TRAY_PADDING - tray_scroll_offset
+	var content_end := area.position.x + TRAY_PADDING
+	for index in tray_groups.size():
+		var group = tray_groups[index]
+		if group == null or not is_instance_valid(group.node):
+			continue
+		if not group.in_tray:
+			if group == dragging and dragging_from_tray:
+				var slot_width := maxf(group.tray_slot.size.x, TRAY_GAP)
+				cursor_x += slot_width + TRAY_GAP
+				content_end = maxf(content_end, cursor_x + tray_scroll_offset)
+			continue
+		_move_group_to_tray(group, index, instant, cursor_x)
+		cursor_x = group.tray_slot.end.x + TRAY_GAP
+		content_end = maxf(content_end, cursor_x + tray_scroll_offset)
+	tray_content_width = maxf(0.0, content_end - area.position.x)
+
+
+func _clamp_tray_scroll() -> void:
+	var area := _tray_area()
+	tray_scroll_offset = clampf(tray_scroll_offset, 0.0, maxf(0.0, tray_content_width - area.size.x + TRAY_PADDING))
+
+
+func _pan_tray(delta_x: float, record_velocity := true) -> void:
+	var now := Time.get_ticks_msec()
+	if record_velocity:
+		var elapsed := maxf(0.001, float(now - tray_last_pan_msec) / 1000.0) if tray_last_pan_msec > 0 else 0.016
+		tray_scroll_velocity = -delta_x / elapsed
+		tray_last_pan_msec = now
+	tray_scroll_offset -= delta_x
+	_clamp_tray_scroll()
+	_layout_tray(true)
+	_notify_state_changed()
+
+
+func _start_tray_inertia() -> void:
+	if absf(tray_scroll_velocity) < TRAY_INERTIA_MIN_SPEED:
+		_stop_tray_inertia()
+		return
+	tray_inertia_active = true
+
+
+func _stop_tray_inertia() -> void:
+	tray_inertia_active = false
+	tray_scroll_velocity = 0.0
+	tray_last_pan_msec = 0
+
+
+func _release_tray_pan() -> void:
+	tray_panning = false
+	_start_tray_inertia()
+
+
+func _scroll_tray_group_into_view(group) -> void:
+	if group == null or not group.in_tray:
+		return
+	var area := _tray_area().grow(-TRAY_PADDING)
+	if group.tray_slot.position.x < area.position.x:
+		tray_scroll_offset -= area.position.x - group.tray_slot.position.x
+	elif group.tray_slot.end.x > area.end.x:
+		tray_scroll_offset += group.tray_slot.end.x - area.end.x
+	_clamp_tray_scroll()
+	_layout_tray(false)
+
+
+func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	if group.tray_tween != null and group.tray_tween.is_valid():
+		group.tray_tween.kill()
+	var current_screen_position: Vector2 = group.node.position
+	if group.node.get_parent() == world_root:
+		current_screen_position = _world_to_screen(group.node.position)
+	if group.node.get_parent() != tray_root:
+		if group.node.get_parent() != null:
+			group.node.get_parent().remove_child(group.node)
+		tray_root.add_child(group.node)
+		group.node.position = current_screen_position
+	group.in_tray = true
+	group.locked = false
+	group.tray_index = index
+	group.node.rotation_degrees = 0.0
+	var bounds := _group_local_bounds(group)
+	var area := _tray_area()
+	var target_height := maxf(24.0, area.size.y - TRAY_PADDING * 2.0)
+	var scale := minf(1.0, target_height / maxf(1.0, bounds.size.y))
+	group.tray_scale = scale
+	var scaled_size := bounds.size * scale
+	var x := forced_x if not is_nan(forced_x) else area.position.x + TRAY_PADDING + float(index) * (scaled_size.x + TRAY_GAP)
+	var top_left := Vector2(x, area.position.y + (area.size.y - scaled_size.y) * 0.5)
+	group.tray_slot = Rect2(top_left, scaled_size)
+	var target_position := top_left - bounds.position * scale
+	group.node.z_index = index * GROUP_Z_STEP
+	if instant:
+		group.is_animating = false
+		group.node.scale = Vector2.ONE * scale
+		group.node.position = target_position
+		_refresh_hint_line_widths()
+		return
+	group.is_animating = true
+	var tween := create_tween()
+	group.tray_tween = tween
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.parallel().tween_property(group.node, "position", target_position, TRAY_ANIMATION_TIME)
+	tween.parallel().tween_property(group.node, "scale", Vector2.ONE * scale, TRAY_ANIMATION_TIME)
+	tween.finished.connect(func(g = group) -> void:
+		if is_instance_valid(g.node):
+			g.is_animating = false
+			g.tray_tween = null
+			_refresh_hint_line_widths()
+	)
+
+
+func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := TRAY_HIT_PADDING):
+	for i in range(tray_groups.size() - 1, -1, -1):
+		var group = tray_groups[i]
+		if group == exclude:
+			continue
+		if group != null and group.in_tray and group.tray_slot.grow(hit_padding).has_point(screen_pos):
+			return group
+	return null
+
+
+func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
+	tray_pending_group = group
+	tray_pending_start_pos = screen_pos
+	tray_pending_total_delta = Vector2.ZERO
+	tray_pending_press_msec = Time.get_ticks_msec()
+	tray_pending_was_scrolling = false
+	group.node.z_index = TRAY_DRAG_Z_INDEX
+	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	_follow_pending_tray_group(screen_pos)
+
+
+func _follow_pending_tray_group(screen_pos: Vector2) -> void:
+	if tray_pending_group == null or not is_instance_valid(tray_pending_group.node):
+		return
+	if not tray_pending_group.in_tray:
+		return
+	var bounds := _group_local_bounds(tray_pending_group)
+	var scale: float = tray_pending_group.tray_scale
+	var local_center := bounds.position + bounds.size * 0.5
+	tray_pending_group.node.position = screen_pos - local_center * scale
+	tray_pending_group.node.z_index = TRAY_DRAG_Z_INDEX
+
+
+func _end_tray_piece_press() -> void:
+	var group = tray_pending_group
+	tray_pending_group = null
+	tray_pending_start_pos = Vector2.ZERO
+	tray_pending_total_delta = Vector2.ZERO
+	tray_pending_press_msec = 0
+	tray_pending_was_scrolling = false
+	if group != null and is_instance_valid(group.node):
+		PieceVisualFactoryScript.set_group_lifted(group, false, self)
+	_layout_tray(false)
+	_start_tray_inertia()
+
+
+func _group_local_bounds(group) -> Rect2:
+	var has_point := false
+	var min_point := Vector2(INF, INF)
+	var max_point := Vector2(-INF, -INF)
+	for member in group.members:
+		var visual_position: Vector2 = member["visual"].position
+		for bounds_points in _member_bounds_points_list(member):
+			for point in bounds_points:
+				var local_point: Vector2 = visual_position + point
+				min_point = min_point.min(local_point)
+				max_point = max_point.max(local_point)
+				has_point = true
+	if not has_point:
+		return Rect2(Vector2.ZERO, Vector2(1, 1))
+	return Rect2(min_point, max_point - min_point)
+
+
+func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) -> void:
+	if group.node.get_parent() != world_root:
+		if group.node.get_parent() != null:
+			group.node.get_parent().remove_child(group.node)
+		world_root.add_child(group.node)
+	group.node.scale = Vector2.ONE * local_scale
+	group.node.position = world_position
+	group.in_tray = false
+	_bring_to_front(group)
+
+
+func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
+	if tray_pending_group == null:
+		return
+	tray_pending_total_delta += relative
+	_follow_pending_tray_group(screen_pos)
+	var held_long_enough := Time.get_ticks_msec() - tray_pending_press_msec >= TRAY_LONG_PRESS_MSEC
+	var should_drag_vertical := tray_pending_total_delta.y <= -TRAY_VERTICAL_DRAG_THRESHOLD or screen_pos.y < _tray_area().position.y - TRAY_EXIT_THRESHOLD
+	var should_drag_horizontal := held_long_enough and not tray_pending_was_scrolling and absf(tray_pending_total_delta.x) >= TRAY_HORIZONTAL_DRAG_THRESHOLD
+	if should_drag_vertical or should_drag_horizontal:
+		_start_tray_world_drag(tray_pending_group, screen_pos)
+		return
+	if absf(relative.x) > 0.0:
+		_pan_tray(relative.x)
+		_follow_pending_tray_group(screen_pos)
+		if absf(tray_pending_total_delta.x) >= TRAY_HORIZONTAL_DRAG_THRESHOLD and not held_long_enough:
+			tray_pending_was_scrolling = true
+
+
+func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
+	if group == null:
+		return
+	_clear_hint_highlights()
+	_stop_tray_inertia()
+	tray_pending_group = null
+	tray_pending_start_pos = Vector2.ZERO
+	tray_pending_total_delta = Vector2.ZERO
+	tray_pending_press_msec = 0
+	tray_pending_was_scrolling = false
+	dragging = group
+	dragging_from_tray = true
+	dragging_tray_index = group.tray_index
+	dragging_original_tray_slot = group.tray_slot
+	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	tray_drag_screen_offset = Vector2.ZERO
+	tray_drag_target_screen_offset = Vector2.ZERO
+	last_drag_screen_pos = screen_pos
+	var world_pos := _screen_to_world(screen_pos)
+	var initial_scale: float = group.tray_scale / maxf(0.001, view_scale)
+	_send_group_to_world(group, world_pos, initial_scale)
+	group.node.z_index = TRAY_DRAG_Z_INDEX
+	_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
+	_animate_dragged_group_to_world_scale(group)
+	drag_offset = Vector2.ZERO
+	_notify_state_changed()
+
+
+func _update_drag_position(screen_pos: Vector2) -> void:
+	last_drag_screen_pos = screen_pos
+	if dragging_from_tray:
+		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
+		_place_dragging_from_screen(screen_pos)
+		return
+	_move_group_to(dragging, _screen_to_world(screen_pos) + drag_offset)
+
+
+func _place_dragging_from_screen(screen_pos: Vector2) -> void:
+	if dragging == null or not is_instance_valid(dragging.node):
+		return
+	dragging.node.position = _screen_to_world(screen_pos + tray_drag_screen_offset)
+	dragging.node.z_index = TRAY_DRAG_Z_INDEX
+
+
+func _tray_drag_target_for_screen(screen_pos: Vector2) -> Vector2:
+	if dragging == null or _tray_area().has_point(screen_pos):
+		return Vector2.ZERO
+	var bounds := _group_local_bounds(dragging)
+	var bottom_at_pointer := bounds.end.y * view_scale
+	return Vector2(0.0, minf(-TRAY_DRAG_LIFT_MARGIN, -TRAY_DRAG_LIFT_MARGIN - bottom_at_pointer))
+
+
+func _set_tray_drag_target_offset(target: Vector2) -> void:
+	if tray_drag_target_screen_offset.is_equal_approx(target):
+		return
+	tray_drag_target_screen_offset = target
+	if tray_drag_offset_tween != null and tray_drag_offset_tween.is_valid():
+		tray_drag_offset_tween.kill()
+	var start := tray_drag_screen_offset
+	tray_drag_offset_tween = create_tween()
+	tray_drag_offset_tween.set_ease(Tween.EASE_OUT)
+	tray_drag_offset_tween.set_trans(Tween.TRANS_CUBIC)
+	tray_drag_offset_tween.tween_method(func(t: float) -> void:
+		tray_drag_screen_offset = start.lerp(tray_drag_target_screen_offset, t)
+		_place_dragging_from_screen(last_drag_screen_pos)
+	, 0.0, 1.0, 0.12)
+
+
+func _animate_dragged_group_to_world_scale(group) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(group.node, "scale", Vector2.ONE, 0.10)
 
 
 func _scatter_position_for_group(group) -> Vector2:
@@ -1483,9 +1887,9 @@ func _visible_world_area() -> Rect2:
 
 
 func _visible_world_area_for_view(scale: float, offset: Vector2) -> Rect2:
-	var viewport := get_viewport_rect().size
-	var top_left := _screen_to_world_for_view(Vector2.ZERO, scale, offset)
-	var bottom_right := _screen_to_world_for_view(viewport, scale, offset)
+	var view_rect := _world_view_screen_rect()
+	var top_left := _screen_to_world_for_view(view_rect.position, scale, offset)
+	var bottom_right := _screen_to_world_for_view(view_rect.end, scale, offset)
 	var position := top_left.min(bottom_right)
 	var size := (bottom_right - top_left).abs()
 	return Rect2(position, size)
@@ -1535,12 +1939,26 @@ func _begin_drag(screen_pos: Vector2) -> void:
 	if current_mode == "swap":
 		_begin_swap_drag(screen_pos)
 		return
+	last_drag_screen_pos = screen_pos
+	if _tray_area().has_point(screen_pos):
+		_stop_tray_inertia()
+	var tray_group = _tray_group_at_screen(screen_pos)
+	if tray_group != null:
+		if tray_group.is_animating:
+			return
+		_begin_tray_piece_press(tray_group, screen_pos)
+		return
+	if _tray_area().has_point(screen_pos):
+		tray_panning = true
+		tray_pan_last_x = screen_pos.x
+		return
 	var world_pos := _screen_to_world(screen_pos)
 	var group = _group_at_world(world_pos)
 	if group == null:
 		_begin_pan(screen_pos, active_touch_index)
 		return
-	if group.is_animating:
+	if group.is_animating or group.locked:
+		_begin_pan(screen_pos, active_touch_index)
 		return
 	_clear_hint_highlights()
 	_select_group(group)
@@ -1555,19 +1973,40 @@ func _end_drag() -> void:
 	if current_mode == "swap":
 		_end_swap_drag()
 		return
+	if tray_pending_group != null:
+		_end_tray_piece_press()
+		return
+	if tray_panning:
+		_release_tray_pan()
+		return
 	if dragging == null:
 		return
 	var released_group = dragging
-	_try_snap_chain(dragging)
+	var snapped := _try_snap_chain(dragging)
+	if dragging_from_tray and not snapped:
+		_return_group_to_tray(released_group)
+	elif snapped:
+		_lock_group(released_group)
 	_check_complete()
 	PieceVisualFactoryScript.set_group_lifted(released_group, false, self)
 	dragging = null
+	dragging_from_tray = false
+	dragging_tray_index = -1
+	tray_drag_offset = Vector2.ZERO
+	tray_drag_screen_offset = Vector2.ZERO
+	tray_drag_target_screen_offset = Vector2.ZERO
+	if tray_drag_offset_tween != null and tray_drag_offset_tween.is_valid():
+		tray_drag_offset_tween.kill()
+	tray_drag_offset_tween = null
+	last_drag_screen_pos = Vector2.ZERO
 	_notify_state_changed(true)
 
 
 func _group_at_world(world_pos: Vector2):
 	for i in range(groups.size() - 1, -1, -1):
 		var group = groups[i]
+		if group.locked or group.in_tray:
+			continue
 		var local_to_group: Vector2 = group.node.transform.affine_inverse() * world_pos
 		for member in group.members:
 			var local_to_piece: Vector2 = local_to_group - member["visual"].position
@@ -1781,21 +2220,71 @@ func _refresh_group_z_indices() -> void:
 		groups[i].node.z_index = i * GROUP_Z_STEP
 
 
-func _try_snap_chain(active) -> void:
+func _try_snap_chain(active) -> bool:
+	if active == null or active.locked:
+		return false
+	var snapped := false
 	var progressed := true
 	while progressed:
 		progressed = false
-		var other = SnapSolverScript.find_match(active, groups, _snap_tolerance(), ROTATION_TOLERANCE)
+		var other = SnapSolverScript.find_match(active, _locked_snap_targets(active), _snap_tolerance(), ROTATION_TOLERANCE)
 		if other != null:
 			_clear_hint_highlights()
-			active.absorb(other)
+			active.absorb(other, SNAP_VISUAL_GAP)
 			groups.erase(other)
+			locked_groups.erase(other)
 			_refresh_group_z_indices()
-			_move_group_to(active, active.node.position, false)
+			active.node.position = active.anchor_home
+			active.node.rotation_degrees = 0.0
 			if selected_group == other:
 				selected_group = active
 			_pulse_node(active.node)
+			snapped = true
 			progressed = true
+	return snapped
+
+
+func _locked_snap_targets(active) -> Array:
+	var result := []
+	for group in groups:
+		if group != active and group.locked:
+			result.append(group)
+	return result
+
+
+func _lock_group(group) -> void:
+	if group == null:
+		return
+	group.locked = true
+	group.in_tray = false
+	group.node.position = group.anchor_home
+	group.node.rotation_degrees = 0.0
+	if not locked_groups.has(group):
+		locked_groups.append(group)
+	if tray_groups.has(group):
+		tray_groups.erase(group)
+		_reindex_tray()
+		_layout_tray(false)
+
+
+func _return_group_to_tray(group) -> void:
+	if group == null:
+		return
+	group.locked = false
+	group.in_tray = true
+	group.node.rotation_degrees = 0.0
+	if not tray_groups.has(group):
+		var index := clampi(dragging_tray_index, 0, tray_groups.size())
+		tray_groups.insert(index, group)
+	_reindex_tray()
+	_layout_tray(false)
+
+
+func _reindex_tray() -> void:
+	for index in tray_groups.size():
+		var group = tray_groups[index]
+		if group != null:
+			group.tray_index = index
 
 
 func _snap_tolerance() -> float:
@@ -1803,10 +2292,14 @@ func _snap_tolerance() -> float:
 
 
 func _check_complete() -> void:
-	if groups.size() == 1:
-		if not completion_emitted:
-			completion_emitted = true
-			completed.emit()
+	if current_mode == "swap":
+		return
+	for group in groups:
+		if not group.locked:
+			return
+	if not completion_emitted:
+		completion_emitted = true
+		completed.emit()
 
 
 func _set_hint_highlights(pair: Array) -> void:
@@ -1828,8 +2321,7 @@ func _add_hint_outline_to_group(group) -> void:
 	for member in group.members:
 		var visual: Node2D = member["visual"]
 		var polygon: PackedVector2Array = member["polygon"]
-		_add_hint_outline_line(visual, polygon, 9.0, HINT_GLOW_COLOR, 30)
-		_add_hint_outline_line(visual, polygon, 4.0, HINT_OUTLINE_COLOR, 31)
+		_add_hint_outline_line(visual, polygon, 3.0, HINT_OUTLINE_COLOR, 31)
 
 
 func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int) -> void:
@@ -1844,18 +2336,36 @@ func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: 
 	line.antialiased = true
 	line.points = polygon
 	line.z_index = z_index
+	line.set_meta("screen_width", width)
 	visual.add_child(line)
+	_update_hint_line_width(line)
 	hint_highlighted_lines.append(line)
 	var tween := create_tween()
-	tween.set_loops(3)
+	tween.set_loops(5)
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_property(line, "modulate:a", 0.38, 0.28)
-	tween.tween_property(line, "modulate:a", 1.0, 0.28)
+	tween.parallel().tween_property(line, "scale", Vector2(1.018, 1.018), 0.30)
+	tween.parallel().tween_property(line, "modulate:a", 0.42, 0.30)
+	tween.tween_property(line, "scale", Vector2.ONE, 0.30)
+	tween.parallel().tween_property(line, "modulate:a", 1.0, 0.30)
+
+
+func _refresh_hint_line_widths() -> void:
+	for line in hint_highlighted_lines:
+		_update_hint_line_width(line)
+
+
+func _update_hint_line_width(line: Line2D) -> void:
+	if line == null or not is_instance_valid(line):
+		return
+	var screen_width := float(line.get_meta("screen_width", line.width))
+	var transform := line.get_global_transform()
+	var scale := maxf(transform.x.length(), transform.y.length())
+	line.width = screen_width / maxf(0.001, scale)
 
 
 func _auto_clear_hint_highlights(token: int) -> void:
-	await get_tree().create_timer(1.85).timeout
+	await get_tree().create_timer(3.0).timeout
 	if token == hint_highlight_token:
 		_clear_hint_highlights()
 
@@ -1871,8 +2381,12 @@ func _clear_hint_highlights() -> void:
 
 func _find_hint_pair() -> Array:
 	for a in groups:
+		if a.locked:
+			continue
 		for b in groups:
 			if a == b:
+				continue
+			if not b.locked:
 				continue
 			if not _groups_are_neighbors(a, b):
 				continue

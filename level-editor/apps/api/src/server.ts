@@ -4,10 +4,11 @@ import { cors } from "hono/cors";
 import fs from "node:fs/promises";
 import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import type { CatalogRenameOperation, LevelCatalog, LevelConfig } from "./types.js";
 import {
   applyCatalogRenames,
-  assertPortrait3x4,
+  assertLandscape4x3,
   ensureLevelDir,
   extensionFromFile,
   hydrateCatalog,
@@ -92,6 +93,22 @@ async function writeUpload(filePath: string, file: File) {
   await fs.writeFile(filePath, Buffer.from(await file.arrayBuffer()));
 }
 
+async function compressImage(filePath: string) {
+  const toolPath = path.join(repoRoot, "tools", "compress_images.py");
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("python3", [toolPath, filePath, "--jpeg-quality", "88"], { cwd: repoRoot });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || "封面压缩失败。"));
+    });
+  });
+}
+
 app.post("/api/topics/:topicId/:asset", async (c) => {
   const topicId = c.req.param("topicId");
   const asset = c.req.param("asset");
@@ -115,10 +132,12 @@ app.post("/api/levels/:topicId/:groupId/:levelId/cover", async (c) => {
   const levelId = c.req.param("levelId");
   try {
     const file = await readUploadFile(c);
-    const extension = extensionFromFile(file, ["jpg", "png", "webp"]);
+    extensionFromFile(file, ["jpg"]);
     await ensureLevelDir(topicId, groupId, levelId);
-    await writeUpload(levelCoverPath(topicId, groupId, levelId, extension), file);
-    return c.json({ path: levelCoverResPath(topicId, groupId, levelId, extension) });
+    const coverPath = levelCoverPath(topicId, groupId, levelId, "jpg");
+    await writeUpload(coverPath, file);
+    await compressImage(coverPath);
+    return c.json({ path: levelCoverResPath(topicId, groupId, levelId, "jpg") });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);
   }
@@ -136,7 +155,7 @@ app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   try {
     const size = readJpegSize(buffer);
-    assertPortrait3x4(size.width, size.height);
+    assertLandscape4x3(size.width, size.height);
     await ensureLevelDir(topicId, groupId, levelId);
     await fs.writeFile(sourceImagePath(topicId, groupId, levelId), buffer);
     const level = await readLevel(topicId, groupId, levelId);

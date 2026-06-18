@@ -4,7 +4,7 @@ import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import type { LevelPiece, Point } from "./types";
 
 type CellPiece = LevelPiece & { cells: string[] };
-export type ShapeKind = "circle" | "square" | "heart" | "triangle";
+export type ShapeKind = "circle" | "square" | "heart" | "triangle" | "star" | "sector" | "crescent" | "hexagon" | "blob" | "shard";
 export type ShapeRequest = {
   kind: ShapeKind;
   count: number;
@@ -119,48 +119,136 @@ function generateVoronoiPoints(imageWidth: number, imageHeight: number, count: n
 
 function placeShape(kind: ShapeKind, imageWidth: number, imageHeight: number, targetCount: number, existing: Point[][], rng: () => number): Point[] {
   const averageSize = Math.sqrt((imageWidth * imageHeight) / Math.max(4, targetCount));
-  const radius = averageSize * (kind === "heart" ? 0.78 : kind === "square" ? 0.68 : 0.72);
+  const baseRadius = averageSize * shapeRadiusFactor(kind);
   for (let attempt = 0; attempt < 180; attempt++) {
+    const radius = baseRadius * randomAreaRadiusScale(kind, rng);
+    const angle = rng() * Math.PI * 2;
     const center: Point = [
       radius * 1.5 + rng() * (imageWidth - radius * 3),
       radius * 1.5 + rng() * (imageHeight - radius * 3),
     ];
-    const polygon = shapePolygon(kind, center, radius);
+    const polygon = shapePolygon(kind, center, radius, angle, rng);
     if (existing.some((other) => polygonsOverlapRough(polygon, other))) continue;
     return polygon;
   }
   return [];
 }
 
-function shapePolygon(kind: ShapeKind, center: Point, radius: number): Point[] {
+function randomAreaRadiusScale(kind: ShapeKind, rng: () => number) {
+  const range = shapeAreaScaleRange(kind);
+  const areaScale = range.min + rng() * (range.max - range.min);
+  return Math.sqrt(areaScale);
+}
+
+function shapeAreaScaleRange(kind: ShapeKind) {
+  if (kind === "sector" || kind === "crescent") return { min: 0.62, max: 1.55 };
+  if (kind === "star" || kind === "shard") return { min: 0.7, max: 1.45 };
+  return { min: 0.55, max: 1.65 };
+}
+
+function shapeRadiusFactor(kind: ShapeKind) {
+  if (kind === "heart") return 0.78;
+  if (kind === "square") return 0.68;
+  if (kind === "sector") return 0.86;
+  if (kind === "crescent") return 0.82;
+  if (kind === "shard") return 0.76;
+  return 0.72;
+}
+
+function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: number, rng: () => number): Point[] {
   if (kind === "square") {
-    const angle = Math.PI / 9;
     return [
       [-1, -1],
       [1, -1],
       [1, 1],
       [-1, 1],
-    ].map(([x, y]) => rotatePoint([center[0] + x * radius, center[1] + y * radius], center, angle));
+    ].map(([x, y]) => rotatePoint([center[0] + x * radius, center[1] + y * radius], center, rotation));
   }
   if (kind === "triangle") {
     return [0, 1, 2].map((index) => {
-      const angle = -Math.PI / 2 + index * (Math.PI * 2 / 3);
+      const angle = rotation - Math.PI / 2 + index * (Math.PI * 2 / 3);
       return [center[0] + Math.cos(angle) * radius * 1.25, center[1] + Math.sin(angle) * radius * 1.25];
     });
   }
+  if (kind === "star") {
+    const points: Point[] = [];
+    for (let i = 0; i < 10; i++) {
+      const angle = rotation - Math.PI / 2 + (Math.PI * 2 * i) / 10;
+      const r = i % 2 === 0 ? radius * 1.15 : radius * 0.5;
+      points.push([center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r]);
+    }
+    return points;
+  }
+  if (kind === "sector") {
+    const points: Point[] = [center];
+    const spread = Math.PI * (0.46 + rng() * 0.18);
+    const arcSteps = 36;
+    for (let i = 0; i <= arcSteps; i++) {
+      const angle = rotation - spread / 2 + (spread * i) / arcSteps;
+      points.push([center[0] + Math.cos(angle) * radius * 1.35, center[1] + Math.sin(angle) * radius * 1.35]);
+    }
+    return points;
+  }
+  if (kind === "crescent") {
+    const points: Point[] = [];
+    const start = rotation - Math.PI * 0.92;
+    const end = rotation + Math.PI * 0.92;
+    const arcSteps = 36;
+    for (let i = 0; i <= arcSteps; i++) {
+      const angle = start + ((end - start) * i) / arcSteps;
+      points.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
+    }
+    const innerCenter: Point = [center[0] + Math.cos(rotation) * radius * 0.48, center[1] + Math.sin(rotation) * radius * 0.48];
+    for (let i = arcSteps; i >= 0; i--) {
+      const angle = start + ((end - start) * i) / arcSteps;
+      points.push([innerCenter[0] + Math.cos(angle) * radius * 0.68, innerCenter[1] + Math.sin(angle) * radius * 0.68]);
+    }
+    return points;
+  }
+  if (kind === "hexagon") {
+    return Array.from({ length: 6 }, (_, index) => {
+      const angle = rotation + Math.PI / 6 + (Math.PI * 2 * index) / 6;
+      return [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius] as Point;
+    });
+  }
+  if (kind === "blob") {
+    const anchors = Array.from({ length: 12 }, () => 0.72 + rng() * 0.46);
+    return Array.from({ length: 60 }, (_, index) => {
+      const position = (index / 60) * anchors.length;
+      const anchorIndex = Math.floor(position) % anchors.length;
+      const nextIndex = (anchorIndex + 1) % anchors.length;
+      const t = position - Math.floor(position);
+      const eased = t * t * (3 - 2 * t);
+      const r = radius * (anchors[anchorIndex] * (1 - eased) + anchors[nextIndex] * eased);
+      const angle = rotation + (Math.PI * 2 * index) / 60;
+      return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r] as Point;
+    });
+  }
+  if (kind === "shard") {
+    return [
+      [0, -1.22],
+      [0.78, -0.52],
+      [1.05, 0.26],
+      [0.28, 0.92],
+      [-0.62, 0.7],
+      [-1.08, -0.18],
+    ].map(([x, y]) => rotatePoint([center[0] + x * radius, center[1] + y * radius], center, rotation));
+  }
   if (kind === "heart") {
     const points: Point[] = [];
-    for (let i = 0; i < 34; i++) {
-      const t = (Math.PI * 2 * i) / 34;
+    const steps = 72;
+    for (let i = 0; i < steps; i++) {
+      const t = (Math.PI * 2 * i) / steps;
       const x = 16 * Math.pow(Math.sin(t), 3);
       const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-      points.push([center[0] + (x / 18) * radius, center[1] + (y / 18) * radius]);
+      points.push(rotatePoint([center[0] + (x / 18) * radius, center[1] + (y / 18) * radius], center, rotation));
     }
     return points;
   }
   const points: Point[] = [];
-  for (let i = 0; i < 28; i++) {
-    const angle = (Math.PI * 2 * i) / 28;
+  const steps = 64;
+  for (let i = 0; i < steps; i++) {
+    const angle = rotation + (Math.PI * 2 * i) / steps;
     points.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
   }
   return points;

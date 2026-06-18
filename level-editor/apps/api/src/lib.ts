@@ -1,19 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelStatus } from "./types.js";
+import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelStatus, SeedAssist } from "./types.js";
 import { catalogPath, groupDir, levelDir, levelJsonPath, levelResPath, sourceImagePath, sourceResPath, topicDir } from "./paths.js";
 
 export const defaultPreset = {
-  id: "mobile_portrait_3x4",
-  name: "Mobile portrait 3:4",
-  aspect_ratio: 0.75,
+  id: "mobile_landscape_4x3",
+  name: "Mobile landscape 4:3",
+  aspect_ratio: 4 / 3,
   default: true,
 };
-const DEFAULT_KNOB_COLS = 6;
-const DEFAULT_KNOB_ROWS = 8;
+const DEFAULT_KNOB_COLS = 8;
+const DEFAULT_KNOB_ROWS = 6;
 const DEFAULT_KNOB_SIZE = 0.24;
-const DEFAULT_SWAP_COLS = 5;
-const DEFAULT_SWAP_ROWS = 7;
+const DEFAULT_SWAP_COLS = 7;
+const DEFAULT_SWAP_ROWS = 5;
+const DEFAULT_POLYGON_SEED_COUNT = 1;
+const DEFAULT_KNOB_SEED_COUNT = 1;
 const DEFAULT_TOPIC_COLOR = "#D9933F";
 const DEFAULT_GROUP_COLOR = "#F6EBD4";
 
@@ -32,6 +34,47 @@ function paddedId(prefix: string, index: number) {
 
 export function zhI18n(value: string) {
   return { zh: value, "zh-Hans": value, _: value };
+}
+
+function defaultAssist(count: number): SeedAssist {
+  return {
+    outline: true,
+    seed: {
+      mode: "auto",
+      count,
+      piece_ids: [],
+    },
+  };
+}
+
+function normalizeAssist(input: unknown, defaultCount: number, validIds?: Set<string>): SeedAssist {
+  const raw = input && typeof input === "object" ? (input as Partial<SeedAssist>) : {};
+  const rawSeed = raw.seed && typeof raw.seed === "object"
+    ? (raw.seed as Partial<SeedAssist["seed"]>)
+    : {};
+  const mode = rawSeed.mode === "manual" ? "manual" : "auto";
+  const count = Math.max(0, Math.floor(Number(rawSeed.count ?? defaultCount) || defaultCount));
+  const pieceIds = Array.isArray(rawSeed.piece_ids)
+    ? rawSeed.piece_ids.map((id: unknown) => String(id)).filter((id) => !validIds || validIds.has(id))
+    : [];
+  return {
+    outline: raw.outline !== false,
+    seed: {
+      mode,
+      count,
+      piece_ids: mode === "manual" ? pieceIds : [],
+    },
+  };
+}
+
+function knobSeedIds(cols: number, rows: number) {
+  const ids = new Set<string>();
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      ids.add(`knob_${row}_${col}`);
+    }
+  }
+  return ids;
 }
 
 export function emptyCatalog(): LevelCatalog {
@@ -186,6 +229,7 @@ export async function hydrateCatalog(catalog: LevelCatalog): Promise<LevelCatalo
           title: config.title,
           title_i18n: config.title_i18n,
           cover: config.cover,
+          background_color: config.background.color,
           source: config.image.path,
         });
       }
@@ -324,13 +368,13 @@ export function defaultLevelConfig(topicId: string, groupId: string, levelId: st
       path: sourceResPath(topicId, groupId, levelId),
       width: 0,
       height: 0,
-      aspect_ratio: 0.75,
+      aspect_ratio: 4 / 3,
       preset: defaultPreset.id,
     },
     background: { type: "color", color: "#F6EBD4" },
     modes: {
-      polygon: { pieces: [], generator: null },
-      knob: { auto: true, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE },
+      polygon: { pieces: [], generator: null, assist: defaultAssist(DEFAULT_POLYGON_SEED_COUNT) },
+      knob: { auto: true, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE, assist: defaultAssist(DEFAULT_KNOB_SEED_COUNT) },
       swap: { auto: true, cols: DEFAULT_SWAP_COLS, rows: DEFAULT_SWAP_ROWS },
     },
   };
@@ -341,7 +385,11 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
 	const raw = input && typeof input === "object" ? (input as Partial<LevelConfig>) : {};
 	const imageWidth = Number(raw.image?.width || 0);
 	const imageHeight = Number(raw.image?.height || 0);
-	const imageAspect = Number(raw.image?.aspect_ratio || (imageWidth && imageHeight ? imageWidth / imageHeight : 0.75));
+	const imageAspect = Number(raw.image?.aspect_ratio || (imageWidth && imageHeight ? imageWidth / imageHeight : 4 / 3));
+  const polygonPieces = Array.isArray(raw.modes?.polygon?.pieces) ? raw.modes.polygon.pieces : [];
+  const polygonSeedIds = new Set(polygonPieces.map((piece) => piece.id));
+  const knobCols = Number(raw.modes?.knob?.cols || DEFAULT_KNOB_COLS);
+  const knobRows = Number(raw.modes?.knob?.rows || DEFAULT_KNOB_ROWS);
 		return {
 	    ...base,
 	    version: 3,
@@ -364,14 +412,16 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
 		},
     modes: {
       polygon: {
-        pieces: Array.isArray(raw.modes?.polygon?.pieces) ? raw.modes.polygon.pieces : [],
+        pieces: polygonPieces,
         generator: raw.modes?.polygon?.generator ?? null,
+        assist: normalizeAssist(raw.modes?.polygon?.assist, DEFAULT_POLYGON_SEED_COUNT, polygonSeedIds),
       },
       knob: {
         auto: true,
-        cols: Number(raw.modes?.knob?.cols || DEFAULT_KNOB_COLS),
-        rows: Number(raw.modes?.knob?.rows || DEFAULT_KNOB_ROWS),
+        cols: knobCols,
+        rows: knobRows,
         knob_size: Number(raw.modes?.knob?.knob_size || DEFAULT_KNOB_SIZE),
+        assist: normalizeAssist(raw.modes?.knob?.assist, DEFAULT_KNOB_SEED_COUNT, knobSeedIds(knobCols, knobRows)),
       },
       swap: {
         auto: true,
@@ -438,9 +488,9 @@ export function readJpegSize(buffer: Buffer) {
   throw new Error("无法读取 JPG 尺寸。");
 }
 
-export function assertPortrait3x4(width: number, height: number) {
+export function assertLandscape4x3(width: number, height: number) {
   const ratio = width / height;
-  if (Math.abs(ratio - 0.75) > 0.01) {
-    throw new Error(`图片比例必须是 3:4，当前是 ${width}x${height}。`);
+  if (Math.abs(ratio - 4 / 3) > 0.01) {
+    throw new Error(`图片比例必须是 4:3，当前是 ${width}x${height}。`);
   }
 }

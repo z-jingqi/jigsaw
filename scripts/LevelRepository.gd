@@ -68,6 +68,8 @@ func build_catalog() -> Array[Dictionary]:
 				"id": str(topic.get("id", "")),
 				"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 				"cover": str(topic.get("cover", "")),
+				"color": str(topic.get("color", "#D9933F")),
+				"icon": str(topic.get("icon", "")),
 				"groups": groups,
 				"levels": flat_levels,
 			})
@@ -126,6 +128,11 @@ func level_thumbnail(level: Dictionary, target_size := Vector2i(260, 260)) -> Te
 func topic_cover_texture(topic: Dictionary) -> Texture2D:
 	var cover_path := str(topic.get("cover", ""))
 	return cached_texture(cover_path) if not cover_path.is_empty() else null
+
+
+func topic_icon_texture(topic: Dictionary) -> Texture2D:
+	var icon_path := str(topic.get("icon", ""))
+	return cached_texture(icon_path) if not icon_path.is_empty() else null
 
 
 func apply_level_media(level_config: Dictionary) -> Dictionary:

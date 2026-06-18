@@ -5,6 +5,7 @@ export type CatalogLevel = {
   title?: string;
   title_i18n?: I18nText;
   cover?: string;
+  background_color?: string;
   sort_order: number;
   path: string;
   source?: string;
@@ -49,6 +50,15 @@ export type LevelPiece = {
   cells?: string[];
 };
 
+export type SeedAssist = {
+  outline: boolean;
+  seed: {
+    mode: "auto" | "manual";
+    count: number;
+    piece_ids: string[];
+  };
+};
+
 export type LevelConfig = {
   version: 3;
   id: string;
@@ -68,8 +78,8 @@ export type LevelConfig = {
   };
   background: { type: "color"; color: string };
   modes: {
-    polygon?: { pieces: LevelPiece[]; generator?: unknown };
-    knob?: { auto: true; cols: number; rows: number; knob_size: number };
+    polygon?: { pieces: LevelPiece[]; generator?: unknown; assist: SeedAssist };
+    knob?: { auto: true; cols: number; rows: number; knob_size: number; assist: SeedAssist };
     swap?: { auto: true; cols: number; rows: number };
   };
 };
