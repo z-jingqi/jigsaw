@@ -62,6 +62,7 @@ func build_catalog() -> Array[Dictionary]:
 				groups.append({
 					"id": str(group.get("id", "")),
 					"name": localized_named(group, str(group.get("name", group.get("id", "")))),
+					"color": str(group.get("color", "")),
 					"levels": levels,
 				})
 			next_topics.append({
@@ -222,7 +223,8 @@ func cached_source_image(path: String, source_texture: Texture2D) -> Image:
 
 
 func level_list_image_path(level_config: Dictionary) -> String:
-	return default_level_image_path(level_config)
+	var cover_path := str(level_config.get("cover", ""))
+	return cover_path if not cover_path.is_empty() else default_level_image_path(level_config)
 
 
 func level_thumbnail_source_path(level_config: Dictionary) -> String:

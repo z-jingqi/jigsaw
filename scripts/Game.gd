@@ -3,6 +3,7 @@ extends Node2D
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
 const LEVEL_NAME_BANNER_PATH := "res://assets/ui/level_name_banner.png"
 const OLIVE_BRANCH_PATH := "res://assets/ui/olive_branch.png"
+const LEVEL_TITLE_DECORATION_PATH := "res://assets/ui/level_title_decoration.png"
 const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
 const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
@@ -21,13 +22,16 @@ const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
 const PLAY_MODES := ["polygon", "knob", "swap"]
 const LEVEL_THUMBNAIL_SIZE := Vector2i(164, 164)
-const UI_ICON_BUTTON_SIZE := 44.0
-const UI_ICON_INSET := 7.0
-const HOME_ICON_BUTTON_SIZE := 54.0
-const HOME_ICON_INSET := 2.0
+const UI_ICON_BUTTON_SIZE := 64.0
+const UI_ICON_INSET := 8.0
+const GAME_HINT_BUTTON_SCALE := 2.0
+const HOME_ICON_BUTTON_SIZE := 72.0
+const HOME_ICON_INSET := 8.0
 const GAME_FOOTER_MARGIN := 18.0
 const HUD_BLOCKER_PADDING := 18.0
 const HUD_DEBUG_MEASUREMENTS := false
+const BUTTON_BOUNDS_DEBUG := false
+const BUTTON_BOUNDS_DEBUG_COLOR := Color(0.16, 0.56, 1.0, 0.20)
 const HUD_TEXT_BUTTON_FONT_SIZE := 22
 const UI_TEXT := {
 	"en": {
@@ -200,6 +204,7 @@ var repository = LevelRepositoryScript.new()
 var title_texture: Texture2D
 var level_name_banner_texture: Texture2D
 var olive_branch_texture: Texture2D
+var level_title_decoration_texture: Texture2D
 var icon_album: Texture2D
 var icon_left_arrow: Texture2D
 var icon_lightbulb: Texture2D
@@ -237,6 +242,7 @@ var lazy_thumbnail_items: Array[Dictionary] = []
 var lazy_thumbnail_queue: Array[Dictionary] = []
 var lazy_thumbnail_processing := false
 var rounded_topic_cover_cache: Dictionary = {}
+var rounded_level_thumbnail_cache: Dictionary = {}
 var active_locale := "en"
 
 
@@ -245,6 +251,7 @@ func _ready() -> void:
 	title_texture = repository.cached_texture(TITLE_IMAGE_PATH)
 	level_name_banner_texture = repository.cached_texture(LEVEL_NAME_BANNER_PATH)
 	olive_branch_texture = repository.cached_texture(OLIVE_BRANCH_PATH)
+	level_title_decoration_texture = repository.cached_texture(LEVEL_TITLE_DECORATION_PATH)
 	icon_album = load(ICON_ALBUM_PATH)
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
 	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
@@ -364,6 +371,7 @@ func _animate_modal_panel(panel: Control) -> void:
 
 
 func _wire_button_animation(button: BaseButton) -> void:
+	_highlight_button_bounds(button)
 	button.pivot_offset = button.custom_minimum_size * 0.5
 	button.button_down.connect(func() -> void:
 		_tween_control_scale(button, Vector2(0.95, 0.95), 0.08)
@@ -383,6 +391,25 @@ func _tween_control_scale(control: Control, target: Vector2, duration: float) ->
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(control, "scale", target, duration)
+
+
+func _highlight_button_bounds(button: BaseButton) -> void:
+	if not BUTTON_BOUNDS_DEBUG or button == null or not is_instance_valid(button):
+		return
+	if button.has_node("button_bounds_debug"):
+		return
+	var overlay := ColorRect.new()
+	overlay.name = "button_bounds_debug"
+	overlay.color = BUTTON_BOUNDS_DEBUG_COLOR
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.offset_left = 0
+	overlay.offset_top = 0
+	overlay.offset_right = 0
+	overlay.offset_bottom = 0
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 4096
+	button.add_child(overlay)
+	overlay.move_to_front()
 
 
 func _rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
@@ -413,6 +440,37 @@ func _rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radi
 	_apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
 	var result := ImageTexture.create_from_image(image)
 	rounded_topic_cover_cache[cache_key] = result
+	return result
+
+
+func _rounded_level_thumbnail_texture(image_path: String, target_size: Vector2i, radius: int) -> Texture2D:
+	var cache_key := "%s@%dx%d@%d" % [image_path, target_size.x, target_size.y, radius]
+	if rounded_level_thumbnail_cache.has(cache_key):
+		return rounded_level_thumbnail_cache[cache_key]
+	var source_texture := repository.cached_texture(image_path)
+	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
+		return source_texture
+	var image := source_texture.get_image()
+	if image == null or image.is_empty():
+		return source_texture
+	var scale_factor := maxf(
+		float(target_size.x) / float(image.get_width()),
+		float(target_size.y) / float(image.get_height())
+	)
+	image.resize(
+		maxi(target_size.x, int(ceil(float(image.get_width()) * scale_factor))),
+		maxi(target_size.y, int(ceil(float(image.get_height()) * scale_factor))),
+		Image.INTERPOLATE_LANCZOS
+	)
+	var offset := Vector2i(
+		maxi(0, (image.get_width() - target_size.x) / 2),
+		maxi(0, (image.get_height() - target_size.y) / 2)
+	)
+	image = image.get_region(Rect2i(offset, target_size))
+	image.convert(Image.FORMAT_RGBA8)
+	_apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
+	var result := ImageTexture.create_from_image(image)
+	rounded_level_thumbnail_cache[cache_key] = result
 	return result
 
 
@@ -761,57 +819,379 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	current_screen = "levels"
 	current_topic = topic
 	var wrap := _base_screen(cream)
-	_header(wrap, topic["name"], _show_topics)
-	wrap.add_child(_topic_progress_block(topic))
+	wrap.add_child(_levels_header(topic))
 	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	wrap.add_child(scroll)
 	var center := CenterContainer.new()
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
-	var grid := GridContainer.new()
-	grid.columns = 1
-	grid.add_theme_constant_override("h_separation", 0)
-	grid.add_theme_constant_override("v_separation", 14)
-	center.add_child(grid)
+	var list := VBoxContainer.new()
+	list.custom_minimum_size.x = _levels_content_width()
+	list.add_theme_constant_override("separation", 22)
+	center.add_child(list)
 	var focus_card: Control = null
+	var rendered_count := 0
 	var groups: Array = topic.get("groups", [])
 	if groups.is_empty() and topic.has("levels"):
 		groups = [{"id": "default", "name": "", "levels": topic.get("levels", [])}]
 	for group in groups:
 		if typeof(group) != TYPE_DICTIONARY:
 			continue
-		var group_levels: Array = group.get("levels", [])
-		if not str(group.get("name", "")).is_empty():
-			grid.add_child(_level_group_header(str(group.get("name", ""))))
-		for level in group_levels:
-			var card := _level_card_button(
-				level,
-				func(l: Dictionary = level) -> void: _show_mode_dialog(l)
-			)
-			grid.add_child(card)
-			if str(level.get("id", "")) == focus_level_id:
-				focus_card = card
-	if topic.get("levels", []).is_empty():
-		grid.add_child(_empty_level_message())
-	var footer := HBoxContainer.new()
-	footer.alignment = BoxContainer.ALIGNMENT_CENTER
-	footer.add_theme_constant_override("separation", 18)
-	var polygon_total := _topic_mode_total(topic, "polygon")
-	if polygon_total > 0:
-		footer.add_child(_summary_item(icon_mode_polygon_done, "%d/%d" % [_topic_mode_done_count(topic, "polygon"), polygon_total]))
-	var knob_total := _topic_mode_total(topic, "knob")
-	if knob_total > 0:
-		footer.add_child(_summary_item(icon_mode_knob_done, "%d/%d" % [_topic_mode_done_count(topic, "knob"), knob_total]))
-	var swap_total := _topic_mode_total(topic, "swap")
-	if swap_total > 0:
-		footer.add_child(_summary_item(icon_mode_swap_done, "%d/%d" % [_topic_mode_done_count(topic, "swap"), swap_total]))
-	footer.add_child(_summary_item(icon_cat_paw, "%d/%d" % [_topic_available_done_count(topic), _topic_available_mode_total(topic)]))
-	wrap.add_child(footer)
-	_register_level_thumbnail_lazy_loader(scroll)
+		var panel_result := _level_group_panel(group, _topic_color(topic), focus_level_id)
+		if int(panel_result.get("count", 0)) <= 0:
+			continue
+		list.add_child(panel_result["panel"])
+		rendered_count += int(panel_result.get("count", 0))
+		var candidate = panel_result.get("focus_card", null)
+		if candidate != null:
+			focus_card = candidate
+	if rendered_count <= 0:
+		list.add_child(_empty_level_message())
 	if focus_card != null:
 		call_deferred("_scroll_level_card_into_view", scroll, focus_card)
+
+
+func _levels_content_width() -> float:
+	var width := get_viewport_rect().size.x - _screen_margin() * 2.0
+	return minf(maxf(280.0, width), 1040.0)
+
+
+func _levels_header(topic: Dictionary) -> Control:
+	var row := Control.new()
+	row.custom_minimum_size = Vector2(_levels_content_width(), 166)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var back_button := _levels_back_button()
+	back_button.position = Vector2(0, 40)
+	back_button.z_index = 3
+	row.add_child(back_button)
+	_add_levels_header_decoration(row)
+	var title := Label.new()
+	title.text = str(topic.get("name", ""))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.offset_left = 130
+	title.offset_top = 26
+	title.offset_right = -190
+	title.offset_bottom = 128
+	title.add_theme_font_size_override("font_size", 62)
+	title.add_theme_color_override("font_color", brown)
+	title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.16))
+	title.add_theme_constant_override("shadow_offset_x", 0)
+	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.z_index = 2
+	row.add_child(title)
+	return row
+
+
+func _levels_back_button() -> Button:
+	var button_size := 84.0
+	var button := _icon_button(icon_left_arrow, _show_topics, _t("back"), button_size, 22.0, true)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color("#FFF4DC")
+	normal.border_color = Color("#E69A57")
+	normal.border_width_left = 3
+	normal.border_width_top = 3
+	normal.border_width_right = 3
+	normal.border_width_bottom = 3
+	normal.corner_radius_top_left = 22
+	normal.corner_radius_top_right = 22
+	normal.corner_radius_bottom_left = 22
+	normal.corner_radius_bottom_right = 22
+	normal.shadow_color = Color(0.42, 0.24, 0.07, 0.10)
+	normal.shadow_size = 4
+	normal.shadow_offset = Vector2(0, 2)
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color("#FFE9C2")
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color("#F8DDA8")
+	button.add_theme_stylebox_override("pressed", pressed)
+	for state in ["disabled", "focus"]:
+		button.add_theme_stylebox_override(state, normal.duplicate())
+	for child in button.get_children():
+		if child is TextureRect:
+			child.modulate = brown
+			button.mouse_entered.connect(func() -> void:
+				if is_instance_valid(child):
+					child.modulate = brown
+			)
+			button.mouse_exited.connect(func() -> void:
+				if is_instance_valid(child):
+					child.modulate = brown
+			)
+			button.button_down.connect(func() -> void:
+				if is_instance_valid(child):
+					child.modulate = deep_orange
+			)
+			button.button_up.connect(func() -> void:
+				if is_instance_valid(child):
+					child.modulate = brown
+			)
+	return button
+
+
+func _add_levels_header_decoration(row: Control) -> void:
+	if level_title_decoration_texture == null:
+		return
+	var decoration := TextureRect.new()
+	decoration.texture = level_title_decoration_texture
+	decoration.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	decoration.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	decoration.custom_minimum_size = Vector2(420, 104)
+	decoration.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	decoration.offset_left = -210
+	decoration.offset_top = 24
+	decoration.offset_right = 210
+	decoration.offset_bottom = 128
+	decoration.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	decoration.z_index = 1
+	row.add_child(decoration)
+
+
+func _level_group_panel(group: Dictionary, fallback_color: Color, focus_level_id: String) -> Dictionary:
+	var group_levels: Array = group.get("levels", [])
+	if group_levels.is_empty():
+		return {"panel": Control.new(), "count": 0, "focus_card": null}
+	var group_color_value := str(group.get("color", "")).strip_edges()
+	var accent := _color_from_value(group_color_value, fallback_color)
+	if group_color_value.is_empty() or group_color_value.to_lower() == "#f6ebd4":
+		accent = fallback_color
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size.x = _levels_content_width()
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = accent.lightened(0.58)
+	panel_style.bg_color.a = 0.34
+	panel_style.border_color = accent.lightened(0.18)
+	panel_style.border_color.a = 0.36
+	panel_style.border_width_left = 2
+	panel_style.border_width_top = 2
+	panel_style.border_width_right = 2
+	panel_style.border_width_bottom = 2
+	panel_style.corner_radius_top_left = 28
+	panel_style.corner_radius_top_right = 28
+	panel_style.corner_radius_bottom_left = 28
+	panel_style.corner_radius_bottom_right = 28
+	panel_style.content_margin_left = 22
+	panel_style.content_margin_top = 20
+	panel_style.content_margin_right = 22
+	panel_style.content_margin_bottom = 20
+	panel.add_theme_stylebox_override("panel", panel_style)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	box.add_child(_level_group_title(str(group.get("name", "")), accent))
+	var focus_card: Control = null
+	var count := 0
+	for level in group_levels:
+		if typeof(level) != TYPE_DICTIONARY:
+			continue
+		var row := _level_list_row(level, func(l: Dictionary = level) -> void: _show_mode_dialog(l))
+		box.add_child(row)
+		count += 1
+		if str(level.get("id", "")) == focus_level_id:
+			focus_card = row
+	return {"panel": panel, "count": count, "focus_card": focus_card}
+
+
+func _level_group_title(text: String, accent: Color) -> Control:
+	var holder := HBoxContainer.new()
+	holder.custom_minimum_size.y = 50
+	holder.alignment = BoxContainer.ALIGNMENT_BEGIN
+	holder.add_theme_constant_override("separation", 14)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var dot := Panel.new()
+	dot.custom_minimum_size = Vector2(18, 18)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var dot_style := StyleBoxFlat.new()
+	dot_style.bg_color = accent
+	dot_style.corner_radius_top_left = 9
+	dot_style.corner_radius_top_right = 9
+	dot_style.corner_radius_bottom_left = 9
+	dot_style.corner_radius_bottom_right = 9
+	dot.add_theme_stylebox_override("panel", dot_style)
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(dot)
+	var pill := PanelContainer.new()
+	pill.custom_minimum_size = Vector2(150, 42)
+	var pill_style := StyleBoxFlat.new()
+	pill_style.bg_color = accent.lightened(0.42)
+	pill_style.bg_color.a = 0.72
+	pill_style.corner_radius_top_left = 21
+	pill_style.corner_radius_top_right = 21
+	pill_style.corner_radius_bottom_left = 21
+	pill_style.corner_radius_bottom_right = 21
+	pill_style.content_margin_left = 26
+	pill_style.content_margin_right = 26
+	pill.add_theme_stylebox_override("panel", pill_style)
+	holder.add_child(pill)
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", accent.darkened(0.42))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_child(label)
+	return holder
+
+
+func _level_list_row(level: Dictionary, action: Callable) -> Button:
+	var card := Button.new()
+	card.text = ""
+	card.custom_minimum_size = Vector2(_levels_content_width() - 44.0, 118)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var available_modes := _available_modes_for_level(level)
+	var level_config := repository.load_level_config(level)
+	var thumbnail_source_path := repository.level_thumbnail_source_path(level_config)
+	var enabled := not thumbnail_source_path.is_empty() and not available_modes.is_empty()
+	card.disabled = not enabled
+	_apply_level_row_style(card)
+	var content := HBoxContainer.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = 26
+	content.offset_top = 14
+	content.offset_right = -26
+	content.offset_bottom = -14
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 28)
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(content)
+	content.add_child(_level_round_thumbnail(thumbnail_source_path, 88))
+	var title := Label.new()
+	title.text = str(level.get("title", level.get("id", "")))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 36)
+	title.add_theme_color_override("font_color", brown)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(title)
+	var modes := HBoxContainer.new()
+	modes.alignment = BoxContainer.ALIGNMENT_CENTER
+	modes.add_theme_constant_override("separation", 36)
+	modes.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(modes)
+	for play_mode in PLAY_MODES:
+		var done := available_modes.has(play_mode) and progress_store.is_done(level["id"], play_mode)
+		modes.add_child(_status_icon(play_mode, done, 54))
+	if enabled:
+		card.pressed.connect(action)
+		_wire_button_animation(card)
+	else:
+		_highlight_button_bounds(card)
+	return card
+
+
+func _apply_level_row_style(card: Button) -> void:
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(1.0, 0.985, 0.94, 0.82)
+	normal.border_color = Color(0.70, 0.53, 0.36, 0.20)
+	normal.border_width_left = 1
+	normal.border_width_top = 1
+	normal.border_width_right = 1
+	normal.border_width_bottom = 1
+	normal.corner_radius_top_left = 22
+	normal.corner_radius_top_right = 22
+	normal.corner_radius_bottom_left = 22
+	normal.corner_radius_bottom_right = 22
+	card.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color("#FFF3DC")
+	hover.border_color = Color(0.78, 0.52, 0.28, 0.36)
+	card.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color("#F8E7C7")
+	card.add_theme_stylebox_override("pressed", pressed)
+	var disabled := normal.duplicate()
+	disabled.bg_color = Color(1.0, 0.985, 0.94, 0.48)
+	disabled.border_color = Color(0.70, 0.53, 0.36, 0.13)
+	card.add_theme_stylebox_override("disabled", disabled)
+	card.add_theme_stylebox_override("focus", normal.duplicate())
+
+
+func _level_round_thumbnail(image_path: String, size: float) -> Control:
+	var holder := PanelContainer.new()
+	holder.custom_minimum_size = Vector2(size, size)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.95, 0.82, 0.62)
+	var radius := int(size * 0.5)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 0
+	style.content_margin_top = 0
+	style.content_margin_right = 0
+	style.content_margin_bottom = 0
+	holder.add_theme_stylebox_override("panel", style)
+	var target_size := Vector2i(int(size), int(size))
+	var texture := _rounded_level_thumbnail_texture(image_path, target_size, int(size * 0.5)) if not image_path.is_empty() else null
+	if texture == null:
+		texture = repository.placeholder_texture()
+	var rect := TextureRect.new()
+	rect.texture = texture
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	rect.custom_minimum_size = Vector2(size, size)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(rect)
+	return holder
+
+
+func _level_mode_legend() -> Control:
+	var center := CenterContainer.new()
+	center.custom_minimum_size.y = 96
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(_levels_content_width(), 76)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.965, 0.88, 0.68)
+	style.border_color = Color(0.78, 0.52, 0.28, 0.30)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.corner_radius_top_left = 22
+	style.corner_radius_top_right = 22
+	style.corner_radius_bottom_left = 22
+	style.corner_radius_bottom_right = 22
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 52)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(row)
+	row.add_child(_level_legend_item("polygon", _mode_label("polygon")))
+	row.add_child(_level_legend_item("knob", _mode_label("knob")))
+	row.add_child(_level_legend_item("swap", _mode_label("swap")))
+	return center
+
+
+func _level_legend_item(play_mode: String, text: String) -> HBoxContainer:
+	var item := HBoxContainer.new()
+	item.alignment = BoxContainer.ALIGNMENT_CENTER
+	item.add_theme_constant_override("separation", 14)
+	item.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item.add_child(_status_icon(play_mode, true, 48))
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 26)
+	label.add_theme_color_override("font_color", brown)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	item.add_child(label)
+	return item
+
+
+func _color_from_value(value: String, fallback: Color) -> Color:
+	var clean := value.strip_edges()
+	return Color(clean) if clean.begins_with("#") else fallback
 
 
 func _level_group_header(text: String) -> Label:
@@ -942,6 +1322,8 @@ func _level_card_button(level: Dictionary, action: Callable) -> Button:
 	if not thumbnail_source_path.is_empty() and not available_modes.is_empty():
 		card.pressed.connect(action)
 		_wire_button_animation(card)
+	else:
+		_highlight_button_bounds(card)
 	return card
 
 
@@ -1032,7 +1414,7 @@ func _topic_card_width(columns: int) -> float:
 func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(card_width, card_width * 0.42)
+	card.custom_minimum_size = Vector2(card_width, card_width * 0.42 * (2.0 / 3.0))
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		card.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	var card_size := card.custom_minimum_size
@@ -1076,17 +1458,14 @@ func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) 
 	color_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	color_panel.add_theme_stylebox_override("panel", _left_topic_color_style(topic_color, 16))
 	content_frame.add_child(color_panel)
-	var bump := Panel.new()
-	bump.name = "topic_color_bump"
-	var bump_size := maxf(18.0, card_size.y * 0.13)
-	bump.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	bump.offset_left = color_panel.offset_right - bump_size * 0.36
-	bump.offset_top = (card_size.y - inset * 2.0 - bump_size) * 0.5
-	bump.offset_right = bump.offset_left + bump_size
-	bump.offset_bottom = bump.offset_top + bump_size
-	bump.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bump.add_theme_stylebox_override("panel", _rounded_panel_style(topic_color, int(bump_size * 0.5)))
-	content_frame.add_child(bump)
+	var bell_width := maxf(8.0, card_size.y * 0.09)
+	var bell_height := maxf(38.0, (card_size.y - inset * 2.0) * 0.90)
+	var bell := Polygon2D.new()
+	bell.name = "topic_color_bell"
+	bell.color = topic_color
+	bell.position = Vector2(color_panel.offset_right - bell_width * 0.36, (card_size.y - inset * 2.0 - bell_height) * 0.5)
+	bell.polygon = _right_peak_bell_polygon(bell_width, bell_height)
+	content_frame.add_child(bell)
 	var icon_texture := repository.topic_icon_texture(topic)
 	if icon_texture != null:
 		var icon := TextureRect.new()
@@ -1095,43 +1474,44 @@ func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) 
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-		var icon_inset := maxf(16.0, card_size.y * 0.20)
+		var icon_inset := maxf(9.0, card_size.y * 0.15)
 		icon.offset_left = icon_inset * 0.7
 		icon.offset_top = icon_inset
-		icon.offset_right = -(card_size.x - color_panel.offset_right + icon_inset * 0.35)
+		icon.offset_right = -(card_size.x - color_panel.offset_right + icon_inset * 0.25)
 		icon.offset_bottom = -icon_inset
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		content_frame.add_child(icon)
 	var inner_width := card_size.x - inset * 2.0
 	var inner_height := card_size.y - inset * 2.0
-	var cover_width := inner_width * 0.39
-	var cover_margin := maxf(8.0, inner_height * 0.055)
-	var cover_holder := Panel.new()
+	var cover_texture := repository.topic_cover_texture(topic)
+	var cover_right_margin := maxf(10.0, inner_width * 0.025)
+	var cover_gap := maxf(16.0, inner_width * 0.035)
+	var cover_width := inner_width * 0.38
+	var cover_holder := Control.new()
 	cover_holder.name = "topic_cover_holder"
-	cover_holder.clip_contents = true
+	cover_holder.clip_contents = false
 	cover_holder.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	cover_holder.offset_left = -cover_width - cover_margin
-	cover_holder.offset_top = cover_margin
-	cover_holder.offset_right = -cover_margin
-	cover_holder.offset_bottom = -cover_margin
+	cover_holder.offset_left = -cover_width - cover_right_margin
+	cover_holder.offset_top = 0
+	cover_holder.offset_right = -cover_right_margin
+	cover_holder.offset_bottom = 0
 	cover_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cover_holder.add_theme_stylebox_override("panel", _rounded_panel_style(Color(1, 1, 1, 0), 18))
 	content_frame.add_child(cover_holder)
 	var cover := TextureRect.new()
 	cover.name = "topic_cover"
-	cover.texture = repository.topic_cover_texture(topic)
+	cover.texture = cover_texture
 	cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
 	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cover_holder.add_child(cover)
 	var text_box := Control.new()
 	text_box.name = "topic_text_box"
 	text_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	text_box.offset_left = color_panel.offset_right + bump_size * 0.45 + 22
-	text_box.offset_top = inner_height * 0.16
-	text_box.offset_right = -(cover_width + cover_margin * 2.0 + 18.0)
-	text_box.offset_bottom = -inner_height * 0.15
+	text_box.offset_left = color_panel.offset_right + bell_width * 0.68 + 16
+	text_box.offset_top = maxf(6.0, inner_height * 0.10)
+	text_box.offset_right = -(cover_width + cover_right_margin + cover_gap)
+	text_box.offset_bottom = -maxf(6.0, inner_height * 0.10)
 	text_box.custom_minimum_size.x = maxf(170.0, inner_width * 0.30)
 	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content_frame.add_child(text_box)
@@ -1144,38 +1524,52 @@ func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) 
 	title.offset_left = 0
 	title.offset_top = 0
 	title.offset_right = 0
-	title.offset_bottom = inner_height * 0.36
+	title.offset_bottom = inner_height * 0.42
 	title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	title.add_theme_font_size_override("font_size", max(22, int(card_size.y * 0.15)))
+	title.add_theme_font_size_override("font_size", max(18, int(card_size.y * 0.14) + 2))
 	title.add_theme_color_override("font_color", brown)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(title)
 	var done := _topic_available_done_count(topic)
 	var total := _topic_available_mode_total(topic)
-	var progress_width := maxf(128.0, minf(text_box.custom_minimum_size.x, inner_width * 0.24))
+	var progress_width := maxf(156.0, minf(text_box.custom_minimum_size.x, inner_width * 0.30))
 	var progress_label := Label.new()
 	progress_label.name = "topic_progress_label"
 	progress_label.text = "%d/%d" % [done, total]
 	progress_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	progress_label.offset_left = 0
-	progress_label.offset_top = -inner_height * 0.20
+	progress_label.offset_top = -inner_height * 0.28
 	progress_label.offset_right = progress_width
-	progress_label.offset_bottom = -inner_height * 0.12
-	progress_label.add_theme_font_size_override("font_size", max(14, int(card_size.y * 0.075)))
+	progress_label.offset_bottom = -inner_height * 0.13
+	progress_label.add_theme_font_size_override("font_size", max(12, int(card_size.y * 0.075)))
 	progress_label.add_theme_color_override("font_color", soft_brown)
 	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(progress_label)
-	var bar := _topic_progress_bar(done, total, Vector2(progress_width, maxf(9.0, card_size.y * 0.032)), topic_color)
+	var bar := _topic_progress_bar(done, total, Vector2(progress_width, maxf(12.0, card_size.y * 0.046)), topic_color)
 	bar.name = "topic_progress_bar"
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	bar.offset_left = 0
-	bar.offset_top = -inner_height * 0.08
+	bar.offset_top = -inner_height * 0.09
 	bar.offset_right = progress_width
-	bar.offset_bottom = -inner_height * 0.08 + bar.custom_minimum_size.y
+	bar.offset_bottom = -inner_height * 0.09 + bar.custom_minimum_size.y
 	text_box.add_child(bar)
 	card.pressed.connect(action)
 	_wire_button_animation(card)
 	return card
+
+
+func _right_peak_bell_polygon(width: float, height: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	points.append(Vector2(0, 0))
+	var segments := 12
+	for i in range(segments + 1):
+		var t := float(i) / float(segments)
+		var y := t * height
+		var normalized := (t - 0.5) * 2.0
+		var x := width * exp(-normalized * normalized * 2.8)
+		points.append(Vector2(x, y))
+	points.append(Vector2(0, height))
+	return points
 
 
 func _topic_color(topic: Dictionary) -> Color:
@@ -1340,7 +1734,7 @@ func _swap_mode_badge(done: bool, size: float) -> Panel:
 	style.corner_radius_bottom_right = 10
 	badge.add_theme_stylebox_override("panel", style)
 	var label := Label.new()
-	label.text = "4x3"
+	label.text = "3x4"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", max(12, int(size * 0.28)))
@@ -1740,6 +2134,7 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 func _set_game_status(text: String) -> void:
 	if status_label != null and is_instance_valid(status_label):
 		status_label.text = text
+		status_label.visible = not text.is_empty()
 
 
 func _set_zoom_label(percent: int) -> void:
@@ -1761,6 +2156,8 @@ func _on_puzzle_state_changed(state: Dictionary) -> void:
 
 func _build_game_hud(level_title: String) -> void:
 	var bar_height := _game_top_bar_height()
+	var hint_button_size := _game_hint_button_size()
+	var hint_icon_inset := UI_ICON_INSET * GAME_HINT_BUTTON_SCALE
 	var top_bar := Control.new()
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top_bar.offset_left = 0
@@ -1773,21 +2170,26 @@ func _build_game_hud(level_title: String) -> void:
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	top_actions.offset_left = -_game_top_actions_width()
-	top_actions.offset_top = (bar_height - _icon_button_size()) * 0.5
+	top_actions.offset_top = (bar_height - hint_button_size) * 0.5
 	top_actions.offset_right = -10
-	top_actions.offset_bottom = top_actions.offset_top + _icon_button_size()
+	top_actions.offset_bottom = top_actions.offset_top + hint_button_size
 	top_actions.add_theme_constant_override("separation", 6)
 	top_bar.add_child(top_actions)
-	var hint_button := _icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint"))
+	var hint_button := _icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint"), hint_button_size, hint_icon_inset)
 	top_actions.add_child(hint_button)
 	zoom_label = null
 	status_label = Label.new()
 	status_label.text = ""
 	status_label.visible = false
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", brown)
 	screen_root.add_child(status_label)
+	_layout_game_status_label()
 	hud_blocker_controls.clear()
 	hud_blocker_controls.append(hint_button)
+	hud_blocker_controls.append(status_label)
 	_queue_game_drag_blocker_refresh()
 	_animate_screen_in(screen_root)
 
@@ -1797,11 +2199,11 @@ func _hud_top_icons_width() -> float:
 
 
 func _game_top_bar_height() -> float:
-	return _icon_button_size() + 22.0
+	return _game_hint_button_size() + 22.0
 
 
 func _game_top_actions_width() -> float:
-	return _icon_button_size() + 20.0
+	return _game_hint_button_size() + 20.0
 
 
 func _hud_title_size(text: String) -> Vector2:
@@ -1814,6 +2216,23 @@ func _hud_button_separation() -> float:
 
 func _icon_button_size() -> float:
 	return UI_ICON_BUTTON_SIZE
+
+
+func _game_hint_button_size() -> float:
+	return _icon_button_size() * GAME_HINT_BUTTON_SCALE
+
+
+func _layout_game_status_label() -> void:
+	if status_label == null or not is_instance_valid(status_label):
+		return
+	var viewport_width := get_viewport_rect().size.x
+	var margin := 18.0
+	status_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	status_label.offset_left = margin
+	status_label.offset_top = _game_top_bar_height()
+	status_label.offset_right = -margin
+	status_label.offset_bottom = _game_top_bar_height() + 34.0
+	status_label.custom_minimum_size = Vector2(maxf(0.0, viewport_width - margin * 2.0), 34.0)
 
 
 func _texture_size(icon: Texture2D) -> Vector2:
@@ -1909,6 +2328,7 @@ func _game_bottom_reserved_height() -> float:
 
 
 func _queue_game_drag_blocker_refresh() -> void:
+	_layout_game_status_label()
 	call_deferred("_refresh_game_drag_blockers")
 
 

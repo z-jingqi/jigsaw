@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import type { CatalogRenameOperation, LevelCatalog, LevelConfig } from "./types.js";
 import {
   applyCatalogRenames,
-  assertLandscape4x3,
+  assertPortrait3x4,
   ensureLevelDir,
   extensionFromFile,
   hydrateCatalog,
@@ -155,7 +155,7 @@ app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   try {
     const size = readJpegSize(buffer);
-    assertLandscape4x3(size.width, size.height);
+    assertPortrait3x4(size.width, size.height);
     await ensureLevelDir(topicId, groupId, levelId);
     await fs.writeFile(sourceImagePath(topicId, groupId, levelId), buffer);
     const level = await readLevel(topicId, groupId, levelId);
@@ -182,6 +182,6 @@ app.get("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
   }
 });
 
-const port = Number(process.env.PORT || 8787);
+const port = Number(process.env.PORT || 8888);
 serve({ fetch: app.fetch, port });
 console.log(`JigCat level editor API listening on http://localhost:${port}`);

@@ -13,18 +13,28 @@ const PIECE_DRAG_PADDING := 8.0
 const PIECE_SPAWN_EDGE_PADDING := 22.0
 const PIECE_SPAWN_SEPARATION := 34.0
 const VIEW_MIN_RATIO := 1.0
-const VIEW_MAX_RATIO := 2.0
+const VIEW_MAX_RATIO := 5.0
 const VIEW_WHEEL_STEP := 0.08
 const TRACKPAD_MAGNIFY_MIN := 0.86
 const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
+const BOARD_SCREEN_EDGE_GAP := 10.0
+const BOARD_OUTLINE_SHADOW_OUTSET := 5.0
 const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
+const HINT_OUTLINE_SCREEN_WIDTH := 3.0
+const HINT_TARGET_COLOR := Color(0.20, 0.78, 1.0, 0.95)
+const HINT_TARGET_SCREEN_WIDTH := 3.0
+const HINT_TARGET_DASH_LENGTH := 11.0
+const HINT_TARGET_DASH_GAP := 7.0
+const HINT_DURATION := 3.0
+const HINT_TARGET_Z_INDEX := 4086
+const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.5
-const SWAP_FALLBACK_COLS := 7
-const SWAP_FALLBACK_ROWS := 5
+const SWAP_FALLBACK_COLS := 5
+const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
@@ -99,6 +109,7 @@ var swap_drag_offset := Vector2.ZERO
 var selected_group = null
 var hint_highlighted_groups: Array = []
 var hint_highlighted_lines: Array[Line2D] = []
+var hint_highlighted_nodes: Array[Node] = []
 var active_touch_index := -1
 var active_touches := {}
 var drag_offset := Vector2.ZERO
@@ -114,6 +125,8 @@ var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
 var randomize_piece_rotation := false
 var hint_highlight_token := 0
+var active_hint_key := ""
+var hint_expires_at_msec := 0
 var texts := {}
 var state_emit_pending := false
 var last_state_emit_msec := 0
@@ -124,6 +137,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if not hint_highlighted_lines.is_empty():
+		_refresh_hint_line_widths()
 	if not tray_inertia_active:
 		return
 	var previous := tray_scroll_offset
@@ -399,7 +414,10 @@ func clear() -> void:
 	selected_group = null
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
+	hint_highlighted_nodes.clear()
 	hint_highlight_token = 0
+	active_hint_key = ""
+	hint_expires_at_msec = 0
 	drag_blockers.clear()
 	active_touch_index = -1
 	active_touches.clear()
@@ -434,7 +452,7 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 		return false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event.pressed and _screen_in_drag_blockers(mouse_event.position):
+		if _screen_in_drag_blockers(mouse_event.position):
 			return false
 		if _tray_area().has_point(mouse_event.position) and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
 			_stop_tray_inertia()
@@ -484,9 +502,9 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
+		if _screen_in_drag_blockers(touch.position):
+			return false
 		if touch.pressed:
-			if _screen_in_drag_blockers(touch.position):
-				return false
 			_stop_tray_inertia()
 			active_touches[touch.index] = touch.position
 			if active_touches.size() >= 2:
@@ -589,9 +607,9 @@ func _view_ratio_for_scale(scale: float) -> float:
 
 
 func _clamped_actual_scale(scale: float) -> float:
-	var pixel_max_scale := 1.0 / maxf(0.001, source_scale)
-	var max_scale := minf(base_view_scale * VIEW_MAX_RATIO, pixel_max_scale)
-	return clampf(scale, base_view_scale * VIEW_MIN_RATIO, maxf(base_view_scale * VIEW_MIN_RATIO, max_scale))
+	var min_scale := base_view_scale * VIEW_MIN_RATIO
+	var max_scale := base_view_scale * VIEW_MAX_RATIO
+	return clampf(scale, min_scale, maxf(min_scale, max_scale))
 
 
 func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
@@ -725,18 +743,17 @@ func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
 	if board.size.x <= 0.0 or board.size.y <= 0.0:
 		return
 	var view_rect := _world_view_screen_rect()
-	var target_scale := minf(
-		view_rect.size.x * 0.70 / maxf(1.0, board.size.x),
-		view_rect.size.y * 0.70 / maxf(1.0, board.size.y)
+	var target_scale := maxf(0.001, (view_rect.size.x - BOARD_SCREEN_EDGE_GAP * 2.0) / maxf(1.0, board.size.x))
+	var target_offset := Vector2(
+		view_rect.position.x + BOARD_SCREEN_EDGE_GAP - board.position.x * target_scale,
+		view_rect.position.y + view_rect.size.y * 0.5 - board.get_center().y * target_scale
 	)
-	target_scale = clampf(target_scale, 0.001, 1.0 / maxf(0.001, source_scale))
-	var target_offset := view_rect.position + view_rect.size * 0.5 - board.get_center() * target_scale
 	if set_baseline:
 		base_view_scale = target_scale
 		base_view_offset = target_offset
 		view_target_ratio = 1.0
 	if animate:
-		_animate_view_to(target_scale, target_offset, 0.22)
+		_animate_view_to(target_scale, target_offset, 0.22, false)
 	else:
 		view_scale = target_scale
 		view_target_scale = target_scale
@@ -797,13 +814,43 @@ func _world_content_bounds() -> Rect2:
 
 
 func _focus_hint_pair(pair: Array) -> void:
-	var focus_group = pair[1] if pair.size() > 1 and pair[0].in_tray else pair[0]
-	var bounds := _group_bounds_at(focus_group, focus_group.node.position)
+	if pair.is_empty():
+		return
+	var hint_group = pair[0]
+	var bounds := _group_bounds_at(hint_group, hint_group.anchor_home)
+	if not hint_group.in_tray:
+		bounds = bounds.merge(_group_bounds_at(hint_group, hint_group.node.position))
 	if pair.size() > 1 and not pair[1].in_tray:
 		bounds = bounds.merge(_group_bounds_at(pair[1], pair[1].node.position))
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return
-	_fit_view_to_world_rect(bounds.grow(VIEW_HINT_PADDING), true, VIEW_HINT_MAX_RATIO, false)
+	_pan_hint_bounds_into_view(bounds.grow(VIEW_HINT_PADDING))
+
+
+func _pan_hint_bounds_into_view(bounds: Rect2) -> void:
+	var view_rect := _world_view_screen_rect().grow(-BOARD_SCREEN_EDGE_GAP)
+	if view_rect.size.x <= 0.0 or view_rect.size.y <= 0.0:
+		return
+	var screen_bounds := Rect2(_world_to_screen(bounds.position), bounds.size * view_scale)
+	if view_rect.encloses(screen_bounds):
+		return
+	var target_offset := view_offset
+	if screen_bounds.size.x > view_rect.size.x:
+		target_offset.x += view_rect.get_center().x - screen_bounds.get_center().x
+	elif screen_bounds.position.x < view_rect.position.x:
+		target_offset.x += view_rect.position.x - screen_bounds.position.x
+	elif screen_bounds.end.x > view_rect.end.x:
+		target_offset.x -= screen_bounds.end.x - view_rect.end.x
+	if screen_bounds.size.y > view_rect.size.y:
+		target_offset.y += view_rect.get_center().y - screen_bounds.get_center().y
+	elif screen_bounds.position.y < view_rect.position.y:
+		target_offset.y += view_rect.position.y - screen_bounds.position.y
+	elif screen_bounds.end.y > view_rect.end.y:
+		target_offset.y -= screen_bounds.end.y - view_rect.end.y
+	target_offset = _clamped_view_offset(target_offset, view_scale)
+	if target_offset.distance_squared_to(view_offset) <= 0.01:
+		return
+	_animate_view_to(view_scale, target_offset, 0.18)
 
 
 func show_hint() -> void:
@@ -817,6 +864,7 @@ func show_hint() -> void:
 		return
 	_set_hint_highlights(pair)
 	_scroll_tray_group_into_view(pair[0])
+	_bring_hint_group_to_front(pair[0])
 	_focus_hint_pair(pair)
 	status_changed.emit(_bt("hint_pair"))
 
@@ -979,15 +1027,24 @@ func _append_knob_edge(target: Array, start: Vector2, end: Vector2, normal: Vect
 func _knob_edge_points(start: Vector2, end: Vector2, normal: Vector2, sign: int, amount: float) -> Array[Vector2]:
 	if sign == 0:
 		return [start, end]
-	var points: Array[Vector2] = [start]
-	var before := start.lerp(end, 0.34)
-	var after := start.lerp(end, 0.66)
-	points.append(before)
-	for step in range(1, 8):
-		var t := float(step) / 8.0
-		var base := before.lerp(after, t)
-		var offset := sin(t * PI) * amount * float(sign)
-		points.append(base + normal * offset)
+	var edge := end - start
+	var edge_length := edge.length()
+	if edge_length <= 0.0 or amount <= 0.0:
+		return [start, end]
+	var tangent := edge / edge_length
+	var signed_normal := normal * float(sign)
+	var center_on_edge := start.lerp(end, 0.5)
+	var radius := amount / (1.0 + sqrt(0.5))
+	var half_chord := radius * sqrt(0.5)
+	var center := center_on_edge + signed_normal * half_chord
+	var before := center_on_edge - tangent * half_chord
+	var after := center_on_edge + tangent * half_chord
+	var points: Array[Vector2] = [start, before]
+	var steps := 18
+	for step in range(1, steps):
+		var t := float(step) / float(steps)
+		var angle := PI * 1.25 - PI * 1.5 * t
+		points.append(center + tangent * cos(angle) * radius + signed_normal * sin(angle) * radius)
 	points.append(after)
 	points.append(end)
 	return points
@@ -1311,8 +1368,8 @@ func _add_board_outline_shadow() -> void:
 	var shadow := ColorRect.new()
 	shadow.name = "board_outline_shadow"
 	shadow.color = Color(0.36, 0.23, 0.12, 0.12)
-	shadow.position = board_origin - Vector2(5, 5)
-	shadow.size = source_size * source_scale + Vector2(10, 10)
+	shadow.position = board_origin - Vector2.ONE * BOARD_OUTLINE_SHADOW_OUTSET
+	shadow.size = source_size * source_scale + Vector2.ONE * BOARD_OUTLINE_SHADOW_OUTSET * 2.0
 	shadow.z_index = -50
 	world_root.add_child(shadow)
 	var target := ColorRect.new()
@@ -2303,33 +2360,145 @@ func _check_complete() -> void:
 
 
 func _set_hint_highlights(pair: Array) -> void:
+	var hint_key := _hint_pair_key(pair)
+	if hint_key == active_hint_key and _has_active_hint_highlights():
+		hint_expires_at_msec = Time.get_ticks_msec() + int(HINT_DURATION * 1000.0)
+		_bring_hint_group_to_front(pair[0])
+		return
 	_clear_hint_highlights()
 	hint_highlight_token += 1
+	active_hint_key = hint_key
+	hint_expires_at_msec = Time.get_ticks_msec() + int(HINT_DURATION * 1000.0)
 	var token := hint_highlight_token
 	var first = pair[0]
-	var second = pair[1]
-	_bring_to_front(first)
-	_bring_to_front(second)
+	_bring_hint_group_to_front(first)
 	hint_highlighted_groups.append(first)
-	hint_highlighted_groups.append(second)
+	_add_hint_target_outline(first)
 	_add_hint_outline_to_group(first)
-	_add_hint_outline_to_group(second)
 	_auto_clear_hint_highlights(token)
 
 
+func _has_active_hint_highlights() -> bool:
+	for line in hint_highlighted_lines:
+		if line != null and is_instance_valid(line):
+			return true
+	for node in hint_highlighted_nodes:
+		if node != null and is_instance_valid(node):
+			return true
+	return false
+
+
+func _bring_hint_group_to_front(group) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	if group.in_tray:
+		group.node.z_index = HINT_GROUP_Z_INDEX
+		return
+	_bring_to_front(group)
+	group.node.z_index = HINT_GROUP_Z_INDEX
+
+
 func _add_hint_outline_to_group(group) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	var center := _hint_outline_local_center(group)
+	var outline_root := Node2D.new()
+	outline_root.name = "hint_group_outline"
+	outline_root.position = center
+	outline_root.z_index = 31
+	group.node.add_child(outline_root)
+	hint_highlighted_nodes.append(outline_root)
 	for member in group.members:
 		var visual: Node2D = member["visual"]
 		var polygon: PackedVector2Array = member["polygon"]
-		_add_hint_outline_line(visual, polygon, 3.0, HINT_OUTLINE_COLOR, 31)
+		var outline := PackedVector2Array()
+		for point in polygon:
+			outline.append(visual.position + point - center)
+		_add_hint_outline_line(outline_root, outline, HINT_OUTLINE_SCREEN_WIDTH, HINT_OUTLINE_COLOR, 0)
+	_hint_pulse_node(outline_root)
 
 
-func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int) -> void:
+func _hint_outline_local_center(group) -> Vector2:
+	var bounds := _group_local_bounds(group)
+	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
+		return Vector2.ZERO
+	return bounds.get_center()
+
+
+func _add_hint_target_outline(group) -> void:
+	if world_root == null or group == null:
+		return
+	var target_root := Node2D.new()
+	target_root.name = "hint_target_outline"
+	target_root.position = group.anchor_home
+	target_root.rotation_degrees = 0.0
+	target_root.z_index = HINT_TARGET_Z_INDEX
+	world_root.add_child(target_root)
+	hint_highlighted_nodes.append(target_root)
+	_redraw_hint_target_outline(target_root, group, 0.0)
+	var tween := create_tween()
+	tween.set_loops(5)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_property(target_root, "modulate:a", 0.36, 0.30)
+	tween.tween_property(target_root, "modulate:a", 1.0, 0.30)
+
+
+func _redraw_hint_target_outline(target_root: Node2D, group, phase: float) -> void:
+	if not is_instance_valid(target_root) or group == null:
+		return
+	for child in target_root.get_children():
+		child.queue_free()
+	var dash_index := 0
+	for member in group.members:
+		var visual_position: Vector2 = member["visual"].position
+		var polygon: PackedVector2Array = member["polygon"]
+		var outline := PackedVector2Array()
+		for point in polygon:
+			outline.append(visual_position + point)
+		for dash in _dashed_polygon_segments(outline, HINT_TARGET_DASH_LENGTH, HINT_TARGET_DASH_GAP, phase):
+			var dash_line := _add_hint_outline_line(target_root, dash, HINT_TARGET_SCREEN_WIDTH, HINT_TARGET_COLOR, 0, false)
+			dash_line.modulate.a = 1.0 if dash_index % 2 == 0 else 0.82
+			dash_index += 1
+
+
+func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, gap_length: float, phase: float) -> Array[PackedVector2Array]:
+	var segments: Array[PackedVector2Array] = []
+	if points.size() < 2:
+		return segments
+	var cycle := maxf(1.0, dash_length + gap_length)
+	var distance_cursor := -fposmod(phase, cycle)
+	for index in range(points.size()):
+		var start := points[index]
+		var end := points[(index + 1) % points.size()]
+		var edge := end - start
+		var edge_length := edge.length()
+		if edge_length <= 0.001:
+			continue
+		var direction := edge / edge_length
+		var local := 0.0
+		while local < edge_length:
+			var cycle_position := fposmod(distance_cursor, cycle)
+			var until_next := cycle - cycle_position
+			var step := minf(edge_length - local, until_next)
+			if cycle_position < dash_length:
+				var dash_remaining := dash_length - cycle_position
+				var dash_step := minf(step, dash_remaining)
+				var dash := PackedVector2Array()
+				dash.append(start + direction * local)
+				dash.append(start + direction * (local + dash_step))
+				segments.append(dash)
+			local += step
+			distance_cursor += step
+	return segments
+
+
+func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int, animate := true, track := true) -> Line2D:
 	var line := Line2D.new()
 	line.name = "hint_highlight"
 	line.width = width
 	line.default_color = color
-	line.closed = true
+	line.closed = polygon.size() > 2
 	line.joint_mode = Line2D.LINE_JOINT_ROUND
 	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
 	line.end_cap_mode = Line2D.LINE_CAP_ROUND
@@ -2339,15 +2508,17 @@ func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: 
 	line.set_meta("screen_width", width)
 	visual.add_child(line)
 	_update_hint_line_width(line)
-	hint_highlighted_lines.append(line)
+	if track:
+		hint_highlighted_lines.append(line)
+	if not animate:
+		return line
 	var tween := create_tween()
 	tween.set_loops(5)
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.set_trans(Tween.TRANS_SINE)
-	tween.parallel().tween_property(line, "scale", Vector2(1.018, 1.018), 0.30)
-	tween.parallel().tween_property(line, "modulate:a", 0.42, 0.30)
-	tween.tween_property(line, "scale", Vector2.ONE, 0.30)
-	tween.parallel().tween_property(line, "modulate:a", 1.0, 0.30)
+	tween.tween_property(line, "modulate:a", 0.42, 0.30)
+	tween.tween_property(line, "modulate:a", 1.0, 0.30)
+	return line
 
 
 func _refresh_hint_line_widths() -> void:
@@ -2365,26 +2536,53 @@ func _update_hint_line_width(line: Line2D) -> void:
 
 
 func _auto_clear_hint_highlights(token: int) -> void:
-	await get_tree().create_timer(3.0).timeout
-	if token == hint_highlight_token:
-		_clear_hint_highlights()
+	while token == hint_highlight_token:
+		var remaining_msec := hint_expires_at_msec - Time.get_ticks_msec()
+		if remaining_msec <= 0:
+			_clear_hint_highlights()
+			return
+		await get_tree().create_timer(float(remaining_msec) / 1000.0).timeout
 
 
 func _clear_hint_highlights() -> void:
 	hint_highlight_token += 1
+	active_hint_key = ""
+	hint_expires_at_msec = 0
 	for line in hint_highlighted_lines:
 		if is_instance_valid(line):
 			line.queue_free()
+	for node in hint_highlighted_nodes:
+		if is_instance_valid(node):
+			node.queue_free()
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
+	hint_highlighted_nodes.clear()
+	if current_mode != "swap":
+		_refresh_group_z_indices()
+		if tray_root != null and is_instance_valid(tray_root):
+			_layout_tray(true)
 
 
 func _find_hint_pair() -> Array:
-	for a in groups:
+	var tray_pair := _find_hint_pair_for_candidates(_sorted_hint_groups(tray_groups))
+	if not tray_pair.is_empty():
+		return tray_pair
+	return _find_hint_pair_for_candidates(_sorted_hint_groups(groups))
+
+
+func _find_hint_pair_for_candidates(candidates: Array) -> Array:
+	var locked_candidates := _sorted_hint_groups(locked_groups)
+	if locked_candidates.is_empty():
+		locked_candidates = _sorted_locked_hint_groups()
+	for a in candidates:
+		if a == null or not is_instance_valid(a.node):
+			continue
 		if a.locked:
 			continue
-		for b in groups:
+		for b in locked_candidates:
 			if a == b:
+				continue
+			if b == null or not is_instance_valid(b.node):
 				continue
 			if not b.locked:
 				continue
@@ -2396,13 +2594,60 @@ func _find_hint_pair() -> Array:
 	return []
 
 
+func _sorted_locked_hint_groups() -> Array:
+	var result := []
+	for group in groups:
+		if group != null and group.locked:
+			result.append(group)
+	return _sorted_hint_groups(result)
+
+
+func _sorted_hint_groups(source_groups: Array) -> Array:
+	var result := source_groups.duplicate()
+	result.sort_custom(func(a, b) -> bool:
+		return _hint_group_sort_key(a) < _hint_group_sort_key(b)
+	)
+	return result
+
+
+func _hint_group_sort_key(group) -> String:
+	if group == null:
+		return "~"
+	var ids: Array[String] = []
+	for member in group.members:
+		ids.append(str(member.get("id", "")))
+	ids.sort()
+	return "|".join(ids)
+
+
+func _hint_pair_key(pair: Array) -> String:
+	if pair.is_empty():
+		return ""
+	var parts: Array[String] = [_hint_group_sort_key(pair[0])]
+	if pair.size() > 1:
+		parts.append(_hint_group_sort_key(pair[1]))
+	if pair.size() > 2:
+		parts.append(str(pair[2].get("id", "")))
+	if pair.size() > 3:
+		parts.append(str(pair[3].get("id", "")))
+	return "->".join(parts)
+
+
 func _groups_are_neighbors(a, b) -> bool:
 	return not _neighbor_member_pair(a, b).is_empty()
 
 
 func _neighbor_member_pair(a, b) -> Array:
-	for am in a.members:
-		for bm in b.members:
+	var a_members: Array = a.members.duplicate()
+	var b_members: Array = b.members.duplicate()
+	a_members.sort_custom(func(first, second) -> bool:
+		return str(first.get("id", "")) < str(second.get("id", ""))
+	)
+	b_members.sort_custom(func(first, second) -> bool:
+		return str(first.get("id", "")) < str(second.get("id", ""))
+	)
+	for am in a_members:
+		for bm in b_members:
 			if am["neighbors"].has(bm["id"]) or bm["neighbors"].has(am["id"]):
 				return [am, bm]
 	return []
@@ -2422,8 +2667,8 @@ func _hint_pulse_node(node: Node2D) -> void:
 	if not is_instance_valid(node):
 		return
 	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
 	for i in 2:
-		tween.tween_property(node, "scale", Vector2(1.08, 1.08), 0.24)
-		tween.tween_property(node, "scale", Vector2.ONE, 0.34)
+		tween.tween_property(node, "scale", Vector2(1.5, 1.5), 0.30)
+		tween.tween_property(node, "scale", Vector2.ONE, 0.30)

@@ -4,16 +4,16 @@ import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, 
 import { catalogPath, groupDir, levelDir, levelJsonPath, levelResPath, sourceImagePath, sourceResPath, topicDir } from "./paths.js";
 
 export const defaultPreset = {
-  id: "mobile_landscape_4x3",
-  name: "Mobile landscape 4:3",
-  aspect_ratio: 4 / 3,
+  id: "mobile_portrait_3x4",
+  name: "Mobile portrait 3:4",
+  aspect_ratio: 3 / 4,
   default: true,
 };
-const DEFAULT_KNOB_COLS = 8;
-const DEFAULT_KNOB_ROWS = 6;
+const DEFAULT_KNOB_COLS = 6;
+const DEFAULT_KNOB_ROWS = 8;
 const DEFAULT_KNOB_SIZE = 0.24;
-const DEFAULT_SWAP_COLS = 7;
-const DEFAULT_SWAP_ROWS = 5;
+const DEFAULT_SWAP_COLS = 5;
+const DEFAULT_SWAP_ROWS = 7;
 const DEFAULT_POLYGON_SEED_COUNT = 1;
 const DEFAULT_KNOB_SEED_COUNT = 1;
 const DEFAULT_TOPIC_COLOR = "#D9933F";
@@ -368,7 +368,7 @@ export function defaultLevelConfig(topicId: string, groupId: string, levelId: st
       path: sourceResPath(topicId, groupId, levelId),
       width: 0,
       height: 0,
-      aspect_ratio: 4 / 3,
+      aspect_ratio: 3 / 4,
       preset: defaultPreset.id,
     },
     background: { type: "color", color: "#F6EBD4" },
@@ -385,7 +385,7 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
 	const raw = input && typeof input === "object" ? (input as Partial<LevelConfig>) : {};
 	const imageWidth = Number(raw.image?.width || 0);
 	const imageHeight = Number(raw.image?.height || 0);
-	const imageAspect = Number(raw.image?.aspect_ratio || (imageWidth && imageHeight ? imageWidth / imageHeight : 4 / 3));
+	const imageAspect = Number(raw.image?.aspect_ratio || (imageWidth && imageHeight ? imageWidth / imageHeight : 3 / 4));
   const polygonPieces = Array.isArray(raw.modes?.polygon?.pieces) ? raw.modes.polygon.pieces : [];
   const polygonSeedIds = new Set(polygonPieces.map((piece) => piece.id));
   const knobCols = Number(raw.modes?.knob?.cols || DEFAULT_KNOB_COLS);
@@ -488,9 +488,9 @@ export function readJpegSize(buffer: Buffer) {
   throw new Error("无法读取 JPG 尺寸。");
 }
 
-export function assertLandscape4x3(width: number, height: number) {
+export function assertPortrait3x4(width: number, height: number) {
   const ratio = width / height;
-  if (Math.abs(ratio - 4 / 3) > 0.01) {
-    throw new Error(`图片比例必须是 4:3，当前是 ${width}x${height}。`);
+  if (Math.abs(ratio - 3 / 4) > 0.01) {
+    throw new Error(`图片比例必须是 3:4，当前是 ${width}x${height}。`);
   }
 }

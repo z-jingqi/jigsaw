@@ -9,6 +9,13 @@ export type ShapeRequest = {
   kind: ShapeKind;
   count: number;
 };
+export type ManualShape = {
+  id: string;
+  kind: ShapeKind;
+  center: Point;
+  radius: number;
+  rotation: number;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -62,11 +69,19 @@ function random(seed: number) {
   };
 }
 
-export function generatePieces(imageWidth: number, imageHeight: number, targetCount: number, shapeRequests: ShapeRequest[] = []): LevelPiece[] {
-  const rng = random(Math.round(imageWidth * 13 + imageHeight * 17 + targetCount * 31 + shapeRequests.length * 43));
+export function generatePieces(imageWidth: number, imageHeight: number, targetCount: number, shapeRequests: ShapeRequest[] = [], manualShapes: ManualShape[] = []): LevelPiece[] {
+  const rng = random(Math.round(imageWidth * 13 + imageHeight * 17 + targetCount * 31 + shapeRequests.length * 43 + manualShapes.length * 59));
   const pieces: CellPiece[] = [];
   const shapePolygons: Point[][] = [];
   let shapeIndex = 1;
+  for (const shape of manualShapes) {
+    const polygon = manualShapePolygon(shape, imageWidth, imageHeight);
+    if (polygon.length >= 3 && polygonAreaAbs(polygon) > 8) {
+      shapePolygons.push(polygon);
+      pieces.push(pieceFromPolygon(`shape_${shape.kind}_${shapeIndex}`, polygon, [`shape:${shape.kind}:${shapeIndex}`]));
+      shapeIndex += 1;
+    }
+  }
   for (const request of shapeRequests) {
     for (let index = 0; index < request.count; index++) {
       const polygon = placeShape(request.kind, imageWidth, imageHeight, targetCount, shapePolygons, rng);
@@ -94,7 +109,45 @@ export function generatePieces(imageWidth: number, imageHeight: number, targetCo
       pieces.push(pieceFromPolygon(`piece_${pieces.length + 1}`, outer, [`voronoi:${index}`]));
     }
   }
-  return withNeighbors(pieces);
+  return withNeighbors(fillCoverageGaps(pieces, imageWidth, imageHeight));
+}
+
+export function fillCoverageGaps(sourcePieces: LevelPiece[], imageWidth: number, imageHeight: number): LevelPiece[] {
+  if (!sourcePieces.length || imageWidth <= 0 || imageHeight <= 0) return sourcePieces;
+  const inputPolygons = sourcePieces
+    .map((piece) => cleanRing(piece.points))
+    .filter((points) => points.length >= 3 && polygonAreaAbs(points) > 1)
+    .map((points) => [closedRing(points)] as Polygon);
+  if (!inputPolygons.length) return sourcePieces;
+  const [firstPolygon, ...restPolygons] = inputPolygons;
+  const union = polygonClipping.union(firstPolygon, ...restPolygons) as MultiPolygon;
+  const imageBounds: Point[] = [[0, 0], [imageWidth, 0], [imageWidth, imageHeight], [0, imageHeight]];
+  const imageRect: Polygon = [closedRing(imageBounds)];
+  const gaps = polygonClipping.difference(imageRect, union) as MultiPolygon;
+  const minGapArea = Math.max(16, (imageWidth * imageHeight) / 50000);
+  const existingIds = new Set(sourcePieces.map((piece) => piece.id));
+  let gapIndex = 1;
+  const gapPieces: LevelPiece[] = [];
+  for (const polygon of gaps) {
+    const outer = cleanRing(polygon[0] as Point[]);
+    if (outer.length < 3 || polygonAreaAbs(outer) < minGapArea) continue;
+    while (existingIds.has(`gap_${gapIndex}`)) gapIndex += 1;
+    const piece = pieceFromPolygon(`gap_${gapIndex}`, outer, [`gap:${gapIndex}`]);
+    existingIds.add(piece.id);
+    gapPieces.push(piece);
+    gapIndex += 1;
+  }
+  return gapPieces.length ? [...sourcePieces, ...gapPieces] : sourcePieces;
+}
+
+export function manualShapePolygon(shape: ManualShape, imageWidth: number, imageHeight: number): Point[] {
+  const maxRadius = Math.max(8, Math.min(imageWidth, imageHeight) * 0.42);
+  const radius = clamp(shape.radius, 8, maxRadius);
+  const center: Point = [
+    clamp(shape.center[0], radius * 0.35, imageWidth - radius * 0.35),
+    clamp(shape.center[1], radius * 0.35, imageHeight - radius * 0.35),
+  ];
+  return shapePolygon(shape.kind, center, radius, shape.rotation, () => 0.5);
 }
 
 function generateVoronoiPoints(imageWidth: number, imageHeight: number, count: number, blocked: Point[][], rng: () => number): Point[] {
@@ -182,7 +235,7 @@ function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: 
   if (kind === "sector") {
     const points: Point[] = [center];
     const spread = Math.PI * (0.46 + rng() * 0.18);
-    const arcSteps = 36;
+    const arcSteps = arcStepCount(radius, 24, 96);
     for (let i = 0; i <= arcSteps; i++) {
       const angle = rotation - spread / 2 + (spread * i) / arcSteps;
       points.push([center[0] + Math.cos(angle) * radius * 1.35, center[1] + Math.sin(angle) * radius * 1.35]);
@@ -191,17 +244,22 @@ function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: 
   }
   if (kind === "crescent") {
     const points: Point[] = [];
-    const start = rotation - Math.PI * 0.92;
-    const end = rotation + Math.PI * 0.92;
-    const arcSteps = 36;
+    const arcSteps = arcStepCount(radius, 32, 112);
+    const tipX = radius * 0.28;
+    const tipY = radius * 0.96;
+    const outerRadius = radius;
+    const outerTipAngle = Math.atan2(tipY, tipX);
     for (let i = 0; i <= arcSteps; i++) {
-      const angle = start + ((end - start) * i) / arcSteps;
-      points.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
+      const angle = -outerTipAngle - ((Math.PI * 2 - outerTipAngle * 2) * i) / arcSteps;
+      points.push(rotatePoint([center[0] + Math.cos(angle) * outerRadius, center[1] + Math.sin(angle) * outerRadius], center, rotation));
     }
-    const innerCenter: Point = [center[0] + Math.cos(rotation) * radius * 0.48, center[1] + Math.sin(rotation) * radius * 0.48];
-    for (let i = arcSteps; i >= 0; i--) {
-      const angle = start + ((end - start) * i) / arcSteps;
-      points.push([innerCenter[0] + Math.cos(angle) * radius * 0.68, innerCenter[1] + Math.sin(angle) * radius * 0.68]);
+    const innerCenter: Point = [center[0] + radius * 0.68, center[1]];
+    const innerRadius = Math.hypot(innerCenter[0] - (center[0] + tipX), tipY);
+    const innerStart = Math.atan2(tipY, center[0] + tipX - innerCenter[0]);
+    const innerEnd = Math.PI * 2 - innerStart;
+    for (let i = 0; i <= arcSteps; i++) {
+      const angle = innerStart + ((innerEnd - innerStart) * i) / arcSteps;
+      points.push(rotatePoint([innerCenter[0] + Math.cos(angle) * innerRadius, innerCenter[1] + Math.sin(angle) * innerRadius], center, rotation));
     }
     return points;
   }
@@ -213,14 +271,15 @@ function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: 
   }
   if (kind === "blob") {
     const anchors = Array.from({ length: 12 }, () => 0.72 + rng() * 0.46);
-    return Array.from({ length: 60 }, (_, index) => {
-      const position = (index / 60) * anchors.length;
+    const steps = arcStepCount(radius, 48, 128);
+    return Array.from({ length: steps }, (_, index) => {
+      const position = (index / steps) * anchors.length;
       const anchorIndex = Math.floor(position) % anchors.length;
       const nextIndex = (anchorIndex + 1) % anchors.length;
       const t = position - Math.floor(position);
       const eased = t * t * (3 - 2 * t);
       const r = radius * (anchors[anchorIndex] * (1 - eased) + anchors[nextIndex] * eased);
-      const angle = rotation + (Math.PI * 2 * index) / 60;
+      const angle = rotation + (Math.PI * 2 * index) / steps;
       return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r] as Point;
     });
   }
@@ -236,7 +295,7 @@ function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: 
   }
   if (kind === "heart") {
     const points: Point[] = [];
-    const steps = 72;
+    const steps = arcStepCount(radius, 56, 144);
     for (let i = 0; i < steps; i++) {
       const t = (Math.PI * 2 * i) / steps;
       const x = 16 * Math.pow(Math.sin(t), 3);
@@ -246,12 +305,16 @@ function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: 
     return points;
   }
   const points: Point[] = [];
-  const steps = 64;
+  const steps = arcStepCount(radius, 48, 144);
   for (let i = 0; i < steps; i++) {
     const angle = rotation + (Math.PI * 2 * i) / steps;
     points.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
   }
   return points;
+}
+
+function arcStepCount(radius: number, min: number, max: number) {
+  return Math.round(clamp(radius * 0.22, min, max));
 }
 
 function rotatePoint(point: Point, center: Point, angle: number): Point {
@@ -368,8 +431,23 @@ export function areAdjacent(a: LevelPiece, b: LevelPiece) {
 
 export function mergePieces(a: LevelPiece, b: LevelPiece): LevelPiece {
   const cells = [...new Set([...(a.cells || []), ...(b.cells || [])])];
-  const points = convexHull([...a.points, ...b.points]);
+  const points = unionOuterPolygon(a.points, b.points) || convexHull([...a.points, ...b.points]);
   return pieceFromPolygon(`${a.id}_${b.id}`, points, cells);
+}
+
+function unionOuterPolygon(a: Point[], b: Point[]) {
+  const union = polygonClipping.union([closedRing(a)], [closedRing(b)]) as MultiPolygon;
+  let best: Point[] = [];
+  let bestArea = 0;
+  for (const polygon of union) {
+    const outer = cleanRing(polygon[0] as Point[]);
+    const area = polygonAreaAbs(outer);
+    if (outer.length >= 3 && area > bestArea) {
+      best = outer;
+      bestArea = area;
+    }
+  }
+  return best.length >= 3 ? best : null;
 }
 
 export function polygonCenter(points: Point[]): Point {
