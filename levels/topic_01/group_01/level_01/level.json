@@ -3,11 +3,11 @@
 	"id": "level_01",
 	"topic_id": "topic_01",
 	"group_id": "group_01",
-	"title": "level_01",
+	"title": "九尾狐",
 	"title_i18n": {
-		"zh": "level_01",
-		"zh-Hans": "level_01",
-		"_": "level_01"
+		"zh": "九尾狐",
+		"zh-Hans": "九尾狐",
+		"_": "九尾狐"
 	},
 	"description": "",
 	"description_i18n": {

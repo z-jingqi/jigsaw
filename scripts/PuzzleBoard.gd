@@ -13,7 +13,7 @@ const PIECE_DRAG_PADDING := 8.0
 const PIECE_SPAWN_EDGE_PADDING := 22.0
 const PIECE_SPAWN_SEPARATION := 34.0
 const VIEW_MIN_RATIO := 1.0
-const VIEW_MAX_RATIO := 5.0
+const VIEW_MAX_RATIO := 1.0
 const VIEW_WHEEL_STEP := 0.08
 const TRACKPAD_MAGNIFY_MIN := 0.86
 const TRACKPAD_MAGNIFY_MAX := 1.16
@@ -167,10 +167,6 @@ func state_snapshot() -> Dictionary:
 	var snapshot := {
 		"version": 1,
 		"mode": current_mode,
-		"view": {
-			"ratio": _view_ratio(),
-			"offset": _vector_to_json(view_offset),
-		},
 		"tray": {
 			"scroll": tray_scroll_offset,
 		},
@@ -222,7 +218,6 @@ func apply_state_snapshot(snapshot: Dictionary) -> void:
 		_restore_swap_state(snapshot)
 	else:
 		_restore_group_state(snapshot)
-	_restore_view_state(snapshot)
 	_check_complete()
 	_check_swap_complete()
 
@@ -444,9 +439,6 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	if modal_open:
 		return false
 	if event is InputEventMagnifyGesture:
-		var magnify := event as InputEventMagnifyGesture
-		var factor := clampf(magnify.factor, TRACKPAD_MAGNIFY_MIN, TRACKPAD_MAGNIFY_MAX)
-		_zoom_view_at(magnify.position, view_scale * factor)
 		return true
 	if event is InputEventPanGesture:
 		return false
@@ -463,11 +455,9 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			_pan_tray(-48.0, false)
 			return true
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
-			_zoom_view_at(mouse_event.position, view_scale + base_view_scale * VIEW_WHEEL_STEP)
-			return true
+			return false
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
-			_zoom_view_at(mouse_event.position, view_scale - base_view_scale * VIEW_WHEEL_STEP)
-			return true
+			return false
 		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
 			var double_group = _group_at_world(_screen_to_world(mouse_event.position))
 			if double_group != null and randomize_piece_rotation:
@@ -508,7 +498,7 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 			_stop_tray_inertia()
 			active_touches[touch.index] = touch.position
 			if active_touches.size() >= 2:
-				_begin_pinch()
+				pinch_active = false
 				return true
 			if touch.double_tap:
 				var double_group = _group_at_world(_screen_to_world(touch.position))
@@ -712,6 +702,8 @@ func _clamp_view_to_table() -> void:
 
 
 func _clamped_view_offset(offset: Vector2, scale: float) -> Vector2:
+	if current_mode != "swap":
+		return _clamped_board_view_offset(offset, scale)
 	var view_rect := _world_view_screen_rect()
 	var table := _virtual_table_area().grow(VIEW_FIT_PADDING)
 	var clamped := offset
@@ -728,6 +720,32 @@ func _clamped_view_offset(offset: Vector2, scale: float) -> Vector2:
 		var max_y := view_rect.position.y - table.position.y * scale
 		clamped.y = clampf(offset.y, min_y, max_y)
 	return clamped
+
+
+func _clamped_board_view_offset(offset: Vector2, scale: float) -> Vector2:
+	var view_rect := _world_view_screen_rect()
+	var board := _board_outline_world_rect()
+	if board.size.x <= 0.0 or board.size.y <= 0.0:
+		return offset
+	var base_screen := Rect2(board.position * base_view_scale + base_view_offset, board.size * base_view_scale)
+	var left_gap := maxf(0.0, base_screen.position.x - view_rect.position.x)
+	var right_gap := maxf(0.0, view_rect.end.x - base_screen.end.x)
+	var top_gap := maxf(0.0, base_screen.position.y - view_rect.position.y)
+	var bottom_gap := maxf(0.0, view_rect.end.y - base_screen.end.y)
+	var min_x := view_rect.end.x - right_gap - board.end.x * scale
+	var max_x := view_rect.position.x + left_gap - board.position.x * scale
+	var min_y := view_rect.end.y - bottom_gap - board.end.y * scale
+	var max_y := view_rect.position.y + top_gap - board.position.y * scale
+	var clamped := offset
+	clamped.x = (min_x + max_x) * 0.5 if min_x > max_x else clampf(offset.x, min_x, max_x)
+	clamped.y = (min_y + max_y) * 0.5 if min_y > max_y else clampf(offset.y, min_y, max_y)
+	return clamped
+
+
+func _board_outline_world_rect() -> Rect2:
+	if source_size.x <= 0.0 or source_size.y <= 0.0:
+		return Rect2(board_origin, Vector2.ZERO)
+	return Rect2(board_origin, source_size * source_scale).grow(BOARD_OUTLINE_SHADOW_OUTSET)
 
 
 func _world_view_screen_rect() -> Rect2:

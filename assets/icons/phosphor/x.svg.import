@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cu4b577pk38bj"
-path="res://.godot/imported/level_title_decoration.png-5ce7d6526c38265faebc3667a9cb52e2.ctex"
+uid="uid://ckv2yckfgqilh"
+path="res://.godot/imported/x.svg-188bb8b46acd03f26a64f4e023005f42.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/level_title_decoration.png"
-dest_files=["res://.godot/imported/level_title_decoration.png-5ce7d6526c38265faebc3667a9cb52e2.ctex"]
+source_file="res://assets/icons/phosphor/x.svg"
+dest_files=["res://.godot/imported/x.svg-188bb8b46acd03f26a64f4e023005f42.ctex"]
 
 [params]
 
@@ -38,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false
