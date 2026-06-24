@@ -124,7 +124,7 @@ const UI_TEXT := {
 		"tutorial_rotate": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。",
 		"tutorial_drag": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n空白处拖动可以移动桌布，双指可以缩放。",
 		"got_it": "知道了",
-		"complete": "恭喜完成",
+		"complete": "恭喜完成！",
 		"completed_mode": "已完成：%s",
 		"next": "下一关",
 		"switch_mode": "换个模式",
@@ -234,6 +234,9 @@ var current_level: Dictionary = {}
 var current_mode := "knob"
 var current_screen := "home"
 var modal_open := false
+var complete_confetti_timer: Timer
+var complete_confetti_layer: Control
+var complete_confetti_rng := RandomNumberGenerator.new()
 
 var status_label: Label
 var zoom_label: Label
@@ -243,6 +246,7 @@ var lazy_thumbnail_queue: Array[Dictionary] = []
 var lazy_thumbnail_processing := false
 var rounded_topic_cover_cache: Dictionary = {}
 var rounded_level_thumbnail_cache: Dictionary = {}
+var rounded_complete_image_cache: Dictionary = {}
 var active_locale := "en"
 
 
@@ -323,6 +327,7 @@ func _puzzle_board_texts() -> Dictionary:
 
 
 func _clear_ui() -> void:
+	_stop_complete_confetti()
 	lazy_thumbnail_items.clear()
 	lazy_thumbnail_queue.clear()
 	lazy_thumbnail_processing = false
@@ -473,6 +478,34 @@ func _rounded_level_thumbnail_texture(image_path: String, target_size: Vector2i,
 	_apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
 	var result := ImageTexture.create_from_image(image)
 	rounded_level_thumbnail_cache[cache_key] = result
+	return result
+
+
+func _rounded_complete_image_texture(image_path: String, target_size: Vector2i, radius: int) -> Texture2D:
+	var cache_key := "%s@%dx%d@%d" % [image_path, target_size.x, target_size.y, radius]
+	if rounded_complete_image_cache.has(cache_key):
+		return rounded_complete_image_cache[cache_key]
+	var source_texture := repository.cached_texture(image_path)
+	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
+		return source_texture
+	var image := source_texture.get_image()
+	if image == null or image.is_empty():
+		return source_texture
+	var scale_factor := minf(
+		float(target_size.x) / float(image.get_width()),
+		float(target_size.y) / float(image.get_height())
+	)
+	var width := maxi(1, int(round(float(image.get_width()) * scale_factor)))
+	var height := maxi(1, int(round(float(image.get_height()) * scale_factor)))
+	image.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	image.convert(Image.FORMAT_RGBA8)
+	var canvas := Image.create(target_size.x, target_size.y, false, Image.FORMAT_RGBA8)
+	canvas.fill(Color("#FFF6E6"))
+	var offset := Vector2i((target_size.x - width) / 2, (target_size.y - height) / 2)
+	canvas.blit_rect(image, Rect2i(Vector2i.ZERO, Vector2i(width, height)), offset)
+	_apply_rounded_image_alpha(canvas, mini(radius, mini(target_size.x, target_size.y) / 2))
+	var result := ImageTexture.create_from_image(canvas)
+	rounded_complete_image_cache[cache_key] = result
 	return result
 
 
@@ -2559,21 +2592,87 @@ func _show_tutorial_modal() -> void:
 
 
 func _show_complete_modal() -> void:
-	_show_modal()
-	var box := _complete_modal_box(Vector2(520, 620))
-	box.add_theme_constant_override("separation", 12)
-	box.add_child(_mode_dialog_image(current_level))
-	box.add_child(_mode_title_block(str(current_level["title"])))
-	box.add_child(_complete_heading())
-	box.add_child(_complete_mode_badge())
-	var desc := Label.new()
-	desc.text = current_level["description"]
-	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc.add_theme_font_size_override("font_size", 18)
-	desc.add_theme_color_override("font_color", brown)
-	box.add_child(desc)
-	box.add_child(_complete_actions())
+	_show_modal(Color(0.16, 0.11, 0.08, 0.78), true)
+	_start_complete_confetti()
+	var viewport_size := get_viewport_rect().size
+	var content_width := minf(viewport_size.x * 0.82, 860.0)
+	var image_height := content_width * 4.0 / 3.0
+	var max_image_height := viewport_size.y * 0.58
+	if image_height > max_image_height:
+		image_height = max_image_height
+		content_width = image_height * 0.75
+	content_width = maxf(280.0, content_width)
+	image_height = content_width * 4.0 / 3.0
+	var button_size := Vector2(minf(360.0, content_width * 0.62), 72.0)
+	var total_height := 94.0 + image_height + 42.0 + button_size.y
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(content_width, total_height)
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.offset_left = -content_width * 0.5
+	box.offset_top = -total_height * 0.5
+	box.offset_right = content_width * 0.5
+	box.offset_bottom = total_height * 0.5
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 16)
+	box.z_index = 8
+	modal_root.add_child(box)
+	box.add_child(_complete_simple_title(content_width))
+	box.add_child(_complete_full_image(Vector2(content_width, image_height)))
+	var level_name := Label.new()
+	level_name.text = _level_display_title(current_level)
+	level_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	level_name.add_theme_font_size_override("font_size", 34)
+	level_name.add_theme_color_override("font_color", Color.WHITE)
+	level_name.add_theme_color_override("font_shadow_color", Color(0.22, 0.12, 0.05, 0.42))
+	level_name.add_theme_constant_override("shadow_offset_y", 3)
+	level_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(level_name)
+	var button_holder := CenterContainer.new()
+	button_holder.custom_minimum_size = Vector2(content_width, button_size.y)
+	var confirm := _button(_t("confirm"), func() -> void:
+		_close_modal()
+		_show_levels(current_topic, str(current_level.get("id", "")))
+	, true, button_size)
+	confirm.add_theme_font_size_override("font_size", 26)
+	button_holder.add_child(confirm)
+	box.add_child(button_holder)
+	_animate_modal_panel(box)
+
+
+func _complete_simple_title(content_width: float) -> Control:
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(content_width, 78)
+	var label := Label.new()
+	label.text = _t("complete")
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.add_theme_font_size_override("font_size", 54)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.add_theme_color_override("font_shadow_color", Color(0.28, 0.13, 0.03, 0.46))
+	label.add_theme_constant_override("shadow_offset_y", 4)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(label)
+	return holder
+
+
+func _complete_full_image(size: Vector2) -> Control:
+	var holder := CenterContainer.new()
+	holder.custom_minimum_size = size
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var image := TextureRect.new()
+	var level_config := repository.load_level_config(current_level)
+	var image_path := repository.level_image_path(level_config)
+	var target_size := Vector2i(maxi(1, int(round(size.x))), maxi(1, int(round(size.y))))
+	image.texture = _rounded_complete_image_texture(image_path, target_size, 28)
+	if image.texture == null:
+		image.texture = texture
+	image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	image.custom_minimum_size = size
+	image.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(image)
+	return holder
 
 
 func _complete_heading() -> Control:
@@ -2751,6 +2850,142 @@ func _completed_mode_labels(level: Dictionary) -> Array:
 	return modes
 
 
+func _start_complete_confetti() -> void:
+	_stop_complete_confetti()
+	complete_confetti_rng.randomize()
+	complete_confetti_layer = Control.new()
+	complete_confetti_layer.name = "CompleteLightEffectLayer"
+	complete_confetti_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	complete_confetti_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	complete_confetti_layer.z_index = 2
+	modal_root.add_child(complete_confetti_layer)
+	_add_complete_radial_lights()
+	for i in range(9):
+		_spawn_complete_light_strip(complete_confetti_rng.randf_range(-get_viewport_rect().size.y * 0.70, get_viewport_rect().size.y * 0.35))
+	complete_confetti_timer = Timer.new()
+	complete_confetti_timer.wait_time = 0.32
+	complete_confetti_timer.one_shot = false
+	complete_confetti_timer.timeout.connect(_spawn_complete_light_strip_batch)
+	modal_root.add_child(complete_confetti_timer)
+	complete_confetti_timer.start()
+
+
+func _stop_complete_confetti() -> void:
+	if complete_confetti_timer != null and is_instance_valid(complete_confetti_timer):
+		complete_confetti_timer.stop()
+		if not complete_confetti_timer.is_queued_for_deletion():
+			complete_confetti_timer.queue_free()
+	complete_confetti_timer = null
+	if complete_confetti_layer != null and is_instance_valid(complete_confetti_layer):
+		if not complete_confetti_layer.is_queued_for_deletion():
+			complete_confetti_layer.queue_free()
+	complete_confetti_layer = null
+
+
+func _spawn_complete_light_strip_batch() -> void:
+	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
+		return
+	_spawn_complete_light_strip(-get_viewport_rect().size.y * 0.35)
+
+
+func _add_complete_radial_lights() -> void:
+	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
+		return
+	var viewport_size := get_viewport_rect().size
+	var ray_root := Node2D.new()
+	ray_root.name = "complete_radial_lights"
+	ray_root.position = viewport_size * 0.5 + Vector2(0.0, -viewport_size.y * 0.08)
+	ray_root.z_index = 0
+	ray_root.modulate.a = 0.86
+	complete_confetti_layer.add_child(ray_root)
+	var ray_count := 34
+	var outer_radius := maxf(viewport_size.x, viewport_size.y) * 0.88
+	var inner_radius := minf(viewport_size.x, viewport_size.y) * 0.11
+	for i in ray_count:
+		var angle := TAU * float(i) / float(ray_count) + complete_confetti_rng.randf_range(-0.035, 0.035)
+		var direction := Vector2(cos(angle), sin(angle))
+		var ray := Line2D.new()
+		ray.points = PackedVector2Array([direction * inner_radius, direction * outer_radius])
+		ray.width = complete_confetti_rng.randf_range(10.0, 24.0)
+		ray.default_color = Color(1.0, complete_confetti_rng.randf_range(0.70, 0.92), 0.38, complete_confetti_rng.randf_range(0.035, 0.085))
+		ray.antialiased = true
+		ray_root.add_child(ray)
+	var rotation_tween := create_tween()
+	rotation_tween.bind_node(ray_root)
+	rotation_tween.set_loops()
+	rotation_tween.set_trans(Tween.TRANS_LINEAR)
+	rotation_tween.tween_property(ray_root, "rotation", TAU, 26.0).as_relative()
+	var alpha_tween := create_tween()
+	alpha_tween.bind_node(ray_root)
+	alpha_tween.set_loops()
+	alpha_tween.set_ease(Tween.EASE_IN_OUT)
+	alpha_tween.set_trans(Tween.TRANS_SINE)
+	alpha_tween.tween_property(ray_root, "modulate:a", 0.56, 2.2)
+	alpha_tween.tween_property(ray_root, "modulate:a", 0.90, 2.2)
+
+
+func _spawn_complete_light_strip(start_y: float) -> void:
+	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
+		return
+	var viewport_size := get_viewport_rect().size
+	var palette := _complete_light_palette()
+	var color: Color = palette[complete_confetti_rng.randi_range(0, palette.size() - 1)]
+	var strip_width := complete_confetti_rng.randf_range(16.0, 40.0)
+	var strip_length := viewport_size.y * complete_confetti_rng.randf_range(0.46, 0.82)
+	var strip := Panel.new()
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.custom_minimum_size = Vector2(strip_width, strip_length)
+	strip.size = strip.custom_minimum_size
+	strip.pivot_offset = strip.size * 0.5
+	strip.position = Vector2(complete_confetti_rng.randf_range(-viewport_size.x * 0.25, viewport_size.x * 1.05), start_y)
+	strip.rotation = complete_confetti_rng.randf_range(-0.58, -0.34)
+	strip.z_index = 1
+	strip.modulate.a = 0.0
+	var style := StyleBoxFlat.new()
+	style.bg_color = color
+	style.bg_color.a = complete_confetti_rng.randf_range(0.10, 0.20)
+	var corner := int(strip_width * 0.5)
+	style.corner_radius_top_left = corner
+	style.corner_radius_top_right = corner
+	style.corner_radius_bottom_left = corner
+	style.corner_radius_bottom_right = corner
+	strip.add_theme_stylebox_override("panel", style)
+	var inner := ColorRect.new()
+	inner.color = Color(1.0, 1.0, 1.0, 0.10)
+	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
+	inner.offset_left = strip_width * 0.32
+	inner.offset_right = -strip_width * 0.36
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(inner)
+	complete_confetti_layer.add_child(strip)
+	var duration := complete_confetti_rng.randf_range(3.4, 5.4)
+	var end_position := strip.position + Vector2(complete_confetti_rng.randf_range(140.0, 340.0), viewport_size.y + strip_length * 0.78)
+	var tween := create_tween()
+	tween.bind_node(strip)
+	tween.set_parallel(true)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_property(strip, "position", end_position, duration)
+	tween.tween_property(strip, "modulate:a", 1.0, duration * 0.16)
+	tween.tween_property(strip, "modulate:a", 0.0, duration * 0.24).set_delay(duration * 0.74)
+	tween.tween_property(strip, "rotation", strip.rotation + complete_confetti_rng.randf_range(-0.10, 0.10), duration)
+	tween.finished.connect(func() -> void:
+		if is_instance_valid(strip):
+			strip.queue_free()
+	)
+
+
+func _complete_light_palette() -> Array[Color]:
+	return [
+		Color("#FFE39B"),
+		Color("#FFD3B5"),
+		Color("#FFF7CF"),
+		Color("#F6C9FF"),
+		Color("#BFEAFF"),
+		Color("#CFF8D6"),
+	]
+
+
 func _scroll_level_card_into_view(scroll: ScrollContainer, card: Control) -> void:
 	if not is_instance_valid(scroll) or not is_instance_valid(card):
 		return
@@ -2762,13 +2997,18 @@ func _scroll_level_card_into_view(scroll: ScrollContainer, card: Control) -> voi
 	scroll.scroll_vertical = max(0, int(target))
 
 
-func _show_modal() -> void:
+func _show_modal(shade_color := Color(0, 0, 0, 0.42), blur_background := false) -> void:
+	_stop_complete_confetti()
 	for child in modal_root.get_children():
-		child.queue_free()
+		if not child.is_queued_for_deletion():
+			child.queue_free()
 	modal_open = true
 	modal_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.42)
+	shade.color = shade_color
+	if blur_background:
+		shade.color = Color.WHITE
+		shade.material = _modal_blur_material(shade_color)
 	shade.modulate.a = 0.0
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	modal_root.add_child(shade)
@@ -2776,6 +3016,25 @@ func _show_modal() -> void:
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(shade, "modulate:a", 1.0, 0.14)
+
+
+func _modal_blur_material(tint: Color) -> ShaderMaterial:
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear_mipmap;
+uniform vec4 tint : source_color = vec4(0.16, 0.11, 0.08, 0.78);
+uniform float blur_lod = 3.2;
+
+void fragment() {
+	vec4 blurred = textureLod(screen_texture, SCREEN_UV, blur_lod);
+	COLOR = mix(blurred, vec4(tint.rgb, 1.0), tint.a);
+}
+"""
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("tint", tint)
+	return material
 
 
 func _modal_box(size: Vector2, bg_color := Color("#FFF6E6")) -> VBoxContainer:
@@ -2901,7 +3160,9 @@ func _modal_title(text: String) -> Label:
 
 
 func _close_modal() -> void:
+	_stop_complete_confetti()
 	for child in modal_root.get_children():
-		child.queue_free()
+		if not child.is_queued_for_deletion():
+			child.queue_free()
 	modal_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	modal_open = false

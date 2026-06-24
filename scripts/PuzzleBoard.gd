@@ -24,9 +24,9 @@ const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
-const HINT_OUTLINE_SCREEN_WIDTH := 3.0
+const HINT_OUTLINE_SCREEN_WIDTH := 9.0
 const HINT_TARGET_COLOR := Color(0.20, 0.78, 1.0, 0.95)
-const HINT_TARGET_SCREEN_WIDTH := 3.0
+const HINT_TARGET_SCREEN_WIDTH := 9.0
 const HINT_TARGET_DASH_LENGTH := 11.0
 const HINT_TARGET_DASH_GAP := 7.0
 const HINT_DURATION := 3.0
@@ -110,6 +110,8 @@ var selected_group = null
 var hint_highlighted_groups: Array = []
 var hint_highlighted_lines: Array[Line2D] = []
 var hint_highlighted_nodes: Array[Node] = []
+var hint_original_modulates: Dictionary = {}
+var hint_blink_tweens: Array[Tween] = []
 var active_touch_index := -1
 var active_touches := {}
 var drag_offset := Vector2.ZERO
@@ -410,6 +412,8 @@ func clear() -> void:
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
 	hint_highlighted_nodes.clear()
+	hint_original_modulates.clear()
+	hint_blink_tweens.clear()
 	hint_highlight_token = 0
 	active_hint_key = ""
 	hint_expires_at_msec = 0
@@ -1590,8 +1594,10 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	group.node.rotation_degrees = 0.0
 	var bounds := _group_local_bounds(group)
 	var area := _tray_area()
-	var target_height := maxf(24.0, area.size.y - TRAY_PADDING * 2.0)
-	var scale := minf(1.0, target_height / maxf(1.0, bounds.size.y))
+	var target_height := maxf(24.0, area.size.y)
+	var scale := 1.0
+	if bounds.size.y > target_height:
+		scale = target_height / maxf(1.0, bounds.size.y)
 	group.tray_scale = scale
 	var scaled_size := bounds.size * scale
 	var x := forced_x if not is_nan(forced_x) else area.position.x + TRAY_PADDING + float(index) * (scaled_size.x + TRAY_GAP)
@@ -2432,8 +2438,9 @@ func _add_hint_outline_to_group(group) -> void:
 		var outline := PackedVector2Array()
 		for point in polygon:
 			outline.append(visual.position + point - center)
-		_add_hint_outline_line(outline_root, outline, HINT_OUTLINE_SCREEN_WIDTH, HINT_OUTLINE_COLOR, 0)
-	_hint_pulse_node(outline_root)
+		_add_hint_outline_line(outline_root, outline, HINT_OUTLINE_SCREEN_WIDTH, HINT_OUTLINE_COLOR, 0, false)
+	if group.in_tray:
+		_hint_blink_group(group)
 
 
 func _hint_outline_local_center(group) -> Vector2:
@@ -2455,18 +2462,21 @@ func _add_hint_target_outline(group) -> void:
 	hint_highlighted_nodes.append(target_root)
 	_redraw_hint_target_outline(target_root, group, 0.0)
 	var tween := create_tween()
-	tween.set_loops(5)
+	tween.bind_node(target_root)
+	tween.set_loops()
 	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_property(target_root, "modulate:a", 0.36, 0.30)
-	tween.tween_property(target_root, "modulate:a", 1.0, 0.30)
+	tween.set_trans(Tween.TRANS_LINEAR)
+	var dash_cycle := HINT_TARGET_DASH_LENGTH + HINT_TARGET_DASH_GAP
+	tween.tween_method(func(phase: float) -> void:
+		_redraw_hint_target_outline(target_root, group, phase)
+	, 0.0, dash_cycle, 0.64)
 
 
 func _redraw_hint_target_outline(target_root: Node2D, group, phase: float) -> void:
 	if not is_instance_valid(target_root) or group == null:
 		return
 	for child in target_root.get_children():
-		child.queue_free()
+		child.free()
 	var dash_index := 0
 	for member in group.members:
 		var visual_position: Vector2 = member["visual"].position
@@ -2509,6 +2519,24 @@ func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, ga
 			local += step
 			distance_cursor += step
 	return segments
+
+
+func _hint_blink_group(group) -> void:
+	if group == null or not is_instance_valid(group.node):
+		return
+	var node: Node2D = group.node
+	if not hint_original_modulates.has(node):
+		hint_original_modulates[node] = node.modulate
+	var original: Color = hint_original_modulates[node]
+	var dimmed := Color(original.r, original.g, original.b, 0.42)
+	var tween := create_tween()
+	tween.bind_node(node)
+	tween.set_loops(5)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_property(node, "modulate", dimmed, 0.30)
+	tween.tween_property(node, "modulate", original, 0.30)
+	hint_blink_tweens.append(tween)
 
 
 func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int, animate := true, track := true) -> Line2D:
@@ -2572,9 +2600,17 @@ func _clear_hint_highlights() -> void:
 	for node in hint_highlighted_nodes:
 		if is_instance_valid(node):
 			node.queue_free()
+	for tween in hint_blink_tweens:
+		if tween != null and tween.is_valid():
+			tween.kill()
+	for node in hint_original_modulates.keys():
+		if is_instance_valid(node):
+			node.modulate = hint_original_modulates[node]
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
 	hint_highlighted_nodes.clear()
+	hint_original_modulates.clear()
+	hint_blink_tweens.clear()
 	if current_mode != "swap":
 		_refresh_group_z_indices()
 		if tray_root != null and is_instance_valid(tray_root):
