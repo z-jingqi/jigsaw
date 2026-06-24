@@ -17,6 +17,7 @@ const ICON_MODE_POLYGON_TODO_PATH := "res://assets/icons/status/mode_polygon_tod
 const ICON_MODE_SWAP_DONE_PATH := "res://assets/icons/status/mode_swap_done.png"
 const ICON_MODE_SWAP_TODO_PATH := "res://assets/icons/status/mode_swap_todo.png"
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
+const DevTestPanelScript := preload("res://scripts/DevTestPanel.gd")
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
@@ -224,6 +225,8 @@ var board_origin := Vector2.ZERO
 var active_level_config := {}
 var puzzle_board: PuzzleBoard
 var ui_layer: CanvasLayer
+var dev_layer: CanvasLayer
+var dev_panel: Control
 var screen_root: Control
 var modal_root: Control
 
@@ -281,6 +284,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
 	ui_layer = CanvasLayer.new()
 	add_child(ui_layer)
+	_setup_dev_tools()
 	_build_catalog()
 	_apply_level_media({})
 	_show_topics()
@@ -291,10 +295,168 @@ func _lock_portrait_orientation() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_D and dev_panel != null:
+			dev_panel.toggle()
+			get_viewport().set_input_as_handled()
+			return
+	if dev_panel != null and dev_panel.visible:
+		return
 	if current_screen != "game":
 		return
 	if puzzle_board.handle_input(event, modal_open):
 		get_viewport().set_input_as_handled()
+
+
+func _setup_dev_tools() -> void:
+	if not OS.is_debug_build():
+		return
+	dev_layer = CanvasLayer.new()
+	dev_layer.layer = 128
+	add_child(dev_layer)
+	dev_panel = DevTestPanelScript.new()
+	dev_layer.add_child(dev_panel)
+	dev_panel.setup(self)
+
+
+func debug_level_options() -> Array:
+	var result: Array = []
+	for topic in topics:
+		for level in topic.get("levels", []):
+			if typeof(level) != TYPE_DICTIONARY:
+				continue
+			var modes := _available_modes_for_level(level)
+			if modes.is_empty():
+				continue
+			result.append({
+				"label": "%s / %s / %s" % [str(topic.get("name", "")), str(level.get("group_name", "")), _level_display_title(level)],
+				"topic_id": str(topic.get("id", "")),
+				"level_id": str(level.get("id", "")),
+				"group_id": str(level.get("group_id", "")),
+				"modes": modes,
+			})
+	return result
+
+
+func debug_enter_level(option_index: int, play_mode: String) -> void:
+	var options := debug_level_options()
+	if option_index < 0 or option_index >= options.size():
+		return
+	var option: Dictionary = options[option_index]
+	var topic := _debug_topic_by_id(str(option.get("topic_id", "")))
+	var level := _debug_level_by_id(topic, str(option.get("group_id", "")), str(option.get("level_id", "")))
+	if topic.is_empty() or level.is_empty():
+		return
+	_close_modal()
+	_show_game(topic, level, play_mode)
+
+
+func debug_restart_current_level() -> void:
+	if current_topic.is_empty() or current_level.is_empty() or current_mode.is_empty():
+		return
+	_close_modal()
+	progress_store.clear_play_state(current_topic, current_level, current_mode)
+	_show_game(current_topic, current_level, current_mode)
+
+
+func debug_apply_viewport_preset(size: Vector2i) -> void:
+	if size.x > 0 and size.y > 0:
+		get_window().size = size
+	call_deferred("_debug_refresh_current_screen")
+
+
+func debug_runtime_metrics() -> Dictionary:
+	var metrics := {
+		"screen": current_screen,
+		"topic": str(current_topic.get("name", "")),
+		"level": _level_display_title(current_level) if not current_level.is_empty() else "",
+		"mode": current_mode,
+	}
+	if puzzle_board != null and puzzle_board.has_method("debug_runtime_metrics"):
+		metrics.merge(puzzle_board.debug_runtime_metrics(), true)
+	return metrics
+
+
+func debug_trigger_hint() -> void:
+	if current_screen == "game" and puzzle_board != null:
+		puzzle_board.show_hint()
+
+
+func debug_clear_hint() -> void:
+	if puzzle_board != null and puzzle_board.has_method("debug_clear_hint"):
+		puzzle_board.debug_clear_hint()
+
+
+func debug_reset_tray() -> void:
+	if puzzle_board != null and puzzle_board.has_method("debug_reset_tray"):
+		puzzle_board.debug_reset_tray()
+
+
+func debug_scroll_tray_left() -> void:
+	if puzzle_board != null and puzzle_board.has_method("debug_scroll_tray_left"):
+		puzzle_board.debug_scroll_tray_left()
+
+
+func debug_scroll_tray_right() -> void:
+	if puzzle_board != null and puzzle_board.has_method("debug_scroll_tray_right"):
+		puzzle_board.debug_scroll_tray_right()
+
+
+func debug_toggle_bounds_overlay() -> void:
+	if puzzle_board != null and puzzle_board.has_method("debug_toggle_bounds_overlay"):
+		puzzle_board.debug_toggle_bounds_overlay()
+
+
+func debug_preview_complete() -> void:
+	if current_topic.is_empty() or current_level.is_empty():
+		var options := debug_level_options()
+		if options.is_empty():
+			return
+		debug_enter_level(0, str(options[0].get("modes", ["polygon"])[0]))
+	_show_complete_modal()
+
+
+func debug_clear_current_progress() -> void:
+	if current_level.is_empty():
+		return
+	progress_store.clear_level_progress(current_topic, current_level)
+	_debug_refresh_current_screen()
+
+
+func debug_clear_all_progress() -> void:
+	progress_store.clear_all_progress()
+	_debug_refresh_current_screen()
+
+
+func debug_dump_state() -> void:
+	var state := debug_runtime_metrics()
+	if puzzle_board != null and puzzle_board.has_method("state_snapshot"):
+		state["snapshot"] = puzzle_board.state_snapshot()
+	print(JSON.stringify(state, "\t"))
+
+
+func _debug_refresh_current_screen() -> void:
+	if current_screen == "game" and not current_topic.is_empty() and not current_level.is_empty() and not current_mode.is_empty():
+		_show_game(current_topic, current_level, current_mode)
+	elif current_screen == "levels" and not current_topic.is_empty():
+		_show_levels(current_topic, str(current_level.get("id", "")))
+	else:
+		_show_topics()
+
+
+func _debug_topic_by_id(topic_id: String) -> Dictionary:
+	for topic in topics:
+		if str(topic.get("id", "")) == topic_id:
+			return topic
+	return {}
+
+
+func _debug_level_by_id(topic: Dictionary, group_id: String, level_id: String) -> Dictionary:
+	for level in topic.get("levels", []):
+		if str(level.get("id", "")) == level_id and str(level.get("group_id", "")) == group_id:
+			return level
+	return {}
 
 
 func _build_catalog() -> void:

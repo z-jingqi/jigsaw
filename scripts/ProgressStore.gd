@@ -77,6 +77,27 @@ func clear_play_state(topic: Dictionary, level: Dictionary, play_mode: String) -
 	save_to_disk()
 
 
+func clear_level_progress(topic: Dictionary, level: Dictionary) -> void:
+	if level.is_empty():
+		return
+	var level_id := str(level.get("id", ""))
+	var completed: Dictionary = progress.get("completed", {})
+	for play_mode in ["polygon", "knob", "swap"]:
+		completed.erase("%s:%s" % [level_id, mode_key(play_mode)])
+	progress["completed"] = completed
+	progress.erase(level_id)
+	var states: Dictionary = progress.get("play_states", {})
+	for play_mode in ["polygon", "knob", "swap"]:
+		states.erase(play_state_key(topic, level, play_mode))
+	progress["play_states"] = states
+	save_to_disk()
+
+
+func clear_all_progress() -> void:
+	progress = {}
+	save_to_disk()
+
+
 func play_state_key(topic: Dictionary, level: Dictionary, play_mode: String) -> String:
 	return "%s/%s/%s:%s" % [
 		str(topic.get("id", "")),

@@ -42,6 +42,7 @@ const GROUP_Z_STEP := 64
 const TRAY_HEIGHT_RATIO := 1.0 / 6.0
 const TRAY_MIN_HEIGHT := 132.0
 const TRAY_PADDING := 14.0
+const TRAY_VERTICAL_SAFE_GAP := 50.0
 const TRAY_GAP := 32.0
 const TRAY_ANIMATION_TIME := 0.20
 const TRAY_Z_INDEX := 4090
@@ -129,6 +130,8 @@ var randomize_piece_rotation := false
 var hint_highlight_token := 0
 var active_hint_key := ""
 var hint_expires_at_msec := 0
+var debug_bounds_overlay_enabled := false
+var debug_bounds_overlay: Control
 var texts := {}
 var state_emit_pending := false
 var last_state_emit_msec := 0
@@ -141,6 +144,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not hint_highlighted_lines.is_empty():
 		_refresh_hint_line_widths()
+	if debug_bounds_overlay_enabled:
+		_refresh_debug_bounds_overlay()
 	if not tray_inertia_active:
 		return
 	var previous := tray_scroll_offset
@@ -417,6 +422,8 @@ func clear() -> void:
 	hint_highlight_token = 0
 	active_hint_key = ""
 	hint_expires_at_msec = 0
+	debug_bounds_overlay_enabled = false
+	debug_bounds_overlay = null
 	drag_blockers.clear()
 	active_touch_index = -1
 	active_touches.clear()
@@ -893,6 +900,74 @@ func show_hint() -> void:
 
 func set_drag_blockers(blockers: Array[Rect2]) -> void:
 	drag_blockers = blockers.duplicate()
+
+
+func debug_runtime_metrics() -> Dictionary:
+	var area := _tray_area()
+	var pieces: Array = []
+	for group in tray_groups:
+		if group == null or not is_instance_valid(group.node):
+			continue
+		var bounds := _group_local_bounds(group)
+		pieces.append({
+			"id": _debug_group_id(group),
+			"in_tray": group.in_tray,
+			"screen_height": bounds.size.y * _tray_original_screen_scale(),
+			"scale": group.tray_scale,
+			"slot_x": group.tray_slot.position.x,
+			"slot_w": group.tray_slot.size.x,
+		})
+	return {
+		"mode": current_mode,
+		"groups": groups.size(),
+		"locked_groups": locked_groups.size(),
+		"tray_groups": tray_groups.size(),
+		"tray": {
+			"height": area.size.y,
+			"usable_height": maxf(24.0, area.size.y - TRAY_VERTICAL_SAFE_GAP * 2.0),
+			"vertical_gap": TRAY_VERTICAL_SAFE_GAP,
+			"scroll": tray_scroll_offset,
+			"content_width": tray_content_width,
+			"velocity": tray_scroll_velocity,
+			"count": tray_groups.size(),
+			"pieces": pieces,
+		},
+		"hint": {
+			"nodes": hint_highlighted_nodes.size(),
+			"lines": hint_highlighted_lines.size(),
+			"key": active_hint_key,
+		},
+	}
+
+
+func debug_clear_hint() -> void:
+	_clear_hint_highlights()
+
+
+func debug_reset_tray() -> void:
+	tray_scroll_offset = 0.0
+	tray_scroll_velocity = 0.0
+	_layout_tray(false)
+
+
+func debug_scroll_tray_left() -> void:
+	tray_scroll_offset = 0.0
+	tray_scroll_velocity = 0.0
+	_layout_tray(false)
+
+
+func debug_scroll_tray_right() -> void:
+	tray_scroll_offset = maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING)
+	tray_scroll_velocity = 0.0
+	_layout_tray(false)
+
+
+func debug_toggle_bounds_overlay() -> void:
+	debug_bounds_overlay_enabled = not debug_bounds_overlay_enabled
+	if not debug_bounds_overlay_enabled:
+		_clear_debug_bounds_overlay()
+		return
+	_refresh_debug_bounds_overlay()
 
 
 func _screen_in_drag_blockers(screen_pos: Vector2) -> bool:
@@ -1575,6 +1650,11 @@ func _scroll_tray_group_into_view(group) -> void:
 	_layout_tray(false)
 
 
+func _tray_original_screen_scale() -> float:
+	var scale := base_view_scale if base_view_scale > 0.0 else view_scale
+	return maxf(0.001, scale)
+
+
 func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
@@ -1594,10 +1674,12 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	group.node.rotation_degrees = 0.0
 	var bounds := _group_local_bounds(group)
 	var area := _tray_area()
-	var target_height := maxf(24.0, area.size.y)
-	var scale := 1.0
-	if bounds.size.y > target_height:
-		scale = target_height / maxf(1.0, bounds.size.y)
+	var target_height := maxf(24.0, area.size.y - TRAY_VERTICAL_SAFE_GAP * 2.0)
+	var original_screen_scale := _tray_original_screen_scale()
+	var original_screen_size := bounds.size * original_screen_scale
+	var scale := original_screen_scale
+	if original_screen_size.y > target_height + 1.0:
+		scale = original_screen_scale * (target_height / maxf(1.0, original_screen_size.y))
 	group.tray_scale = scale
 	var scaled_size := bounds.size * scale
 	var x := forced_x if not is_nan(forced_x) else area.position.x + TRAY_PADDING + float(index) * (scaled_size.x + TRAY_GAP)
@@ -1935,6 +2017,76 @@ func _screen_push_out(subject: Rect2, obstacle: Rect2) -> Vector2:
 		if candidate.length_squared() < best.length_squared():
 			best = candidate
 	return best
+
+
+func _debug_group_id(group) -> String:
+	if group == null or group.members.is_empty():
+		return "group"
+	return str(group.members[0].get("id", "group"))
+
+
+func _refresh_debug_bounds_overlay() -> void:
+	if not debug_bounds_overlay_enabled:
+		return
+	if debug_bounds_overlay == null or not is_instance_valid(debug_bounds_overlay):
+		debug_bounds_overlay = Control.new()
+		debug_bounds_overlay.name = "debug_bounds_overlay"
+		debug_bounds_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		debug_bounds_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		debug_bounds_overlay.z_index = 5000
+		add_child(debug_bounds_overlay)
+	for child in debug_bounds_overlay.get_children():
+		child.free()
+	var tray := _tray_area()
+	_debug_add_rect_outline(debug_bounds_overlay, tray, Color(1.0, 0.74, 0.20, 0.88), 4.0)
+	var usable := Rect2(
+		Vector2(tray.position.x, tray.position.y + TRAY_VERTICAL_SAFE_GAP),
+		Vector2(tray.size.x, maxf(1.0, tray.size.y - TRAY_VERTICAL_SAFE_GAP * 2.0))
+	)
+	_debug_add_rect_outline(debug_bounds_overlay, usable, Color(0.25, 0.85, 1.0, 0.72), 3.0)
+	for group in groups:
+		if group == null or not is_instance_valid(group.node):
+			continue
+		var rect: Rect2 = group.tray_slot if group.in_tray else _world_rect_to_screen(_group_bounds_at(group, group.node.position))
+		var color := Color(0.38, 1.0, 0.45, 0.72) if group.locked else Color(0.28, 0.72, 1.0, 0.68)
+		_debug_add_rect_outline(debug_bounds_overlay, rect, color, 2.0)
+	for blocker in drag_blockers:
+		_debug_add_rect_outline(debug_bounds_overlay, blocker, Color(1.0, 0.15, 0.15, 0.72), 3.0)
+
+
+func _clear_debug_bounds_overlay() -> void:
+	if debug_bounds_overlay != null and is_instance_valid(debug_bounds_overlay):
+		debug_bounds_overlay.queue_free()
+	debug_bounds_overlay = null
+
+
+func _debug_add_rect_outline(parent: Control, rect: Rect2, color: Color, width: float) -> void:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	var top := ColorRect.new()
+	top.color = color
+	top.position = rect.position
+	top.size = Vector2(rect.size.x, width)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(top)
+	var bottom := ColorRect.new()
+	bottom.color = color
+	bottom.position = Vector2(rect.position.x, rect.end.y - width)
+	bottom.size = Vector2(rect.size.x, width)
+	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(bottom)
+	var left := ColorRect.new()
+	left.color = color
+	left.position = rect.position
+	left.size = Vector2(width, rect.size.y)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(left)
+	var right := ColorRect.new()
+	right.color = color
+	right.position = Vector2(rect.end.x - width, rect.position.y)
+	right.size = Vector2(width, rect.size.y)
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(right)
 
 
 func _world_rect_to_screen(rect: Rect2) -> Rect2:
@@ -2485,7 +2637,7 @@ func _redraw_hint_target_outline(target_root: Node2D, group, phase: float) -> vo
 		for point in polygon:
 			outline.append(visual_position + point)
 		for dash in _dashed_polygon_segments(outline, HINT_TARGET_DASH_LENGTH, HINT_TARGET_DASH_GAP, phase):
-			var dash_line := _add_hint_outline_line(target_root, dash, HINT_TARGET_SCREEN_WIDTH, HINT_TARGET_COLOR, 0, false)
+			var dash_line := _add_hint_outline_line(target_root, dash, HINT_TARGET_SCREEN_WIDTH, HINT_TARGET_COLOR, 0, false, false)
 			dash_line.modulate.a = 1.0 if dash_index % 2 == 0 else 0.82
 			dash_index += 1
 
@@ -2568,17 +2720,22 @@ func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: 
 
 
 func _refresh_hint_line_widths() -> void:
+	var valid_lines: Array[Line2D] = []
 	for line in hint_highlighted_lines:
-		_update_hint_line_width(line)
+		if line != null and is_instance_valid(line):
+			_update_hint_line_width(line)
+			valid_lines.append(line)
+	hint_highlighted_lines = valid_lines
 
 
-func _update_hint_line_width(line: Line2D) -> void:
-	if line == null or not is_instance_valid(line):
+func _update_hint_line_width(line) -> void:
+	if line == null or not is_instance_valid(line) or not line is Line2D:
 		return
-	var screen_width := float(line.get_meta("screen_width", line.width))
-	var transform := line.get_global_transform()
+	var hint_line := line as Line2D
+	var screen_width := float(hint_line.get_meta("screen_width", hint_line.width))
+	var transform := hint_line.get_global_transform()
 	var scale := maxf(transform.x.length(), transform.y.length())
-	line.width = screen_width / maxf(0.001, scale)
+	hint_line.width = screen_width / maxf(0.001, scale)
 
 
 func _auto_clear_hint_highlights(token: int) -> void:
