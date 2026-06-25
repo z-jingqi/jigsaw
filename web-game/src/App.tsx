@@ -84,6 +84,7 @@ export function App() {
           progress={progress}
           totalForTopic={countTopicModes}
           onSelectTopic={(topic) => setScreen({ name: "levels", topicId: topic.id })}
+          onStartLevel={startLevel}
         />
       ) : selectedTopic ? (
         <LevelScreen
