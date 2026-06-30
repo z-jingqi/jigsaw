@@ -1,198 +1,175 @@
-import type { CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { ProgressSnapshot } from "../store/progressStore";
-import { GameMode, LevelRecord, TopicRecord } from "../data/types";
+import { TopicRecord } from "../data/types";
 
 interface TopicScreenProps {
   topics: TopicRecord[];
   progress: ProgressSnapshot;
   totalForTopic: (topic: TopicRecord) => number;
+  restoreScrollTop: number;
+  onScrollPositionChange: (scrollTop: number) => void;
   onSelectTopic: (topic: TopicRecord) => void;
-  onStartLevel: (level: LevelRecord, mode: GameMode) => void;
 }
 
-interface FeaturedLevel {
-  topic: TopicRecord;
-  level: LevelRecord;
-  mode: GameMode;
-  isResume: boolean;
+interface TopicStats {
+  completedModes: number;
+  totalModes: number;
+  ratio: number;
 }
 
-const modePriority: GameMode[] = ["polygon", "knob", "swap"];
+const islandAssets = [
+  "/assets/web-ui/island-map/island-1.webp",
+  "/assets/web-ui/island-map/island-2.webp",
+  "/assets/web-ui/island-map/island-3.webp",
+];
 
-function completedForTopic(topic: TopicRecord, progress: ProgressSnapshot): number {
-  let done = 0;
+const topicIslandArt: Record<string, string> = {
+  topic_01: "/assets/web-ui/island-map/topic-shanhai.webp",
+  topic_02: "/assets/web-ui/island-map/topic-greek.webp",
+  topic_03: "/assets/web-ui/island-map/topic-cat.webp",
+  topic_04: "/assets/web-ui/island-map/topic-dog.webp",
+};
+
+function getTopicStats(topic: TopicRecord, progress: ProgressSnapshot): TopicStats {
+  let completedModes = 0;
+  let totalModes = 0;
+
   topic.groups.forEach((group) => {
     group.levels.forEach((level) => {
-      level.availableModes.forEach((mode: GameMode) => {
-        if (progress.completed[`${level.id}:${mode}`]) done += 1;
+      totalModes += level.availableModes.length;
+      level.availableModes.forEach((mode) => {
+        if (progress.completed[`${level.id}:${mode}`]) completedModes += 1;
       });
     });
   });
-  return done;
+
+  return {
+    completedModes,
+    totalModes,
+    ratio: totalModes > 0 ? completedModes / totalModes : 0,
+  };
 }
 
-function firstMode(level: LevelRecord): GameMode | undefined {
-  return modePriority.find((mode) => level.availableModes.includes(mode)) ?? level.availableModes[0];
-}
-
-function findFeaturedLevel(topics: TopicRecord[], progress: ProgressSnapshot): FeaturedLevel | undefined {
-  const last = progress.last;
-  if (last) {
-    const topic = topics.find((candidate) => candidate.id === last.topicId);
-    const group = topic?.groups.find((candidate) => candidate.id === last.groupId);
-    const level = group?.levels.find((candidate) => candidate.id === last.levelId);
-    const mode = level?.availableModes.includes(last.mode) ? last.mode : level ? firstMode(level) : undefined;
-    if (topic && level && mode) {
-      return { topic, level, mode, isResume: true };
-    }
-  }
-
-  for (const topic of topics) {
-    for (const group of topic.groups) {
-      for (const level of group.levels) {
-        const mode = firstMode(level);
-        if (mode) return { topic, level, mode, isResume: false };
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function scrollToTopics() {
-  document.getElementById("topic-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+function getTotalStats(topics: TopicRecord[], progress: ProgressSnapshot): TopicStats {
+  return topics.reduce<TopicStats>(
+    (total, topic) => {
+      const stats = getTopicStats(topic, progress);
+      total.completedModes += stats.completedModes;
+      total.totalModes += stats.totalModes;
+      total.ratio = total.totalModes > 0 ? total.completedModes / total.totalModes : 0;
+      return total;
+    },
+    { completedModes: 0, totalModes: 0, ratio: 0 },
+  );
 }
 
 export function TopicScreen({
   topics,
   progress,
   totalForTopic,
+  restoreScrollTop,
+  onScrollPositionChange,
   onSelectTopic,
-  onStartLevel,
 }: TopicScreenProps) {
-  const featured = findFeaturedLevel(topics, progress);
-  const previewTopics = topics.slice(0, 4);
+  const screenRef = useRef<HTMLElement | null>(null);
+  const totalStats = getTotalStats(topics, progress);
+
+  const getCurrentScrollTop = useCallback(() => {
+    return Math.max(
+      screenRef.current?.scrollTop ?? 0,
+      window.scrollY,
+      document.documentElement.scrollTop,
+      document.body.scrollTop,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (restoreScrollTop <= 0) return;
+
+    const applyScroll = () => {
+      if (screenRef.current) screenRef.current.scrollTop = restoreScrollTop;
+      window.scrollTo(0, restoreScrollTop);
+    };
+
+    applyScroll();
+    const frame = window.requestAnimationFrame(applyScroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [restoreScrollTop, topics.length]);
+
+  useEffect(() => {
+    const handleScroll = () => onScrollPositionChange(getCurrentScrollTop());
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [getCurrentScrollTop, onScrollPositionChange]);
+
+  function handleTopicSelect(topic: TopicRecord) {
+    onScrollPositionChange(getCurrentScrollTop());
+    onSelectTopic(topic);
+  }
 
   return (
-    <section className="topic-screen">
-      <header className="home-header">
-        <img className="home-logo" src="/assets/ui/title.png" alt="jigcat" />
-        <div className="home-actions">
-          <button className="icon-button" aria-label="相册">
-            <img src="/assets/icons/phosphor/image.svg" alt="" />
-          </button>
-          <button className="icon-button" aria-label="设置">
-            <img src="/assets/icons/phosphor/gear-six.svg" alt="" />
-          </button>
+    <section
+      ref={screenRef}
+      className="topic-screen island-topic-screen"
+      onScroll={() => onScrollPositionChange(getCurrentScrollTop())}
+    >
+      <header className="island-topbar" aria-label="主题页面操作">
+        <button className="island-icon-button" type="button" aria-label="设置">
+          <img src="/assets/icons/phosphor/gear-six.svg" alt="" />
+        </button>
+        <h1 className="island-game-title" aria-label="JigCat">
+          <span>Jig</span>
+          <span>Cat</span>
+        </h1>
+        <div className="island-overall-progress" aria-label="游玩进度">
+          <strong>
+            {totalStats.completedModes}/{totalStats.totalModes}
+          </strong>
+          <span>
+            <i style={{ width: `${totalStats.ratio * 100}%` }} />
+          </span>
         </div>
       </header>
 
-      <div className="home-decor home-decor--top" aria-hidden="true">
-        <img src="/assets/web-ui/decor-cluster.png" alt="" />
-      </div>
-
-      {featured ? (
-        <section className="home-feature" style={{ "--topic-color": featured.topic.color } as CSSProperties}>
-          <div className="home-feature__copy">
-            <span className="home-feature__label">{featured.isResume ? "最近游玩" : "新的拼图"}</span>
-            <h1>{featured.topic.title}</h1>
-            <p>{featured.level.title}</p>
-            <TopicProgress topic={featured.topic} progress={progress} totalForTopic={totalForTopic} />
-            <button className="home-feature__button" type="button" onClick={() => onStartLevel(featured.level, featured.mode)}>
-              {featured.isResume ? "继续游戏" : "开始游戏"}
-            </button>
-          </div>
-          <div className="home-feature__art">
-            <img src={featured.level.imageUrl || featured.topic.coverUrl} alt="" />
-          </div>
-        </section>
-      ) : (
-        <section className="home-feature home-feature--empty">
-          <div className="home-feature__copy">
-            <span className="home-feature__label">欢迎回来</span>
-            <h1>准备新的拼图</h1>
-            <p>当前还没有可游玩的关卡。</p>
-            <button className="home-feature__button" type="button" onClick={scrollToTopics}>
-              选择主题
-            </button>
-          </div>
-        </section>
-      )}
-
-      <button className="choose-topic-button" type="button" onClick={scrollToTopics}>
-        <span className="choose-topic-button__mark" aria-hidden="true" />
-        选择主题
-        <span className="choose-topic-button__arrow" aria-hidden="true" />
-      </button>
-
-      <section id="topic-preview" className="topic-preview" aria-label="主题预览">
-        <div className="section-heading">
-          <h2>主题预览</h2>
-          <span>轻点进入关卡</span>
-        </div>
-
-        {previewTopics.length === 0 ? (
+      <section className="island-map" aria-label="主题列表">
+        {topics.length === 0 ? (
           <div className="empty-state">还没有主题</div>
         ) : (
-          <div className="topic-preview__grid">
-            {previewTopics.map((topic) => {
-              const total = totalForTopic(topic);
-              const done = completedForTopic(topic, progress);
-              const ratio = total > 0 ? done / total : 0;
-
-              return (
-                <button
-                  key={topic.id}
-                  className="topic-card"
-                  type="button"
-                  onClick={() => onSelectTopic(topic)}
-                  style={{ "--topic-color": topic.color } as CSSProperties}
-                >
-                  <span className="topic-card__badge">
-                    {topic.iconUrl ? <img src={topic.iconUrl} alt="" /> : null}
+          topics.map((topic, index) => {
+            const stats = getTopicStats(topic, progress);
+            const total = totalForTopic(topic);
+            const island = islandAssets[index % islandAssets.length];
+            const topicArt = topicIslandArt[topic.id];
+            const islandSide = index % 2 === 0 ? "left" : "right";
+            return (
+              <button
+                key={topic.id}
+                type="button"
+                className={`theme-island theme-island--${index % 3} theme-island--${islandSide}`}
+                aria-label={`${topic.title} ${stats.completedModes}/${total}`}
+                onClick={() => handleTopicSelect(topic)}
+                style={
+                  {
+                    "--topic-color": topic.color,
+                    "--topic-progress": `${stats.ratio * 100}%`,
+                  } as CSSProperties
+                }
+              >
+                <img className="theme-island__base" src={island} alt="" />
+                {topicArt ? <img className="theme-island__cover" src={topicArt} alt="" /> : null}
+                <span className="theme-island__label">
+                  {topic.iconUrl ? <img className="theme-island__icon" src={topic.iconUrl} alt="" /> : null}
+                  <strong>{topic.title}</strong>
+                  <span className="theme-island__progress">
+                    {stats.completedModes}/{total}
                   </span>
-                  <span className="topic-card__content">
-                    <span className="topic-card__title">{topic.title}</span>
-                    <span className="topic-card__progress-text">
-                      {done}/{total}
-                    </span>
-                    <span className="topic-card__progress">
-                      <span style={{ width: `${ratio * 100}%` }} />
-                    </span>
-                  </span>
-                  {topic.coverUrl ? <img className="topic-card__cover" src={topic.coverUrl} alt="" /> : null}
-                </button>
-              );
-            })}
-          </div>
+                </span>
+              </button>
+            );
+          })
         )}
       </section>
     </section>
-  );
-}
-
-function TopicProgress({
-  topic,
-  progress,
-  totalForTopic,
-}: {
-  topic: TopicRecord;
-  progress: ProgressSnapshot;
-  totalForTopic: (topic: TopicRecord) => number;
-}) {
-  const total = totalForTopic(topic);
-  const done = completedForTopic(topic, progress);
-  const ratio = total > 0 ? done / total : 0;
-
-  return (
-    <div className="home-progress">
-      <span>拼图进度</span>
-      <strong>
-        {done}/{total}
-      </strong>
-      <div>
-        <i style={{ width: `${ratio * 100}%` }} />
-      </div>
-    </div>
   );
 }
