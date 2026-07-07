@@ -13,6 +13,7 @@ const SURFACE_LIGHT_COLOR := Color(1.0, 0.96, 0.88, 0.06)
 const SHADOW_COLOR := Color(0.40, 0.24, 0.10, 0.12)
 const SHADOW_OFFSET := Vector2(5.0, 7.0)
 const LIFTED_SCALE := Vector2(1.014, 1.014)
+const SEAM_LINE_COLOR := Color(0.0, 0.0, 0.0, 0.22)
 
 
 static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D:
@@ -35,6 +36,29 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D
 	for cut_line in piece["cut_lines"]:
 		node.add_child(_piece_cut_line(cut_line, 1.7, CUT_LINE_COLOR, 6))
 	return node
+
+
+static func add_seam_outline(group, width: float) -> void:
+	if group == null:
+		return
+	for member in group.members:
+		var visual: Node2D = member.get("visual", null)
+		if visual == null or not is_instance_valid(visual):
+			continue
+		if visual.get_node_or_null("piece_seam_line") != null:
+			continue
+		var line := Line2D.new()
+		line.name = "piece_seam_line"
+		line.width = width
+		line.default_color = SEAM_LINE_COLOR
+		line.closed = true
+		line.joint_mode = Line2D.LINE_JOINT_ROUND
+		line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		line.end_cap_mode = Line2D.LINE_CAP_ROUND
+		line.antialiased = true
+		line.z_index = 5
+		line.points = member["polygon"]
+		visual.add_child(line)
 
 
 static func set_group_lifted(group, lifted: bool, tween_owner: Node) -> void:

@@ -24,15 +24,20 @@ const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
-const HINT_OUTLINE_SCREEN_WIDTH := 9.0
+const HINT_OUTLINE_SCREEN_WIDTH := 5.0
 const HINT_TARGET_COLOR := Color(0.20, 0.78, 1.0, 0.95)
-const HINT_TARGET_SCREEN_WIDTH := 9.0
+const HINT_TARGET_SCREEN_WIDTH := 5.0
 const HINT_TARGET_DASH_LENGTH := 11.0
 const HINT_TARGET_DASH_GAP := 7.0
-const HINT_DURATION := 3.0
+const HINT_DURATION := 6.0
+const HINT_BREATHE_SCALE := 1.14
+const HINT_BREATHE_CYCLE := 1.5
+const HINT_TRAY_SCROLL_TIME := 0.3
 const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
-const SNAP_VISUAL_GAP := 0.5
+const SNAP_VISUAL_GAP := 0.0
+const SEAM_SCREEN_WIDTH := 1.6
+const SHIMMER_DURATION := 0.7
 const SWAP_FALLBACK_COLS := 5
 const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
@@ -48,9 +53,8 @@ const TRAY_ANIMATION_TIME := 0.20
 const TRAY_Z_INDEX := 4090
 const TRAY_HIT_PADDING := 18.0
 const TRAY_EXIT_THRESHOLD := 18.0
-const TRAY_VERTICAL_DRAG_THRESHOLD := 12.0
-const TRAY_HORIZONTAL_DRAG_THRESHOLD := 16.0
-const TRAY_LONG_PRESS_MSEC := 180
+const TRAY_GESTURE_DECIDE_THRESHOLD := 12.0
+const TRAY_DRAG_SCALE_TIME := 0.16
 const TRAY_DRAG_LIFT_MARGIN := 28.0
 const TRAY_DRAG_Z_INDEX := 4095
 const TRAY_INERTIA_MIN_SPEED := 90.0
@@ -88,8 +92,6 @@ var tray_pan_last_x := 0.0
 var tray_pending_group = null
 var tray_pending_start_pos := Vector2.ZERO
 var tray_pending_total_delta := Vector2.ZERO
-var tray_pending_press_msec := 0
-var tray_pending_was_scrolling := false
 var tray_scroll_velocity := 0.0
 var tray_last_pan_msec := 0
 var tray_inertia_active := false
@@ -103,6 +105,9 @@ var tray_drag_offset := Vector2.ZERO
 var tray_drag_screen_offset := Vector2.ZERO
 var tray_drag_target_screen_offset := Vector2.ZERO
 var tray_drag_offset_tween: Tween
+var tray_drag_local_grab := Vector2.ZERO
+var tray_drag_scale_tween: Tween
+var dragging_at_tray_scale := false
 var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
 var swap_drag_start_slot := -1
@@ -130,6 +135,8 @@ var randomize_piece_rotation := false
 var hint_highlight_token := 0
 var active_hint_key := ""
 var hint_expires_at_msec := 0
+var hint_pending := false
+var hint_tray_scroll_tween: Tween
 var debug_bounds_overlay_enabled := false
 var debug_bounds_overlay: Control
 var texts := {}
@@ -259,6 +266,7 @@ func _restore_group_state(snapshot: Dictionary) -> void:
 		active.node.rotation_degrees = 0.0
 		active.locked = true
 		active.in_tray = false
+		PieceVisualFactoryScript.add_seam_outline(active, _seam_line_width())
 		if bool(item.get("seed", false)):
 			active.is_seed = true
 		if not locked_groups.has(active):
@@ -394,8 +402,6 @@ func clear() -> void:
 	tray_pending_group = null
 	tray_pending_start_pos = Vector2.ZERO
 	tray_pending_total_delta = Vector2.ZERO
-	tray_pending_press_msec = 0
-	tray_pending_was_scrolling = false
 	tray_scroll_velocity = 0.0
 	tray_last_pan_msec = 0
 	tray_inertia_active = false
@@ -409,6 +415,9 @@ func clear() -> void:
 	tray_drag_screen_offset = Vector2.ZERO
 	tray_drag_target_screen_offset = Vector2.ZERO
 	tray_drag_offset_tween = null
+	tray_drag_local_grab = Vector2.ZERO
+	tray_drag_scale_tween = null
+	dragging_at_tray_scale = false
 	last_drag_screen_pos = Vector2.ZERO
 	swap_dragging = null
 	swap_drag_start_slot = -1
@@ -422,6 +431,8 @@ func clear() -> void:
 	hint_highlight_token = 0
 	active_hint_key = ""
 	hint_expires_at_msec = 0
+	hint_pending = false
+	hint_tray_scroll_tween = null
 	debug_bounds_overlay_enabled = false
 	debug_bounds_overlay = null
 	drag_blockers.clear()
@@ -883,19 +894,59 @@ func _pan_hint_bounds_into_view(bounds: Rect2) -> void:
 
 
 func show_hint() -> void:
+	if _hint_in_progress():
+		return
 	if current_mode == "swap":
-		status_changed.emit(_bt("swap_hint"))
+		_show_swap_hint()
 		return
 	var pair := _find_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
 		status_changed.emit(_bt("hint_none"))
 		return
-	_set_hint_highlights(pair)
-	_scroll_tray_group_into_view(pair[0])
-	_bring_hint_group_to_front(pair[0])
-	_focus_hint_pair(pair)
+	hint_pending = true
 	status_changed.emit(_bt("hint_pair"))
+	_animate_tray_scroll_to_group(pair[0], func() -> void:
+		if not hint_pending:
+			return
+		hint_pending = false
+		_set_hint_highlights(pair)
+		_bring_hint_group_to_front(pair[0])
+		_focus_hint_pair(pair)
+	)
+
+
+func _hint_in_progress() -> bool:
+	if hint_pending:
+		return true
+	return _has_active_hint_highlights() and Time.get_ticks_msec() < hint_expires_at_msec
+
+
+func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
+	if group == null or not group.in_tray:
+		on_done.call()
+		return
+	var area := _tray_area().grow(-TRAY_PADDING)
+	var target_offset := tray_scroll_offset
+	if group.tray_slot.position.x < area.position.x:
+		target_offset -= area.position.x - group.tray_slot.position.x
+	elif group.tray_slot.end.x > area.end.x:
+		target_offset += group.tray_slot.end.x - area.end.x
+	target_offset = clampf(target_offset, 0.0, maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING))
+	if absf(target_offset - tray_scroll_offset) < 1.0:
+		on_done.call()
+		return
+	_stop_tray_inertia()
+	if hint_tray_scroll_tween != null and hint_tray_scroll_tween.is_valid():
+		hint_tray_scroll_tween.kill()
+	hint_tray_scroll_tween = create_tween()
+	hint_tray_scroll_tween.set_ease(Tween.EASE_OUT)
+	hint_tray_scroll_tween.set_trans(Tween.TRANS_CUBIC)
+	hint_tray_scroll_tween.tween_method(func(value: float) -> void:
+		tray_scroll_offset = value
+		_layout_tray(true)
+	, tray_scroll_offset, target_offset, HINT_TRAY_SCROLL_TIME)
+	hint_tray_scroll_tween.finished.connect(on_done)
 
 
 func set_drag_blockers(blockers: Array[Rect2]) -> void:
@@ -998,6 +1049,8 @@ func _start_play_session(play_mode: String) -> bool:
 	tray_scroll_offset = 0.0
 	_layout_tray(true)
 	fit_view_to_pieces(false)
+	for group in locked_groups:
+		PieceVisualFactoryScript.add_seam_outline(group, _seam_line_width())
 	return true
 
 
@@ -1609,6 +1662,8 @@ func _clamp_tray_scroll() -> void:
 
 
 func _pan_tray(delta_x: float, record_velocity := true) -> void:
+	if not hint_highlighted_groups.is_empty():
+		_clear_hint_highlights()
 	var now := Time.get_ticks_msec()
 	if record_velocity:
 		var elapsed := maxf(0.001, float(now - tray_last_pan_msec) / 1000.0) if tray_last_pan_msec > 0 else 0.016
@@ -1636,18 +1691,6 @@ func _stop_tray_inertia() -> void:
 func _release_tray_pan() -> void:
 	tray_panning = false
 	_start_tray_inertia()
-
-
-func _scroll_tray_group_into_view(group) -> void:
-	if group == null or not group.in_tray:
-		return
-	var area := _tray_area().grow(-TRAY_PADDING)
-	if group.tray_slot.position.x < area.position.x:
-		tray_scroll_offset -= area.position.x - group.tray_slot.position.x
-	elif group.tray_slot.end.x > area.end.x:
-		tray_scroll_offset += group.tray_slot.end.x - area.end.x
-	_clamp_tray_scroll()
-	_layout_tray(false)
 
 
 func _tray_original_screen_scale() -> float:
@@ -1722,23 +1765,8 @@ func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
 	tray_pending_group = group
 	tray_pending_start_pos = screen_pos
 	tray_pending_total_delta = Vector2.ZERO
-	tray_pending_press_msec = Time.get_ticks_msec()
-	tray_pending_was_scrolling = false
 	group.node.z_index = TRAY_DRAG_Z_INDEX
 	PieceVisualFactoryScript.set_group_lifted(group, true, self)
-	_follow_pending_tray_group(screen_pos)
-
-
-func _follow_pending_tray_group(screen_pos: Vector2) -> void:
-	if tray_pending_group == null or not is_instance_valid(tray_pending_group.node):
-		return
-	if not tray_pending_group.in_tray:
-		return
-	var bounds := _group_local_bounds(tray_pending_group)
-	var scale: float = tray_pending_group.tray_scale
-	var local_center := bounds.position + bounds.size * 0.5
-	tray_pending_group.node.position = screen_pos - local_center * scale
-	tray_pending_group.node.z_index = TRAY_DRAG_Z_INDEX
 
 
 func _end_tray_piece_press() -> void:
@@ -1746,12 +1774,9 @@ func _end_tray_piece_press() -> void:
 	tray_pending_group = null
 	tray_pending_start_pos = Vector2.ZERO
 	tray_pending_total_delta = Vector2.ZERO
-	tray_pending_press_msec = 0
-	tray_pending_was_scrolling = false
 	if group != null and is_instance_valid(group.node):
 		PieceVisualFactoryScript.set_group_lifted(group, false, self)
 	_layout_tray(false)
-	_start_tray_inertia()
 
 
 func _group_local_bounds(group) -> Rect2:
@@ -1786,18 +1811,27 @@ func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
 	if tray_pending_group == null:
 		return
 	tray_pending_total_delta += relative
-	_follow_pending_tray_group(screen_pos)
-	var held_long_enough := Time.get_ticks_msec() - tray_pending_press_msec >= TRAY_LONG_PRESS_MSEC
-	var should_drag_vertical := tray_pending_total_delta.y <= -TRAY_VERTICAL_DRAG_THRESHOLD or screen_pos.y < _tray_area().position.y - TRAY_EXIT_THRESHOLD
-	var should_drag_horizontal := held_long_enough and not tray_pending_was_scrolling and absf(tray_pending_total_delta.x) >= TRAY_HORIZONTAL_DRAG_THRESHOLD
-	if should_drag_vertical or should_drag_horizontal:
-		_start_tray_world_drag(tray_pending_group, screen_pos)
+	var left_tray := screen_pos.y < _tray_area().position.y - TRAY_EXIT_THRESHOLD
+	if tray_pending_total_delta.length() < TRAY_GESTURE_DECIDE_THRESHOLD and not left_tray:
 		return
-	if absf(relative.x) > 0.0:
-		_pan_tray(relative.x)
-		_follow_pending_tray_group(screen_pos)
-		if absf(tray_pending_total_delta.x) >= TRAY_HORIZONTAL_DRAG_THRESHOLD and not held_long_enough:
-			tray_pending_was_scrolling = true
+	if not left_tray and absf(tray_pending_total_delta.x) > absf(tray_pending_total_delta.y):
+		_start_tray_scroll_from_pending(screen_pos)
+		return
+	_start_tray_world_drag(tray_pending_group, screen_pos)
+
+
+func _start_tray_scroll_from_pending(screen_pos: Vector2) -> void:
+	_clear_hint_highlights()
+	var group = tray_pending_group
+	var accumulated_x := tray_pending_total_delta.x
+	tray_pending_group = null
+	tray_pending_start_pos = Vector2.ZERO
+	tray_pending_total_delta = Vector2.ZERO
+	if group != null and is_instance_valid(group.node):
+		PieceVisualFactoryScript.set_group_lifted(group, false, self)
+	tray_panning = true
+	tray_pan_last_x = screen_pos.x
+	_pan_tray(accumulated_x)
 
 
 func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
@@ -1808,8 +1842,6 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	tray_pending_group = null
 	tray_pending_start_pos = Vector2.ZERO
 	tray_pending_total_delta = Vector2.ZERO
-	tray_pending_press_msec = 0
-	tray_pending_was_scrolling = false
 	dragging = group
 	dragging_from_tray = true
 	dragging_tray_index = group.tray_index
@@ -1818,12 +1850,15 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	tray_drag_screen_offset = Vector2.ZERO
 	tray_drag_target_screen_offset = Vector2.ZERO
 	last_drag_screen_pos = screen_pos
-	var world_pos := _screen_to_world(screen_pos)
 	var initial_scale: float = group.tray_scale / maxf(0.001, view_scale)
-	_send_group_to_world(group, world_pos, initial_scale)
+	var pointer_world := _screen_to_world(screen_pos)
+	var node_world := _screen_to_world(group.node.position)
+	_send_group_to_world(group, node_world, initial_scale)
+	tray_drag_local_grab = (pointer_world - node_world) / maxf(0.001, initial_scale)
+	dragging_at_tray_scale = true
 	group.node.z_index = TRAY_DRAG_Z_INDEX
 	_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
-	_animate_dragged_group_to_world_scale(group)
+	_update_tray_drag_scale(screen_pos)
 	drag_offset = Vector2.ZERO
 	_notify_state_changed()
 
@@ -1832,15 +1867,41 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 	last_drag_screen_pos = screen_pos
 	if dragging_from_tray:
 		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
+		_update_tray_drag_scale(screen_pos)
 		_place_dragging_from_screen(screen_pos)
 		return
 	_move_group_to(dragging, _screen_to_world(screen_pos) + drag_offset)
 
 
+func _update_tray_drag_scale(screen_pos: Vector2) -> void:
+	if dragging == null or not is_instance_valid(dragging.node):
+		return
+	var inside_tray := _tray_area().has_point(screen_pos)
+	if inside_tray == dragging_at_tray_scale:
+		return
+	dragging_at_tray_scale = inside_tray
+	var target_scale: float = dragging.tray_scale / maxf(0.001, view_scale) if inside_tray else 1.0
+	if tray_drag_scale_tween != null and tray_drag_scale_tween.is_valid():
+		tray_drag_scale_tween.kill()
+	var group = dragging
+	tray_drag_scale_tween = create_tween()
+	tray_drag_scale_tween.set_ease(Tween.EASE_OUT)
+	tray_drag_scale_tween.set_trans(Tween.TRANS_CUBIC)
+	var start_scale: float = group.node.scale.x
+	tray_drag_scale_tween.tween_method(func(t: float) -> void:
+		if not is_instance_valid(group.node):
+			return
+		group.node.scale = Vector2.ONE * lerpf(start_scale, target_scale, t)
+		if group == dragging:
+			_place_dragging_from_screen(last_drag_screen_pos)
+	, 0.0, 1.0, TRAY_DRAG_SCALE_TIME)
+
+
 func _place_dragging_from_screen(screen_pos: Vector2) -> void:
 	if dragging == null or not is_instance_valid(dragging.node):
 		return
-	dragging.node.position = _screen_to_world(screen_pos + tray_drag_screen_offset)
+	var pointer_world := _screen_to_world(screen_pos + tray_drag_screen_offset)
+	dragging.node.position = pointer_world - tray_drag_local_grab * dragging.node.scale.x
 	dragging.node.z_index = TRAY_DRAG_Z_INDEX
 
 
@@ -1866,15 +1927,6 @@ func _set_tray_drag_target_offset(target: Vector2) -> void:
 		tray_drag_screen_offset = start.lerp(tray_drag_target_screen_offset, t)
 		_place_dragging_from_screen(last_drag_screen_pos)
 	, 0.0, 1.0, 0.12)
-
-
-func _animate_dragged_group_to_world_scale(group) -> void:
-	if group == null or not is_instance_valid(group.node):
-		return
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "scale", Vector2.ONE, 0.10)
 
 
 func _scatter_position_for_group(group) -> Vector2:
@@ -2215,11 +2267,13 @@ func _end_drag() -> void:
 	if dragging == null:
 		return
 	var released_group = dragging
+	var released_members: Array = released_group.members.duplicate()
 	var snapped := _try_snap_chain(dragging)
 	if dragging_from_tray and not snapped:
 		_return_group_to_tray(released_group)
 	elif snapped:
 		_lock_group(released_group)
+		_play_snap_shimmer(released_members)
 	_check_complete()
 	PieceVisualFactoryScript.set_group_lifted(released_group, false, self)
 	dragging = null
@@ -2231,6 +2285,11 @@ func _end_drag() -> void:
 	if tray_drag_offset_tween != null and tray_drag_offset_tween.is_valid():
 		tray_drag_offset_tween.kill()
 	tray_drag_offset_tween = null
+	if tray_drag_scale_tween != null and tray_drag_scale_tween.is_valid():
+		tray_drag_scale_tween.kill()
+	tray_drag_scale_tween = null
+	tray_drag_local_grab = Vector2.ZERO
+	dragging_at_tray_scale = false
 	last_drag_screen_pos = Vector2.ZERO
 	_notify_state_changed(true)
 
@@ -2400,6 +2459,58 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	)
 
 
+func _show_swap_hint() -> void:
+	var pair := _find_swap_hint_pair()
+	if pair.is_empty():
+		_clear_hint_highlights()
+		status_changed.emit(_bt("hint_none"))
+		return
+	var hint_key := "swap:%d:%d" % [int(pair[0]["correct_index"]), int(pair[1]["correct_index"])]
+	if hint_key == active_hint_key and _has_active_hint_highlights():
+		hint_expires_at_msec = Time.get_ticks_msec() + int(HINT_DURATION * 1000.0)
+		return
+	_clear_hint_highlights()
+	hint_highlight_token += 1
+	active_hint_key = hint_key
+	hint_expires_at_msec = Time.get_ticks_msec() + int(HINT_DURATION * 1000.0)
+	for tile in pair:
+		_add_swap_hint_outline(tile)
+	_auto_clear_hint_highlights(hint_highlight_token)
+	status_changed.emit(_bt("hint_pair"))
+
+
+func _find_swap_hint_pair() -> Array:
+	var by_slot := {}
+	for tile in swap_tiles:
+		by_slot[int(tile["slot_index"])] = tile
+	var fallback: Array = []
+	for tile in swap_tiles:
+		if int(tile["slot_index"]) == int(tile["correct_index"]):
+			continue
+		var occupant = by_slot.get(int(tile["correct_index"]), null)
+		if occupant == null or occupant == tile:
+			continue
+		if int(occupant["correct_index"]) == int(tile["slot_index"]):
+			return [tile, occupant]
+		if fallback.is_empty():
+			fallback = [tile, occupant]
+	return fallback
+
+
+func _add_swap_hint_outline(tile) -> void:
+	var node: Node2D = tile["node"]
+	if not is_instance_valid(node):
+		return
+	var size: Vector2 = tile["size"]
+	var rect_polygon := PackedVector2Array([
+		Vector2.ZERO,
+		Vector2(size.x, 0.0),
+		size,
+		Vector2(0.0, size.y),
+	])
+	_spawn_dashed_outline(node, [rect_polygon], Vector2.ZERO, 30)
+
+
 func _check_swap_complete() -> void:
 	if completion_emitted or swap_tiles.is_empty():
 		return
@@ -2471,10 +2582,91 @@ func _try_snap_chain(active) -> bool:
 			active.node.rotation_degrees = 0.0
 			if selected_group == other:
 				selected_group = active
+			active.node.scale = Vector2.ONE
+			PieceVisualFactoryScript.add_seam_outline(active, _seam_line_width())
 			_pulse_node(active.node)
 			snapped = true
 			progressed = true
 	return snapped
+
+
+func _seam_line_width() -> float:
+	return SEAM_SCREEN_WIDTH / maxf(0.001, base_view_scale if base_view_scale > 0.0 else view_scale)
+
+
+func _play_snap_shimmer(members: Array) -> void:
+	var material := ShaderMaterial.new()
+	material.shader = _shimmer_shader()
+	material.set_shader_parameter("progress", 0.0)
+	var overlays: Array[Polygon2D] = []
+	for member in members:
+		if typeof(member) != TYPE_DICTIONARY:
+			continue
+		var visual: Node2D = member.get("visual", null)
+		if visual == null or not is_instance_valid(visual):
+			continue
+		var polygon: PackedVector2Array = member["polygon"]
+		var bounds := _source_rect_for_points(polygon)
+		if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
+			continue
+		var overlay := Polygon2D.new()
+		overlay.name = "snap_shimmer"
+		overlay.polygon = polygon
+		var uv := PackedVector2Array()
+		for point in polygon:
+			uv.append((point - bounds.position) / bounds.size)
+		overlay.uv = uv
+		overlay.texture = _shimmer_uv_texture()
+		overlay.material = material
+		overlay.z_index = 24
+		visual.add_child(overlay)
+		overlays.append(overlay)
+	if overlays.is_empty():
+		return
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_method(func(t: float) -> void:
+		material.set_shader_parameter("progress", t)
+	, 0.0, 1.0, SHIMMER_DURATION)
+	tween.finished.connect(func() -> void:
+		for overlay in overlays:
+			if is_instance_valid(overlay):
+				overlay.queue_free()
+	)
+
+
+static var _shimmer_shader_cache: Shader = null
+static var _shimmer_uv_texture_cache: Texture2D = null
+
+
+static func _shimmer_shader() -> Shader:
+	if _shimmer_shader_cache != null:
+		return _shimmer_shader_cache
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform float progress : hint_range(0.0, 1.0) = 0.0;
+
+void fragment() {
+	float band_center = mix(-0.4, 1.4, progress);
+	float d = (UV.x + UV.y) * 0.5;
+	float band = 1.0 - smoothstep(0.0, 0.26, abs(d - band_center));
+	float alpha = band * band * 0.8;
+	COLOR = vec4(1.0, 1.0, 1.0, alpha);
+}
+"""
+	_shimmer_shader_cache = shader
+	return shader
+
+
+static func _shimmer_uv_texture() -> Texture2D:
+	if _shimmer_uv_texture_cache != null:
+		return _shimmer_uv_texture_cache
+	var image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	_shimmer_uv_texture_cache = ImageTexture.create_from_image(image)
+	return _shimmer_uv_texture_cache
 
 
 func _locked_snap_targets(active) -> Array:
@@ -2492,6 +2684,8 @@ func _lock_group(group) -> void:
 	group.in_tray = false
 	group.node.position = group.anchor_home
 	group.node.rotation_degrees = 0.0
+	group.node.scale = Vector2.ONE
+	PieceVisualFactoryScript.add_seam_outline(group, _seam_line_width())
 	if not locked_groups.has(group):
 		locked_groups.append(group)
 	if tray_groups.has(group):
@@ -2591,8 +2785,7 @@ func _add_hint_outline_to_group(group) -> void:
 		for point in polygon:
 			outline.append(visual.position + point - center)
 		_add_hint_outline_line(outline_root, outline, HINT_OUTLINE_SCREEN_WIDTH, HINT_OUTLINE_COLOR, 0, false)
-	if group.in_tray:
-		_hint_blink_group(group)
+	_hint_breathe_group(group)
 
 
 func _hint_outline_local_center(group) -> Vector2:
@@ -2605,41 +2798,44 @@ func _hint_outline_local_center(group) -> Vector2:
 func _add_hint_target_outline(group) -> void:
 	if world_root == null or group == null:
 		return
-	var target_root := Node2D.new()
-	target_root.name = "hint_target_outline"
-	target_root.position = group.anchor_home
-	target_root.rotation_degrees = 0.0
-	target_root.z_index = HINT_TARGET_Z_INDEX
-	world_root.add_child(target_root)
-	hint_highlighted_nodes.append(target_root)
-	_redraw_hint_target_outline(target_root, group, 0.0)
-	var tween := create_tween()
-	tween.bind_node(target_root)
-	tween.set_loops()
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_LINEAR)
-	var dash_cycle := HINT_TARGET_DASH_LENGTH + HINT_TARGET_DASH_GAP
-	tween.tween_method(func(phase: float) -> void:
-		_redraw_hint_target_outline(target_root, group, phase)
-	, 0.0, dash_cycle, 0.64)
-
-
-func _redraw_hint_target_outline(target_root: Node2D, group, phase: float) -> void:
-	if not is_instance_valid(target_root) or group == null:
-		return
-	for child in target_root.get_children():
-		child.free()
-	var dash_index := 0
+	var polygons: Array = []
 	for member in group.members:
 		var visual_position: Vector2 = member["visual"].position
 		var polygon: PackedVector2Array = member["polygon"]
 		var outline := PackedVector2Array()
 		for point in polygon:
 			outline.append(visual_position + point)
-		for dash in _dashed_polygon_segments(outline, HINT_TARGET_DASH_LENGTH, HINT_TARGET_DASH_GAP, phase):
-			var dash_line := _add_hint_outline_line(target_root, dash, HINT_TARGET_SCREEN_WIDTH, HINT_TARGET_COLOR, 0, false, false)
-			dash_line.modulate.a = 1.0 if dash_index % 2 == 0 else 0.82
-			dash_index += 1
+		polygons.append(outline)
+	_spawn_dashed_outline(world_root, polygons, group.anchor_home, HINT_TARGET_Z_INDEX)
+
+
+func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int) -> Node2D:
+	var root := Node2D.new()
+	root.name = "hint_dashed_outline"
+	root.position = local_position
+	root.z_index = z_index_value
+	parent.add_child(root)
+	hint_highlighted_nodes.append(root)
+	_redraw_dashed_outline(root, polygons, 0.0)
+	var tween := create_tween()
+	tween.bind_node(root)
+	tween.set_loops()
+	tween.set_trans(Tween.TRANS_LINEAR)
+	var dash_cycle := HINT_TARGET_DASH_LENGTH + HINT_TARGET_DASH_GAP
+	tween.tween_method(func(phase: float) -> void:
+		_redraw_dashed_outline(root, polygons, phase)
+	, 0.0, dash_cycle, 0.64)
+	return root
+
+
+func _redraw_dashed_outline(root: Node2D, polygons: Array, phase: float) -> void:
+	if not is_instance_valid(root):
+		return
+	for child in root.get_children():
+		child.free()
+	for polygon in polygons:
+		for dash in _dashed_polygon_segments(polygon, HINT_TARGET_DASH_LENGTH, HINT_TARGET_DASH_GAP, phase):
+			_add_hint_outline_line(root, dash, HINT_TARGET_SCREEN_WIDTH, HINT_TARGET_COLOR, 0, false, false)
 
 
 func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, gap_length: float, phase: float) -> Array[PackedVector2Array]:
@@ -2660,7 +2856,9 @@ func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, ga
 		while local < edge_length:
 			var cycle_position := fposmod(distance_cursor, cycle)
 			var until_next := cycle - cycle_position
-			var step := minf(edge_length - local, until_next)
+			# fposmod can return the divisor itself due to float error, which
+			# would make the step zero and hang this loop
+			var step := maxf(0.01, minf(edge_length - local, until_next))
 			if cycle_position < dash_length:
 				var dash_remaining := dash_length - cycle_position
 				var dash_step := minf(step, dash_remaining)
@@ -2673,21 +2871,29 @@ func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, ga
 	return segments
 
 
-func _hint_blink_group(group) -> void:
+func _hint_breathe_group(group) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
 	var node: Node2D = group.node
-	if not hint_original_modulates.has(node):
-		hint_original_modulates[node] = node.modulate
-	var original: Color = hint_original_modulates[node]
-	var dimmed := Color(original.r, original.g, original.b, 0.42)
+	var base_scale: float = node.scale.x
+	var base_position: Vector2 = node.position
+	var local_center := _hint_outline_local_center(group)
+	var pinned_center := base_position + local_center * base_scale
+	var apply_factor := func(factor: float) -> void:
+		if not is_instance_valid(node):
+			return
+		node.scale = Vector2.ONE * base_scale * factor
+		node.position = pinned_center - local_center * base_scale * factor
 	var tween := create_tween()
 	tween.bind_node(node)
-	tween.set_loops(5)
+	tween.set_loops(int(ceil(HINT_DURATION / HINT_BREATHE_CYCLE)))
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_property(node, "modulate", dimmed, 0.30)
-	tween.tween_property(node, "modulate", original, 0.30)
+	tween.tween_method(apply_factor, 1.0, HINT_BREATHE_SCALE, HINT_BREATHE_CYCLE * 0.5)
+	tween.tween_method(apply_factor, HINT_BREATHE_SCALE, 1.0, HINT_BREATHE_CYCLE * 0.5)
+	tween.finished.connect(func() -> void:
+		apply_factor.call(1.0)
+	)
 	hint_blink_tweens.append(tween)
 
 
@@ -2751,6 +2957,10 @@ func _clear_hint_highlights() -> void:
 	hint_highlight_token += 1
 	active_hint_key = ""
 	hint_expires_at_msec = 0
+	hint_pending = false
+	if hint_tray_scroll_tween != null and hint_tray_scroll_tween.is_valid():
+		hint_tray_scroll_tween.kill()
+	hint_tray_scroll_tween = null
 	for line in hint_highlighted_lines:
 		if is_instance_valid(line):
 			line.queue_free()

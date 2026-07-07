@@ -16,7 +16,19 @@ const ICON_MODE_POLYGON_DONE_PATH := "res://assets/icons/status/mode_polygon_don
 const ICON_MODE_POLYGON_TODO_PATH := "res://assets/icons/status/mode_polygon_todo.png"
 const ICON_MODE_SWAP_DONE_PATH := "res://assets/icons/status/mode_swap_done.png"
 const ICON_MODE_SWAP_TODO_PATH := "res://assets/icons/status/mode_swap_todo.png"
+const ISLAND_OCEAN_BG_PATH := "res://assets/web-ui/island-map/ocean-bg.webp"
+const ISLAND_BASE_PATHS := [
+	"res://assets/web-ui/island-map/island-1.webp",
+	"res://assets/web-ui/island-map/island-2.webp",
+	"res://assets/web-ui/island-map/island-3.webp",
+]
+const ISLAND_CLOUD_PATHS := [
+	"res://assets/web-ui/island-map/cloud-wide.webp",
+	"res://assets/web-ui/island-map/cloud-medium.webp",
+	"res://assets/web-ui/island-map/cloud-round.webp",
+]
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
+const ConfettiEffectScript := preload("res://scripts/ConfettiEffect.gd")
 const DevTestPanelScript := preload("res://scripts/DevTestPanel.gd")
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
@@ -30,6 +42,9 @@ const HOME_ICON_BUTTON_SIZE := 72.0
 const HOME_ICON_INSET := 8.0
 const GAME_FOOTER_MARGIN := 18.0
 const HUD_BLOCKER_PADDING := 18.0
+const TOPICS_SCROLL_FRICTION := 7.0
+const TOPICS_TAP_THRESHOLD := 14.0
+const TOPICS_INERTIA_MIN_SPEED := 40.0
 const HUD_DEBUG_MEASUREMENTS := false
 const BUTTON_BOUNDS_DEBUG := false
 const BUTTON_BOUNDS_DEBUG_COLOR := Color(0.16, 0.56, 1.0, 0.20)
@@ -237,9 +252,16 @@ var current_level: Dictionary = {}
 var current_mode := "knob"
 var current_screen := "home"
 var modal_open := false
-var complete_confetti_timer: Timer
 var complete_confetti_layer: Control
-var complete_confetti_rng := RandomNumberGenerator.new()
+var topics_content: Control
+var topics_content_height := 0.0
+var topics_scroll_offset := 0.0
+var topics_scroll_velocity := 0.0
+var topics_inertia_active := false
+var topics_drag_active := false
+var topics_drag_total := Vector2.ZERO
+var topics_drag_last_msec := 0
+var topics_island_items: Array[Dictionary] = []
 
 var status_label: Label
 var zoom_label: Label
@@ -287,6 +309,7 @@ func _ready() -> void:
 	_setup_dev_tools()
 	_build_catalog()
 	_apply_level_media({})
+	set_process(false)
 	_show_topics()
 
 
@@ -297,7 +320,8 @@ func _lock_portrait_orientation() -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
-		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_D and dev_panel != null:
+		var is_dev_key := key_event.keycode == KEY_D or key_event.physical_keycode == KEY_D
+		if key_event.pressed and not key_event.echo and is_dev_key and dev_panel != null:
 			dev_panel.toggle()
 			get_viewport().set_input_as_handled()
 			return
@@ -330,10 +354,9 @@ func debug_level_options() -> Array:
 			if modes.is_empty():
 				continue
 			result.append({
-				"label": "%s / %s / %s" % [str(topic.get("name", "")), str(level.get("group_name", "")), _level_display_title(level)],
+				"label": "%s / %s" % [str(topic.get("name", "")), _level_display_title(level)],
 				"topic_id": str(topic.get("id", "")),
 				"level_id": str(level.get("id", "")),
-				"group_id": str(level.get("group_id", "")),
 				"modes": modes,
 			})
 	return result
@@ -345,7 +368,7 @@ func debug_enter_level(option_index: int, play_mode: String) -> void:
 		return
 	var option: Dictionary = options[option_index]
 	var topic := _debug_topic_by_id(str(option.get("topic_id", "")))
-	var level := _debug_level_by_id(topic, str(option.get("group_id", "")), str(option.get("level_id", "")))
+	var level := _debug_level_by_id(topic, str(option.get("level_id", "")))
 	if topic.is_empty() or level.is_empty():
 		return
 	_close_modal()
@@ -452,9 +475,9 @@ func _debug_topic_by_id(topic_id: String) -> Dictionary:
 	return {}
 
 
-func _debug_level_by_id(topic: Dictionary, group_id: String, level_id: String) -> Dictionary:
+func _debug_level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
 	for level in topic.get("levels", []):
-		if str(level.get("id", "")) == level_id and str(level.get("group_id", "")) == group_id:
+		if str(level.get("id", "")) == level_id:
 			return level
 	return {}
 
@@ -490,6 +513,10 @@ func _puzzle_board_texts() -> Dictionary:
 
 func _clear_ui() -> void:
 	_stop_complete_confetti()
+	_stop_topics_inertia()
+	topics_drag_active = false
+	topics_island_items.clear()
+	topics_content = null
 	lazy_thumbnail_items.clear()
 	lazy_thumbnail_queue.clear()
 	lazy_thumbnail_processing = false
@@ -763,29 +790,6 @@ func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) 
 	row.add_child(label)
 
 
-func _root_title(parent: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.custom_minimum_size.y = 72
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	parent.add_child(row)
-	var title := TextureRect.new()
-	title.texture = title_texture
-	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	title.custom_minimum_size = Vector2(168, 60)
-	row.add_child(title)
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
-	var actions := HBoxContainer.new()
-	actions.alignment = BoxContainer.ALIGNMENT_END
-	actions.add_theme_constant_override("separation", 10)
-	actions.add_child(_icon_button(icon_album, _show_album, _t("album"), HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
-	actions.add_child(_icon_button(icon_setting, _show_settings_modal, _t("settings"), HOME_ICON_BUTTON_SIZE, HOME_ICON_INSET, true))
-	row.add_child(actions)
-
-
 func _button(text: String, action: Callable, primary := true, min_size := Vector2(120, 42)) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -993,29 +997,445 @@ func _show_last_topic_levels() -> void:
 
 func _show_topics() -> void:
 	current_screen = "topics"
-	var wrap := _base_screen(cream)
-	_root_title(wrap)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	wrap.add_child(scroll)
-	var center := CenterContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
-	var grid := GridContainer.new()
-	var columns := 1
-	grid.columns = columns
-	grid.add_theme_constant_override("h_separation", _screen_margin())
-	grid.add_theme_constant_override("v_separation", _screen_margin())
-	center.add_child(grid)
+	_clear_ui()
+	_clear_board()
+	var ui_scale := _island_ui_scale()
+	var viewport_size := get_viewport_rect().size
+	_add_island_background()
+	topics_island_items.clear()
+	topics_scroll_offset = 0.0
+	topics_scroll_velocity = 0.0
+	topics_drag_active = false
+	topics_content = Control.new()
+	topics_content.name = "topics_content"
+	topics_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(topics_content)
+	var island_width := minf(viewport_size.x * 0.81, 430.0 * ui_scale)
+	var island_height := island_width / 1.48
+	var side_margin := 18.0 * ui_scale
+	var gap := 14.0 * ui_scale
+	var y := _island_topbar_height(ui_scale) + 18.0 * ui_scale
 	if topics.is_empty():
-		grid.add_child(_empty_topic_message())
+		var empty := _empty_topic_message()
+		empty.position = Vector2((viewport_size.x - empty.custom_minimum_size.x) * 0.5, y)
+		topics_content.add_child(empty)
+		y += empty.custom_minimum_size.y
+	for index in topics.size():
+		var topic: Dictionary = topics[index]
+		var island := _island_topic_button(topic, index, ui_scale)
+		var x := side_margin if index % 2 == 0 else viewport_size.x - island_width - side_margin
+		island.position = Vector2(x, y)
+		topics_content.add_child(island)
+		topics_island_items.append({
+			"rect": Rect2(Vector2(x, y), Vector2(island_width, island_height)),
+			"topic": topic,
+		})
+		y += island_height + gap
+	topics_content_height = y + 54.0 * ui_scale
+	var catcher := Control.new()
+	catcher.name = "topics_scroll_catcher"
+	catcher.set_anchors_preset(Control.PRESET_FULL_RECT)
+	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	catcher.gui_input.connect(_on_topics_gui_input)
+	screen_root.add_child(catcher)
+	screen_root.add_child(_island_topbar(ui_scale))
+	_apply_topics_scroll()
+	topics_content.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(topics_content, "modulate:a", 1.0, 0.24)
+
+
+func _on_topics_gui_input(event: InputEvent) -> void:
+	if current_screen != "topics":
 		return
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		var wheel_step := 160.0 * _island_ui_scale() * maxf(mouse_event.factor, 0.25)
+		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
+			_impulse_topics_scroll(-wheel_step)
+		elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+			_impulse_topics_scroll(wheel_step)
+		elif mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			if mouse_event.pressed:
+				_begin_topics_drag()
+			else:
+				_end_topics_drag(mouse_event.position)
+	elif event is InputEventMouseMotion:
+		if topics_drag_active:
+			_update_topics_drag(event as InputEventMouseMotion)
+	elif event is InputEventPanGesture:
+		var pan := event as InputEventPanGesture
+		_stop_topics_inertia()
+		_scroll_topics_to(topics_scroll_offset + pan.delta.y * 14.0 * _island_ui_scale())
+
+
+func _begin_topics_drag() -> void:
+	_stop_topics_inertia()
+	topics_drag_active = true
+	topics_drag_total = Vector2.ZERO
+	topics_drag_last_msec = Time.get_ticks_msec()
+
+
+func _update_topics_drag(motion: InputEventMouseMotion) -> void:
+	topics_drag_total += motion.relative
+	var now := Time.get_ticks_msec()
+	var elapsed := maxf(0.001, float(now - topics_drag_last_msec) / 1000.0)
+	topics_drag_last_msec = now
+	topics_scroll_velocity = -motion.relative.y / elapsed
+	_scroll_topics_to(topics_scroll_offset - motion.relative.y)
+
+
+func _end_topics_drag(screen_pos: Vector2) -> void:
+	if not topics_drag_active:
+		return
+	topics_drag_active = false
+	if topics_drag_total.length() <= TOPICS_TAP_THRESHOLD * _island_ui_scale() * 0.5:
+		topics_scroll_velocity = 0.0
+		_activate_island_at(screen_pos)
+		return
+	if absf(topics_scroll_velocity) >= TOPICS_INERTIA_MIN_SPEED * 3.0:
+		topics_inertia_active = true
+		set_process(true)
+	else:
+		topics_scroll_velocity = 0.0
+
+
+func _activate_island_at(screen_pos: Vector2) -> void:
+	var content_pos := screen_pos + Vector2(0.0, topics_scroll_offset)
+	for item in topics_island_items:
+		var rect: Rect2 = item["rect"]
+		if rect.has_point(content_pos):
+			var topic: Dictionary = item["topic"]
+			_show_levels(topic, progress_store.focus_level_id(topic))
+			return
+
+
+func _scroll_topics_to(target: float) -> void:
+	topics_scroll_offset = clampf(target, 0.0, _topics_max_scroll())
+	_apply_topics_scroll()
+
+
+func _topics_max_scroll() -> float:
+	return maxf(0.0, topics_content_height - get_viewport_rect().size.y)
+
+
+func _apply_topics_scroll() -> void:
+	if topics_content != null and is_instance_valid(topics_content):
+		topics_content.position.y = -topics_scroll_offset
+
+
+func _impulse_topics_scroll(distance: float) -> void:
+	topics_scroll_velocity += distance * TOPICS_SCROLL_FRICTION
+	topics_inertia_active = true
+	set_process(true)
+
+
+func _stop_topics_inertia() -> void:
+	topics_inertia_active = false
+	topics_scroll_velocity = 0.0
+	set_process(false)
+
+
+func _process(delta: float) -> void:
+	if not topics_inertia_active or current_screen != "topics":
+		_stop_topics_inertia()
+		return
+	var previous := topics_scroll_offset
+	_scroll_topics_to(topics_scroll_offset + topics_scroll_velocity * delta)
+	topics_scroll_velocity *= maxf(0.0, 1.0 - TOPICS_SCROLL_FRICTION * delta)
+	if absf(topics_scroll_velocity) < TOPICS_INERTIA_MIN_SPEED or is_equal_approx(previous, topics_scroll_offset):
+		_stop_topics_inertia()
+
+
+func _island_ui_scale() -> float:
+	return clampf(get_viewport_rect().size.x / 390.0, 1.0, 4.0)
+
+
+func _island_topbar_height(ui_scale: float) -> float:
+	return 60.0 * ui_scale
+
+
+func _add_island_background() -> void:
+	var bg := ColorRect.new()
+	bg.color = Color("#79C3C3")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(bg)
+	var ocean := TextureRect.new()
+	ocean.texture = repository.cached_texture(ISLAND_OCEAN_BG_PATH)
+	ocean.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	ocean.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	ocean.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ocean.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(ocean)
+	var glow := ColorRect.new()
+	glow.color = Color(1.0, 1.0, 1.0, 0.10)
+	glow.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	glow.offset_bottom = get_viewport_rect().size.y * 0.22
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	screen_root.add_child(glow)
+	var ui_scale := _island_ui_scale()
+	var viewport_size := get_viewport_rect().size
+	var cloud_specs := [
+		{"path": ISLAND_CLOUD_PATHS[0], "pos": Vector2(viewport_size.x * 0.04, viewport_size.y * 0.16), "width": 120.0},
+		{"path": ISLAND_CLOUD_PATHS[1], "pos": Vector2(viewport_size.x * 0.68, viewport_size.y * 0.42), "width": 96.0},
+		{"path": ISLAND_CLOUD_PATHS[2], "pos": Vector2(viewport_size.x * 0.10, viewport_size.y * 0.70), "width": 78.0},
+	]
+	for spec in cloud_specs:
+		var cloud_texture := repository.cached_texture(str(spec["path"]))
+		if cloud_texture == null:
+			continue
+		var cloud := TextureRect.new()
+		cloud.texture = cloud_texture
+		cloud.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		cloud.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var cloud_width: float = float(spec["width"]) * ui_scale
+		var cloud_height := cloud_width * float(cloud_texture.get_height()) / maxf(1.0, float(cloud_texture.get_width()))
+		cloud.custom_minimum_size = Vector2(cloud_width, cloud_height)
+		cloud.position = spec["pos"]
+		cloud.size = cloud.custom_minimum_size
+		cloud.modulate.a = 0.85
+		cloud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		screen_root.add_child(cloud)
+
+
+func _island_topbar(ui_scale: float) -> Control:
+	var bar := Control.new()
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_bottom = _island_topbar_height(ui_scale)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var side_margin := 14.0 * ui_scale
+	var button_size := 44.0 * ui_scale
+	var settings_button := _icon_button(icon_setting, _show_settings_modal, _t("settings"), button_size, 10.0 * ui_scale, true)
+	settings_button.position = Vector2(side_margin, 12.0 * ui_scale)
+	bar.add_child(settings_button)
+	var album_button := _icon_button(icon_album, _show_album, _t("album"), button_size, 10.0 * ui_scale, true)
+	album_button.position = Vector2(side_margin + button_size + 8.0 * ui_scale, 12.0 * ui_scale)
+	bar.add_child(album_button)
+	bar.add_child(_island_game_title(ui_scale))
+	bar.add_child(_island_overall_progress(ui_scale))
+	return bar
+
+
+func _island_game_title(ui_scale: float) -> Control:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.98, 0.94, 0.96)
+	style.border_color = Color(0.35, 0.23, 0.13, 0.18)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	var radius := int(14.0 * ui_scale)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 16.0 * ui_scale
+	style.content_margin_right = 16.0 * ui_scale
+	style.content_margin_top = 7.0 * ui_scale
+	style.content_margin_bottom = 9.0 * ui_scale
+	style.shadow_color = Color(0.35, 0.23, 0.13, 0.16)
+	style.shadow_size = int(6.0 * ui_scale)
+	style.shadow_offset = Vector2(0, 3.0 * ui_scale)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(row)
+	var font_size := int(27.0 * ui_scale)
+	var jig := Label.new()
+	jig.text = "Jig"
+	jig.add_theme_font_size_override("font_size", font_size)
+	jig.add_theme_color_override("font_color", Color("#2E8587"))
+	jig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(jig)
+	var cat := Label.new()
+	cat.text = "Cat"
+	cat.add_theme_font_size_override("font_size", font_size)
+	cat.add_theme_color_override("font_color", orange)
+	cat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(cat)
+	panel.position = Vector2(get_viewport_rect().size.x * 0.5 - 60.0 * ui_scale, 10.0 * ui_scale)
+	panel.rotation_degrees = -1.0
+	return panel
+
+
+func _island_overall_progress(ui_scale: float) -> Control:
+	var done := 0
+	var total := 0
 	for topic in topics:
-		var card := _topic_card_button(topic, _topic_card_width(columns), func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)))
-		grid.add_child(card)
+		done += _topic_available_done_count(topic)
+		total += _topic_available_mode_total(topic)
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.96, 0.90, 0.92)
+	style.border_color = Color(0.35, 0.23, 0.13, 0.16)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	var radius := int(13.0 * ui_scale)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 12.0 * ui_scale
+	style.content_margin_right = 12.0 * ui_scale
+	style.content_margin_top = 8.0 * ui_scale
+	style.content_margin_bottom = 9.0 * ui_scale
+	style.shadow_color = Color(0.35, 0.23, 0.13, 0.14)
+	style.shadow_size = int(5.0 * ui_scale)
+	style.shadow_offset = Vector2(0, 2.0 * ui_scale)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", int(5.0 * ui_scale))
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(box)
+	var count := Label.new()
+	count.text = "%d/%d" % [done, total]
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count.add_theme_font_size_override("font_size", int(15.0 * ui_scale))
+	count.add_theme_color_override("font_color", brown)
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(count)
+	box.add_child(_topic_progress_bar(done, total, Vector2(80.0 * ui_scale, 7.0 * ui_scale), orange))
+	var panel_width := 104.0 * ui_scale
+	panel.position = Vector2(get_viewport_rect().size.x - panel_width - 14.0 * ui_scale, 10.0 * ui_scale)
+	panel.custom_minimum_size.x = panel_width
+	return panel
+
+
+func _island_topic_button(topic: Dictionary, index: int, ui_scale: float) -> Control:
+	var viewport_width := get_viewport_rect().size.x
+	var island_width := minf(viewport_width * 0.81, 430.0 * ui_scale)
+	var island_height := island_width / 1.48
+	var card := Control.new()
+	card.custom_minimum_size = Vector2(island_width, island_height)
+	card.size = card.custom_minimum_size
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base := TextureRect.new()
+	base.name = "island_base"
+	base.texture = repository.cached_texture(str(ISLAND_BASE_PATHS[index % ISLAND_BASE_PATHS.size()]))
+	base.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	base.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	base.set_anchors_preset(Control.PRESET_FULL_RECT)
+	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(base)
+	var art_texture := repository.topic_island_texture(topic)
+	if art_texture != null:
+		var art := TextureRect.new()
+		art.name = "island_topic_art"
+		art.texture = art_texture
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var art_width := island_width * 0.37
+		var art_height := island_height * 0.62
+		art.position = Vector2(island_width * 0.24, island_height * 0.05)
+		art.size = Vector2(art_width, art_height)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(art)
+	card.add_child(_island_topic_label(topic, island_width, island_height, ui_scale))
+	return card
+
+
+func _island_topic_label(topic: Dictionary, island_width: float, island_height: float, ui_scale: float) -> Control:
+	var done := _topic_available_done_count(topic)
+	var total := _topic_available_mode_total(topic)
+	var topic_color := _topic_color(topic)
+	var panel := PanelContainer.new()
+	panel.name = "island_topic_label"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1.0, 0.96, 0.90, 0.94)
+	style.border_color = Color(0.35, 0.23, 0.13, 0.17)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	var radius := int(13.0 * ui_scale)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	style.content_margin_left = 12.0 * ui_scale
+	style.content_margin_right = 12.0 * ui_scale
+	style.content_margin_top = 8.0 * ui_scale
+	style.content_margin_bottom = 9.0 * ui_scale
+	style.shadow_color = Color(0.35, 0.23, 0.13, 0.13)
+	style.shadow_size = int(5.0 * ui_scale)
+	style.shadow_offset = Vector2(0, 2.0 * ui_scale)
+	panel.add_theme_stylebox_override("panel", style)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", int(4.0 * ui_scale))
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(box)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", int(8.0 * ui_scale))
+	title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(title_row)
+	var icon_texture := repository.topic_icon_texture(topic)
+	if icon_texture != null:
+		var icon_holder := PanelContainer.new()
+		var icon_style := StyleBoxFlat.new()
+		icon_style.bg_color = topic_color.lightened(0.18)
+		var icon_radius := int(14.0 * ui_scale)
+		icon_style.corner_radius_top_left = icon_radius
+		icon_style.corner_radius_top_right = icon_radius
+		icon_style.corner_radius_bottom_left = icon_radius
+		icon_style.corner_radius_bottom_right = icon_radius
+		icon_style.content_margin_left = 5.0 * ui_scale
+		icon_style.content_margin_right = 5.0 * ui_scale
+		icon_style.content_margin_top = 5.0 * ui_scale
+		icon_style.content_margin_bottom = 5.0 * ui_scale
+		icon_holder.add_theme_stylebox_override("panel", icon_style)
+		icon_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var icon := TextureRect.new()
+		icon.texture = icon_texture
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		var icon_size := 18.0 * ui_scale
+		icon.custom_minimum_size = Vector2(icon_size, icon_size)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_holder.add_child(icon)
+		title_row.add_child(icon_holder)
+	var title := Label.new()
+	title.text = str(topic.get("name", ""))
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", int(22.0 * ui_scale))
+	title.add_theme_color_override("font_color", brown)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_row.add_child(title)
+	var pill := PanelContainer.new()
+	pill.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var pill_style := StyleBoxFlat.new()
+	pill_style.bg_color = topic_color.darkened(0.08)
+	var pill_radius := int(11.0 * ui_scale)
+	pill_style.corner_radius_top_left = pill_radius
+	pill_style.corner_radius_top_right = pill_radius
+	pill_style.corner_radius_bottom_left = pill_radius
+	pill_style.corner_radius_bottom_right = pill_radius
+	pill_style.content_margin_left = 11.0 * ui_scale
+	pill_style.content_margin_right = 11.0 * ui_scale
+	pill_style.content_margin_top = 4.0 * ui_scale
+	pill_style.content_margin_bottom = 5.0 * ui_scale
+	pill.add_theme_stylebox_override("panel", pill_style)
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var progress := Label.new()
+	progress.text = "%d/%d" % [done, total]
+	progress.add_theme_font_size_override("font_size", int(14.0 * ui_scale))
+	progress.add_theme_color_override("font_color", Color.WHITE)
+	progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_child(progress)
+	box.add_child(pill)
+	panel.position = Vector2(island_width * 0.93 - 150.0 * ui_scale, island_height * 0.90 - 62.0 * ui_scale)
+	panel.custom_minimum_size.x = 112.0 * ui_scale
+	return panel
 
 
 func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
@@ -1033,24 +1453,18 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	scroll.add_child(center)
 	var list := VBoxContainer.new()
 	list.custom_minimum_size.x = _levels_content_width()
-	list.add_theme_constant_override("separation", 22)
+	list.add_theme_constant_override("separation", 18)
 	center.add_child(list)
 	var focus_card: Control = null
 	var rendered_count := 0
-	var groups: Array = topic.get("groups", [])
-	if groups.is_empty() and topic.has("levels"):
-		groups = [{"id": "default", "name": "", "levels": topic.get("levels", [])}]
-	for group in groups:
-		if typeof(group) != TYPE_DICTIONARY:
+	for level in topic.get("levels", []):
+		if typeof(level) != TYPE_DICTIONARY:
 			continue
-		var panel_result := _level_group_panel(group, _topic_color(topic), focus_level_id)
-		if int(panel_result.get("count", 0)) <= 0:
-			continue
-		list.add_child(panel_result["panel"])
-		rendered_count += int(panel_result.get("count", 0))
-		var candidate = panel_result.get("focus_card", null)
-		if candidate != null:
-			focus_card = candidate
+		var row := _level_list_row(level, func(l: Dictionary = level) -> void: _show_mode_dialog(l))
+		list.add_child(row)
+		rendered_count += 1
+		if str(level.get("id", "")) == focus_level_id:
+			focus_card = row
 	if rendered_count <= 0:
 		list.add_child(_empty_level_message())
 	if focus_card != null:
@@ -1114,98 +1528,10 @@ func _levels_back_button() -> Button:
 	return button
 
 
-func _level_group_panel(group: Dictionary, fallback_color: Color, focus_level_id: String) -> Dictionary:
-	var group_levels: Array = group.get("levels", [])
-	if group_levels.is_empty():
-		return {"panel": Control.new(), "count": 0, "focus_card": null}
-	var group_color_value := str(group.get("color", "")).strip_edges()
-	var accent := _color_from_value(group_color_value, fallback_color)
-	if group_color_value.is_empty() or group_color_value.to_lower() == "#f6ebd4":
-		accent = fallback_color
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size.x = _levels_content_width()
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = accent.lightened(0.58)
-	panel_style.bg_color.a = 0.34
-	panel_style.border_color = accent.lightened(0.18)
-	panel_style.border_color.a = 0.36
-	panel_style.border_width_left = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_bottom = 2
-	panel_style.corner_radius_top_left = 28
-	panel_style.corner_radius_top_right = 28
-	panel_style.corner_radius_bottom_left = 28
-	panel_style.corner_radius_bottom_right = 28
-	panel_style.content_margin_left = 22
-	panel_style.content_margin_top = 20
-	panel_style.content_margin_right = 22
-	panel_style.content_margin_bottom = 20
-	panel.add_theme_stylebox_override("panel", panel_style)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	panel.add_child(box)
-	box.add_child(_level_group_title(str(group.get("name", "")), accent))
-	var focus_card: Control = null
-	var count := 0
-	for level in group_levels:
-		if typeof(level) != TYPE_DICTIONARY:
-			continue
-		var row := _level_list_row(level, func(l: Dictionary = level) -> void: _show_mode_dialog(l))
-		box.add_child(row)
-		count += 1
-		if str(level.get("id", "")) == focus_level_id:
-			focus_card = row
-	return {"panel": panel, "count": count, "focus_card": focus_card}
-
-
-func _level_group_title(text: String, accent: Color) -> Control:
-	var holder := HBoxContainer.new()
-	holder.custom_minimum_size.y = 50
-	holder.alignment = BoxContainer.ALIGNMENT_BEGIN
-	holder.add_theme_constant_override("separation", 14)
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var dot := Panel.new()
-	dot.custom_minimum_size = Vector2(18, 18)
-	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var dot_style := StyleBoxFlat.new()
-	dot_style.bg_color = accent
-	dot_style.corner_radius_top_left = 9
-	dot_style.corner_radius_top_right = 9
-	dot_style.corner_radius_bottom_left = 9
-	dot_style.corner_radius_bottom_right = 9
-	dot.add_theme_stylebox_override("panel", dot_style)
-	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(dot)
-	var pill := PanelContainer.new()
-	pill.custom_minimum_size = Vector2(150, 42)
-	var pill_style := StyleBoxFlat.new()
-	pill_style.bg_color = accent.lightened(0.42)
-	pill_style.bg_color.a = 0.72
-	pill_style.corner_radius_top_left = 21
-	pill_style.corner_radius_top_right = 21
-	pill_style.corner_radius_bottom_left = 21
-	pill_style.corner_radius_bottom_right = 21
-	pill_style.content_margin_left = 26
-	pill_style.content_margin_right = 26
-	pill.add_theme_stylebox_override("panel", pill_style)
-	holder.add_child(pill)
-	var label := Label.new()
-	label.text = text
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 28)
-	label.add_theme_color_override("font_color", accent.darkened(0.42))
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pill.add_child(label)
-	return holder
-
-
 func _level_list_row(level: Dictionary, action: Callable) -> Button:
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(_levels_content_width() - 44.0, 118)
+	card.custom_minimum_size = Vector2(_levels_content_width(), 118)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var available_modes := _available_modes_for_level(level)
 	var level_config := repository.load_level_config(level)
@@ -1360,16 +1686,6 @@ func _level_legend_item(play_mode: String, text: String) -> HBoxContainer:
 func _color_from_value(value: String, fallback: Color) -> Color:
 	var clean := value.strip_edges()
 	return Color(clean) if clean.begins_with("#") else fallback
-
-
-func _level_group_header(text: String) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.custom_minimum_size = Vector2(380, 42)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 22)
-	label.add_theme_color_override("font_color", brown)
-	return label
 
 
 func _empty_level_message() -> Label:
@@ -1574,185 +1890,9 @@ func _set_preview_texture(holder: Control, preview_texture: Texture2D, min_size:
 	holder.add_child(preview)
 
 
-func _topic_card_width(columns: int) -> float:
-	var available := get_viewport_rect().size.x - _screen_margin() * 2.0 - _screen_margin() * float(max(0, columns - 1))
-	return maxf(240.0, floor(available / float(max(1, columns))))
-
-
-func _topic_card_button(topic: Dictionary, card_width: float, action: Callable) -> Button:
-	var card := Button.new()
-	card.text = ""
-	card.custom_minimum_size = Vector2(card_width, card_width * 0.42 * (2.0 / 3.0))
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		card.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	var card_size := card.custom_minimum_size
-	var inset := maxf(12.0, card_size.y * 0.055)
-	var frame := Panel.new()
-	frame.name = "topic_card_frame"
-	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = paper
-	frame_style.border_color = Color(0.77, 0.56, 0.34, 0.36)
-	frame_style.border_width_left = 2
-	frame_style.border_width_top = 2
-	frame_style.border_width_right = 2
-	frame_style.border_width_bottom = 2
-	frame_style.corner_radius_top_left = 22
-	frame_style.corner_radius_top_right = 22
-	frame_style.corner_radius_bottom_left = 22
-	frame_style.corner_radius_bottom_right = 22
-	frame.add_theme_stylebox_override("panel", frame_style)
-	card.add_child(frame)
-	var content_frame := Panel.new()
-	content_frame.name = "topic_card_content_frame"
-	content_frame.clip_contents = true
-	content_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content_frame.offset_left = inset
-	content_frame.offset_top = inset
-	content_frame.offset_right = -inset
-	content_frame.offset_bottom = -inset
-	content_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content_frame.add_theme_stylebox_override("panel", _rounded_panel_style(paper, 16))
-	frame.add_child(content_frame)
-	var topic_color := _topic_color(topic)
-	var color_panel := Panel.new()
-	color_panel.name = "topic_color_panel"
-	color_panel.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	color_panel.offset_left = 0
-	color_panel.offset_top = 0
-	color_panel.offset_right = card_size.x * 0.20
-	color_panel.offset_bottom = 0
-	color_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	color_panel.add_theme_stylebox_override("panel", _left_topic_color_style(topic_color, 16))
-	content_frame.add_child(color_panel)
-	var bell_width := maxf(8.0, card_size.y * 0.09)
-	var bell_height := maxf(38.0, (card_size.y - inset * 2.0) * 0.90)
-	var bell := Polygon2D.new()
-	bell.name = "topic_color_bell"
-	bell.color = topic_color
-	bell.position = Vector2(color_panel.offset_right - bell_width * 0.36, (card_size.y - inset * 2.0 - bell_height) * 0.5)
-	bell.polygon = _right_peak_bell_polygon(bell_width, bell_height)
-	content_frame.add_child(bell)
-	var icon_texture := repository.topic_icon_texture(topic)
-	if icon_texture != null:
-		var icon := TextureRect.new()
-		icon.name = "topic_icon"
-		icon.texture = icon_texture
-		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-		var icon_inset := maxf(9.0, card_size.y * 0.15)
-		icon.offset_left = icon_inset * 0.7
-		icon.offset_top = icon_inset
-		icon.offset_right = -(card_size.x - color_panel.offset_right + icon_inset * 0.25)
-		icon.offset_bottom = -icon_inset
-		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content_frame.add_child(icon)
-	var inner_width := card_size.x - inset * 2.0
-	var inner_height := card_size.y - inset * 2.0
-	var cover_texture := repository.topic_cover_texture(topic)
-	var cover_right_margin := maxf(10.0, inner_width * 0.025)
-	var cover_gap := maxf(16.0, inner_width * 0.035)
-	var cover_width := inner_width * 0.38
-	var cover_holder := Control.new()
-	cover_holder.name = "topic_cover_holder"
-	cover_holder.clip_contents = false
-	cover_holder.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	cover_holder.offset_left = -cover_width - cover_right_margin
-	cover_holder.offset_top = 0
-	cover_holder.offset_right = -cover_right_margin
-	cover_holder.offset_bottom = 0
-	cover_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content_frame.add_child(cover_holder)
-	var cover := TextureRect.new()
-	cover.name = "topic_cover"
-	cover.texture = cover_texture
-	cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	cover.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cover_holder.add_child(cover)
-	var text_box := Control.new()
-	text_box.name = "topic_text_box"
-	text_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	text_box.offset_left = color_panel.offset_right + bell_width * 0.68 + 16
-	text_box.offset_top = maxf(6.0, inner_height * 0.10)
-	text_box.offset_right = -(cover_width + cover_right_margin + cover_gap)
-	text_box.offset_bottom = -maxf(6.0, inner_height * 0.10)
-	text_box.custom_minimum_size.x = maxf(170.0, inner_width * 0.30)
-	text_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content_frame.add_child(text_box)
-	var title := Label.new()
-	title.name = "topic_title"
-	title.text = str(topic["name"])
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.clip_text = true
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_left = 0
-	title.offset_top = 0
-	title.offset_right = 0
-	title.offset_bottom = inner_height * 0.42
-	title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	title.add_theme_font_size_override("font_size", max(18, int(card_size.y * 0.14) + 2))
-	title.add_theme_color_override("font_color", brown)
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	text_box.add_child(title)
-	var done := _topic_available_done_count(topic)
-	var total := _topic_available_mode_total(topic)
-	var progress_width := maxf(156.0, minf(text_box.custom_minimum_size.x, inner_width * 0.30))
-	var progress_label := Label.new()
-	progress_label.name = "topic_progress_label"
-	progress_label.text = "%d/%d" % [done, total]
-	progress_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	progress_label.offset_left = 0
-	progress_label.offset_top = -inner_height * 0.28
-	progress_label.offset_right = progress_width
-	progress_label.offset_bottom = -inner_height * 0.13
-	progress_label.add_theme_font_size_override("font_size", max(12, int(card_size.y * 0.075)))
-	progress_label.add_theme_color_override("font_color", soft_brown)
-	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	text_box.add_child(progress_label)
-	var bar := _topic_progress_bar(done, total, Vector2(progress_width, maxf(12.0, card_size.y * 0.046)), topic_color)
-	bar.name = "topic_progress_bar"
-	bar.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bar.offset_left = 0
-	bar.offset_top = -inner_height * 0.09
-	bar.offset_right = progress_width
-	bar.offset_bottom = -inner_height * 0.09 + bar.custom_minimum_size.y
-	text_box.add_child(bar)
-	card.pressed.connect(action)
-	_wire_button_animation(card)
-	return card
-
-
-func _right_peak_bell_polygon(width: float, height: float) -> PackedVector2Array:
-	var points := PackedVector2Array()
-	points.append(Vector2(0, 0))
-	var segments := 12
-	for i in range(segments + 1):
-		var t := float(i) / float(segments)
-		var y := t * height
-		var normalized := (t - 0.5) * 2.0
-		var x := width * exp(-normalized * normalized * 2.8)
-		points.append(Vector2(x, y))
-	points.append(Vector2(0, height))
-	return points
-
-
 func _topic_color(topic: Dictionary) -> Color:
 	var value := str(topic.get("color", "#D9933F"))
 	return Color(value) if value.begins_with("#") else orange
-
-
-func _left_topic_color_style(color: Color, radius: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.corner_radius_top_left = radius
-	style.corner_radius_bottom_left = radius
-	style.corner_radius_top_right = 0
-	style.corner_radius_bottom_right = 0
-	return style
 
 
 func _topic_progress_bar(done: int, total: int, size: Vector2, fill_color: Color) -> Panel:
@@ -2755,18 +2895,19 @@ func _show_tutorial_modal() -> void:
 
 func _show_complete_modal() -> void:
 	_show_modal(Color(0.16, 0.11, 0.08, 0.78), true)
-	_start_complete_confetti()
 	var viewport_size := get_viewport_rect().size
+	var description := _level_description(current_level)
 	var content_width := minf(viewport_size.x * 0.82, 860.0)
 	var image_height := content_width * 4.0 / 3.0
-	var max_image_height := viewport_size.y * 0.58
+	var max_image_height := viewport_size.y * (0.46 if not description.is_empty() else 0.56)
 	if image_height > max_image_height:
 		image_height = max_image_height
 		content_width = image_height * 0.75
 	content_width = maxf(280.0, content_width)
 	image_height = content_width * 4.0 / 3.0
 	var button_size := Vector2(minf(360.0, content_width * 0.62), 72.0)
-	var total_height := 94.0 + image_height + 42.0 + button_size.y
+	var description_height := 0.0 if description.is_empty() else 150.0
+	var total_height := 94.0 + image_height + 52.0 + description_height + button_size.y + 48.0
 	var box := VBoxContainer.new()
 	box.custom_minimum_size = Vector2(content_width, total_height)
 	box.set_anchors_preset(Control.PRESET_CENTER)
@@ -2775,7 +2916,7 @@ func _show_complete_modal() -> void:
 	box.offset_right = content_width * 0.5
 	box.offset_bottom = total_height * 0.5
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 16)
+	box.add_theme_constant_override("separation", 18)
 	box.z_index = 8
 	modal_root.add_child(box)
 	box.add_child(_complete_simple_title(content_width))
@@ -2789,6 +2930,19 @@ func _show_complete_modal() -> void:
 	level_name.add_theme_constant_override("shadow_offset_y", 3)
 	level_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(level_name)
+	if not description.is_empty():
+		var desc := Label.new()
+		desc.text = description
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.custom_minimum_size.x = content_width
+		desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		desc.add_theme_font_size_override("font_size", 22)
+		desc.add_theme_color_override("font_color", Color(1.0, 0.96, 0.88, 0.94))
+		desc.add_theme_color_override("font_shadow_color", Color(0.22, 0.12, 0.05, 0.36))
+		desc.add_theme_constant_override("shadow_offset_y", 2)
+		desc.add_theme_constant_override("line_spacing", 6)
+		desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(desc)
 	var button_holder := CenterContainer.new()
 	button_holder.custom_minimum_size = Vector2(content_width, button_size.y)
 	var confirm := _button(_t("confirm"), func() -> void:
@@ -2799,6 +2953,15 @@ func _show_complete_modal() -> void:
 	button_holder.add_child(confirm)
 	box.add_child(button_holder)
 	_animate_modal_panel(box)
+	_start_complete_confetti()
+
+
+func _level_description(level: Dictionary) -> String:
+	var description := str(level.get("description", "")).strip_edges()
+	if not description.is_empty():
+		return description
+	var level_config := repository.load_level_config(level)
+	return str(level_config.get("description", "")).strip_edges()
 
 
 func _complete_simple_title(content_width: float) -> Control:
@@ -3014,138 +3177,20 @@ func _completed_mode_labels(level: Dictionary) -> Array:
 
 func _start_complete_confetti() -> void:
 	_stop_complete_confetti()
-	complete_confetti_rng.randomize()
 	complete_confetti_layer = Control.new()
-	complete_confetti_layer.name = "CompleteLightEffectLayer"
+	complete_confetti_layer.name = "CompleteConfettiLayer"
 	complete_confetti_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	complete_confetti_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	complete_confetti_layer.z_index = 2
+	complete_confetti_layer.z_index = 20
 	modal_root.add_child(complete_confetti_layer)
-	_add_complete_radial_lights()
-	for i in range(9):
-		_spawn_complete_light_strip(complete_confetti_rng.randf_range(-get_viewport_rect().size.y * 0.70, get_viewport_rect().size.y * 0.35))
-	complete_confetti_timer = Timer.new()
-	complete_confetti_timer.wait_time = 0.32
-	complete_confetti_timer.one_shot = false
-	complete_confetti_timer.timeout.connect(_spawn_complete_light_strip_batch)
-	modal_root.add_child(complete_confetti_timer)
-	complete_confetti_timer.start()
+	complete_confetti_layer.add_child(ConfettiEffectScript.new())
 
 
 func _stop_complete_confetti() -> void:
-	if complete_confetti_timer != null and is_instance_valid(complete_confetti_timer):
-		complete_confetti_timer.stop()
-		if not complete_confetti_timer.is_queued_for_deletion():
-			complete_confetti_timer.queue_free()
-	complete_confetti_timer = null
 	if complete_confetti_layer != null and is_instance_valid(complete_confetti_layer):
 		if not complete_confetti_layer.is_queued_for_deletion():
 			complete_confetti_layer.queue_free()
 	complete_confetti_layer = null
-
-
-func _spawn_complete_light_strip_batch() -> void:
-	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
-		return
-	_spawn_complete_light_strip(-get_viewport_rect().size.y * 0.35)
-
-
-func _add_complete_radial_lights() -> void:
-	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
-		return
-	var viewport_size := get_viewport_rect().size
-	var ray_root := Node2D.new()
-	ray_root.name = "complete_radial_lights"
-	ray_root.position = viewport_size * 0.5 + Vector2(0.0, -viewport_size.y * 0.08)
-	ray_root.z_index = 0
-	ray_root.modulate.a = 0.86
-	complete_confetti_layer.add_child(ray_root)
-	var ray_count := 34
-	var outer_radius := maxf(viewport_size.x, viewport_size.y) * 0.88
-	var inner_radius := minf(viewport_size.x, viewport_size.y) * 0.11
-	for i in ray_count:
-		var angle := TAU * float(i) / float(ray_count) + complete_confetti_rng.randf_range(-0.035, 0.035)
-		var direction := Vector2(cos(angle), sin(angle))
-		var ray := Line2D.new()
-		ray.points = PackedVector2Array([direction * inner_radius, direction * outer_radius])
-		ray.width = complete_confetti_rng.randf_range(10.0, 24.0)
-		ray.default_color = Color(1.0, complete_confetti_rng.randf_range(0.70, 0.92), 0.38, complete_confetti_rng.randf_range(0.035, 0.085))
-		ray.antialiased = true
-		ray_root.add_child(ray)
-	var rotation_tween := create_tween()
-	rotation_tween.bind_node(ray_root)
-	rotation_tween.set_loops()
-	rotation_tween.set_trans(Tween.TRANS_LINEAR)
-	rotation_tween.tween_property(ray_root, "rotation", TAU, 26.0).as_relative()
-	var alpha_tween := create_tween()
-	alpha_tween.bind_node(ray_root)
-	alpha_tween.set_loops()
-	alpha_tween.set_ease(Tween.EASE_IN_OUT)
-	alpha_tween.set_trans(Tween.TRANS_SINE)
-	alpha_tween.tween_property(ray_root, "modulate:a", 0.56, 2.2)
-	alpha_tween.tween_property(ray_root, "modulate:a", 0.90, 2.2)
-
-
-func _spawn_complete_light_strip(start_y: float) -> void:
-	if complete_confetti_layer == null or not is_instance_valid(complete_confetti_layer):
-		return
-	var viewport_size := get_viewport_rect().size
-	var palette := _complete_light_palette()
-	var color: Color = palette[complete_confetti_rng.randi_range(0, palette.size() - 1)]
-	var strip_width := complete_confetti_rng.randf_range(16.0, 40.0)
-	var strip_length := viewport_size.y * complete_confetti_rng.randf_range(0.46, 0.82)
-	var strip := Panel.new()
-	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	strip.custom_minimum_size = Vector2(strip_width, strip_length)
-	strip.size = strip.custom_minimum_size
-	strip.pivot_offset = strip.size * 0.5
-	strip.position = Vector2(complete_confetti_rng.randf_range(-viewport_size.x * 0.25, viewport_size.x * 1.05), start_y)
-	strip.rotation = complete_confetti_rng.randf_range(-0.58, -0.34)
-	strip.z_index = 1
-	strip.modulate.a = 0.0
-	var style := StyleBoxFlat.new()
-	style.bg_color = color
-	style.bg_color.a = complete_confetti_rng.randf_range(0.10, 0.20)
-	var corner := int(strip_width * 0.5)
-	style.corner_radius_top_left = corner
-	style.corner_radius_top_right = corner
-	style.corner_radius_bottom_left = corner
-	style.corner_radius_bottom_right = corner
-	strip.add_theme_stylebox_override("panel", style)
-	var inner := ColorRect.new()
-	inner.color = Color(1.0, 1.0, 1.0, 0.10)
-	inner.set_anchors_preset(Control.PRESET_FULL_RECT)
-	inner.offset_left = strip_width * 0.32
-	inner.offset_right = -strip_width * 0.36
-	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	strip.add_child(inner)
-	complete_confetti_layer.add_child(strip)
-	var duration := complete_confetti_rng.randf_range(3.4, 5.4)
-	var end_position := strip.position + Vector2(complete_confetti_rng.randf_range(140.0, 340.0), viewport_size.y + strip_length * 0.78)
-	var tween := create_tween()
-	tween.bind_node(strip)
-	tween.set_parallel(true)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_property(strip, "position", end_position, duration)
-	tween.tween_property(strip, "modulate:a", 1.0, duration * 0.16)
-	tween.tween_property(strip, "modulate:a", 0.0, duration * 0.24).set_delay(duration * 0.74)
-	tween.tween_property(strip, "rotation", strip.rotation + complete_confetti_rng.randf_range(-0.10, 0.10), duration)
-	tween.finished.connect(func() -> void:
-		if is_instance_valid(strip):
-			strip.queue_free()
-	)
-
-
-func _complete_light_palette() -> Array[Color]:
-	return [
-		Color("#FFE39B"),
-		Color("#FFD3B5"),
-		Color("#FFF7CF"),
-		Color("#F6C9FF"),
-		Color("#BFEAFF"),
-		Color("#CFF8D6"),
-	]
 
 
 func _scroll_level_card_into_view(scroll: ScrollContainer, card: Control) -> void:

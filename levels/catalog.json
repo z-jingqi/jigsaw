@@ -1,5 +1,5 @@
 {
-	"version": 3,
+	"version": 4,
 	"default_locale": "en",
 	"locales": [
 		"en",
@@ -26,37 +26,13 @@
 			"cover": "res://levels/topic_01/cover.png",
 			"color": "#6CA4A6",
 			"icon": "res://levels/topic_01/icon.png",
+			"island": "res://assets/web-ui/island-map/topic-shanhai.webp",
 			"sort_order": 0,
-			"groups": [
+			"levels": [
 				{
-					"id": "group_01",
-					"name": "异兽",
-					"name_i18n": {
-						"zh": "异兽",
-						"zh-Hans": "异兽",
-						"_": "异兽"
-					},
-					"color": "#F6EBD4",
+					"id": "level_01",
 					"sort_order": 0,
-					"levels": [
-						{
-							"id": "level_01",
-							"sort_order": 0,
-							"path": "res://levels/topic_01/group_01/level_01/level.json"
-						}
-					]
-				},
-				{
-					"id": "group_02",
-					"name": "神话故事",
-					"name_i18n": {
-						"zh": "神话故事",
-						"zh-Hans": "神话故事",
-						"_": "神话故事"
-					},
-					"color": "#F6EBD4",
-					"sort_order": 1,
-					"levels": []
+					"path": "res://levels/topic_01/level_01/level.json"
 				}
 			]
 		},
@@ -71,8 +47,9 @@
 			"cover": "res://levels/topic_02/cover.png",
 			"color": "#A38DBE",
 			"icon": "res://levels/topic_02/icon.png",
+			"island": "res://assets/web-ui/island-map/topic-greek.webp",
 			"sort_order": 1,
-			"groups": []
+			"levels": []
 		},
 		{
 			"id": "topic_03",
@@ -85,8 +62,9 @@
 			"cover": "res://levels/topic_03/cover.png",
 			"color": "#F0874D",
 			"icon": "res://levels/topic_03/icon.png",
+			"island": "res://assets/web-ui/island-map/topic-cat.webp",
 			"sort_order": 2,
-			"groups": []
+			"levels": []
 		},
 		{
 			"id": "topic_04",
@@ -99,8 +77,9 @@
 			"cover": "res://levels/topic_04/cover.png",
 			"color": "#96A87F",
 			"icon": "res://levels/topic_04/icon.png",
+			"island": "res://assets/web-ui/island-map/topic-dog.webp",
 			"sort_order": 3,
-			"groups": []
+			"levels": []
 		}
 	]
 }

@@ -45,11 +45,9 @@ func mark_completed(level_id: String, play_mode: String) -> void:
 
 func mark_last_played(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
 	progress["last_topic_id"] = str(topic.get("id", ""))
-	progress["last_group_id"] = str(level.get("group_id", ""))
 	progress["last_level_id"] = str(level.get("id", ""))
 	progress["last_mode"] = mode_key(play_mode)
 	progress["_last_topic_id"] = progress["last_topic_id"]
-	progress["_last_group_id"] = progress["last_group_id"]
 	progress["_last_level_id"] = progress["last_level_id"]
 	progress["_last_mode"] = progress["last_mode"]
 	save_to_disk()
@@ -99,9 +97,8 @@ func clear_all_progress() -> void:
 
 
 func play_state_key(topic: Dictionary, level: Dictionary, play_mode: String) -> String:
-	return "%s/%s/%s:%s" % [
+	return "%s/%s:%s" % [
 		str(topic.get("id", "")),
-		str(level.get("group_id", "")),
 		str(level.get("id", "")),
 		mode_key(play_mode),
 	]
@@ -172,9 +169,8 @@ func topic_by_id(topics: Array[Dictionary], topic_id: String) -> Dictionary:
 
 
 func level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
-	var group_id := str(progress.get("last_group_id", progress.get("_last_group_id", "")))
 	for level in topic.get("levels", []):
-		if str(level.get("id", "")) == level_id and (group_id.is_empty() or str(level.get("group_id", "")) == group_id):
+		if str(level.get("id", "")) == level_id:
 			return level
 	return {}
 

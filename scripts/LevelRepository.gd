@@ -26,53 +26,36 @@ func build_catalog() -> Array[Dictionary]:
 			if typeof(topic_data) != TYPE_DICTIONARY:
 				continue
 			var topic: Dictionary = topic_data
-			var groups: Array[Dictionary] = []
-			var flat_levels: Array[Dictionary] = []
-			var catalog_groups: Array = topic.get("groups", [])
-			if catalog_groups.is_empty() and topic.has("levels"):
-				catalog_groups = [{"id": "default", "name": "Default", "sort_order": 0, "levels": topic.get("levels", [])}]
-			catalog_groups.sort_custom(func(a, b) -> bool:
-				return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+			var levels: Array[Dictionary] = []
+			var catalog_levels: Array = topic.get("levels", [])
+			if catalog_levels.is_empty() and topic.has("groups"):
+				for group_data in topic.get("groups", []):
+					if typeof(group_data) == TYPE_DICTIONARY:
+						catalog_levels.append_array(group_data.get("levels", []))
+			catalog_levels.sort_custom(func(a, b) -> bool:
+				return _catalog_level_sort_order(a) < _catalog_level_sort_order(b)
 			)
-			for group_data in catalog_groups:
-				if typeof(group_data) != TYPE_DICTIONARY:
+			for level_data in catalog_levels:
+				var level_entry := _catalog_level_entry(level_data)
+				if level_entry.is_empty():
 					continue
-				var group: Dictionary = group_data
-				var levels: Array[Dictionary] = []
-				var catalog_levels: Array = group.get("levels", [])
-				catalog_levels.sort_custom(func(a, b) -> bool:
-					return _catalog_level_sort_order(a) < _catalog_level_sort_order(b)
-				)
-				for level_data in catalog_levels:
-					var level_entry := _catalog_level_entry(level_data)
-					if level_entry.is_empty():
-						continue
-					var config_path := str(level_entry.get("path", levelResPath(str(topic.get("id", "")), str(group.get("id", "")), str(level_entry.get("id", "")))))
-					var level_config := load_config_path(config_path)
-					var level := {
-						"id": str(level_entry.get("id", level_config.get("id", ""))),
-						"title": localized_config_string(level_config, "title", str(level_entry.get("title", "")), level_entry),
-						"description": localized_config_string(level_config, "description", "", level_entry),
-						"config_path": config_path,
-						"group_id": str(group.get("id", "")),
-						"group_name": localized_named(group, str(group.get("name", group.get("id", "")))),
-					}
-					levels.append(level)
-					flat_levels.append(level)
-				groups.append({
-					"id": str(group.get("id", "")),
-					"name": localized_named(group, str(group.get("name", group.get("id", "")))),
-					"color": str(group.get("color", "")),
-					"levels": levels,
-				})
+				var config_path := str(level_entry.get("path", levelResPath(str(topic.get("id", "")), str(level_entry.get("id", "")))))
+				var level_config := load_config_path(config_path)
+				var level := {
+					"id": str(level_entry.get("id", level_config.get("id", ""))),
+					"title": localized_config_string(level_config, "title", str(level_entry.get("title", "")), level_entry),
+					"description": localized_config_string(level_config, "description", "", level_entry),
+					"config_path": config_path,
+				}
+				levels.append(level)
 			next_topics.append({
 				"id": str(topic.get("id", "")),
 				"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 				"cover": str(topic.get("cover", "")),
 				"color": str(topic.get("color", "#D9933F")),
 				"icon": str(topic.get("icon", "")),
-				"groups": groups,
-				"levels": flat_levels,
+				"island": str(topic.get("island", "")),
+				"levels": levels,
 			})
 		return next_topics
 	return []
@@ -97,8 +80,8 @@ func _catalog_level_sort_order(level_data) -> int:
 	return 0
 
 
-func levelResPath(topic_id: String, group_id: String, level_id: String) -> String:
-	return "res://levels/%s/%s/%s/level.json" % [topic_id, group_id, level_id]
+func levelResPath(topic_id: String, level_id: String) -> String:
+	return "res://levels/%s/%s/level.json" % [topic_id, level_id]
 
 
 func load_level_config(level: Dictionary) -> Dictionary:
@@ -134,6 +117,11 @@ func topic_cover_texture(topic: Dictionary) -> Texture2D:
 func topic_icon_texture(topic: Dictionary) -> Texture2D:
 	var icon_path := str(topic.get("icon", ""))
 	return cached_texture(icon_path) if not icon_path.is_empty() else null
+
+
+func topic_island_texture(topic: Dictionary) -> Texture2D:
+	var island_path := str(topic.get("island", ""))
+	return cached_texture(island_path) if not island_path.is_empty() else null
 
 
 func apply_level_media(level_config: Dictionary) -> Dictionary:
