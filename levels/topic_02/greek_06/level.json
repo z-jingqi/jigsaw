@@ -1,0 +1,42 @@
+{
+	"version": 3,
+	"id": "greek_06",
+	"topic_id": "topic_02",
+	"title": "赫尔墨斯",
+	"title_i18n": {
+		"zh": "赫尔墨斯",
+		"zh-Hans": "赫尔墨斯",
+		"_": "赫尔墨斯"
+	},
+	"description": "赫尔墨斯是希腊神话中的重要神祇。此为测试关卡，正式介绍待补充。",
+	"description_i18n": {
+		"zh": "赫尔墨斯是希腊神话中的重要神祇。此为测试关卡，正式介绍待补充。",
+		"zh-Hans": "赫尔墨斯是希腊神话中的重要神祇。此为测试关卡，正式介绍待补充。",
+		"_": "赫尔墨斯是希腊神话中的重要神祇。此为测试关卡，正式介绍待补充。"
+	},
+	"cover": "",
+	"image": {
+		"path": "res://levels/topic_02/greek_06/source.jpg",
+		"width": 1086,
+		"height": 1448,
+		"aspect_ratio": 0.75,
+		"preset": "mobile_portrait_3x4"
+	},
+	"background": {
+		"type": "color",
+		"color": "#F6EBD4"
+	},
+	"modes": {
+		"knob": {
+			"auto": true,
+			"cols": 6,
+			"rows": 8,
+			"knob_size": 0.24
+		},
+		"swap": {
+			"auto": true,
+			"cols": 5,
+			"rows": 7
+		}
+	}
+}

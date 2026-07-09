@@ -46,6 +46,7 @@ func build_catalog() -> Array[Dictionary]:
 					"title": localized_config_string(level_config, "title", str(level_entry.get("title", "")), level_entry),
 					"description": localized_config_string(level_config, "description", "", level_entry),
 					"config_path": config_path,
+					"unlock_grant": maxi(1, int(level_entry.get("unlock_grant", 1))),
 				}
 				levels.append(level)
 			next_topics.append({
@@ -55,6 +56,8 @@ func build_catalog() -> Array[Dictionary]:
 				"color": str(topic.get("color", "#D9933F")),
 				"icon": str(topic.get("icon", "")),
 				"island": str(topic.get("island", "")),
+				"level_background": str(topic.get("level_background", "")),
+				"card_back": str(topic.get("card_back", "")),
 				"levels": levels,
 			})
 		return next_topics

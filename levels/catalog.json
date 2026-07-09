@@ -23,10 +23,12 @@
 				"zh-Hans": "山海经",
 				"_": "山海经"
 			},
-			"cover": "res://levels/topic_01/cover.png",
-			"color": "#6CA4A6",
+			"cover": "res://levels/topic_01/cover.jpg",
+			"color": "#95A584",
 			"icon": "res://levels/topic_01/icon.png",
 			"island": "res://assets/web-ui/island-map/topic-shanhai.webp",
+			"level_background": "res://levels/topic_01/level-bg.jpg",
+			"card_back": "res://levels/topic_01/card-back.jpg",
 			"sort_order": 0,
 			"levels": [
 				{
@@ -44,12 +46,43 @@
 				"zh-Hans": "希腊神话",
 				"_": "希腊神话"
 			},
-			"cover": "res://levels/topic_02/cover.png",
+			"cover": "",
 			"color": "#A38DBE",
 			"icon": "res://levels/topic_02/icon.png",
 			"island": "res://assets/web-ui/island-map/topic-greek.webp",
 			"sort_order": 1,
-			"levels": []
+			"levels": [
+				{
+					"id": "greek_01",
+					"sort_order": 0,
+					"path": "res://levels/topic_02/greek_01/level.json"
+				},
+				{
+					"id": "greek_02",
+					"sort_order": 1,
+					"path": "res://levels/topic_02/greek_02/level.json"
+				},
+				{
+					"id": "greek_03",
+					"sort_order": 2,
+					"path": "res://levels/topic_02/greek_03/level.json"
+				},
+				{
+					"id": "greek_04",
+					"sort_order": 3,
+					"path": "res://levels/topic_02/greek_04/level.json"
+				},
+				{
+					"id": "greek_05",
+					"sort_order": 4,
+					"path": "res://levels/topic_02/greek_05/level.json"
+				},
+				{
+					"id": "greek_06",
+					"sort_order": 5,
+					"path": "res://levels/topic_02/greek_06/level.json"
+				}
+			]
 		},
 		{
 			"id": "topic_03",
@@ -59,7 +92,7 @@
 				"zh-Hans": "猫",
 				"_": "猫"
 			},
-			"cover": "res://levels/topic_03/cover.png",
+			"cover": "",
 			"color": "#F0874D",
 			"icon": "res://levels/topic_03/icon.png",
 			"island": "res://assets/web-ui/island-map/topic-cat.webp",
@@ -74,7 +107,7 @@
 				"zh-Hans": "狗",
 				"_": "狗"
 			},
-			"cover": "res://levels/topic_04/cover.png",
+			"cover": "",
 			"color": "#96A87F",
 			"icon": "res://levels/topic_04/icon.png",
 			"island": "res://assets/web-ui/island-map/topic-dog.webp",
