@@ -4,7 +4,6 @@ import { cors } from "hono/cors";
 import fs from "node:fs/promises";
 import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
-import { spawn } from "node:child_process";
 import type { CatalogRenameOperation, LevelCatalog, LevelConfig } from "./types.js";
 import {
   applyCatalogRenames,
@@ -21,7 +20,7 @@ import {
   writeCatalog,
   writeLevel,
 } from "./lib.js";
-import { levelCoverPath, levelCoverResPath, repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath } from "./paths.js";
+import { repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath } from "./paths.js";
 
 const app = new Hono();
 
@@ -46,12 +45,16 @@ app.put("/api/catalog", async (c) => {
       for (const level of group.levels) {
         await ensureLevelDir(topic.id, group.id, level.id);
         const config = await readLevel(topic.id, group.id, level.id, level.title || level.id);
-        await writeLevel({
-          ...config,
-          title: level.title || config.title,
-          title_i18n: level.title_i18n || config.title_i18n,
-          cover: level.cover || config.cover,
-        });
+        const nextTitle = level.title || config.title;
+        const identityChanged = renames.length > 0;
+        const titleChanged = nextTitle !== config.title;
+        if (identityChanged || titleChanged) {
+          await writeLevel({
+            ...config,
+            title: nextTitle,
+            title_i18n: level.title_i18n || config.title_i18n,
+          });
+        }
       }
     }
   }
@@ -93,22 +96,6 @@ async function writeUpload(filePath: string, file: File) {
   await fs.writeFile(filePath, Buffer.from(await file.arrayBuffer()));
 }
 
-async function compressImage(filePath: string) {
-  const toolPath = path.join(repoRoot, "tools", "compress_images.py");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("python3", [toolPath, filePath, "--jpeg-quality", "88"], { cwd: repoRoot });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(stderr.trim() || "封面压缩失败。"));
-    });
-  });
-}
-
 app.post("/api/topics/:topicId/:asset", async (c) => {
   const topicId = c.req.param("topicId");
   const asset = c.req.param("asset");
@@ -121,23 +108,6 @@ app.post("/api/topics/:topicId/:asset", async (c) => {
     const filePath = asset === "icon" ? topicIconPath(topicId, extension) : topicCoverPath(topicId, extension);
     await writeUpload(filePath, file);
     return c.json({ path: asset === "icon" ? topicIconResPath(topicId, extension) : topicCoverResPath(topicId, extension) });
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);
-  }
-});
-
-app.post("/api/levels/:topicId/:groupId/:levelId/cover", async (c) => {
-  const topicId = c.req.param("topicId");
-  const groupId = c.req.param("groupId");
-  const levelId = c.req.param("levelId");
-  try {
-    const file = await readUploadFile(c);
-    extensionFromFile(file, ["jpg"]);
-    await ensureLevelDir(topicId, groupId, levelId);
-    const coverPath = levelCoverPath(topicId, groupId, levelId, "jpg");
-    await writeUpload(coverPath, file);
-    await compressImage(coverPath);
-    return c.json({ path: levelCoverResPath(topicId, groupId, levelId, "jpg") });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "上传失败。" }, 400);
   }

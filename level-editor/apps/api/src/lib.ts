@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelStatus, SeedAssist } from "./types.js";
-import { catalogPath, groupDir, levelDir, levelJsonPath, levelResPath, sourceImagePath, sourceResPath, topicDir } from "./paths.js";
+import { catalogPath, FLAT_GROUP_ID, groupDir, levelDir, levelJsonPath, levelResPath, sourceImagePath, sourceResPath, topicDir } from "./paths.js";
 
 export const defaultPreset = {
   id: "mobile_portrait_3x4",
@@ -79,9 +79,9 @@ function knobSeedIds(cols: number, rows: number) {
 
 export function emptyCatalog(): LevelCatalog {
   return {
-    version: 3,
-    default_locale: "en",
-    locales: ["en", "zh", "ja"],
+    version: 4,
+    default_locale: "zh-Hans",
+    locales: ["zh-Hans", "zh", "en", "ja"],
     image_presets: [defaultPreset],
     topics: [],
   };
@@ -92,9 +92,9 @@ export function normalizeCatalog(input: unknown): LevelCatalog {
   return {
     ...emptyCatalog(),
     ...raw,
-    version: 3,
-    default_locale: "en",
-    locales: ["en", "zh", "ja"],
+    version: Number(raw.version || 4),
+    default_locale: String(raw.default_locale || "zh-Hans"),
+    locales: Array.isArray(raw.locales) && raw.locales.length ? raw.locales : ["zh-Hans", "zh", "en", "ja"],
     image_presets: Array.isArray(raw.image_presets) && raw.image_presets.length ? raw.image_presets : [defaultPreset],
     topics: Array.isArray(raw.topics)
       ? raw.topics.map(normalizeTopic).sort((a, b) => a.sort_order - b.sort_order)
@@ -104,17 +104,28 @@ export function normalizeCatalog(input: unknown): LevelCatalog {
 
 function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
   const id = safeId(topic.id, paddedId("topic", index));
+  const flatLevels = Array.isArray(topic.levels) || topic.flat_levels === true;
+  const sourceLevels = Array.isArray(topic.levels)
+    ? topic.levels
+    : topic.groups?.find((group) => group.id === FLAT_GROUP_ID)?.levels || [];
   return {
     id,
     name: topic.name,
     name_i18n: topic.name_i18n,
     cover: topic.cover,
     color: topic.color,
+    ui_palette: topic.ui_palette,
     icon: topic.icon,
+    island: topic.island,
+    level_background: topic.level_background,
+    card_back: topic.card_back,
     sort_order: Number(topic.sort_order ?? index),
-    groups: Array.isArray(topic.groups)
-      ? topic.groups.map((group, groupIndex) => normalizeGroup(group, id, groupIndex)).sort((a, b) => a.sort_order - b.sort_order)
-      : [],
+    groups: flatLevels
+      ? [normalizeGroup({ id: FLAT_GROUP_ID, name: "关卡", name_i18n: zhI18n("关卡"), sort_order: 0, levels: sourceLevels }, id, 0)]
+      : Array.isArray(topic.groups)
+        ? topic.groups.map((group, groupIndex) => normalizeGroup(group, id, groupIndex)).sort((a, b) => a.sort_order - b.sort_order)
+        : [],
+    flat_levels: flatLevels,
   };
 }
 
@@ -138,7 +149,6 @@ function normalizeLevel(level: CatalogLevel, topicId: string, groupId: string, i
     id,
     title: level.title,
     title_i18n: level.title_i18n,
-    cover: level.cover,
     sort_order: Number(level.sort_order ?? index),
     path: String(level.path || levelResPath(topicId, groupId, id)),
     source: level.source,
@@ -178,27 +188,47 @@ function storedCatalog(catalog: LevelCatalog): LevelCatalog {
   const normalized = normalizeCatalog(catalog);
   return {
     ...normalized,
-    topics: normalized.topics.map((topic, topicIndex) => ({
-      id: topic.id,
-      name: topic.name,
-      name_i18n: topic.name_i18n,
-      cover: topic.cover,
-      color: topic.color,
-      icon: topic.icon,
-      sort_order: topicIndex,
-      groups: topic.groups.map((group, groupIndex) => ({
-        id: group.id,
-        name: group.name,
-        name_i18n: group.name_i18n,
-        color: group.color,
-        sort_order: groupIndex,
-        levels: group.levels.map((level, levelIndex) => ({
-          id: level.id,
-          sort_order: levelIndex,
-          path: level.path || levelResPath(topic.id, group.id, level.id),
+    topics: normalized.topics.map((topic, topicIndex) => {
+      const base = {
+        id: topic.id,
+        name: topic.name,
+        name_i18n: topic.name_i18n,
+        cover: topic.cover,
+        color: topic.color,
+        ui_palette: topic.ui_palette,
+        icon: topic.icon,
+        island: topic.island,
+        level_background: topic.level_background,
+        card_back: topic.card_back,
+        sort_order: topicIndex,
+      };
+      if (topic.flat_levels) {
+        const group = topic.groups.find((item) => item.id === FLAT_GROUP_ID) || topic.groups[0];
+        return {
+          ...base,
+          levels: (group?.levels || []).map((level, levelIndex) => ({
+            id: level.id,
+            sort_order: levelIndex,
+            path: level.path || levelResPath(topic.id, FLAT_GROUP_ID, level.id),
+          })),
+        } as CatalogTopic;
+      }
+      return {
+        ...base,
+        groups: topic.groups.map((group, groupIndex) => ({
+          id: group.id,
+          name: group.name,
+          name_i18n: group.name_i18n,
+          color: group.color,
+          sort_order: groupIndex,
+          levels: group.levels.map((level, levelIndex) => ({
+            id: level.id,
+            sort_order: levelIndex,
+            path: level.path || levelResPath(topic.id, group.id, level.id),
+          })),
         })),
-      })),
-    })),
+      };
+    }),
   };
 }
 
@@ -228,7 +258,6 @@ export async function hydrateCatalog(catalog: LevelCatalog): Promise<LevelCatalo
           ...level,
           title: config.title,
           title_i18n: config.title_i18n,
-          cover: config.cover,
           background_color: config.background.color,
           source: config.image.path,
         });
@@ -363,7 +392,6 @@ export function defaultLevelConfig(topicId: string, groupId: string, levelId: st
     title_i18n: zhI18n(title),
     description,
     description_i18n: zhI18n(description),
-    cover: "",
     image: {
       path: sourceResPath(topicId, groupId, levelId),
       width: 0,
@@ -400,7 +428,6 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
     title_i18n: raw.title_i18n || zhI18n(String(raw.title || title)),
     description: String(raw.description || ""),
     description_i18n: raw.description_i18n || zhI18n(String(raw.description || "")),
-    cover: String(raw.cover || ""),
 		image: {
 			...base.image,
 			...(raw.image || {}),
@@ -437,7 +464,10 @@ export async function readLevel(topicId: string, groupId: string, levelId: strin
 }
 
 export async function writeLevel(config: LevelConfig) {
-  await writeJson(levelJsonPath(config.topic_id, config.group_id, config.id), normalizeLevelConfig(config, config.topic_id, config.group_id, config.id, config.title));
+  const normalized = normalizeLevelConfig(config, config.topic_id, config.group_id, config.id, config.title);
+  const stored: Record<string, unknown> = { ...normalized };
+  if (normalized.group_id === FLAT_GROUP_ID) delete stored.group_id;
+  await writeJson(levelJsonPath(config.topic_id, config.group_id, config.id), stored);
 }
 
 export async function levelStatuses(catalog: LevelCatalog): Promise<LevelStatus[]> {

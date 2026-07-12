@@ -15,6 +15,9 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 
+JPEG_MARKER_PREFIX = "JigCat:jpeg-quality="
+
+
 @dataclass(frozen=True)
 class InputFile:
     path: Path
@@ -135,7 +138,15 @@ def convert_one(
         with Image.open(src) as image:
             before_size = image.size
             output, composited = image_to_rgb(image, background)
-            output.save(dst, format="JPEG", quality=quality, optimize=True, progressive=True)
+            output.save(
+                dst,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+                subsampling=2,
+                comment=f"{JPEG_MARKER_PREFIX}{quality}".encode("ascii"),
+            )
             after_bytes = dst.stat().st_size
             detail = f"quality={quality}"
             if composited:

@@ -18,11 +18,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, ChevronDown, ChevronRight, Edit3, Eye, FolderPlus, Gamepad2, GripVertical, Hexagon, ImageIcon, ImageUp, Pencil, Plus, Redo2, Save, Sparkles, Trash2, Undo2, Wand2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Edit3, Eye, FolderPlus, Gamepad2, GripVertical, Hexagon, ImageUp, Pencil, Plus, Redo2, Save, Sparkles, Trash2, Undo2, Wand2 } from "lucide-react";
 import { HexColorPicker } from "react-colorful";
 import Cropper, { type Area } from "react-easy-crop";
 import { toast } from "sonner";
-import { assetUrl, loadCatalog, loadLevel, saveCatalog, saveLevel, sourceUrl, uploadLevelCover, uploadSource, uploadTopicAsset } from "./api";
+import { assetUrl, loadCatalog, loadLevel, saveCatalog, saveLevel, sourceUrl, uploadSource, uploadTopicAsset } from "./api";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Toaster } from "./components/ui/sonner";
@@ -51,9 +51,9 @@ import "./styles.css";
 import "react-easy-crop/react-easy-crop.css";
 
 const emptyCatalog: LevelCatalog = {
-  version: 3,
-  default_locale: "en",
-  locales: ["en", "zh", "ja"],
+  version: 4,
+  default_locale: "zh-Hans",
+  locales: ["zh-Hans", "zh", "en", "ja"],
   image_presets: [{ id: "mobile_portrait_3x4", name: "Mobile portrait 3:4", aspect_ratio: 3 / 4, default: true }],
   topics: [],
 };
@@ -67,6 +67,7 @@ const DEFAULT_POLYGON_SEED_COUNT = 1;
 const DEFAULT_KNOB_SEED_COUNT = 1;
 const DEFAULT_TOPIC_COLOR = "#D9933F";
 const DEFAULT_GROUP_COLOR = "#F6EBD4";
+const FLAT_GROUP_ID = "levels";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const LINE_COLOR_OPTIONS = ["#FFF6E6", "#5A3A22", "#D9933F", "#2f7667", "#38BDF8", "#FFFFFF", "#111827"];
 const SHAPE_OPTIONS: Array<{ kind: ShapeKind; label: string }> = [
@@ -308,7 +309,7 @@ function App() {
         </div>
       </header>
       <div className="grid h-[calc(100vh-56px)] grid-cols-[340px_1fr] overflow-hidden">
-        <aside className="border-r border-border bg-card">
+        <aside className="min-h-0 overflow-y-auto border-r border-border bg-card">
           <TreePanel
             catalog={catalog}
             expanded={expanded}
@@ -388,30 +389,6 @@ function App() {
                   setLevel(saved);
                   toast.success("图片已上传");
                   await refresh();
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "上传失败");
-                }
-              }}
-              onUploadCover={async (file) => {
-                try {
-                  const result = await uploadLevelCover(selected, file);
-                  commitLevel((current) => ({ ...current, cover: result.path }));
-                  commitCatalog((current) => ({
-                    ...current,
-                    topics: current.topics.map((topic) =>
-                      topic.id === selected.topicId
-                        ? {
-                            ...topic,
-                            groups: topic.groups.map((group) =>
-                              group.id === selected.groupId
-                                ? { ...group, levels: group.levels.map((item) => (item.id === selected.levelId ? { ...item, cover: result.path } : item)) }
-                                : group,
-                            ),
-                          }
-                        : topic,
-                    ),
-                  }));
-                  toast.success("关卡封面已上传");
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : "上传失败");
                 }
@@ -613,10 +590,11 @@ function TreePanel(props: {
   }
 
   function withLevelPaths(topicId: string, groupId: string, level: CatalogLevel): CatalogLevel {
+    const base = `res://levels/${topicId}/${groupId === FLAT_GROUP_ID ? "" : `${groupId}/`}${level.id}`;
     return {
       ...level,
-      path: `res://levels/${topicId}/${groupId}/${level.id}/level.json`,
-      source: `res://levels/${topicId}/${groupId}/${level.id}/source.jpg`,
+      path: `${base}/level.json`,
+      source: `${base}/source.jpg`,
     };
   }
 
@@ -666,12 +644,7 @@ function TreePanel(props: {
         icon: remapResPath(topic.icon, `res://levels/${topic.id}/`, `res://levels/${id}/`),
         groups: topic.groups.map((group) => ({
           ...group,
-          levels: group.levels.map((level) =>
-            withLevelPaths(id, group.id, {
-              ...level,
-              cover: remapResPath(level.cover, `res://levels/${topic.id}/`, `res://levels/${id}/`),
-            }),
-          ),
+          levels: group.levels.map((level) => withLevelPaths(id, group.id, level)),
         })),
       };
     });
@@ -688,12 +661,7 @@ function TreePanel(props: {
         ...group,
         id,
         sort_order: index,
-        levels: group.levels.map((level) =>
-          withLevelPaths(topic.id, id, {
-            ...level,
-            cover: remapResPath(level.cover, `res://levels/${topic.id}/${group.id}/`, `res://levels/${topic.id}/${id}/`),
-          }),
-        ),
+        levels: group.levels.map((level) => withLevelPaths(topic.id, id, level)),
       };
     });
     return { groups: nextGroups, renames, groupIdMap };
@@ -705,12 +673,7 @@ function TreePanel(props: {
     const nextLevels = levels.map((level, index) => {
       const id = levelIdMap.get(level.id) || level.id;
       if (id !== level.id) renames.push({ kind: "level", topicId: topic.id, groupId: group.id, fromLevelId: level.id, toLevelId: id });
-      return withLevelPaths(topic.id, group.id, {
-        ...level,
-        id,
-        sort_order: index,
-        cover: remapResPath(level.cover, `res://levels/${topic.id}/${group.id}/${level.id}/`, `res://levels/${topic.id}/${group.id}/${id}/`),
-      });
+      return withLevelPaths(topic.id, group.id, { ...level, id, sort_order: index });
     });
     return { levels: nextLevels, renames, levelIdMap };
   }
@@ -752,7 +715,6 @@ function TreePanel(props: {
       id,
       title,
       title_i18n: zhI18n(title),
-      cover: "",
       sort_order: group.levels.length,
       path: `res://levels/${topic.id}/${group.id}/${id}/level.json`,
       source: `res://levels/${topic.id}/${group.id}/${id}/source.jpg`,
@@ -1332,7 +1294,6 @@ function LevelTreeRow(props: {
   onSelect: () => void;
   onDelete: () => void;
 }) {
-  const [previewOpen, setPreviewOpen] = React.useState(false);
   return (
     <div className={cn("flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground", !props.isDraggingTree && "hover:bg-accent hover:text-foreground", props.active && "bg-accent text-foreground")} style={{ paddingLeft: "58px" }}>
       {props.editMode && (
@@ -1341,30 +1302,12 @@ function LevelTreeRow(props: {
         </button>
       )}
       {!props.editMode && <span className="h-7 w-5 shrink-0" />}
-      {props.level.cover ? (
-        <>
-          <button className="grid shrink-0 gap-0.5" type="button" onClick={() => setPreviewOpen(true)}>
-            <img className="h-6 w-6 rounded-full object-cover" src={assetUrl(props.level.cover)} alt="" />
-            <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
-          </button>
-          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle>{props.level.title || props.level.id}</DialogTitle>
-                <DialogDescription>关卡封面预览</DialogDescription>
-              </DialogHeader>
-              <img className="mx-auto h-52 w-52 rounded-lg object-cover" src={assetUrl(props.level.cover)} alt="" />
-            </DialogContent>
-          </Dialog>
-        </>
-      ) : (
-        <span className="grid shrink-0 gap-0.5">
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary">
-            <Gamepad2 className="h-3.5 w-3.5 text-primary" />
-          </span>
-          <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
+      <span className="grid shrink-0 gap-0.5">
+        <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary">
+          <Gamepad2 className="h-3.5 w-3.5 text-primary" />
         </span>
-      )}
+        <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
+      </span>
       <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
       {props.status?.hasSource && <ImageUp className="h-4 w-4 shrink-0 text-success" aria-label="已有原图" />}
       {props.status?.hasPolygon && <Hexagon className="h-4 w-4 shrink-0 text-success" aria-label="已有多边形" />}
@@ -1623,17 +1566,12 @@ function LevelDetails(props: {
   canUndo: boolean;
   canRedo: boolean;
   onUpload: (file: File) => Promise<void>;
-  onUploadCover: (file: File) => Promise<void>;
   onSave: () => Promise<void>;
   onEditPolygon: () => void;
   onEditKnob: () => void;
 }) {
-  const { catalog, target, level, status, editMode, onLevel, onCatalog, onUpload, onUploadCover, onSave, onEditPolygon, onEditKnob } = props;
-  const topic = catalog.topics.find((item) => item.id === target.topicId);
-  const group = topic?.groups.find((item) => item.id === target.groupId);
-  const catalogLevel = group?.levels.find((item) => item.id === target.levelId);
+  const { catalog, target, level, status, editMode, onLevel, onCatalog, onUpload, onSave, onEditPolygon, onEditKnob } = props;
   const sourceInputRef = React.useRef<HTMLInputElement | null>(null);
-  const [coverOpen, setCoverOpen] = React.useState(false);
   const sourceImageUrl = React.useMemo(() => sourceUrl(target), [target.topicId, target.groupId, target.levelId, status?.hasSource, level.image.width, level.image.height]);
 
   function updateTitle(title: string) {
@@ -1663,20 +1601,6 @@ function LevelDetails(props: {
           <p className="text-sm text-muted-foreground">这里只管理关卡基础信息和 polygon 数据。</p>
         </div>
         <div className="flex items-center gap-3">
-          {catalogLevel?.cover ? (
-            <button
-              className={cn("h-12 w-12 overflow-hidden rounded-full border border-border", editMode && status?.hasSource && "hover:ring-2 hover:ring-primary/40")}
-              type="button"
-              onClick={() => editMode && status?.hasSource && setCoverOpen(true)}
-              title={editMode && status?.hasSource ? "重新制作封面" : "关卡封面"}
-            >
-              <img className="h-full w-full object-cover" src={assetUrl(catalogLevel.cover)} alt={`${level.title} 封面`} />
-            </button>
-          ) : editMode ? (
-            <Button variant="outline" disabled={!status?.hasSource} onClick={() => setCoverOpen(true)}>
-              <ImageIcon size={16} />制作封面
-            </Button>
-          ) : null}
           {editMode && (
             <>
             <Button variant="outline" disabled={!props.canUndo} onClick={props.onUndo}>
@@ -1772,16 +1696,6 @@ function LevelDetails(props: {
           )}
         </div>
       </div>
-      <CoverCropDialog
-        open={coverOpen}
-        imageUrl={sourceImageUrl}
-        title={level.title}
-        onOpenChange={setCoverOpen}
-        onSave={async (file) => {
-          await onUploadCover(file);
-          setCoverOpen(false);
-        }}
-      />
     </div>
   );
 }

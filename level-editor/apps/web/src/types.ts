@@ -4,7 +4,6 @@ export type CatalogLevel = {
   id: string;
   title?: string;
   title_i18n?: I18nText;
-  cover?: string;
   background_color?: string;
   sort_order: number;
   path: string;
@@ -26,14 +25,20 @@ export type CatalogTopic = {
   name_i18n?: I18nText;
   cover?: string;
   color?: string;
+  ui_palette?: Record<string, string>;
   icon?: string;
+  island?: string;
+  level_background?: string;
+  card_back?: string;
   sort_order: number;
   groups: CatalogGroup[];
+  levels?: CatalogLevel[];
+  flat_levels?: boolean;
 };
 
 export type LevelCatalog = {
-  version: 3;
-  default_locale: "en";
+  version: number;
+  default_locale: string;
   locales: string[];
   image_presets: Array<{ id: string; name: string; aspect_ratio: number; default: boolean }>;
   topics: CatalogTopic[];
@@ -68,7 +73,6 @@ export type LevelConfig = {
   title_i18n: I18nText;
   description: string;
   description_i18n: I18nText;
-  cover: string;
   image: {
     path: string;
     width: number;

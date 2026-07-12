@@ -9,12 +9,16 @@ For images with transparency, alpha and fully transparent pixels are preserved.
 from __future__ import annotations
 
 import argparse
+import math
 import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageSequence, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageSequence, UnidentifiedImageError
+
+
+JPEG_MARKER_PREFIX = "JigCat:jpeg-quality="
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,13 @@ def bounded_int(min_value: int, max_value: int):
         return parsed
 
     return parse
+
+
+def non_negative_float(value: str) -> float:
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
+    return parsed
 
 
 def collect_inputs(inputs: list[Path], recursive: bool) -> list[InputFile]:
@@ -104,9 +115,12 @@ def transparency_is_preserved(left: Path, right: Path) -> bool:
                     return False
                 if left_alpha.getextrema() == (255, 255):
                     continue
-                for left_pixel, right_pixel in zip(left_rgba.getdata(), right_rgba.getdata()):
-                    if left_pixel[3] == 0 and left_pixel != right_pixel:
-                        return False
+                transparent_mask = left_alpha.point(lambda alpha: 255 if alpha == 0 else 0)
+                difference = ImageChops.difference(left_rgba, right_rgba)
+                transparent_difference = Image.new("RGBA", left_rgba.size)
+                transparent_difference.paste(difference, mask=transparent_mask)
+                if transparent_difference.getbbox() is not None:
+                    return False
         return True
     except (OSError, UnidentifiedImageError):
         return False
@@ -128,17 +142,106 @@ def copy_color_and_orientation_info(image: Image.Image) -> dict[str, object]:
     return info
 
 
-def save_candidate(src: Path, candidate: Path, png_colors: int, jpeg_quality: int, webp_quality: int) -> None:
+def jpeg_quality_marker(path: Path) -> int | None:
+    if path.suffix.lower() not in {".jpg", ".jpeg"}:
+        return None
+    try:
+        with Image.open(path) as image:
+            comment = image.info.get("comment", b"")
+            text = comment.decode("ascii", errors="ignore") if isinstance(comment, bytes) else str(comment)
+            if not text.startswith(JPEG_MARKER_PREFIX):
+                return None
+            return int(text.removeprefix(JPEG_MARKER_PREFIX))
+    except (OSError, UnidentifiedImageError, ValueError):
+        return None
+
+
+def save_jpeg(
+    image: Image.Image,
+    candidate: Path,
+    quality: int,
+    metadata: dict[str, object],
+) -> None:
+    output = image.convert("RGB") if image.mode not in {"RGB", "L"} else image
+    output.save(
+        candidate,
+        format="JPEG",
+        optimize=True,
+        progressive=True,
+        quality=quality,
+        subsampling=2,
+        comment=f"{JPEG_MARKER_PREFIX}{quality}".encode("ascii"),
+        **metadata,
+    )
+
+
+def save_jpeg_to_target(
+    image: Image.Image,
+    candidate: Path,
+    quality: int,
+    min_quality: int,
+    target_bytes: int | None,
+    metadata: dict[str, object],
+) -> int:
+    save_jpeg(image, candidate, quality, metadata)
+    if target_bytes is None or candidate.stat().st_size <= target_bytes or quality <= min_quality:
+        return quality
+
+    chosen_quality = min_quality
+    upper_quality = quality
+    probe_quality = quality - 4
+    while probe_quality >= min_quality:
+        save_jpeg(image, candidate, probe_quality, metadata)
+        if candidate.stat().st_size <= target_bytes:
+            chosen_quality = probe_quality
+            upper_quality = min(quality, probe_quality + 3)
+            break
+        probe_quality -= 4
+    else:
+        save_jpeg(image, candidate, min_quality, metadata)
+        return min_quality
+
+    low = chosen_quality + 1
+    high = upper_quality
+    while low <= high:
+        probe_quality = (low + high) // 2
+        save_jpeg(image, candidate, probe_quality, metadata)
+        if candidate.stat().st_size <= target_bytes:
+            chosen_quality = probe_quality
+            low = probe_quality + 1
+        else:
+            high = probe_quality - 1
+    save_jpeg(image, candidate, chosen_quality, metadata)
+    return chosen_quality
+
+
+def save_candidate(
+    src: Path,
+    candidate: Path,
+    png_colors: int,
+    jpeg_quality: int,
+    jpeg_min_quality: int,
+    webp_quality: int,
+    target_bytes: int | None,
+) -> str:
     with Image.open(src) as image:
         image_format = image.format
         if not image_format:
             raise ValueError("unknown image format")
 
         frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
-        save_kwargs = {
-            **copy_color_and_orientation_info(image),
-            **compression_options(image_format, jpeg_quality, webp_quality),
-        }
+        metadata = copy_color_and_orientation_info(image)
+        if image_format.upper() in {"JPEG", "MPO"} and len(frames) == 1:
+            used_quality = save_jpeg_to_target(
+                frames[0],
+                candidate,
+                jpeg_quality,
+                jpeg_min_quality,
+                target_bytes,
+                metadata,
+            )
+            return f"jpeg quality={used_quality}"
+        save_kwargs = {**metadata, **compression_options(image_format, jpeg_quality, webp_quality)}
         if image_format.upper() == "PNG":
             frames = [quantize_png_frame(frame, png_colors) for frame in frames]
         if len(frames) > 1:
@@ -150,9 +253,10 @@ def save_candidate(src: Path, candidate: Path, png_colors: int, jpeg_quality: in
                 **copy_animation_info(image),
                 **save_kwargs,
             )
-            return
+            return image_format.upper()
 
         frames[0].save(candidate, format=image_format, **save_kwargs)
+        return image_format.upper()
 
 
 def quantize_png_frame(image: Image.Image, colors: int) -> Image.Image:
@@ -191,12 +295,29 @@ def compress_one(
     src: Path,
     dst: Path,
     min_savings: int,
+    min_savings_percent: float,
     png_colors: int,
     jpeg_quality: int,
+    jpeg_min_quality: int,
     webp_quality: int,
+    target_bytes: int | None,
 ) -> Result:
     before = src.stat().st_size
     dst.parent.mkdir(parents=True, exist_ok=True)
+
+    marked_quality = jpeg_quality_marker(src)
+    marker_satisfies_request = marked_quality is not None and marked_quality <= jpeg_quality
+    if marker_satisfies_request and (target_bytes is None or before <= target_bytes):
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+            return Result(src, dst, before, before, "copied", f"already compressed at quality={marked_quality}")
+        return Result(src, dst, before, before, "kept", f"already compressed at quality={marked_quality}")
+
+    if target_bytes is not None and src.suffix.lower() in {".jpg", ".jpeg"} and before <= target_bytes:
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+            return Result(src, dst, before, before, "copied", "already within target size")
+        return Result(src, dst, before, before, "kept", "already within target size")
 
     with tempfile.NamedTemporaryFile(
         prefix=f"{src.stem}-",
@@ -207,16 +328,32 @@ def compress_one(
         candidate = Path(handle.name)
 
     try:
-        save_candidate(src, candidate, png_colors, jpeg_quality, webp_quality)
+        encoding_detail = save_candidate(
+            src,
+            candidate,
+            png_colors,
+            jpeg_quality,
+            jpeg_min_quality,
+            webp_quality,
+            target_bytes,
+        )
         after = candidate.stat().st_size
-        if after + min_savings > before:
+        required_savings = max(min_savings, math.ceil(before * min_savings_percent / 100.0))
+        if after + required_savings > before:
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
+                return Result(src, dst, before, before, "copied", "candidate was not smaller enough")
             return Result(src, dst, before, after, "kept", "candidate was not smaller enough")
         if not same_geometry(src, candidate):
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
             return Result(src, dst, before, after, "kept", "candidate changed frame geometry")
         if not transparency_is_preserved(src, candidate):
+            if src.resolve() != dst.resolve():
+                shutil.copy2(src, dst)
             return Result(src, dst, before, after, "kept", "candidate changed transparency")
         shutil.move(str(candidate), dst)
-        return Result(src, dst, before, after, "wrote")
+        return Result(src, dst, before, after, "wrote", encoding_detail)
     except UnidentifiedImageError:
         return Result(src, dst, before, None, "skipped", "not a supported image")
     except Exception as exc:
@@ -231,7 +368,11 @@ def print_result(result: Result) -> None:
     if result.status == "wrote" and result.after is not None:
         saved = result.before - result.after
         percent = saved / result.before * 100 if result.before else 0
-        print(f"wrote {src}{target}: {result.before} -> {result.after} bytes ({percent:.1f}% smaller)")
+        detail = f"; {result.detail}" if result.detail else ""
+        print(f"wrote {src}{target}: {result.before} -> {result.after} bytes ({percent:.1f}% smaller{detail})")
+        return
+    if result.status == "copied":
+        print(f"copied {src}{target}: {result.before} bytes ({result.detail})")
         return
     if result.after is None:
         print(f"{result.status} {src}: {result.detail}")
@@ -253,6 +394,12 @@ def parse_args() -> argparse.Namespace:
         help="Minimum bytes saved before writing a candidate. Default: 1",
     )
     parser.add_argument(
+        "--min-savings-percent",
+        type=non_negative_float,
+        default=1.0,
+        help="Minimum percentage saved before replacing a file. Default: 1.0",
+    )
+    parser.add_argument(
         "--png-colors",
         type=bounded_int(2, 256),
         default=256,
@@ -265,6 +412,17 @@ def parse_args() -> argparse.Namespace:
         help="JPEG quality for visually near-lossless output. Default: 88",
     )
     parser.add_argument(
+        "--jpeg-min-quality",
+        type=bounded_int(1, 100),
+        default=72,
+        help="Lowest JPEG quality allowed while meeting --target-kb. Default: 72",
+    )
+    parser.add_argument(
+        "--target-kb",
+        type=positive_int,
+        help="Optional maximum JPEG size in KiB; already-small JPEGs are copied without re-encoding",
+    )
+    parser.add_argument(
         "--webp-quality",
         type=bounded_int(1, 100),
         default=86,
@@ -275,23 +433,39 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.jpeg_min_quality > args.jpeg_quality:
+        raise SystemExit("--jpeg-min-quality must not exceed --jpeg-quality")
     files = collect_inputs(args.inputs, args.recursive)
     if not files:
         print("No files to process.")
         return 0
 
     written = 0
+    copied = 0
     saved = 0
+    target_bytes = args.target_kb * 1024 if args.target_kb else None
     for input_file in files:
         src = input_file.path
         dst = output_path_for(input_file, args.output_dir)
-        result = compress_one(src, dst, args.min_savings, args.png_colors, args.jpeg_quality, args.webp_quality)
+        result = compress_one(
+            src,
+            dst,
+            args.min_savings,
+            args.min_savings_percent,
+            args.png_colors,
+            args.jpeg_quality,
+            args.jpeg_min_quality,
+            args.webp_quality,
+            target_bytes,
+        )
         print_result(result)
         if result.status == "wrote" and result.after is not None:
             written += 1
             saved += result.before - result.after
+        elif result.status == "copied":
+            copied += 1
 
-    print(f"Done. Wrote {written}/{len(files)} files, saved {saved} bytes.")
+    print(f"Done. Wrote {written}/{len(files)} files, copied {copied}, saved {saved} bytes.")
     return 0
 
 
