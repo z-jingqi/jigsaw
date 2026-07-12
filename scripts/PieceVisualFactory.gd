@@ -16,9 +16,12 @@ const LIFTED_SCALE := Vector2(1.014, 1.014)
 const SEAM_LINE_COLOR := Color(0.0, 0.0, 0.0, 0.22)
 
 
-static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D:
+static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := {}) -> Node2D:
 	var node := Node2D.new()
 	node.name = piece["id"] + "_visual"
+	var cut_line_color: Color = style.get("cut_line_color", CUT_LINE_COLOR)
+	var cut_line_lift_color: Color = style.get("cut_line_lift_color", CUT_LINE_LIFT_COLOR)
+	node.set_meta("seam_line_color", style.get("seam_line_color", SEAM_LINE_COLOR))
 	node.add_child(_piece_lift_shadow(piece["polygon"]))
 	var poly := Polygon2D.new()
 	poly.name = "piece_texture"
@@ -34,7 +37,7 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D) -> Node2D
 	light.z_index = 1
 	node.add_child(light)
 	for cut_line in piece["cut_lines"]:
-		node.add_child(_piece_cut_line(cut_line, 1.7, CUT_LINE_COLOR, 6))
+		node.add_child(_piece_cut_line(cut_line, 1.7, cut_line_color, cut_line_lift_color, 6))
 	return node
 
 
@@ -50,7 +53,7 @@ static func add_seam_outline(group, width: float) -> void:
 		var line := Line2D.new()
 		line.name = "piece_seam_line"
 		line.width = width
-		line.default_color = SEAM_LINE_COLOR
+		line.default_color = visual.get_meta("seam_line_color", SEAM_LINE_COLOR)
 		line.closed = true
 		line.joint_mode = Line2D.LINE_JOINT_ROUND
 		line.begin_cap_mode = Line2D.LINE_CAP_ROUND
@@ -61,7 +64,7 @@ static func add_seam_outline(group, width: float) -> void:
 		visual.add_child(line)
 
 
-static func set_group_lifted(group, lifted: bool, tween_owner: Node) -> void:
+static func set_group_lifted(group, lifted: bool, tween_owner: Node, animate := true) -> void:
 	if group == null:
 		return
 	for member in group.members:
@@ -69,17 +72,27 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node) -> void:
 		if visual == null or not is_instance_valid(visual):
 			continue
 		var target_scale := LIFTED_SCALE if lifted else Vector2.ONE
+		var shadow := visual.get_node_or_null("piece_lift_shadow")
+		if not animate:
+			visual.scale = target_scale
+			if shadow != null:
+				shadow.modulate.a = 1.0 if lifted else 0.0
+			for child in visual.get_children():
+				if child is Line2D and child.name == "piece_cut_line":
+					var line := child as Line2D
+					line.default_color = line.get_meta("lift_color", CUT_LINE_LIFT_COLOR) if lifted else line.get_meta("base_color", CUT_LINE_COLOR)
+			continue
 		var tween := tween_owner.create_tween()
 		tween.set_ease(Tween.EASE_OUT)
 		tween.set_trans(Tween.TRANS_CUBIC)
 		tween.parallel().tween_property(visual, "scale", target_scale, 0.12)
-		var shadow := visual.get_node_or_null("piece_lift_shadow")
 		if shadow != null:
 			tween.parallel().tween_property(shadow, "modulate:a", 1.0 if lifted else 0.0, 0.12)
 		for child in visual.get_children():
 			if child is Line2D and child.name == "piece_cut_line":
 				var line := child as Line2D
-				tween.parallel().tween_property(line, "default_color", CUT_LINE_LIFT_COLOR if lifted else CUT_LINE_COLOR, 0.12)
+				var target_color: Color = line.get_meta("lift_color", CUT_LINE_LIFT_COLOR) if lifted else line.get_meta("base_color", CUT_LINE_COLOR)
+				tween.parallel().tween_property(line, "default_color", target_color, 0.12)
 
 
 static func _piece_lift_shadow(points: PackedVector2Array) -> Node2D:
@@ -121,7 +134,7 @@ static func _piece_outline_line(points: PackedVector2Array, width: float, color:
 	return line
 
 
-static func _piece_cut_line(points: PackedVector2Array, width: float, color: Color, z_index: int) -> Line2D:
+static func _piece_cut_line(points: PackedVector2Array, width: float, color: Color, lift_color: Color, z_index: int) -> Line2D:
 	var line := Line2D.new()
 	line.name = "piece_cut_line"
 	line.width = width
@@ -133,4 +146,6 @@ static func _piece_cut_line(points: PackedVector2Array, width: float, color: Col
 	line.antialiased = true
 	line.z_index = z_index
 	line.points = points
+	line.set_meta("base_color", color)
+	line.set_meta("lift_color", lift_color)
 	return line

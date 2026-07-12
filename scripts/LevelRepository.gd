@@ -2,6 +2,7 @@ extends RefCounted
 class_name LevelRepository
 
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
+const LEVEL_THUMBNAIL_FILE := "thumbnail.webp"
 
 var texture_cache: Dictionary = {}
 var thumbnail_cache: Dictionary = {}
@@ -54,6 +55,7 @@ func build_catalog() -> Array[Dictionary]:
 				"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 				"cover": str(topic.get("cover", "")),
 				"color": str(topic.get("color", "#D9933F")),
+				"ui_palette": topic.get("ui_palette", {}) if typeof(topic.get("ui_palette", {})) == TYPE_DICTIONARY else {},
 				"icon": str(topic.get("icon", "")),
 				"island": str(topic.get("island", "")),
 				"level_background": str(topic.get("level_background", "")),
@@ -102,6 +104,7 @@ func load_config_path(config_path: String) -> Dictionary:
 	var parsed = JSON.parse_string(file.get_as_text())
 	var config: Dictionary = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
 	if not config.is_empty():
+		config["_config_path"] = config_path
 		config_cache[config_path] = config
 	return config
 
@@ -172,6 +175,15 @@ func cached_texture(path: String) -> Texture2D:
 	return null
 
 
+func texture_from_file(path: String) -> Texture2D:
+	if path.is_empty():
+		return null
+	var image := Image.load_from_file(image_file_path(path))
+	if image != null and not image.is_empty():
+		return ImageTexture.create_from_image(image)
+	return load(path) as Texture2D
+
+
 func cached_runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 	if path.is_empty() or target_size.x <= 0 or target_size.y <= 0:
 		return null
@@ -214,12 +226,24 @@ func cached_source_image(path: String, source_texture: Texture2D) -> Image:
 
 
 func level_list_image_path(level_config: Dictionary) -> String:
-	var cover_path := str(level_config.get("cover", ""))
-	return cover_path if not cover_path.is_empty() else default_level_image_path(level_config)
+	return default_level_image_path(level_config)
 
 
 func level_thumbnail_source_path(level_config: Dictionary) -> String:
+	var thumbnail_path := level_thumbnail_path(level_config)
+	if not thumbnail_path.is_empty() and FileAccess.file_exists(thumbnail_path):
+		return thumbnail_path
 	return level_list_image_path(level_config)
+
+
+func level_thumbnail_path(level_config: Dictionary) -> String:
+	var explicit_path := image_path_from_value(level_config.get("thumbnail", null), "")
+	if not explicit_path.is_empty():
+		return explicit_path
+	var config_path := str(level_config.get("_config_path", ""))
+	if config_path.is_empty():
+		return ""
+	return config_path.get_base_dir().path_join(LEVEL_THUMBNAIL_FILE)
 
 
 func level_image_path(level_config: Dictionary) -> String:

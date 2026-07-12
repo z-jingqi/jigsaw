@@ -5,6 +5,7 @@ signal status_changed(text: String)
 signal zoom_changed(percent: int)
 signal completed
 signal state_changed(state: Dictionary)
+signal undo_available_changed(available: bool)
 
 const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
@@ -12,8 +13,8 @@ const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
 const PIECE_SPAWN_EDGE_PADDING := 22.0
 const PIECE_SPAWN_SEPARATION := 34.0
-const VIEW_MIN_RATIO := 1.0
-const VIEW_MAX_RATIO := 1.0
+const VIEW_MIN_RATIO := 0.90
+const VIEW_MAX_RATIO := 2.40
 const VIEW_WHEEL_STEP := 0.08
 const TRACKPAD_MAGNIFY_MIN := 0.86
 const TRACKPAD_MAGNIFY_MAX := 1.16
@@ -36,11 +37,17 @@ const HINT_TRAY_SCROLL_TIME := 0.3
 const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.0
+const SNAP_PREVIEW_PULL := 0.10
+const SNAP_PREVIEW_COLOR := Color(0.16, 0.70, 0.62, 0.92)
+const SNAP_PREVIEW_SCREEN_WIDTH := 3.0
 const SEAM_SCREEN_WIDTH := 1.6
 const SHIMMER_DURATION := 0.7
 const SWAP_FALLBACK_COLS := 5
 const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
+const SWAP_TARGET_PREVIEW_COLOR := Color(0.96, 0.58, 0.20, 0.96)
+const SWAP_TARGET_PREVIEW_FILL := Color(1.0, 0.72, 0.30, 0.20)
+const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
 const GROUP_Z_STEP := 64
@@ -96,6 +103,7 @@ var tray_scroll_velocity := 0.0
 var tray_last_pan_msec := 0
 var tray_inertia_active := false
 var swap_tiles: Array = []
+var swap_history: Array[Dictionary] = []
 var spawn_bounds: Array[Rect2] = []
 var dragging = null
 var dragging_from_tray := false
@@ -112,6 +120,10 @@ var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
 var swap_drag_start_slot := -1
 var swap_drag_offset := Vector2.ZERO
+var swap_target_preview = null
+var swap_target_preview_root: Node2D
+var swap_target_preview_line: Line2D
+var swap_target_preview_tween: Tween
 var selected_group = null
 var hint_highlighted_groups: Array = []
 var hint_highlighted_lines: Array[Line2D] = []
@@ -137,11 +149,20 @@ var active_hint_key := ""
 var hint_expires_at_msec := 0
 var hint_pending := false
 var hint_tray_scroll_tween: Tween
+var hint_clear_timer: Timer
+var hint_count := 0
+var snap_preview_lines: Array[Line2D] = []
+var snap_preview_key := ""
+var snap_ready_key := ""
 var debug_bounds_overlay_enabled := false
 var debug_bounds_overlay: Control
 var texts := {}
 var state_emit_pending := false
 var last_state_emit_msec := 0
+var haptics_enabled := true
+var reduced_motion := false
+var edge_contrast_mode := "auto"
+var piece_visual_style := {}
 
 
 func _ready() -> void:
@@ -151,6 +172,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not hint_highlighted_lines.is_empty():
 		_refresh_hint_line_widths()
+	if swap_target_preview_line != null and is_instance_valid(swap_target_preview_line):
+		_update_hint_line_width(swap_target_preview_line)
 	if debug_bounds_overlay_enabled:
 		_refresh_debug_bounds_overlay()
 	if not tray_inertia_active:
@@ -173,16 +196,50 @@ func set_texts(next_texts: Dictionary) -> void:
 	texts = next_texts.duplicate()
 
 
+func set_feedback_preferences(next_haptics_enabled: bool, next_reduced_motion: bool, next_edge_contrast_mode := "auto") -> void:
+	haptics_enabled = next_haptics_enabled
+	reduced_motion = next_reduced_motion
+	edge_contrast_mode = next_edge_contrast_mode if ["auto", "dark", "light"].has(next_edge_contrast_mode) else "auto"
+
+
 func _bt(key: String) -> String:
 	return str(texts.get(key, key))
 
 
+func _motion_duration(duration: float) -> float:
+	return 0.001 if reduced_motion else duration
+
+
+func _trigger_haptic(kind: String) -> void:
+	if not haptics_enabled:
+		return
+	var duration := 8
+	var amplitude := 0.16
+	if kind == "ready":
+		duration = 12
+		amplitude = 0.22
+	elif kind == "snap" or kind == "swap":
+		duration = 28
+		amplitude = 0.48
+	elif kind == "complete":
+		duration = 70
+		amplitude = 0.72
+	Input.vibrate_handheld(duration, amplitude)
+
+
 func state_snapshot() -> Dictionary:
+	var tray_max_scroll := maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING)
 	var snapshot := {
-		"version": 1,
+		"version": 2,
 		"mode": current_mode,
+		"hint_count": hint_count,
+		"view": {
+			"ratio": _view_ratio(),
+			"offset": _vector_to_json(view_offset),
+		},
 		"tray": {
 			"scroll": tray_scroll_offset,
+			"scroll_ratio": 0.0 if tray_max_scroll <= 0.0 else clampf(tray_scroll_offset / tray_max_scroll, 0.0, 1.0),
 		},
 	}
 	if current_mode == "swap":
@@ -198,6 +255,7 @@ func state_snapshot() -> Dictionary:
 				"z": int(node.z_index),
 			})
 		snapshot["tiles"] = tiles
+		snapshot["swap_history"] = swap_history.duplicate(true)
 	else:
 		var group_states := []
 		for group in groups:
@@ -225,13 +283,21 @@ func state_snapshot() -> Dictionary:
 	return snapshot
 
 
+func should_persist_state() -> bool:
+	if completion_emitted:
+		return false
+	return not swap_tiles.is_empty() if current_mode == "swap" else not groups.is_empty()
+
+
 func apply_state_snapshot(snapshot: Dictionary) -> void:
 	if str(snapshot.get("mode", current_mode)) != current_mode:
 		return
+	hint_count = maxi(0, int(snapshot.get("hint_count", 0)))
 	if current_mode == "swap":
 		_restore_swap_state(snapshot)
 	else:
 		_restore_group_state(snapshot)
+	_restore_view_state(snapshot)
 	_check_complete()
 	_check_swap_complete()
 
@@ -283,6 +349,10 @@ func _restore_group_state(snapshot: Dictionary) -> void:
 	for index in tray_groups.size():
 		_move_group_to_tray(tray_groups[index], index, true)
 	tray_scroll_offset = 0.0
+	_layout_tray(true)
+	var tray_state: Dictionary = snapshot.get("tray", {})
+	var max_scroll := maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING)
+	tray_scroll_offset = max_scroll * clampf(float(tray_state.get("scroll_ratio", 0.0)), 0.0, 1.0) if tray_state.has("scroll_ratio") else maxf(0.0, float(tray_state.get("scroll", 0.0)))
 	_clamp_tray_scroll()
 	_layout_tray(true)
 	_refresh_group_z_indices()
@@ -320,6 +390,9 @@ func _restore_swap_state(snapshot: Dictionary) -> void:
 	swap_tiles = next_tiles
 	for index in swap_tiles.size():
 		swap_tiles[index]["node"].z_index = index * GROUP_Z_STEP
+	var history = snapshot.get("swap_history", [])
+	swap_history = history.duplicate(true) if typeof(history) == TYPE_ARRAY else []
+	undo_available_changed.emit(not swap_history.is_empty())
 
 
 func _restore_view_state(snapshot: Dictionary) -> void:
@@ -370,6 +443,7 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	texture = source_texture
 	source_image = image
 	source_size = image_size
+	piece_visual_style = _piece_visual_style()
 	hud_icon_size = icon_size
 	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
@@ -390,6 +464,7 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 
 
 func clear() -> void:
+	_clear_swap_target_preview()
 	for child in get_children():
 		child.queue_free()
 	groups.clear()
@@ -406,6 +481,7 @@ func clear() -> void:
 	tray_last_pan_msec = 0
 	tray_inertia_active = false
 	swap_tiles.clear()
+	swap_history.clear()
 	spawn_bounds.clear()
 	dragging = null
 	dragging_from_tray = false
@@ -422,6 +498,10 @@ func clear() -> void:
 	swap_dragging = null
 	swap_drag_start_slot = -1
 	swap_drag_offset = Vector2.ZERO
+	swap_target_preview = null
+	swap_target_preview_root = null
+	swap_target_preview_line = null
+	swap_target_preview_tween = null
 	selected_group = null
 	hint_highlighted_groups.clear()
 	hint_highlighted_lines.clear()
@@ -433,6 +513,11 @@ func clear() -> void:
 	hint_expires_at_msec = 0
 	hint_pending = false
 	hint_tray_scroll_tween = null
+	hint_clear_timer = null
+	hint_count = 0
+	_clear_snap_preview()
+	snap_preview_key = ""
+	snap_ready_key = ""
 	debug_bounds_overlay_enabled = false
 	debug_bounds_overlay = null
 	drag_blockers.clear()
@@ -455,6 +540,7 @@ func clear() -> void:
 	randomize_piece_rotation = false
 	state_emit_pending = false
 	last_state_emit_msec = 0
+	undo_available_changed.emit(false)
 
 
 func handle_input(event: InputEvent, modal_open: bool) -> bool:
@@ -599,6 +685,7 @@ func _apply_view_transform() -> void:
 	world_root.position = view_offset
 	world_root.scale = Vector2.ONE * view_scale
 	_refresh_hint_line_widths()
+	_refresh_snap_preview_line_widths()
 	zoom_changed.emit(roundi(_view_ratio() * 100.0))
 
 
@@ -644,6 +731,7 @@ func _animate_view_to(target_scale: float, target_offset: Vector2, duration: flo
 	var start_offset := view_offset
 	var final_scale := view_target_scale
 	var final_offset := _clamped_view_offset(target_offset, final_scale) if clamp_target else target_offset
+	duration = _motion_duration(duration)
 	view_tween = create_tween()
 	view_tween.set_ease(Tween.EASE_OUT)
 	view_tween.set_trans(Tween.TRANS_CUBIC)
@@ -708,6 +796,7 @@ func _update_pinch() -> void:
 	view_offset = midpoint - pinch_start_world_midpoint * view_scale
 	_clamp_view_to_table()
 	_apply_view_transform()
+	_notify_state_changed()
 
 
 func _active_touch_points() -> Array[Vector2]:
@@ -896,6 +985,8 @@ func _pan_hint_bounds_into_view(bounds: Rect2) -> void:
 func show_hint() -> void:
 	if _hint_in_progress():
 		return
+	hint_count += 1
+	_notify_state_changed(true)
 	if current_mode == "swap":
 		_show_swap_hint()
 		return
@@ -1004,13 +1095,13 @@ func debug_reset_tray() -> void:
 func debug_scroll_tray_left() -> void:
 	tray_scroll_offset = 0.0
 	tray_scroll_velocity = 0.0
-	_layout_tray(false)
+	_layout_tray(true)
 
 
 func debug_scroll_tray_right() -> void:
 	tray_scroll_offset = maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING)
 	tray_scroll_velocity = 0.0
-	_layout_tray(false)
+	_layout_tray(true)
 
 
 func debug_toggle_bounds_overlay() -> void:
@@ -1019,6 +1110,279 @@ func debug_toggle_bounds_overlay() -> void:
 		_clear_debug_bounds_overlay()
 		return
 	_refresh_debug_bounds_overlay()
+
+
+func debug_run_interaction_smoke() -> Dictionary:
+	var result := {
+		"mode": current_mode,
+		"tray_scroll": true,
+		"pickup_drop": false,
+		"hint": false,
+		"snap_preview": true,
+		"snap_shimmer_only": true,
+		"swap_preview": true,
+		"snap": true,
+		"undo": true,
+		"complete": false,
+	}
+	if current_mode == "swap":
+		await _debug_smoke_swap(result)
+	else:
+		await _debug_smoke_piece_mode(result)
+	var ok := true
+	for key in ["tray_scroll", "pickup_drop", "hint", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "undo", "complete"]:
+		ok = ok and bool(result.get(key, false))
+	result["ok"] = ok
+	return result
+
+
+func _debug_smoke_piece_mode(result: Dictionary) -> void:
+	var tray_wait_started := Time.get_ticks_msec()
+	while _debug_tray_animation_active() and Time.get_ticks_msec() - tray_wait_started < 1200:
+		await get_tree().create_timer(0.02).timeout
+	var max_scroll := maxf(0.0, tray_content_width - _tray_area().size.x + TRAY_PADDING)
+	debug_scroll_tray_left()
+	if max_scroll > 1.0 and not tray_groups.is_empty():
+		var scroll_start: Vector2 = tray_groups[0].tray_slot.get_center()
+		var scroll_end := scroll_start + Vector2(-minf(180.0, _tray_area().size.x * 0.28), 0.0)
+		handle_input(_debug_mouse_button(scroll_start, true), false)
+		handle_input(_debug_mouse_motion(scroll_end, scroll_end - scroll_start), false)
+		handle_input(_debug_mouse_button(scroll_end, false), false)
+		result["tray_scroll"] = tray_scroll_offset > 0.5
+	else:
+		result["tray_scroll"] = true
+	debug_scroll_tray_left()
+	if not tray_groups.is_empty():
+		var picked = tray_groups[0]
+		var center: Vector2 = picked.tray_slot.get_center()
+		var lift_position := Vector2(center.x, _tray_area().position.y - 72.0)
+		var drop_position := lift_position + Vector2(0.0, -64.0)
+		handle_input(_debug_mouse_button(center, true), false)
+		handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
+		handle_input(_debug_mouse_motion(drop_position, drop_position - lift_position), false)
+		var lifted: bool = dragging == picked and not picked.in_tray
+		handle_input(_debug_mouse_button(drop_position, false), false)
+		await get_tree().process_frame
+		result["pickup_drop"] = lifted and picked.in_tray and dragging == null
+	show_hint()
+	var hint_wait_started := Time.get_ticks_msec()
+	while hint_pending and Time.get_ticks_msec() - hint_wait_started < 1200:
+		await get_tree().create_timer(0.02).timeout
+	result["hint"] = _has_active_hint_highlights()
+	debug_clear_hint()
+	var pair := _find_hint_pair()
+	if pair.is_empty():
+		result["snap_preview"] = false
+		result["snap_shimmer_only"] = false
+		result["snap"] = false
+	else:
+		var active = pair[0]
+		_send_group_to_world(active, active.anchor_home + Vector2(_snap_tolerance() * 1.05, 0.0))
+		active.node.scale = Vector2.ONE
+		_update_snap_preview(active)
+		var outside_hidden := snap_preview_lines.is_empty()
+		active.node.position = active.anchor_home + Vector2(_snap_tolerance() * 0.92, 0.0)
+		_update_snap_preview(active)
+		result["snap_preview"] = outside_hidden and not snap_preview_lines.is_empty()
+		var group_count_before := groups.size()
+		PieceVisualFactoryScript.set_group_lifted(active, true, self, false)
+		dragging = active
+		dragging_from_tray = false
+		_end_drag()
+		var scale_reset := true
+		var shimmer_visible := false
+		for member in active.members:
+			var visual: Node2D = member.get("visual", null)
+			if visual == null or not is_instance_valid(visual):
+				continue
+			scale_reset = scale_reset and visual.scale.is_equal_approx(Vector2.ONE)
+			shimmer_visible = shimmer_visible or visual.get_node_or_null("snap_shimmer") != null
+		result["snap_shimmer_only"] = scale_reset and (reduced_motion or shimmer_visible)
+		result["snap"] = groups.size() < group_count_before and active.locked and dragging == null
+		_clear_snap_preview()
+	debug_force_complete()
+	result["complete"] = completion_emitted
+
+
+func _debug_tray_animation_active() -> bool:
+	for group in tray_groups:
+		if group != null and group.is_animating:
+			return true
+	return false
+
+
+func _debug_mouse_button(position: Vector2, pressed: bool) -> InputEventMouseButton:
+	var event := InputEventMouseButton.new()
+	event.position = position
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
+	event.pressed = pressed
+	return event
+
+
+func _debug_mouse_motion(position: Vector2, relative: Vector2) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.position = position
+	event.relative = relative
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT
+	return event
+
+
+func _debug_smoke_swap(result: Dictionary) -> void:
+	show_hint()
+	await get_tree().process_frame
+	result["hint"] = _has_active_hint_highlights()
+	debug_clear_hint()
+	var pair := _find_swap_hint_pair()
+	if pair.size() < 2:
+		result["pickup_drop"] = false
+		result["swap_preview"] = false
+		result["undo"] = false
+	else:
+		var first = pair[0]
+		var second = pair[1]
+		var first_slot := int(first["slot_index"])
+		var second_slot := int(second["slot_index"])
+		var first_center: Vector2 = first["node"].position + first["size"] * 0.5
+		_begin_swap_drag(_world_to_screen(first_center))
+		var lifted: bool = swap_dragging == first
+		_move_swap_tile_to(first, second["node"].position)
+		result["swap_preview"] = swap_target_preview == second and swap_target_preview_root != null and is_instance_valid(swap_target_preview_root)
+		_end_swap_drag()
+		await get_tree().create_timer(_motion_duration(SWAP_ANIMATION_TIME) + 0.03).timeout
+		var swapped := int(first["slot_index"]) == second_slot and int(second["slot_index"]) == first_slot
+		result["pickup_drop"] = lifted and swapped and swap_dragging == null
+		var undo_was_available := can_undo_swap()
+		undo_last_swap()
+		await get_tree().create_timer(_motion_duration(SWAP_ANIMATION_TIME) + 0.03).timeout
+		result["undo"] = undo_was_available and int(first["slot_index"]) == first_slot and int(second["slot_index"]) == second_slot
+	debug_force_complete()
+	result["complete"] = completion_emitted
+
+
+func debug_force_complete() -> void:
+	_clear_hint_highlights()
+	_clear_snap_preview()
+	if current_mode == "swap":
+		for tile in swap_tiles:
+			tile["slot_index"] = int(tile["correct_index"])
+			tile["node"].position = _swap_slot_position(int(tile["correct_index"]), _swap_cols(), _swap_rows())
+		_check_swap_complete()
+		return
+	for group in groups.duplicate():
+		if group.locked:
+			continue
+		_send_group_to_world(group, group.anchor_home)
+		group.locked = true
+		group.in_tray = false
+		group.node.position = group.anchor_home
+		group.node.rotation_degrees = 0.0
+		group.node.scale = Vector2.ONE
+		PieceVisualFactoryScript.add_seam_outline(group, _seam_line_width())
+		if not locked_groups.has(group):
+			locked_groups.append(group)
+	tray_groups.clear()
+	_layout_tray(true)
+	_check_complete()
+
+
+func debug_prepare_restore_snapshot() -> Dictionary:
+	hint_count = 2
+	_zoom_view_at(_world_view_screen_rect().get_center(), base_view_scale * 1.45)
+	if current_mode == "swap":
+		var pair := _find_swap_hint_pair()
+		if pair.size() >= 2:
+			var first = pair[0]
+			var second = pair[1]
+			var first_slot := int(first["slot_index"])
+			var second_slot := int(second["slot_index"])
+			swap_history.append({
+				"first": int(first["correct_index"]),
+				"second": int(second["correct_index"]),
+				"first_slot": first_slot,
+				"second_slot": second_slot,
+			})
+			first["slot_index"] = second_slot
+			second["slot_index"] = first_slot
+			first["node"].position = _swap_slot_position(second_slot, _swap_cols(), _swap_rows())
+			second["node"].position = _swap_slot_position(first_slot, _swap_cols(), _swap_rows())
+			undo_available_changed.emit(true)
+	else:
+		var pair := _find_hint_pair()
+		if not pair.is_empty():
+			var active = pair[0]
+			_send_group_to_world(active, active.anchor_home)
+			if _try_snap_chain(active):
+				_lock_group(active)
+		debug_scroll_tray_right()
+	return state_snapshot()
+
+
+func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
+	var actual := state_snapshot()
+	var checks := {
+		"mode": str(actual.get("mode", "")) == str(expected.get("mode", "")),
+		"hint_count": int(actual.get("hint_count", -1)) == int(expected.get("hint_count", -2)),
+		"view": _debug_view_state_matches(actual.get("view", {}), expected.get("view", {})),
+		"tray_scroll": absf(float(actual.get("tray", {}).get("scroll_ratio", 0.0)) - float(expected.get("tray", {}).get("scroll_ratio", 0.0))) <= 0.01,
+	}
+	if current_mode == "swap":
+		checks["pieces"] = _debug_swap_state_matches(actual.get("tiles", []), expected.get("tiles", []))
+		checks["history"] = actual.get("swap_history", []).size() == expected.get("swap_history", []).size()
+	else:
+		checks["pieces"] = _debug_group_state_matches(actual.get("groups", []), expected.get("groups", []))
+		checks["tray_order"] = actual.get("tray_order", []) == expected.get("tray_order", [])
+	var ok := true
+	for value in checks.values():
+		ok = ok and bool(value)
+	return {
+		"mode": current_mode,
+		"ok": ok,
+		"checks": checks,
+		"tray_scroll": {
+			"actual": float(actual.get("tray", {}).get("scroll", 0.0)),
+			"expected": float(expected.get("tray", {}).get("scroll", 0.0)),
+			"actual_ratio": float(actual.get("tray", {}).get("scroll_ratio", 0.0)),
+			"expected_ratio": float(expected.get("tray", {}).get("scroll_ratio", 0.0)),
+		},
+	}
+
+
+func _debug_view_state_matches(actual, expected) -> bool:
+	if typeof(actual) != TYPE_DICTIONARY or typeof(expected) != TYPE_DICTIONARY:
+		return false
+	return absf(float(actual.get("ratio", 1.0)) - float(expected.get("ratio", 1.0))) <= 0.01 \
+		and _json_vector(actual.get("offset", [])).distance_to(_json_vector(expected.get("offset", []))) <= 1.0
+
+
+func _debug_swap_state_matches(actual: Array, expected: Array) -> bool:
+	if actual.size() != expected.size():
+		return false
+	var actual_slots := {}
+	for item in actual:
+		actual_slots[int(item.get("correct_index", -1))] = int(item.get("slot_index", -1))
+	for item in expected:
+		if int(actual_slots.get(int(item.get("correct_index", -1)), -2)) != int(item.get("slot_index", -1)):
+			return false
+	return true
+
+
+func _debug_group_state_matches(actual: Array, expected: Array) -> bool:
+	if actual.size() != expected.size():
+		return false
+	var actual_keys: Array[String] = []
+	var expected_keys: Array[String] = []
+	for item in actual:
+		var ids: Array = item.get("members", []).duplicate()
+		ids.sort()
+		actual_keys.append("|".join(ids))
+	for item in expected:
+		var ids: Array = item.get("members", []).duplicate()
+		ids.sort()
+		expected_keys.append("|".join(ids))
+	actual_keys.sort()
+	expected_keys.sort()
+	return actual_keys == expected_keys
 
 
 func _screen_in_drag_blockers(screen_pos: Vector2) -> bool:
@@ -1218,6 +1582,8 @@ func _start_swap_session() -> bool:
 	source_scale = layout["source_scale"]
 	board_origin = layout["board_origin"]
 	var order := _swap_shuffled_order(cols, rows)
+	swap_history.clear()
+	undo_available_changed.emit(false)
 	for slot_index in range(order.size()):
 		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)
 	fit_view_to_pieces(false)
@@ -1253,7 +1619,7 @@ func _create_swap_tile(correct_index: int, slot_index: int, cols: int, rows: int
 		"uv": uv,
 		"cut_lines": [],
 	}
-	node.add_child(PieceVisualFactoryScript.create_piece_visual(piece, texture))
+	node.add_child(PieceVisualFactoryScript.create_piece_visual(piece, texture, piece_visual_style))
 	var tile := {
 		"node": node,
 		"correct_index": correct_index,
@@ -1478,7 +1844,6 @@ func _add_level_background(level_config: Dictionary) -> void:
 	var viewport_size := get_viewport_rect().size
 	var bg := ColorRect.new()
 	bg.color = _level_background_color(level_config)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.position = Vector2.ZERO
 	bg.size = viewport_size
 	bg.z_index = -101
@@ -1496,7 +1861,6 @@ func _add_level_background(level_config: Dictionary) -> void:
 	bg_image.texture = bg_texture
 	bg_image.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg_image.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg_image.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg_image.position = Vector2.ZERO
 	bg_image.size = viewport_size
 	bg_image.z_index = -100
@@ -1510,6 +1874,51 @@ func _level_background_color(level_config: Dictionary) -> Color:
 		if str(bg.get("type", "color")) == "color":
 			return Color(str(bg.get("color", "#ead8bd")))
 	return Color("#ead8bd")
+
+
+func _piece_visual_style() -> Dictionary:
+	var configured = active_level_config.get("piece_style", {})
+	if edge_contrast_mode == "auto" and typeof(configured) == TYPE_DICTIONARY:
+		var line_value := str(configured.get("line_color", ""))
+		if not line_value.is_empty():
+			var line_color := Color.from_string(line_value, PieceVisualFactoryScript.CUT_LINE_COLOR)
+			var seam_color := Color.from_string(str(configured.get("seam_color", line_value)), line_color)
+			return {
+				"cut_line_color": line_color,
+				"cut_line_lift_color": Color("#D98A43"),
+				"seam_line_color": seam_color,
+			}
+	var use_light := edge_contrast_mode == "light" or (edge_contrast_mode == "auto" and _source_average_luminance() < 0.46)
+	if use_light:
+		return {
+			"cut_line_color": Color(1.0, 0.98, 0.91, 0.90),
+			"cut_line_lift_color": Color(1.0, 0.78, 0.38, 0.96),
+			"seam_line_color": Color(1.0, 0.98, 0.91, 0.40),
+		}
+	return {
+		"cut_line_color": Color(0.16, 0.12, 0.09, 0.78),
+		"cut_line_lift_color": Color(0.78, 0.43, 0.12, 0.90),
+		"seam_line_color": Color(0.0, 0.0, 0.0, 0.26),
+	}
+
+
+func _source_average_luminance() -> float:
+	if source_image == null or source_image.is_empty():
+		return _level_background_color(active_level_config).get_luminance()
+	var width := source_image.get_width()
+	var height := source_image.get_height()
+	var step_x := maxi(1, int(width / 24.0))
+	var step_y := maxi(1, int(height / 24.0))
+	var total := 0.0
+	var count := 0
+	for y in range(0, height, step_y):
+		for x in range(0, width, step_x):
+			var color := source_image.get_pixel(x, y)
+			if color.a <= 0.08:
+				continue
+			total += color.get_luminance()
+			count += 1
+	return total / float(count) if count > 0 else _level_background_color(active_level_config).get_luminance()
 
 
 func _add_board_outline_shadow() -> void:
@@ -1537,7 +1946,7 @@ func _create_group(piece: Dictionary, locked_seed := false) -> void:
 	group_node.rotation_degrees = 0.0 if locked_seed else ([0, 90, 180, 270][int(rng.randi_range(0, 3))] if randomize_piece_rotation else 0.0)
 	group_node.z_index = groups.size() * GROUP_Z_STEP
 	world_root.add_child(group_node)
-	var visual := PieceVisualFactoryScript.create_piece_visual(piece, texture)
+	var visual := PieceVisualFactoryScript.create_piece_visual(piece, texture, piece_visual_style)
 	group_node.add_child(visual)
 	piece["visual"] = visual
 	var group = PieceGroupScript.new(group_node, piece)
@@ -1741,8 +2150,9 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	group.tray_tween = tween
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.parallel().tween_property(group.node, "position", target_position, TRAY_ANIMATION_TIME)
-	tween.parallel().tween_property(group.node, "scale", Vector2.ONE * scale, TRAY_ANIMATION_TIME)
+	var duration := _motion_duration(TRAY_ANIMATION_TIME)
+	tween.parallel().tween_property(group.node, "position", target_position, duration)
+	tween.parallel().tween_property(group.node, "scale", Vector2.ONE * scale, duration)
 	tween.finished.connect(func(g = group) -> void:
 		if is_instance_valid(g.node):
 			g.is_animating = false
@@ -1766,7 +2176,7 @@ func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
 	tray_pending_start_pos = screen_pos
 	tray_pending_total_delta = Vector2.ZERO
 	group.node.z_index = TRAY_DRAG_Z_INDEX
-	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	PieceVisualFactoryScript.set_group_lifted(group, true, self, not reduced_motion)
 
 
 func _end_tray_piece_press() -> void:
@@ -1775,7 +2185,7 @@ func _end_tray_piece_press() -> void:
 	tray_pending_start_pos = Vector2.ZERO
 	tray_pending_total_delta = Vector2.ZERO
 	if group != null and is_instance_valid(group.node):
-		PieceVisualFactoryScript.set_group_lifted(group, false, self)
+		PieceVisualFactoryScript.set_group_lifted(group, false, self, not reduced_motion)
 	_layout_tray(false)
 
 
@@ -1828,7 +2238,7 @@ func _start_tray_scroll_from_pending(screen_pos: Vector2) -> void:
 	tray_pending_start_pos = Vector2.ZERO
 	tray_pending_total_delta = Vector2.ZERO
 	if group != null and is_instance_valid(group.node):
-		PieceVisualFactoryScript.set_group_lifted(group, false, self)
+		PieceVisualFactoryScript.set_group_lifted(group, false, self, not reduced_motion)
 	tray_panning = true
 	tray_pan_last_x = screen_pos.x
 	_pan_tray(accumulated_x)
@@ -1846,7 +2256,8 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	dragging_from_tray = true
 	dragging_tray_index = group.tray_index
 	dragging_original_tray_slot = group.tray_slot
-	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	PieceVisualFactoryScript.set_group_lifted(group, true, self, not reduced_motion)
+	_trigger_haptic("pickup")
 	tray_drag_screen_offset = Vector2.ZERO
 	tray_drag_target_screen_offset = Vector2.ZERO
 	last_drag_screen_pos = screen_pos
@@ -1869,8 +2280,13 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
 		_update_tray_drag_scale(screen_pos)
 		_place_dragging_from_screen(screen_pos)
+		if _tray_area().has_point(screen_pos):
+			_clear_snap_preview()
+		else:
+			_update_snap_preview(dragging)
 		return
 	_move_group_to(dragging, _screen_to_world(screen_pos) + drag_offset)
+	_update_snap_preview(dragging)
 
 
 func _update_tray_drag_scale(screen_pos: Vector2) -> void:
@@ -1894,7 +2310,7 @@ func _update_tray_drag_scale(screen_pos: Vector2) -> void:
 		group.node.scale = Vector2.ONE * lerpf(start_scale, target_scale, t)
 		if group == dragging:
 			_place_dragging_from_screen(last_drag_screen_pos)
-	, 0.0, 1.0, TRAY_DRAG_SCALE_TIME)
+	, 0.0, 1.0, _motion_duration(TRAY_DRAG_SCALE_TIME))
 
 
 func _place_dragging_from_screen(screen_pos: Vector2) -> void:
@@ -1926,7 +2342,7 @@ func _set_tray_drag_target_offset(target: Vector2) -> void:
 	tray_drag_offset_tween.tween_method(func(t: float) -> void:
 		tray_drag_screen_offset = start.lerp(tray_drag_target_screen_offset, t)
 		_place_dragging_from_screen(last_drag_screen_pos)
-	, 0.0, 1.0, 0.12)
+	, 0.0, 1.0, _motion_duration(0.12))
 
 
 func _scatter_position_for_group(group) -> Vector2:
@@ -2250,7 +2666,8 @@ func _begin_drag(screen_pos: Vector2) -> void:
 	dragging = group
 	drag_offset = group.node.position - world_pos
 	_bring_to_front(group)
-	PieceVisualFactoryScript.set_group_lifted(group, true, self)
+	PieceVisualFactoryScript.set_group_lifted(group, true, self, not reduced_motion)
+	_trigger_haptic("pickup")
 	_notify_state_changed()
 
 
@@ -2268,14 +2685,17 @@ func _end_drag() -> void:
 		return
 	var released_group = dragging
 	var released_members: Array = released_group.members.duplicate()
+	_clear_snap_preview()
 	var snapped := _try_snap_chain(dragging)
 	if dragging_from_tray and not snapped:
 		_return_group_to_tray(released_group)
 	elif snapped:
 		_lock_group(released_group)
 		_play_snap_shimmer(released_members)
+	else:
+		_trigger_haptic("drop")
 	_check_complete()
-	PieceVisualFactoryScript.set_group_lifted(released_group, false, self)
+	PieceVisualFactoryScript.set_group_lifted(released_group, false, self, not reduced_motion and not snapped)
 	dragging = null
 	dragging_from_tray = false
 	dragging_tray_index = -1
@@ -2356,12 +2776,14 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 		return
 	if bool(tile.get("is_animating", false)):
 		return
+	_clear_swap_target_preview()
 	_clear_hint_highlights()
 	swap_dragging = tile
 	swap_drag_start_slot = int(tile["slot_index"])
 	swap_drag_offset = tile["node"].position - world_pos
 	_bring_swap_tile_to_front(tile)
 	_set_swap_tile_lifted(tile, true)
+	_trigger_haptic("pickup")
 	_notify_state_changed()
 
 
@@ -2369,17 +2791,25 @@ func _end_swap_drag() -> void:
 	if swap_dragging == null:
 		return
 	var released = swap_dragging
-	var center: Vector2 = released["node"].position + released["size"] * 0.5
-	var target = _swap_tile_at_world(center, released)
+	var target = _swap_target_for_drag(released)
+	_clear_swap_target_preview()
 	if target == null:
 		_animate_swap_tile_to(released, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
 	else:
 		var target_slot := int(target["slot_index"])
+		swap_history.append({
+			"first": int(released["correct_index"]),
+			"second": int(target["correct_index"]),
+			"first_slot": swap_drag_start_slot,
+			"second_slot": target_slot,
+		})
 		released["slot_index"] = target_slot
 		target["slot_index"] = swap_drag_start_slot
 		_animate_swap_tile_to(released, _swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
 		_animate_swap_tile_to(target, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
 		status_changed.emit(_bt("swapped"))
+		undo_available_changed.emit(true)
+		_trigger_haptic("swap")
 	_set_swap_tile_lifted(released, false)
 	swap_dragging = null
 	swap_drag_start_slot = -1
@@ -2401,7 +2831,73 @@ func _move_swap_tile_to(tile, target_position: Vector2) -> void:
 	elif bounds.end.y > area.end.y:
 		delta.y = area.end.y - bounds.end.y
 	tile["node"].position = target_position + delta
+	_update_swap_target_preview(tile)
 	_notify_state_changed()
+
+
+func _swap_target_for_drag(tile):
+	if tile == null or not is_instance_valid(tile["node"]):
+		return null
+	var center: Vector2 = tile["node"].position + tile["size"] * 0.5
+	return _swap_tile_at_world(center, tile)
+
+
+func _update_swap_target_preview(tile) -> void:
+	var target = _swap_target_for_drag(tile)
+	if target == swap_target_preview:
+		return
+	_clear_swap_target_preview()
+	if target == null:
+		return
+	swap_target_preview = target
+	var size: Vector2 = target.get("size", Vector2.ZERO)
+	var polygon := PackedVector2Array([Vector2.ZERO, Vector2(size.x, 0.0), size, Vector2(0.0, size.y)])
+	var root := Node2D.new()
+	root.name = "swap_target_preview"
+	root.z_index = 48
+	target["node"].add_child(root)
+	swap_target_preview_root = root
+	var fill := Polygon2D.new()
+	fill.polygon = polygon
+	fill.color = SWAP_TARGET_PREVIEW_FILL
+	root.add_child(fill)
+	var line := Line2D.new()
+	line.name = "swap_target_preview_outline"
+	line.points = polygon
+	line.closed = true
+	line.default_color = SWAP_TARGET_PREVIEW_COLOR
+	line.width = SWAP_TARGET_PREVIEW_SCREEN_WIDTH
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	line.antialiased = true
+	line.z_index = 1
+	line.set_meta("screen_width", SWAP_TARGET_PREVIEW_SCREEN_WIDTH)
+	root.add_child(line)
+	swap_target_preview_line = line
+	_update_hint_line_width(line)
+	_trigger_haptic("ready")
+	if reduced_motion:
+		return
+	root.modulate.a = 0.68
+	swap_target_preview_tween = create_tween()
+	swap_target_preview_tween.bind_node(root)
+	swap_target_preview_tween.set_loops()
+	swap_target_preview_tween.set_ease(Tween.EASE_IN_OUT)
+	swap_target_preview_tween.set_trans(Tween.TRANS_SINE)
+	swap_target_preview_tween.tween_property(root, "modulate:a", 1.0, 0.34)
+	swap_target_preview_tween.tween_property(root, "modulate:a", 0.68, 0.34)
+
+
+func _clear_swap_target_preview() -> void:
+	if swap_target_preview_tween != null and swap_target_preview_tween.is_valid():
+		swap_target_preview_tween.kill()
+	swap_target_preview_tween = null
+	if swap_target_preview_root != null and is_instance_valid(swap_target_preview_root):
+		swap_target_preview_root.queue_free()
+	swap_target_preview = null
+	swap_target_preview_root = null
+	swap_target_preview_line = null
 
 
 func _swap_tile_at_world(world_pos: Vector2, exclude = null):
@@ -2437,6 +2933,9 @@ func _set_swap_tile_lifted(tile, lifted: bool) -> void:
 	if not is_instance_valid(node):
 		return
 	var target_scale := Vector2(1.025, 1.025) if lifted else Vector2.ONE
+	if reduced_motion:
+		node.scale = target_scale
+		return
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
@@ -2450,13 +2949,47 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(tile["node"], "position", target_position, SWAP_ANIMATION_TIME)
+	tween.tween_property(tile["node"], "position", target_position, _motion_duration(SWAP_ANIMATION_TIME))
 	tween.finished.connect(func(t = tile) -> void:
 		if is_instance_valid(t["node"]):
 			t["is_animating"] = false
 		_check_swap_complete()
 		_notify_state_changed(true)
 	)
+
+
+func can_undo_swap() -> bool:
+	return current_mode == "swap" and not swap_history.is_empty()
+
+
+func undo_last_swap() -> void:
+	if not can_undo_swap() or swap_dragging != null:
+		return
+	for tile in swap_tiles:
+		if bool(tile.get("is_animating", false)):
+			return
+	var entry: Dictionary = swap_history.pop_back()
+	var first = _swap_tile_by_correct_index(int(entry.get("first", -1)))
+	var second = _swap_tile_by_correct_index(int(entry.get("second", -1)))
+	if first == null or second == null:
+		undo_available_changed.emit(not swap_history.is_empty())
+		return
+	_clear_hint_highlights()
+	first["slot_index"] = int(entry.get("first_slot", first["slot_index"]))
+	second["slot_index"] = int(entry.get("second_slot", second["slot_index"]))
+	_animate_swap_tile_to(first, _swap_slot_position(int(first["slot_index"]), _swap_cols(), _swap_rows()))
+	_animate_swap_tile_to(second, _swap_slot_position(int(second["slot_index"]), _swap_cols(), _swap_rows()))
+	status_changed.emit(_bt("undone"))
+	undo_available_changed.emit(not swap_history.is_empty())
+	_trigger_haptic("swap")
+	_notify_state_changed(true)
+
+
+func _swap_tile_by_correct_index(correct_index: int):
+	for tile in swap_tiles:
+		if int(tile.get("correct_index", -1)) == correct_index:
+			return tile
+	return null
 
 
 func _show_swap_hint() -> void:
@@ -2518,6 +3051,7 @@ func _check_swap_complete() -> void:
 		if int(tile["slot_index"]) != int(tile["correct_index"]):
 			return
 	completion_emitted = true
+	_trigger_haptic("complete")
 	completed.emit()
 
 
@@ -2541,7 +3075,7 @@ func _rotate_group(group) -> void:
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "rotation_degrees", target, 0.16)
+	tween.tween_property(group.node, "rotation_degrees", target, _motion_duration(0.16))
 	tween.finished.connect(func() -> void:
 		if not groups.has(group) or not is_instance_valid(group.node):
 			return
@@ -2564,6 +3098,71 @@ func _refresh_group_z_indices() -> void:
 		groups[i].node.z_index = i * GROUP_Z_STEP
 
 
+func _update_snap_preview(active) -> void:
+	if active == null or active.locked or not is_instance_valid(active.node) or absf(active.node.scale.x - 1.0) > 0.04:
+		_clear_snap_preview()
+		return
+	var match := _snap_match_data(active)
+	if match.is_empty():
+		_clear_snap_preview()
+		return
+	var other = match.get("other", null)
+	var key := "%s>%s" % [_debug_group_id(active), _debug_group_id(other)]
+	if key != snap_preview_key:
+		_clear_snap_preview()
+		snap_preview_key = key
+		_add_snap_preview_outline(match.get("active_member", {}))
+		_add_snap_preview_outline(match.get("other_member", {}))
+	var distance := float(match.get("distance", _snap_tolerance()))
+	var correction: Vector2 = match.get("correction", Vector2.ZERO)
+	if distance > 0.5:
+		active.node.position += correction * SNAP_PREVIEW_PULL
+	if snap_ready_key != key:
+		snap_ready_key = key
+		_trigger_haptic("ready")
+
+
+func _add_snap_preview_outline(member) -> void:
+	if typeof(member) != TYPE_DICTIONARY:
+		return
+	var visual: Node2D = member.get("visual", null)
+	if visual == null or not is_instance_valid(visual):
+		return
+	var line := Line2D.new()
+	line.name = "snap_preview_outline"
+	line.points = member.get("polygon", PackedVector2Array())
+	line.closed = true
+	line.default_color = SNAP_PREVIEW_COLOR
+	line.width = SNAP_PREVIEW_SCREEN_WIDTH
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	line.antialiased = true
+	line.z_index = 42
+	line.set_meta("screen_width", SNAP_PREVIEW_SCREEN_WIDTH)
+	visual.add_child(line)
+	snap_preview_lines.append(line)
+	_update_hint_line_width(line)
+
+
+func _clear_snap_preview() -> void:
+	for line in snap_preview_lines:
+		if line != null and is_instance_valid(line):
+			line.queue_free()
+	snap_preview_lines.clear()
+	snap_preview_key = ""
+	snap_ready_key = ""
+
+
+func _refresh_snap_preview_line_widths() -> void:
+	var valid: Array[Line2D] = []
+	for line in snap_preview_lines:
+		if line != null and is_instance_valid(line):
+			_update_hint_line_width(line)
+			valid.append(line)
+	snap_preview_lines = valid
+
+
 func _try_snap_chain(active) -> bool:
 	if active == null or active.locked:
 		return false
@@ -2571,7 +3170,8 @@ func _try_snap_chain(active) -> bool:
 	var progressed := true
 	while progressed:
 		progressed = false
-		var other = SnapSolverScript.find_match(active, _locked_snap_targets(active), _snap_tolerance(), ROTATION_TOLERANCE)
+		var match := _snap_match_data(active)
+		var other = match.get("other", null)
 		if other != null:
 			_clear_hint_highlights()
 			active.absorb(other, SNAP_VISUAL_GAP)
@@ -2584,10 +3184,15 @@ func _try_snap_chain(active) -> bool:
 				selected_group = active
 			active.node.scale = Vector2.ONE
 			PieceVisualFactoryScript.add_seam_outline(active, _seam_line_width())
-			_pulse_node(active.node)
 			snapped = true
 			progressed = true
+	if snapped:
+		_trigger_haptic("snap")
 	return snapped
+
+
+func _snap_match_data(active) -> Dictionary:
+	return SnapSolverScript.find_match_data(active, _locked_snap_targets(active), _snap_tolerance(), ROTATION_TOLERANCE)
 
 
 func _seam_line_width() -> float:
@@ -2595,6 +3200,8 @@ func _seam_line_width() -> float:
 
 
 func _play_snap_shimmer(members: Array) -> void:
+	if reduced_motion:
+		return
 	var material := ShaderMaterial.new()
 	material.shader = _shimmer_shader()
 	material.set_shader_parameter("progress", 0.0)
@@ -2726,6 +3333,7 @@ func _check_complete() -> void:
 			return
 	if not completion_emitted:
 		completion_emitted = true
+		_trigger_haptic("complete")
 		completed.emit()
 
 
@@ -2817,6 +3425,8 @@ func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vect
 	parent.add_child(root)
 	hint_highlighted_nodes.append(root)
 	_redraw_dashed_outline(root, polygons, 0.0)
+	if reduced_motion:
+		return root
 	var tween := create_tween()
 	tween.bind_node(root)
 	tween.set_loops()
@@ -2874,6 +3484,8 @@ func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, ga
 func _hint_breathe_group(group) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
+	if reduced_motion:
+		return
 	var node: Node2D = group.node
 	var base_scale: float = node.scale.x
 	var base_position: Vector2 = node.position
@@ -2914,7 +3526,7 @@ func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: 
 	_update_hint_line_width(line)
 	if track:
 		hint_highlighted_lines.append(line)
-	if not animate:
+	if not animate or reduced_motion:
 		return line
 	var tween := create_tween()
 	tween.set_loops(5)
@@ -2945,15 +3557,33 @@ func _update_hint_line_width(line) -> void:
 
 
 func _auto_clear_hint_highlights(token: int) -> void:
-	while token == hint_highlight_token:
-		var remaining_msec := hint_expires_at_msec - Time.get_ticks_msec()
-		if remaining_msec <= 0:
-			_clear_hint_highlights()
-			return
-		await get_tree().create_timer(float(remaining_msec) / 1000.0).timeout
+	_stop_hint_clear_timer()
+	if token != hint_highlight_token:
+		return
+	var remaining_msec := hint_expires_at_msec - Time.get_ticks_msec()
+	if remaining_msec <= 0:
+		_clear_hint_highlights()
+		return
+	hint_clear_timer = Timer.new()
+	hint_clear_timer.one_shot = true
+	hint_clear_timer.wait_time = maxf(0.01, float(remaining_msec) / 1000.0)
+	add_child(hint_clear_timer)
+	hint_clear_timer.timeout.connect(func() -> void:
+		if token == hint_highlight_token:
+			_auto_clear_hint_highlights(token)
+	)
+	hint_clear_timer.start()
+
+
+func _stop_hint_clear_timer() -> void:
+	if hint_clear_timer != null and is_instance_valid(hint_clear_timer):
+		hint_clear_timer.stop()
+		hint_clear_timer.queue_free()
+	hint_clear_timer = null
 
 
 func _clear_hint_highlights() -> void:
+	_stop_hint_clear_timer()
 	hint_highlight_token += 1
 	active_hint_key = ""
 	hint_expires_at_msec = 0
@@ -3072,16 +3702,6 @@ func _neighbor_member_pair(a, b) -> Array:
 			if am["neighbors"].has(bm["id"]) or bm["neighbors"].has(am["id"]):
 				return [am, bm]
 	return []
-
-
-func _pulse_node(node: Node2D) -> void:
-	if not is_instance_valid(node):
-		return
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(node, "scale", Vector2(1.05, 1.05), 0.08)
-	tween.tween_property(node, "scale", Vector2.ONE, 0.12)
 
 
 func _hint_pulse_node(node: Node2D) -> void:

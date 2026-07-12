@@ -104,13 +104,52 @@ func play_state_key(topic: Dictionary, level: Dictionary, play_mode: String) -> 
 	]
 
 
-func tutorial_seen() -> bool:
+func tutorial_seen(play_mode := "") -> bool:
+	var key := mode_key(play_mode)
+	if not key.is_empty():
+		var modes: Dictionary = progress.get("tutorial_seen_modes", {})
+		if modes.has(key):
+			return bool(modes[key])
 	return bool(progress.get("tutorial_seen", progress.get("_tutorial_seen", false)))
 
 
-func mark_tutorial_seen() -> void:
-	progress["tutorial_seen"] = true
-	progress["_tutorial_seen"] = true
+func mark_tutorial_seen(play_mode := "") -> void:
+	var key := mode_key(play_mode)
+	if key.is_empty():
+		progress["tutorial_seen"] = true
+		progress["_tutorial_seen"] = true
+	else:
+		var modes: Dictionary = progress.get("tutorial_seen_modes", {})
+		modes[key] = true
+		progress["tutorial_seen_modes"] = modes
+	save_to_disk()
+
+
+func haptics_enabled() -> bool:
+	return bool(progress.get("haptics_enabled", true))
+
+
+func set_haptics_enabled(enabled: bool) -> void:
+	progress["haptics_enabled"] = enabled
+	save_to_disk()
+
+
+func reduced_motion_enabled() -> bool:
+	return bool(progress.get("reduced_motion_enabled", false))
+
+
+func set_reduced_motion_enabled(enabled: bool) -> void:
+	progress["reduced_motion_enabled"] = enabled
+	save_to_disk()
+
+
+func edge_contrast_mode() -> String:
+	var mode := str(progress.get("edge_contrast_mode", "auto"))
+	return mode if ["auto", "dark", "light"].has(mode) else "auto"
+
+
+func set_edge_contrast_mode(mode: String) -> void:
+	progress["edge_contrast_mode"] = mode if ["auto", "dark", "light"].has(mode) else "auto"
 	save_to_disk()
 
 

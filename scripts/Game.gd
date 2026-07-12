@@ -21,9 +21,7 @@ const THEME_LOGO_PATH := "res://assets/ui/theme-list/jigcat-logo.png"
 const THEME_SQUARE_BUTTON_PATH := "res://assets/ui/theme-list/square-button-base.png"
 const THEME_CIRCLE_BUTTON_PATH := "res://assets/ui/theme-list/circle-arrow-button-base.png"
 const THEME_SETTINGS_ICON_PATH := "res://assets/ui/theme-list/settings-icon.png"
-const THEME_ALBUM_ICON_PATH := "res://assets/ui/theme-list/album-icon.png"
 const THEME_ARROW_ICON_PATH := "res://assets/ui/theme-list/arrow-right-icon.png"
-const SHOW_ALBUM_ENTRY := false
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const ConfettiEffectScript := preload("res://scripts/ConfettiEffect.gd")
 const DevTestPanelScript := preload("res://scripts/DevTestPanel.gd")
@@ -42,6 +40,40 @@ const HUD_BLOCKER_PADDING := 18.0
 const TOPICS_SCROLL_FRICTION := 7.0
 const TOPICS_TAP_THRESHOLD := 14.0
 const TOPICS_INERTIA_MIN_SPEED := 40.0
+const UNLOCK_BURN_SHADER_CODE := """
+shader_type canvas_item;
+
+uniform float progress : hint_range(0.0, 1.0) = 0.0;
+uniform sampler2D noise_tex : repeat_enable, filter_linear;
+uniform vec2 seed_points[4];
+uniform float aspect = 0.75;
+uniform float field_max = 1.0;
+
+void fragment() {
+	vec4 tex = texture(TEXTURE, UV);
+	vec2 p = vec2(UV.x * aspect, UV.y);
+	float d = 1e9;
+	for (int i = 0; i < 4; i++) {
+		vec2 s = vec2(seed_points[i].x * aspect, seed_points[i].y);
+		d = min(d, distance(p, s));
+	}
+	float n = texture(noise_tex, UV * 1.2).r;
+	float fine = texture(noise_tex, UV * 4.0).r;
+	float field = d / 1.55 + (n - 0.5) * 0.07;
+	float front = mix(-0.04, field_max, progress);
+	float edge = 0.05 + 0.02 * n;
+	if (field < front) {
+		discard;
+	}
+	float glow = 1.0 - smoothstep(front, front + edge, field);
+	float char_band = 1.0 - smoothstep(front + edge * 0.5, front + edge * 2.2, field);
+	vec3 color = mix(tex.rgb, tex.rgb * 0.22, char_band * 0.9);
+	float flicker = 0.8 + 0.2 * sin(TIME * 7.0 + fine * 12.0);
+	vec3 ember = mix(vec3(0.95, 0.25, 0.03), vec3(1.0, 0.85, 0.30), glow * flicker);
+	color = mix(color, ember, glow);
+	COLOR = vec4(color, tex.a);
+}
+"""
 const HUD_DEBUG_MEASUREMENTS := false
 const BUTTON_BOUNDS_DEBUG := false
 const BUTTON_BOUNDS_DEBUG_COLOR := Color(0.16, 0.56, 1.0, 0.20)
@@ -69,6 +101,9 @@ const UI_TEXT := {
 		"status_missing_mode": "This level JSON is missing data for the current mode.",
 		"pause": "Paused",
 		"resume": "Resume",
+		"continue": "Continue",
+		"in_progress": "In progress",
+		"undo": "Undo",
 		"restart": "Restart",
 		"return_levels": "Level list",
 		"return_topics": "Topics",
@@ -78,6 +113,11 @@ const UI_TEXT := {
 		"music": "Music",
 		"sfx": "Sound effects",
 		"haptics": "Haptics",
+		"reduce_motion": "Reduce motion",
+		"piece_edges": "Piece edge contrast",
+		"edge_auto": "Automatic",
+		"edge_dark": "Dark",
+		"edge_light": "Light",
 		"random_rotation": "Random piece rotation (polygon / jigsaw)",
 		"random_rotation_next": "Random rotation changes apply after restarting or entering another level.",
 		"close": "Close",
@@ -96,6 +136,7 @@ const UI_TEXT := {
 		"hint_none": "No nearby pieces can be hinted right now.",
 		"hint_pair": "The highlighted pieces fit together.",
 		"swapped": "Two tiles swapped.",
+		"undone": "Last swap undone.",
 		"pan_hint": "Drag the tablecloth to move the view. Pinch to zoom."
 	},
 	"zh": {
@@ -120,6 +161,9 @@ const UI_TEXT := {
 		"status_missing_mode": "关卡 JSON 缺少当前模式配置。",
 		"pause": "已暂停",
 		"resume": "继续游戏",
+		"continue": "继续",
+		"in_progress": "进行中",
+		"undo": "撤销",
 		"restart": "重新开始",
 		"return_levels": "返回关卡列表",
 		"return_topics": "返回主题选择",
@@ -129,6 +173,11 @@ const UI_TEXT := {
 		"music": "音乐",
 		"sfx": "音效",
 		"haptics": "震动反馈",
+		"reduce_motion": "减少动态效果",
+		"piece_edges": "碎片边线对比度",
+		"edge_auto": "自动",
+		"edge_dark": "深色",
+		"edge_light": "浅色",
 		"random_rotation": "碎片随机旋转（多边形 / 凹凸）",
 		"random_rotation_next": "随机旋转设置将在重新开始或进入下一关后生效。",
 		"close": "关闭",
@@ -147,6 +196,7 @@ const UI_TEXT := {
 		"hint_none": "暂时没有可提示的相邻碎片。",
 		"hint_pair": "高亮的两块可以拼在一起。",
 		"swapped": "已交换两块图片。",
+		"undone": "已撤销上一次交换。",
 		"pan_hint": "拖动桌布可移动视角，双指可缩放。"
 	},
 	"ja": {
@@ -171,6 +221,9 @@ const UI_TEXT := {
 		"status_missing_mode": "このレベル JSON には現在のモード設定がありません。",
 		"pause": "一時停止",
 		"resume": "続ける",
+		"continue": "続きから",
+		"in_progress": "進行中",
+		"undo": "元に戻す",
 		"restart": "最初から",
 		"return_levels": "レベル一覧",
 		"return_topics": "テーマへ",
@@ -180,6 +233,11 @@ const UI_TEXT := {
 		"music": "音楽",
 		"sfx": "効果音",
 		"haptics": "振動",
+		"reduce_motion": "視差効果を減らす",
+		"piece_edges": "ピース境界線",
+		"edge_auto": "自動",
+		"edge_dark": "濃い色",
+		"edge_light": "明るい色",
 		"random_rotation": "ピースをランダム回転（ポリゴン / ジグソー）",
 		"random_rotation_next": "ランダム回転の変更は再開または次のレベルから反映されます。",
 		"close": "閉じる",
@@ -198,6 +256,7 @@ const UI_TEXT := {
 		"hint_none": "今はヒントにできる隣接ピースがありません。",
 		"hint_pair": "ハイライトされた 2 つはつながります。",
 		"swapped": "2 枚のタイルを交換しました。",
+		"undone": "直前の交換を元に戻しました。",
 		"pan_hint": "背景をドラッグして移動し、ピンチでズームできます。"
 	}
 }
@@ -262,11 +321,17 @@ var topics_island_items: Array[Dictionary] = []
 
 var status_label: Label
 var zoom_label: Label
+var swap_undo_button: Button
 var hud_blocker_controls: Array[Control] = []
 var rounded_topic_cover_cache: Dictionary = {}
 var rounded_level_thumbnail_cache: Dictionary = {}
+var unlock_burn_shader: Shader = null
+var unlock_burn_noise: Texture2D = null
+var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
 var rounded_complete_image_cache: Dictionary = {}
 var active_locale := "en"
+var newly_unlocked_topic_id := ""
+var newly_unlocked_level_id := ""
 
 
 func _ready() -> void:
@@ -296,6 +361,8 @@ func _ready() -> void:
 	puzzle_board.zoom_changed.connect(_set_zoom_label)
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
+	puzzle_board.undo_available_changed.connect(_set_swap_undo_available)
+	puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
 	add_child(puzzle_board)
 	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
 	ui_layer = CanvasLayer.new()
@@ -374,7 +441,7 @@ func debug_restart_current_level() -> void:
 		return
 	_close_modal()
 	progress_store.clear_play_state(current_topic, current_level, current_mode)
-	_show_game(current_topic, current_level, current_mode)
+	_show_game(current_topic, current_level, current_mode, true)
 
 
 func debug_apply_viewport_preset(size: Vector2i) -> void:
@@ -453,6 +520,12 @@ func debug_dump_state() -> void:
 	print(JSON.stringify(state, "\t"))
 
 
+func debug_run_current_interaction_smoke() -> Dictionary:
+	if current_screen != "game" or puzzle_board == null:
+		return {"ok": false, "reason": "no_active_game"}
+	return await puzzle_board.debug_run_interaction_smoke()
+
+
 func _debug_refresh_current_screen() -> void:
 	if current_screen == "game" and not current_topic.is_empty() and not current_level.is_empty() and not current_mode.is_empty():
 		_show_game(current_topic, current_level, current_mode)
@@ -500,6 +573,7 @@ func _puzzle_board_texts() -> Dictionary:
 		"hint_none": _t("hint_none"),
 		"hint_pair": _t("hint_pair"),
 		"swapped": _t("swapped"),
+		"undone": _t("undone"),
 		"status_swap": _t("status_swap"),
 		"pan_hint": _t("pan_hint"),
 	}
@@ -531,7 +605,23 @@ func _clear_board() -> void:
 		puzzle_board.clear()
 
 
+func _persist_current_puzzle_state() -> void:
+	if puzzle_board == null or current_topic.is_empty() or current_level.is_empty() or current_mode.is_empty():
+		return
+	if not puzzle_board.should_persist_state():
+		return
+	progress_store.save_play_state(current_topic, current_level, current_mode, puzzle_board.state_snapshot())
+
+
+func _ui_motion_reduced() -> bool:
+	return progress_store.reduced_motion_enabled()
+
+
 func _animate_screen_in(control: Control) -> void:
+	if _ui_motion_reduced():
+		control.modulate.a = 1.0
+		control.position.y = 0.0
+		return
 	control.modulate.a = 0.0
 	control.position.y = 18.0
 	var tween := create_tween()
@@ -542,7 +632,22 @@ func _animate_screen_in(control: Control) -> void:
 	tween.tween_property(control, "position:y", 0.0, 0.24)
 
 
+func _fade_control_in(control: Control) -> void:
+	if _ui_motion_reduced():
+		control.modulate.a = 1.0
+		return
+	control.modulate.a = 0.0
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(control, "modulate:a", 1.0, 0.24)
+
+
 func _animate_modal_panel(panel: Control) -> void:
+	if _ui_motion_reduced():
+		panel.modulate.a = 1.0
+		panel.scale = Vector2.ONE
+		return
 	panel.modulate.a = 0.0
 	panel.scale = Vector2(0.94, 0.94)
 	await get_tree().process_frame
@@ -573,6 +678,9 @@ func _wire_button_animation(button: BaseButton) -> void:
 
 func _tween_control_scale(control: Control, target: Vector2, duration: float) -> void:
 	if not is_instance_valid(control):
+		return
+	if _ui_motion_reduced():
+		control.scale = target
 		return
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
@@ -634,7 +742,7 @@ func _rounded_level_thumbnail_texture(image_path: String, target_size: Vector2i,
 	var cache_key := "%s@%dx%d@%d" % [image_path, target_size.x, target_size.y, radius]
 	if rounded_level_thumbnail_cache.has(cache_key):
 		return rounded_level_thumbnail_cache[cache_key]
-	var source_texture := repository.cached_texture(image_path)
+	var source_texture := repository.texture_from_file(image_path)
 	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
 		return source_texture
 	var image := source_texture.get_image()
@@ -987,6 +1095,7 @@ func _show_last_topic_levels() -> void:
 
 
 func _show_topics() -> void:
+	_persist_current_puzzle_state()
 	current_screen = "topics"
 	_clear_ui()
 	_clear_board()
@@ -1002,14 +1111,12 @@ func _show_topics() -> void:
 	topics_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen_root.add_child(topics_content)
 	var columns := 2 if viewport_size.x / maxf(1.0, viewport_size.y) >= 0.65 else 1
-	var side_margin := 14.0 * ui_scale
-	var gap := 12.0 * ui_scale
+	var side_margin := 18.0 * ui_scale
+	var gap := 6.0 * ui_scale
 	var card_width := (viewport_size.x - side_margin * 2.0 - gap * float(columns - 1)) / float(columns)
 	var card_height := card_width * _theme_card_aspect()
 	var count := topics.size()
-	var rows_total := int(ceil(float(count) / float(columns)))
-	var grid_height := float(rows_total) * card_height + maxf(0.0, float(rows_total - 1)) * gap
-	var top := _grid_top_offset(_theme_topbar_height(ui_scale), grid_height, ui_scale)
+	var top := _grid_top_offset(_theme_topbar_height(ui_scale), ui_scale)
 	var y := top
 	if topics.is_empty():
 		var empty := _empty_topic_message()
@@ -1020,9 +1127,7 @@ func _show_topics() -> void:
 		var topic: Dictionary = topics[index]
 		var col := index % columns
 		var row := index / columns
-		var items_in_row := mini(columns, count - row * columns)
-		var row_offset := float(columns - items_in_row) * (card_width + gap) * 0.5
-		var x := side_margin + row_offset + float(col) * (card_width + gap)
+		var x := side_margin + float(col) * (card_width + gap)
 		y = top + float(row) * (card_height + gap)
 		var card := _theme_card(topic, card_width, ui_scale)
 		card.position = Vector2(x, y)
@@ -1042,11 +1147,7 @@ func _show_topics() -> void:
 	screen_root.add_child(catcher)
 	screen_root.add_child(_theme_list_topbar(ui_scale))
 	_apply_topics_scroll()
-	topics_content.modulate.a = 0.0
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(topics_content, "modulate:a", 1.0, 0.24)
+	_fade_control_in(topics_content)
 
 
 func _topics_ui_scale() -> float:
@@ -1055,12 +1156,8 @@ func _topics_ui_scale() -> float:
 	return clampf(get_viewport_rect().size.x / 390.0, 1.0, 3.3)
 
 
-func _grid_top_offset(topbar_bottom: float, grid_height: float, ui_scale: float) -> float:
-	# when the grid doesn't fill the screen, push it down a bit so short
-	# lists read as balanced instead of hugging the top bar
-	var viewport_height := get_viewport_rect().size.y
-	var usable := viewport_height - topbar_bottom - 24.0 * ui_scale
-	return topbar_bottom + 10.0 * ui_scale + maxf(0.0, (usable - grid_height) * 0.35)
+func _grid_top_offset(topbar_bottom: float, ui_scale: float) -> float:
+	return topbar_bottom + 10.0 * ui_scale
 
 
 func _theme_topbar_height(ui_scale: float) -> float:
@@ -1085,23 +1182,22 @@ func _add_theme_list_background() -> void:
 func _theme_list_topbar(ui_scale: float) -> Control:
 	var viewport_width := get_viewport_rect().size.x
 	var bar := Control.new()
+	bar.name = "theme_topbar"
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_bottom = _theme_topbar_height(ui_scale)
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var button_size := 52.0 * ui_scale
+	var button_size := 64.0 * ui_scale
 	var side_margin := 20.0 * ui_scale
 	var settings_button := _theme_square_button(THEME_SETTINGS_ICON_PATH, _show_settings_modal, _t("settings"), button_size)
-	settings_button.position = Vector2(side_margin, 18.0 * ui_scale)
+	settings_button.name = "theme_settings_button"
+	settings_button.position = Vector2(viewport_width - side_margin - button_size, 18.0 * ui_scale)
 	bar.add_child(settings_button)
-	if SHOW_ALBUM_ENTRY:
-		var album_button := _theme_square_button(THEME_ALBUM_ICON_PATH, _show_album, _t("album"), button_size)
-		album_button.position = Vector2(viewport_width - side_margin - button_size, 18.0 * ui_scale)
-		bar.add_child(album_button)
 	var logo := TextureRect.new()
+	logo.name = "theme_logo"
 	logo.texture = repository.cached_texture(THEME_LOGO_PATH)
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	var logo_width := minf(viewport_width * 0.46, 220.0 * ui_scale)
+	var logo_width := minf(viewport_width * 0.49, 230.0 * ui_scale)
 	var logo_height := logo_width * 0.5
 	logo.position = Vector2((viewport_width - logo_width) * 0.5, 4.0 * ui_scale)
 	logo.size = Vector2(logo_width, logo_height)
@@ -1144,7 +1240,7 @@ func _theme_square_button(icon_path: String, action: Callable, tooltip: String, 
 
 
 func _theme_card_aspect() -> float:
-	return 0.38
+	return 0.285
 
 
 func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Control:
@@ -1154,10 +1250,11 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 	var total := _topic_available_mode_total(topic)
 	var ratio := 0.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
 	var card := Control.new()
+	card.name = "theme_card_%s" % str(topic.get("id", ""))
 	card.custom_minimum_size = Vector2(card_width, card_height)
 	card.size = card.custom_minimum_size
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var card_radius := int(card_height * 0.12)
+	var card_radius := int(card_height * 0.10)
 	var base := Panel.new()
 	base.name = "theme_card_base"
 	base.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1174,12 +1271,12 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 	base.add_theme_stylebox_override("panel", base_style)
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(base)
-	var pad := 6.0 * ui_scale
+	var pad := 5.0 * ui_scale
 	var top_y := pad
 	var bottom_y := card_height - pad
 	var cover_height := card_height - pad * 2.0
-	var cover_width := cover_height * 16.0 / 9.0
-	var cover_radius := int(card_radius * 0.7)
+	var cover_width := cover_height * 1.58
+	var cover_radius := int(card_radius * 0.75)
 	var cover_texture := _rounded_topic_cover_texture(topic, Vector2i(int(cover_width), int(cover_height)), cover_radius)
 	if cover_texture != null:
 		var cover_rect := TextureRect.new()
@@ -1196,41 +1293,59 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 		cover.name = "theme_card_cover"
 		cover.position = Vector2(pad, top_y)
 		cover.size = Vector2(cover_width, cover_height)
-		cover.add_theme_stylebox_override("panel", _rounded_panel_style(topic_color.lightened(0.08), cover_radius))
+		cover.add_theme_stylebox_override("panel", _rounded_panel_style(Color("#FFF5E3").lerp(topic_color, 0.26), cover_radius))
 		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(cover)
-	var text_x := pad + cover_width + card_width * 0.035
-	var circle_size := card_height * 0.26
-	var right_edge := card_width - pad - card_width * 0.015
+		var fallback_path := str(topic.get("island", ""))
+		var fallback_texture := repository.cached_texture(fallback_path) if not fallback_path.is_empty() else null
+		if fallback_texture != null:
+			var art := TextureRect.new()
+			art.name = "theme_card_cover_art"
+			art.texture = fallback_texture
+			art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			var art_inset := cover_height * 0.035
+			art.position = Vector2(pad + art_inset, top_y + art_inset)
+			art.size = Vector2(cover_width - art_inset * 2.0, cover_height - art_inset * 2.0)
+			art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card.add_child(art)
+	var text_x := pad + cover_width + card_width * 0.04
+	var circle_size := card_height * 0.38
+	var right_edge := card_width - pad - card_width * 0.025
+	var badge_size := Vector2(card_height * 0.36, card_height * 0.18)
+	var badge_position := Vector2(right_edge - badge_size.x, top_y + card_height * 0.07)
 	var title := Label.new()
+	title.name = "theme_card_title"
 	title.text = str(topic.get("name", ""))
-	title.position = Vector2(text_x, top_y + card_height * 0.02)
-	title.size = Vector2(right_edge - text_x, card_height * 0.24)
+	title.position = Vector2(text_x, top_y + card_height * 0.14)
+	title.size = Vector2(maxf(0.0, badge_position.x - text_x - card_width * 0.02), card_height * 0.24)
 	title.clip_text = true
-	title.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", maxi(16, int(card_height * 0.17)))
 	title.add_theme_color_override("font_color", brown)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(title)
-	var bar_height := card_height * 0.06
-	var bar_width := maxf(card_width * 0.16, right_edge - circle_size - card_width * 0.02 - text_x)
+	var bar_height := card_height * 0.085
+	var available_bar_width := right_edge - circle_size - card_width * 0.025 - text_x
+	var bar_width := minf(card_width * 0.32, maxf(card_width * 0.22, available_bar_width))
 	var bar := _topic_progress_bar(done, total, Vector2(bar_width, bar_height), topic_color)
-	bar.position = Vector2(text_x, card_height * 0.5 - bar_height * 0.5)
+	bar.name = "theme_card_progress"
+	bar.position = Vector2(text_x, top_y + card_height * 0.60)
 	card.add_child(bar)
 	var count_height := card_height * 0.14
 	var count := Label.new()
+	count.name = "theme_card_progress_count"
 	count.text = "%d/%d" % [done, total]
-	count.position = Vector2(text_x, bottom_y - count_height - card_height * 0.02)
+	count.position = Vector2(text_x, top_y + card_height * 0.73)
 	count.size = Vector2(bar_width, count_height)
-	count.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	count.add_theme_font_size_override("font_size", maxi(12, int(card_height * 0.115)))
+	count.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	count.add_theme_font_size_override("font_size", maxi(12, int(card_height * 0.11)))
 	count.add_theme_color_override("font_color", soft_brown)
 	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(count)
-	var badge_size := Vector2(card_height * 0.32, card_height * 0.145)
 	var badge := Panel.new()
 	badge.name = "theme_card_percent_badge"
-	badge.position = Vector2(pad + card_height * 0.05, top_y + card_height * 0.05)
+	badge.position = badge_position
 	badge.size = badge_size
 	var badge_style := _rounded_panel_style(topic_color, int(badge_size.y * 0.5))
 	badge_style.border_color = Color(1.0, 1.0, 1.0, 0.75)
@@ -1246,7 +1361,7 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 	percent.set_anchors_preset(Control.PRESET_FULL_RECT)
 	percent.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	percent.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	percent.add_theme_font_size_override("font_size", maxi(12, int(card_height * 0.085)))
+	percent.add_theme_font_size_override("font_size", maxi(12, int(card_height * 0.105)))
 	percent.add_theme_color_override("font_color", Color.WHITE)
 	percent.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.add_child(percent)
@@ -1255,7 +1370,7 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 	circle.texture = repository.cached_texture(THEME_CIRCLE_BUTTON_PATH)
 	circle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	circle.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	circle.position = Vector2(right_edge - circle_size, bottom_y - circle_size)
+	circle.position = Vector2(right_edge - circle_size, bottom_y - circle_size - card_height * 0.10)
 	circle.size = Vector2(circle_size, circle_size)
 	circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(circle)
@@ -1378,6 +1493,7 @@ func _process(delta: float) -> void:
 
 
 func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
+	_persist_current_puzzle_state()
 	current_screen = "levels"
 	current_topic = topic
 	_clear_ui()
@@ -1401,9 +1517,7 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	var locks := _compute_level_locks(topic)
 	var levels: Array = topic.get("levels", [])
 	var count := levels.size()
-	var rows_total := int(ceil(float(count) / float(columns)))
-	var grid_height := float(rows_total) * card_height + maxf(0.0, float(rows_total - 1)) * gap
-	var top := _grid_top_offset(_theme_topbar_height(ui_scale), grid_height, ui_scale)
+	var top := _grid_top_offset(_theme_topbar_height(ui_scale), ui_scale)
 	var y := top
 	var focus_row := -1
 	if levels.is_empty():
@@ -1417,14 +1531,14 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 			continue
 		var col := index % columns
 		var row := index / columns
-		var items_in_row := mini(columns, count - row * columns)
-		var row_offset := float(columns - items_in_row) * (card_width + gap) * 0.5
-		var x := side_margin + row_offset + float(col) * (card_width + gap)
+		var x := side_margin + float(col) * (card_width + gap)
 		y = top + float(row) * (card_height + gap)
 		var unlocked: bool = locks.get(str(level.get("id", "")), false)
 		var card := _level_grid_card(topic, level, unlocked, card_width, ui_scale)
 		card.position = Vector2(x, y)
 		topics_content.add_child(card)
+		if unlocked and str(topic.get("id", "")) == newly_unlocked_topic_id and str(level.get("id", "")) == newly_unlocked_level_id:
+			_animate_new_unlock_card(card, topic, card_width)
 		var item := {"rect": Rect2(Vector2(x, y), Vector2(card_width, card_height))}
 		if unlocked:
 			item["action"] = func(l: Dictionary = level) -> void: _show_mode_dialog(l)
@@ -1444,11 +1558,10 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	if focus_row > 0:
 		topics_scroll_offset = clampf(top + float(focus_row) * (card_height + gap) - viewport_size.y * 0.30, 0.0, _topics_max_scroll())
 	_apply_topics_scroll()
-	topics_content.modulate.a = 0.0
-	var tween := create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(topics_content, "modulate:a", 1.0, 0.24)
+	_fade_control_in(topics_content)
+	if str(topic.get("id", "")) == newly_unlocked_topic_id:
+		newly_unlocked_topic_id = ""
+		newly_unlocked_level_id = ""
 
 
 func _compute_level_locks(topic: Dictionary) -> Dictionary:
@@ -1498,39 +1611,64 @@ func _add_level_list_background(topic: Dictionary) -> void:
 
 func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	var viewport_width := get_viewport_rect().size.x
+	var palette := _topic_ui_palette(topic)
+	var surface: Color = palette.surface
+	var foreground: Color = palette.foreground
+	var outline: Color = palette.outline
+	var accent: Color = palette.accent
 	var bar := Control.new()
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_bottom = _theme_topbar_height(ui_scale)
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var button_size := 52.0 * ui_scale
 	var side_margin := 20.0 * ui_scale
-	var back_button := _level_back_button(button_size)
+	var back_button := _level_back_button(button_size, palette)
 	back_button.position = Vector2(side_margin, 20.0 * ui_scale)
 	bar.add_child(back_button)
+	var title_panel := Panel.new()
+	title_panel.position = Vector2(viewport_width * 0.22, 20.0 * ui_scale)
+	title_panel.size = Vector2(viewport_width * 0.56, button_size)
+	var title_style := _rounded_panel_style(surface, int(button_size * 0.48))
+	title_style.border_color = outline
+	title_style.border_width_left = maxi(1, int(ui_scale))
+	title_style.border_width_top = maxi(1, int(ui_scale))
+	title_style.border_width_right = maxi(1, int(ui_scale))
+	title_style.border_width_bottom = maxi(1, int(ui_scale))
+	title_style.shadow_color = Color(outline, 0.22)
+	title_style.shadow_size = maxi(2, int(4.0 * ui_scale))
+	title_style.shadow_offset = Vector2(0.0, 2.0 * ui_scale)
+	title_panel.add_theme_stylebox_override("panel", title_style)
+	title_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(title_panel)
 	var title := Label.new()
 	title.text = str(topic.get("name", ""))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.position = Vector2(viewport_width * 0.22, 20.0 * ui_scale)
-	title.size = Vector2(viewport_width * 0.56, button_size)
+	title.set_anchors_preset(Control.PRESET_FULL_RECT)
 	title.clip_text = true
 	title.add_theme_font_size_override("font_size", int(26.0 * ui_scale))
-	title.add_theme_color_override("font_color", Color.WHITE)
-	title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.35))
-	title.add_theme_constant_override("shadow_offset_y", int(2.0 * ui_scale))
+	title.add_theme_color_override("font_color", foreground)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar.add_child(title)
+	title_panel.add_child(title)
 	var done := _topic_available_done_count(topic)
 	var total := _topic_available_mode_total(topic)
 	var pill_size := Vector2(96.0 * ui_scale, 34.0 * ui_scale)
 	var pill := Panel.new()
 	pill.position = Vector2(viewport_width - side_margin - pill_size.x, 20.0 * ui_scale + (button_size - pill_size.y) * 0.5)
 	pill.size = pill_size
-	var pill_style := _rounded_panel_style(Color(0.0, 0.0, 0.0, 0.30), int(pill_size.y * 0.5))
+	var pill_style := _rounded_panel_style(surface, int(pill_size.y * 0.5))
+	pill_style.border_color = outline
+	pill_style.border_width_left = maxi(1, int(ui_scale))
+	pill_style.border_width_top = maxi(1, int(ui_scale))
+	pill_style.border_width_right = maxi(1, int(ui_scale))
+	pill_style.border_width_bottom = maxi(1, int(ui_scale))
+	pill_style.shadow_color = Color(outline, 0.18)
+	pill_style.shadow_size = maxi(1, int(3.0 * ui_scale))
+	pill_style.shadow_offset = Vector2(0.0, 1.0 * ui_scale)
 	pill.add_theme_stylebox_override("panel", pill_style)
 	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(pill)
-	var pill_bar := _topic_progress_bar(done, total, Vector2(pill_size.x * 0.42, 7.0 * ui_scale), Color.WHITE)
+	var pill_bar := _topic_progress_bar(done, total, Vector2(pill_size.x * 0.42, 7.0 * ui_scale), accent, Color(outline, 0.28))
 	pill_bar.position = Vector2(pill_size.x * 0.10, (pill_size.y - 7.0 * ui_scale) * 0.5)
 	pill.add_child(pill_bar)
 	var pill_label := Label.new()
@@ -1540,27 +1678,25 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	pill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pill_label.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
-	pill_label.add_theme_color_override("font_color", Color.WHITE)
+	pill_label.add_theme_color_override("font_color", foreground)
 	pill_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pill.add_child(pill_label)
 	return bar
 
 
-func _level_back_button(button_size: float) -> Button:
+func _level_back_button(button_size: float, palette: Dictionary) -> Button:
 	var button := Button.new()
 	button.text = ""
 	button.tooltip_text = _t("back")
 	button.custom_minimum_size = Vector2(button_size, button_size)
 	button.size = button.custom_minimum_size
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	var base := TextureRect.new()
-	base.texture = repository.cached_texture(THEME_CIRCLE_BUTTON_PATH)
-	base.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	base.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	base.set_anchors_preset(Control.PRESET_FULL_RECT)
-	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(base)
+	var surface: Color = palette.surface
+	var outline: Color = palette.outline
+	button.add_theme_stylebox_override("normal", _topic_nav_button_style(surface, outline, button_size))
+	button.add_theme_stylebox_override("hover", _topic_nav_button_style(surface.lightened(0.06), outline, button_size))
+	button.add_theme_stylebox_override("pressed", _topic_nav_button_style(surface.darkened(0.04), outline, button_size, false))
+	button.add_theme_stylebox_override("disabled", _topic_nav_button_style(surface, outline, button_size, false))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var arrow := TextureRect.new()
 	arrow.texture = repository.cached_texture(THEME_ARROW_ICON_PATH)
 	arrow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1572,11 +1708,26 @@ func _level_back_button(button_size: float) -> Button:
 	arrow.offset_top = inset
 	arrow.offset_right = -inset
 	arrow.offset_bottom = -inset
+	arrow.modulate = palette.foreground
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(arrow)
 	button.pressed.connect(_show_topics)
 	_wire_button_animation(button)
 	return button
+
+
+func _topic_nav_button_style(surface: Color, outline: Color, button_size: float, with_shadow := true) -> StyleBoxFlat:
+	var style := _rounded_panel_style(surface, int(button_size * 0.5))
+	style.border_color = outline
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	if with_shadow:
+		style.shadow_color = Color(outline, 0.22)
+		style.shadow_size = maxi(2, int(button_size * 0.08))
+		style.shadow_offset = Vector2(0.0, button_size * 0.04)
+	return style
 
 
 func _level_grid_card(topic: Dictionary, level: Dictionary, unlocked: bool, card_width: float, ui_scale: float) -> Control:
@@ -1587,11 +1738,11 @@ func _level_grid_card(topic: Dictionary, level: Dictionary, unlocked: bool, card
 	card.custom_minimum_size = Vector2(card_width, card_height)
 	card.size = card.custom_minimum_size
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var level_config := repository.load_level_config(level)
-	if unlocked:
-		_add_level_card_cover(card, level_config, topic_color, card_width, card_height, radius)
-	else:
+	if not unlocked:
 		_add_level_card_back(card, topic, topic_color, card_width, card_height, radius)
+		return card
+	var level_config := repository.load_level_config(level)
+	_add_level_card_cover(card, level_config, topic_color, card_width, card_height, radius)
 	var overlay_height := card_height * 0.27
 	var overlay := Panel.new()
 	overlay.name = "level_card_overlay"
@@ -1605,20 +1756,19 @@ func _level_grid_card(topic: Dictionary, level: Dictionary, unlocked: bool, card
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(overlay)
 	var available_modes := _available_modes_for_config(level_config)
-	if unlocked:
-		var name_label := Label.new()
-		name_label.text = _level_display_title(level)
-		name_label.position = Vector2(card_width * 0.05, overlay_height * 0.06)
-		name_label.size = Vector2(card_width * 0.90, overlay_height * 0.42)
-		name_label.clip_text = true
-		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		name_label.add_theme_font_size_override("font_size", maxi(14, int(overlay_height * 0.34)))
-		name_label.add_theme_color_override("font_color", Color.WHITE)
-		name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.35))
-		name_label.add_theme_constant_override("shadow_offset_y", 2)
-		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		overlay.add_child(name_label)
+	var name_label := Label.new()
+	name_label.text = _level_display_title(level)
+	name_label.position = Vector2(card_width * 0.05, overlay_height * 0.06)
+	name_label.size = Vector2(card_width * 0.90, overlay_height * 0.42)
+	name_label.clip_text = true
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_size_override("font_size", maxi(14, int(overlay_height * 0.34)))
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.35))
+	name_label.add_theme_constant_override("shadow_offset_y", 2)
+	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(name_label)
 	var icons := HBoxContainer.new()
 	icons.alignment = BoxContainer.ALIGNMENT_CENTER
 	icons.add_theme_constant_override("separation", int(card_width * 0.075))
@@ -1628,10 +1778,8 @@ func _level_grid_card(topic: Dictionary, level: Dictionary, unlocked: bool, card
 	overlay.add_child(icons)
 	var icon_size := overlay_height * 0.40
 	for play_mode in available_modes:
-		var state := _level_mode_state(topic, level, play_mode) if unlocked else "todo"
+		var state := _level_mode_state(topic, level, play_mode)
 		var icon := _mode_state_icon(play_mode, state, icon_size)
-		if not unlocked:
-			icon.modulate.a = 0.55
 		icons.add_child(icon)
 	return card
 
@@ -1707,44 +1855,6 @@ func _add_level_card_back(card: Control, topic: Dictionary, topic_color: Color, 
 		inner.add_theme_stylebox_override("panel", inner_style)
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(inner)
-	_add_lock_icon(card, topic_color, card_width, card_height)
-
-
-func _add_lock_icon(card: Control, topic_color: Color, card_width: float, card_height: float) -> void:
-	var lock_size := card_width * 0.20
-	var lock_color := topic_color.lightened(0.42)
-	var shackle := Panel.new()
-	shackle.position = Vector2((card_width - lock_size * 0.62) * 0.5, card_height * 0.42 - lock_size * 0.52)
-	shackle.size = Vector2(lock_size * 0.62, lock_size * 0.62)
-	var shackle_style := StyleBoxFlat.new()
-	shackle_style.draw_center = false
-	shackle_style.border_color = lock_color
-	var shackle_border := maxi(2, int(lock_size * 0.12))
-	shackle_style.border_width_left = shackle_border
-	shackle_style.border_width_top = shackle_border
-	shackle_style.border_width_right = shackle_border
-	shackle_style.border_width_bottom = shackle_border
-	var shackle_radius := int(lock_size * 0.31)
-	shackle_style.corner_radius_top_left = shackle_radius
-	shackle_style.corner_radius_top_right = shackle_radius
-	shackle_style.corner_radius_bottom_left = shackle_radius
-	shackle_style.corner_radius_bottom_right = shackle_radius
-	shackle.add_theme_stylebox_override("panel", shackle_style)
-	shackle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(shackle)
-	var body := Panel.new()
-	body.position = Vector2((card_width - lock_size) * 0.5, card_height * 0.42)
-	body.size = Vector2(lock_size, lock_size * 0.80)
-	body.add_theme_stylebox_override("panel", _rounded_panel_style(lock_color, int(lock_size * 0.16)))
-	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(body)
-	var keyhole := Panel.new()
-	var keyhole_size := lock_size * 0.22
-	keyhole.position = Vector2((card_width - keyhole_size) * 0.5, card_height * 0.42 + lock_size * 0.28)
-	keyhole.size = Vector2(keyhole_size, keyhole_size)
-	keyhole.add_theme_stylebox_override("panel", _rounded_panel_style(topic_color.darkened(0.42), int(keyhole_size * 0.5)))
-	keyhole.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add_child(keyhole)
 
 
 func _level_mode_state(topic: Dictionary, level: Dictionary, play_mode: String) -> String:
@@ -1871,12 +1981,37 @@ func _topic_color(topic: Dictionary) -> Color:
 	return Color(value) if value.begins_with("#") else orange
 
 
-func _topic_progress_bar(done: int, total: int, size: Vector2, fill_color: Color) -> Panel:
+func _topic_ui_palette(topic: Dictionary) -> Dictionary:
+	var topic_color := _topic_color(topic)
+	var defaults := {
+		"surface": Color("#FFF4DE").lerp(topic_color, 0.14),
+		"foreground": topic_color.darkened(0.62),
+		"outline": topic_color.darkened(0.20),
+		"accent": topic_color,
+	}
+	var raw = topic.get("ui_palette", {})
+	if typeof(raw) != TYPE_DICTIONARY:
+		return defaults
+	var palette: Dictionary = raw
+	return {
+		"surface": _topic_ui_color(palette, "surface", defaults.surface),
+		"foreground": _topic_ui_color(palette, "foreground", defaults.foreground),
+		"outline": _topic_ui_color(palette, "outline", defaults.outline),
+		"accent": _topic_ui_color(palette, "accent", defaults.accent),
+	}
+
+
+func _topic_ui_color(palette: Dictionary, key: String, fallback: Color) -> Color:
+	var value := str(palette.get(key, ""))
+	return Color.from_string(value, fallback) if not value.is_empty() else fallback
+
+
+func _topic_progress_bar(done: int, total: int, size: Vector2, fill_color: Color, track_color := Color(0.78, 0.64, 0.48, 0.22)) -> Panel:
 	var holder := Panel.new()
 	holder.custom_minimum_size = size
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.78, 0.64, 0.48, 0.22)
+	track.bg_color = track_color
 	var radius := int(size.y * 0.5)
 	track.corner_radius_top_left = radius
 	track.corner_radius_top_right = radius
@@ -2216,6 +2351,7 @@ func _mode_dialog_image(level: Dictionary) -> Control:
 
 func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var done := progress_store.is_done(level["id"], play_mode)
+	var has_saved_state := not done and not progress_store.play_state(current_topic, level, play_mode).is_empty()
 	var layout_scale := _mode_dialog_layout_scale()
 	var card_width := _mode_dialog_content_width()
 	var card := Button.new()
@@ -2249,7 +2385,7 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	text_box.add_child(name)
 	var state := Label.new()
-	state.text = _mode_modal_description(play_mode)
+	state.text = "%s · %s" % [_mode_modal_description(play_mode), _t("in_progress")] if has_saved_state else _mode_modal_description(play_mode)
 	state.add_theme_font_size_override("font_size", maxi(18, int(22.0 * layout_scale)))
 	state.add_theme_color_override("font_color", _mode_accent_color(play_mode).darkened(0.14) if done else soft_brown)
 	state.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2257,13 +2393,24 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var action: Callable = func() -> void:
 		_close_modal()
 		_show_game(current_topic, level, play_mode)
-	row.add_child(_mode_action_button(
-		_t("replay") if done else _t("start_game"),
+	var actions := VBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", maxi(6, int(8.0 * layout_scale)))
+	row.add_child(actions)
+	actions.add_child(_mode_action_button(
+		_t("replay") if done else (_t("continue") if has_saved_state else _t("start_game")),
 		play_mode,
 		action,
 		Vector2(maxf(118.0, 168.0 * layout_scale), maxf(48.0, 58.0 * layout_scale)),
 		maxi(18, int(24.0 * layout_scale))
 	))
+	if has_saved_state:
+		actions.add_child(_mode_secondary_action_button(
+			_t("restart"),
+			func() -> void: _show_mode_restart_confirm(level, play_mode),
+			Vector2(maxf(118.0, 168.0 * layout_scale), maxf(36.0, 42.0 * layout_scale)),
+			maxi(15, int(18.0 * layout_scale))
+		))
 	if done:
 		card.add_child(_mode_corner_check_badge(_mode_accent_color(play_mode)))
 	card.pressed.connect(func() -> void:
@@ -2272,6 +2419,348 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	)
 	_wire_button_animation(card)
 	return card
+
+
+func _animate_new_unlock_card(card: Control, topic: Dictionary, card_width: float) -> void:
+	if _ui_motion_reduced():
+		return
+	var card_height := card_width * 4.0 / 3.0
+	var topic_color := _topic_color(topic)
+	var radius := int(card_width * 0.07)
+	# Cover the fresh card with the locked look right away, then reveal it.
+	var overlay := Control.new()
+	overlay.name = "unlock_reveal_overlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_add_level_card_back(overlay, topic, topic_color, card_width, card_height, radius)
+	card.add_child(overlay)
+	var back_image := await _render_card_back_snapshot(topic, topic_color, card_width, card_height, radius)
+	if not is_instance_valid(card) or not card.is_inside_tree() or not is_instance_valid(overlay):
+		return
+	if back_image == null or back_image.is_empty():
+		_animate_unlock_flip_fallback(card, overlay)
+		return
+	if unlock_effect_style == "shatter":
+		_animate_unlock_shatter(card, overlay, back_image, card_width, card_height)
+	else:
+		_animate_unlock_burn(card, overlay, back_image, card_width, card_height)
+
+
+func _animate_unlock_burn(card: Control, overlay: Control, back_image: Image, card_width: float, card_height: float) -> void:
+	for child in overlay.get_children():
+		child.queue_free()
+	var burn := TextureRect.new()
+	burn.texture = ImageTexture.create_from_image(back_image)
+	burn.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	burn.stretch_mode = TextureRect.STRETCH_SCALE
+	burn.set_anchors_preset(Control.PRESET_FULL_RECT)
+	burn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = _unlock_burn_shader_resource()
+	material.set_shader_parameter("noise_tex", _unlock_burn_noise_texture())
+	material.set_shader_parameter("aspect", card_width / maxf(1.0, card_height))
+	var seeds := _unlock_burn_seed_points()
+	material.set_shader_parameter("seed_points", seeds)
+	material.set_shader_parameter("field_max", _unlock_burn_field_max(seeds, card_width / maxf(1.0, card_height)))
+	material.set_shader_parameter("progress", 0.0)
+	burn.material = material
+	overlay.add_child(burn)
+	var tween := card.create_tween()
+	tween.tween_interval(0.55)
+	tween.tween_method(
+		func(value: float) -> void: material.set_shader_parameter("progress", value),
+		0.0, 1.0, 3.0
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(overlay.queue_free)
+
+
+func _animate_unlock_shatter(card: Control, overlay: Control, back_image: Image, card_width: float, card_height: float) -> void:
+	# Glass break in two hits: first the cracks appear, then the shards fly out.
+	for child in overlay.get_children():
+		child.queue_free()
+	var texture := ImageTexture.create_from_image(back_image)
+	var intact := TextureRect.new()
+	intact.texture = texture
+	intact.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	intact.stretch_mode = TextureRect.STRETCH_SCALE
+	intact.set_anchors_preset(Control.PRESET_FULL_RECT)
+	intact.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(intact)
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var impact := Vector2(card_width * rng.randf_range(0.36, 0.64), card_height * rng.randf_range(0.34, 0.62))
+	var geometry := _unlock_crack_geometry(impact, card_width, card_height, rng)
+	var tween := card.create_tween()
+	tween.tween_interval(0.45)
+	tween.tween_callback(func() -> void: _unlock_crack_stage(overlay, geometry))
+	tween.tween_interval(0.7)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(intact):
+			intact.queue_free()
+		_unlock_shatter_stage(overlay, geometry, texture, impact, card_width, rng)
+	)
+	tween.tween_interval(1.0)
+	tween.tween_callback(overlay.queue_free)
+
+
+func _unlock_crack_geometry(impact: Vector2, card_width: float, card_height: float, rng: RandomNumberGenerator) -> Dictionary:
+	# Radial cracks from the impact point plus two irregular concentric rings;
+	# shards are the cells this pattern cuts out of the card rectangle.
+	var rect_points := PackedVector2Array([
+		Vector2.ZERO, Vector2(card_width, 0.0), Vector2(card_width, card_height), Vector2(0.0, card_height)
+	])
+	var far := (card_width + card_height) * 4.0
+	var ray_count := rng.randi_range(7, 9)
+	var angles: Array[float] = []
+	for i in range(ray_count):
+		angles.append(TAU * (float(i) + rng.randf_range(-0.28, 0.28)) / float(ray_count))
+	var dirs: Array[Vector2] = []
+	var ring1 := PackedVector2Array()
+	var ring2 := PackedVector2Array()
+	var rays: Array[PackedVector2Array] = []
+	for i in range(ray_count):
+		var dir := Vector2.from_angle(angles[i])
+		dirs.append(dir)
+		var exit_distance := _rect_ray_exit_distance(impact, dir, card_width, card_height)
+		var r1 := impact + dir * exit_distance * 0.32 * rng.randf_range(0.8, 1.2)
+		var r2 := impact + dir * exit_distance * 0.64 * rng.randf_range(0.85, 1.15)
+		ring1.append(r1)
+		ring2.append(r2)
+		rays.append(PackedVector2Array([impact, r1, r2, impact + dir * exit_distance]))
+	var shards: Array[PackedVector2Array] = []
+	var min_area := card_width * card_height * 0.0008
+	for i in range(ray_count):
+		var j := (i + 1) % ray_count
+		var angle_next := angles[j] + (TAU if j == 0 else 0.0)
+		var mid := Vector2.from_angle((angles[i] + angle_next) * 0.5)
+		var wedge := PackedVector2Array([impact, impact + dirs[i] * far, impact + mid * far, impact + dirs[j] * far])
+		for wedge_part in Geometry2D.intersect_polygons(wedge, rect_points):
+			for poly in Geometry2D.intersect_polygons(wedge_part, ring1):
+				if _polygon_points_area(poly) >= min_area:
+					shards.append(poly)
+			for band in Geometry2D.clip_polygons(ring2, ring1):
+				for poly in Geometry2D.intersect_polygons(wedge_part, band):
+					if _polygon_points_area(poly) >= min_area:
+						shards.append(poly)
+			for poly in Geometry2D.clip_polygons(wedge_part, ring2):
+				if _polygon_points_area(poly) >= min_area:
+					shards.append(poly)
+	return {"rays": rays, "rings": [ring1, ring2], "shards": shards}
+
+
+func _rect_ray_exit_distance(origin: Vector2, dir: Vector2, width: float, height: float) -> float:
+	var best := width + height
+	if absf(dir.x) > 0.0001:
+		var tx := ((width if dir.x > 0.0 else 0.0) - origin.x) / dir.x
+		if tx > 0.0:
+			best = minf(best, tx)
+	if absf(dir.y) > 0.0001:
+		var ty := ((height if dir.y > 0.0 else 0.0) - origin.y) / dir.y
+		if ty > 0.0:
+			best = minf(best, ty)
+	return best
+
+
+func _polygon_points_area(points: PackedVector2Array) -> float:
+	var area := 0.0
+	for i in range(points.size()):
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		area += a.x * b.y - b.x * a.y
+	return absf(area * 0.5)
+
+
+func _unlock_crack_stage(overlay: Control, geometry: Dictionary) -> void:
+	if not is_instance_valid(overlay):
+		return
+	var cracks := Node2D.new()
+	cracks.name = "crack_lines"
+	overlay.add_child(cracks)
+	for ray in geometry["rays"]:
+		_add_crack_line(cracks, ray, false)
+	for ring in geometry["rings"]:
+		_add_crack_line(cracks, ring, true)
+	cracks.modulate.a = 0.0
+	var fade := cracks.create_tween()
+	fade.tween_property(cracks, "modulate:a", 1.0, 0.07)
+	var shake := overlay.create_tween()
+	shake.tween_property(overlay, "position", Vector2(3.0, -2.0), 0.03).as_relative()
+	shake.tween_property(overlay, "position", Vector2(-5.0, 3.0), 0.05).as_relative()
+	shake.tween_property(overlay, "position", Vector2(2.0, -1.0), 0.04).as_relative()
+
+
+func _add_crack_line(parent: Node2D, points: PackedVector2Array, closed: bool) -> void:
+	var glow := Line2D.new()
+	glow.points = points
+	glow.closed = closed
+	glow.width = 5.0
+	glow.default_color = Color(1.0, 1.0, 1.0, 0.22)
+	parent.add_child(glow)
+	var line := Line2D.new()
+	line.points = points
+	line.closed = closed
+	line.width = 2.0
+	line.default_color = Color(1.0, 1.0, 1.0, 0.85)
+	parent.add_child(line)
+
+
+func _unlock_shatter_stage(overlay: Control, geometry: Dictionary, texture: Texture2D, impact: Vector2, card_width: float, rng: RandomNumberGenerator) -> void:
+	if not is_instance_valid(overlay):
+		return
+	var cracks := overlay.get_node_or_null("crack_lines")
+	if cracks != null:
+		cracks.queue_free()
+	var jolt := overlay.create_tween()
+	jolt.tween_property(overlay, "position", Vector2(-4.0, 3.0), 0.03).as_relative()
+	jolt.tween_property(overlay, "position", Vector2(4.0, -3.0), 0.05).as_relative()
+	for shard_points in geometry["shards"]:
+		var centroid := Vector2.ZERO
+		for point in shard_points:
+			centroid += point
+		centroid /= float(shard_points.size())
+		var local := PackedVector2Array()
+		for point in shard_points:
+			local.append(point - centroid)
+		var shard := Polygon2D.new()
+		shard.polygon = local
+		shard.uv = shard_points
+		shard.texture = texture
+		shard.position = centroid
+		overlay.add_child(shard)
+		var direction := centroid - impact
+		direction = direction.normalized() if direction.length() > 0.001 else Vector2.from_angle(rng.randf_range(0.0, TAU))
+		direction = (direction + Vector2(rng.randf_range(-0.25, 0.25), rng.randf_range(-0.25, 0.25))).normalized()
+		var fly_distance := card_width * rng.randf_range(0.45, 0.95)
+		var duration := rng.randf_range(0.55, 0.85)
+		var target := centroid + direction * fly_distance + Vector2(0.0, card_width * 0.18)
+		var tween := shard.create_tween().set_parallel(true)
+		tween.tween_property(shard, "position", target, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(shard, "rotation", rng.randf_range(-1.6, 1.6), duration)
+		tween.tween_property(shard, "modulate:a", 0.0, duration * 0.7).set_delay(duration * 0.3)
+
+
+func _render_card_back_snapshot(topic: Dictionary, topic_color: Color, card_width: float, card_height: float, radius: int) -> Image:
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(maxi(2, int(card_width)), maxi(2, int(card_height)))
+	viewport.transparent_bg = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var holder := Control.new()
+	holder.size = Vector2(card_width, card_height)
+	viewport.add_child(holder)
+	_add_level_card_back(holder, topic, topic_color, card_width, card_height, radius)
+	add_child(viewport)
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(viewport):
+		return null
+	var image := viewport.get_texture().get_image()
+	viewport.queue_free()
+	return image
+
+
+func _unlock_burn_seed_points() -> PackedVector2Array:
+	# 3-4 ignition points scattered anywhere on the card, kept just far enough
+	# apart that the fire does not start as a single blob. The shader always
+	# reads 4 points, so "3 points" pads with a near-duplicate.
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var count := rng.randi_range(3, 4)
+	var seeds := PackedVector2Array()
+	for attempt in range(64):
+		if seeds.size() >= count:
+			break
+		var candidate := Vector2(rng.randf_range(0.06, 0.94), rng.randf_range(0.06, 0.94))
+		var separated := true
+		for seed in seeds:
+			if candidate.distance_to(seed) < 0.30:
+				separated = false
+				break
+		if separated:
+			seeds.append(candidate)
+	if seeds.is_empty():
+		seeds.append(Vector2(0.5, 0.5))
+	while seeds.size() < 4:
+		var base: Vector2 = seeds[rng.randi_range(0, seeds.size() - 1)]
+		seeds.append(base + Vector2(rng.randf_range(-0.05, 0.05), rng.randf_range(-0.05, 0.05)))
+	return seeds
+
+
+func _unlock_burn_field_max(seeds: PackedVector2Array, aspect: float) -> float:
+	# Largest distance-field value on the card, so the tween's progress range
+	# maps exactly onto the visible burn (mirrors the shader's field math).
+	var max_distance := 0.0
+	for gy in range(7):
+		for gx in range(7):
+			var point := Vector2(aspect * float(gx) / 6.0, float(gy) / 6.0)
+			var nearest := 1e9
+			for seed in seeds:
+				nearest = minf(nearest, point.distance_to(Vector2(seed.x * aspect, seed.y)))
+			max_distance = maxf(max_distance, nearest)
+	return max_distance / 1.55 + 0.09
+
+
+func _unlock_burn_shader_resource() -> Shader:
+	if unlock_burn_shader == null:
+		unlock_burn_shader = Shader.new()
+		unlock_burn_shader.code = UNLOCK_BURN_SHADER_CODE
+	return unlock_burn_shader
+
+
+func _unlock_burn_noise_texture() -> Texture2D:
+	if unlock_burn_noise == null:
+		var noise := FastNoiseLite.new()
+		noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		noise.frequency = 0.045
+		noise.fractal_octaves = 2
+		unlock_burn_noise = ImageTexture.create_from_image(noise.get_seamless_image(192, 192))
+	return unlock_burn_noise
+
+
+func _animate_unlock_flip_fallback(card: Control, overlay: Control) -> void:
+	card.pivot_offset = card.size * 0.5
+	overlay.pivot_offset = card.size * 0.5
+	var tween := card.create_tween()
+	tween.tween_interval(0.45)
+	tween.tween_property(overlay, "scale:x", 0.0, 0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_callback(overlay.queue_free)
+	tween.tween_property(card, "scale:x", 1.0, 0.26).from(0.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _mode_secondary_action_button(text: String, action: Callable, min_size: Vector2, font_size: int) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = min_size
+	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_color_override("font_color", soft_brown)
+	button.add_theme_color_override("font_hover_color", deep_orange)
+	button.add_theme_color_override("font_pressed_color", deep_orange)
+	button.add_theme_color_override("font_disabled_color", Color(soft_brown, 0.34))
+	var normal := _rounded_panel_style(Color(1.0, 1.0, 1.0, 0.34), int(min_size.y * 0.42))
+	normal.border_color = Color(soft_brown, 0.40)
+	normal.border_width_left = 1
+	normal.border_width_top = 1
+	normal.border_width_right = 1
+	normal.border_width_bottom = 1
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color(1.0, 0.95, 0.84, 0.72)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.pressed.connect(action)
+	_wire_button_animation(button)
+	return button
+
+
+func _show_mode_restart_confirm(level: Dictionary, play_mode: String) -> void:
+	_show_modal()
+	var box := _modal_box(Vector2(360, 230))
+	box.add_child(_modal_title(_t("confirm_restart")))
+	box.add_child(_button(_t("confirm"), func() -> void:
+		progress_store.clear_play_state(current_topic, level, play_mode)
+		_close_modal()
+		_show_game(current_topic, level, play_mode, true)
+	))
+	box.add_child(_button(_t("back"), func() -> void: _show_mode_dialog(level), false))
 
 
 func _mode_select_style(play_mode: String, hover: bool) -> StyleBoxFlat:
@@ -2481,7 +2970,9 @@ func _mode_accent_color(mode: String) -> Color:
 	return Color("#A38DBE")
 
 
-func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void:
+func _show_game(topic: Dictionary, level: Dictionary, play_mode: String, discard_current_state := false) -> void:
+	if not discard_current_state:
+		_persist_current_puzzle_state()
 	current_screen = "game"
 	current_topic = topic
 	current_level = level
@@ -2503,7 +2994,7 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String) -> void
 	_build_game_hud(_level_display_title(level))
 	if not loaded:
 		status_label.text = _t("status_missing_mode")
-	elif not progress_store.tutorial_seen():
+	elif not progress_store.tutorial_seen(current_mode):
 		_show_tutorial_modal()
 
 
@@ -2519,7 +3010,15 @@ func _set_zoom_label(percent: int) -> void:
 
 
 func _on_puzzle_completed() -> void:
+	var locks_before := _compute_level_locks(current_topic)
 	progress_store.mark_completed(current_level["id"], current_mode)
+	var locks_after := _compute_level_locks(current_topic)
+	for level in current_topic.get("levels", []):
+		var level_id := str(level.get("id", ""))
+		if not bool(locks_before.get(level_id, false)) and bool(locks_after.get(level_id, false)):
+			newly_unlocked_topic_id = str(current_topic.get("id", ""))
+			newly_unlocked_level_id = level_id
+			break
 	progress_store.clear_play_state(current_topic, current_level, current_mode)
 	_show_complete_modal()
 
@@ -2569,6 +3068,11 @@ func _build_game_hud(level_title: String) -> void:
 	top_actions.offset_bottom = top_actions.offset_top + hint_button_size
 	top_actions.add_theme_constant_override("separation", 6)
 	top_bar.add_child(top_actions)
+	swap_undo_button = null
+	if current_mode == "swap":
+		swap_undo_button = _tool_text_button(_t("undo"), puzzle_board.undo_last_swap, _t("undo"))
+		swap_undo_button.disabled = not puzzle_board.can_undo_swap()
+		top_actions.add_child(swap_undo_button)
 	var hint_button := _icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint"), hint_button_size, hint_icon_inset)
 	top_actions.add_child(hint_button)
 	zoom_label = null
@@ -2583,6 +3087,8 @@ func _build_game_hud(level_title: String) -> void:
 	_layout_game_status_label()
 	hud_blocker_controls.clear()
 	hud_blocker_controls.append(back_button)
+	if swap_undo_button != null:
+		hud_blocker_controls.append(swap_undo_button)
 	hud_blocker_controls.append(hint_button)
 	hud_blocker_controls.append(status_label)
 	_queue_game_drag_blocker_refresh()
@@ -2598,7 +3104,15 @@ func _game_top_bar_height() -> float:
 
 
 func _game_top_actions_width() -> float:
-	return _game_hint_button_size() + 20.0
+	var width := _game_hint_button_size() + 20.0
+	if current_mode == "swap":
+		width += _hud_text_button_width(_t("undo")) + 12.0
+	return width
+
+
+func _set_swap_undo_available(available: bool) -> void:
+	if swap_undo_button != null and is_instance_valid(swap_undo_button):
+		swap_undo_button.disabled = not available
 
 
 func _hud_title_size(text: String) -> Vector2:
@@ -2777,32 +3291,83 @@ func _show_restart_confirm() -> void:
 	box.add_child(_button(_t("confirm"), func() -> void:
 		progress_store.clear_play_state(current_topic, current_level, current_mode)
 		_close_modal()
-		_show_game(current_topic, current_level, current_mode)
+		_show_game(current_topic, current_level, current_mode, true)
 	))
 	box.add_child(_button(_t("back"), _show_pause_modal, false))
 
 
 func _show_settings_modal() -> void:
 	_show_modal()
-	var box := _modal_box(Vector2(420, 390))
+	var box := _modal_box(Vector2(520, 520))
+	var panel := box.get_parent() as PanelContainer
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	panel_style.content_margin_left = 40
+	panel_style.content_margin_top = 34
+	panel_style.content_margin_right = 40
+	panel_style.content_margin_bottom = 34
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 18)
 	box.add_child(_modal_title(_t("settings_title")))
-	for name in [_t("music"), _t("sfx"), _t("haptics")]:
-		var check := CheckBox.new()
-		check.text = name
-		check.button_pressed = true
-		check.add_theme_color_override("font_color", brown)
-		box.add_child(check)
+	var haptics_check := CheckBox.new()
+	haptics_check.text = _t("haptics")
+	haptics_check.button_pressed = progress_store.haptics_enabled()
+	_style_settings_checkbox(haptics_check, 24)
+	haptics_check.toggled.connect(func(enabled: bool) -> void:
+		progress_store.set_haptics_enabled(enabled)
+		puzzle_board.set_feedback_preferences(enabled, progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
+	)
+	box.add_child(haptics_check)
+	var motion_check := CheckBox.new()
+	motion_check.text = _t("reduce_motion")
+	motion_check.button_pressed = progress_store.reduced_motion_enabled()
+	_style_settings_checkbox(motion_check, 24)
+	motion_check.toggled.connect(func(enabled: bool) -> void:
+		progress_store.set_reduced_motion_enabled(enabled)
+		puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), enabled, progress_store.edge_contrast_mode())
+	)
+	box.add_child(motion_check)
+	var edge_row := HBoxContainer.new()
+	edge_row.add_theme_constant_override("separation", 12)
+	var edge_label := Label.new()
+	edge_label.text = _t("piece_edges")
+	edge_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	edge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	edge_label.add_theme_font_size_override("font_size", 22)
+	edge_label.add_theme_color_override("font_color", brown)
+	edge_row.add_child(edge_label)
+	var edge_select := OptionButton.new()
+	edge_select.custom_minimum_size = Vector2(150, 52)
+	edge_select.add_theme_font_size_override("font_size", 20)
+	var edge_modes := ["auto", "dark", "light"]
+	for mode in edge_modes:
+		edge_select.add_item(_t("edge_%s" % mode))
+	edge_select.select(maxi(0, edge_modes.find(progress_store.edge_contrast_mode())))
+	edge_select.item_selected.connect(func(index: int) -> void:
+		var mode := str(edge_modes[clampi(index, 0, edge_modes.size() - 1)])
+		progress_store.set_edge_contrast_mode(mode)
+		puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), mode)
+	)
+	edge_row.add_child(edge_select)
+	box.add_child(edge_row)
 	var rotation_check := CheckBox.new()
 	rotation_check.text = _t("random_rotation")
 	rotation_check.button_pressed = progress_store.random_rotation_enabled()
-	rotation_check.add_theme_color_override("font_color", brown)
+	_style_settings_checkbox(rotation_check, 22)
 	rotation_check.toggled.connect(func(enabled: bool) -> void:
 		progress_store.set_random_rotation_enabled(enabled)
 		if current_screen == "game":
 			_set_game_status(_t("random_rotation_next"))
 	)
 	box.add_child(rotation_check)
-	box.add_child(_button(_t("close"), _close_modal))
+	var close_button := _button(_t("close"), _close_modal, true, Vector2(420, 64))
+	close_button.add_theme_font_size_override("font_size", 22)
+	box.add_child(close_button)
+
+
+func _style_settings_checkbox(check: CheckBox, font_size: int) -> void:
+	check.add_theme_font_size_override("font_size", font_size)
+	for color_name in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color", "font_focus_color"]:
+		check.add_theme_color_override(color_name, brown)
 
 
 func _show_tutorial_modal() -> void:
@@ -2821,7 +3386,7 @@ func _show_tutorial_modal() -> void:
 	text.add_theme_color_override("font_color", brown)
 	box.add_child(text)
 	box.add_child(_button(_t("got_it"), func() -> void:
-		progress_store.mark_tutorial_seen()
+		progress_store.mark_tutorial_seen(current_mode)
 		_close_modal()
 	))
 
@@ -3110,6 +3675,8 @@ func _completed_mode_labels(level: Dictionary) -> Array:
 
 func _start_complete_confetti() -> void:
 	_stop_complete_confetti()
+	if _ui_motion_reduced():
+		return
 	complete_confetti_layer = Control.new()
 	complete_confetti_layer.name = "CompleteConfettiLayer"
 	complete_confetti_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -3141,6 +3708,9 @@ func _show_modal(shade_color := Color(0, 0, 0, 0.42), blur_background := false) 
 	shade.modulate.a = 0.0
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	modal_root.add_child(shade)
+	if _ui_motion_reduced():
+		shade.modulate.a = 1.0
+		return
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)

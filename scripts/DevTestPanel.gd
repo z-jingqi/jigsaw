@@ -198,6 +198,7 @@ func _tab_state() -> Control:
 	state_label = _metric_label()
 	box.add_child(state_label)
 	box.add_child(_button_grid([
+		{"text": "运行交互巡检", "action": _run_interaction_smoke},
 		{"text": "清当前进度", "action": func() -> void: _call_host("debug_clear_current_progress")},
 		{"text": "清全部进度", "action": func() -> void: _call_host("debug_clear_all_progress")},
 		{"text": "打印状态", "action": func() -> void: _call_host("debug_dump_state")},
@@ -373,6 +374,13 @@ func _enter_selected_level() -> void:
 func _restart_current_level() -> void:
 	_call_host("debug_restart_current_level")
 	_set_status("已重进当前关卡")
+
+
+func _run_interaction_smoke() -> void:
+	_set_status("正在运行当前模式巡检...")
+	var result: Dictionary = await _call_host("debug_run_current_interaction_smoke", [], {"ok": false})
+	_set_status("巡检通过: %s" % str(result.get("mode", "")) if bool(result.get("ok", false)) else "巡检失败: %s" % JSON.stringify(result))
+	_refresh_runtime_labels()
 
 
 func _selected_level_option() -> Dictionary:
