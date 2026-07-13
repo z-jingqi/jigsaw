@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cs6reom1vcw5e"
-path="res://.godot/imported/topic-greek.webp-6ee4790101ab99262f48fade797a53bd.ctex"
+uid="uid://b82owux1iu8e8"
+path="res://.godot/imported/card-back.webp-2f38bdf6772f300e3191955a30f9d240.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/web-ui/island-map/topic-greek.webp"
-dest_files=["res://.godot/imported/topic-greek.webp-6ee4790101ab99262f48fade797a53bd.ctex"]
+source_file="res://levels/topic_01/card-back.webp"
+dest_files=["res://.godot/imported/card-back.webp-2f38bdf6772f300e3191955a30f9d240.ctex"]
 
 [params]
 

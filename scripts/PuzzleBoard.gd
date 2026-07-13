@@ -21,6 +21,7 @@ const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
 const BOARD_SCREEN_EDGE_GAP := 10.0
 const BOARD_OUTLINE_SHADOW_OUTSET := 5.0
+const BOARD_LINE_FRAME_WIDTH := 2
 const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
@@ -61,11 +62,12 @@ const TRAY_Z_INDEX := 4090
 const TRAY_HIT_PADDING := 18.0
 const TRAY_EXIT_THRESHOLD := 18.0
 const TRAY_GESTURE_DECIDE_THRESHOLD := 12.0
-const TRAY_DRAG_SCALE_TIME := 0.16
 const TRAY_DRAG_LIFT_MARGIN := 28.0
 const TRAY_DRAG_Z_INDEX := 4095
 const TRAY_INERTIA_MIN_SPEED := 90.0
 const TRAY_INERTIA_FRICTION := 9.0
+const TRAY_TOP_BORDER_HEIGHT := 2.0
+const TRAY_TOP_BORDER_COLOR := Color(0.39, 0.43, 0.34, 0.46)
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const PieceGroupScript := preload("res://scripts/PieceGroup.gd")
 const PieceVisualFactoryScript := preload("res://scripts/PieceVisualFactory.gd")
@@ -81,7 +83,7 @@ var current_mode := "knob"
 var rng := RandomNumberGenerator.new()
 var world_root: Node2D
 var tray_root: Node2D
-var tray_background: ColorRect
+var tray_top_border: ColorRect
 var view_scale := 1.0
 var view_target_scale := 1.0
 var view_target_ratio := 1.0
@@ -114,8 +116,6 @@ var tray_drag_screen_offset := Vector2.ZERO
 var tray_drag_target_screen_offset := Vector2.ZERO
 var tray_drag_offset_tween: Tween
 var tray_drag_local_grab := Vector2.ZERO
-var tray_drag_scale_tween: Tween
-var dragging_at_tray_scale := false
 var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
 var swap_drag_start_slot := -1
@@ -492,8 +492,6 @@ func clear() -> void:
 	tray_drag_target_screen_offset = Vector2.ZERO
 	tray_drag_offset_tween = null
 	tray_drag_local_grab = Vector2.ZERO
-	tray_drag_scale_tween = null
-	dragging_at_tray_scale = false
 	last_drag_screen_pos = Vector2.ZERO
 	swap_dragging = null
 	swap_drag_start_slot = -1
@@ -528,7 +526,7 @@ func clear() -> void:
 	pinch_active = false
 	world_root = null
 	tray_root = null
-	tray_background = null
+	tray_top_border = null
 	view_scale = 1.0
 	view_target_scale = 1.0
 	view_target_ratio = 1.0
@@ -856,7 +854,8 @@ func _clamped_board_view_offset(offset: Vector2, scale: float) -> Vector2:
 func _board_outline_world_rect() -> Rect2:
 	if source_size.x <= 0.0 or source_size.y <= 0.0:
 		return Rect2(board_origin, Vector2.ZERO)
-	return Rect2(board_origin, source_size * source_scale).grow(BOARD_OUTLINE_SHADOW_OUTSET)
+	var outset := float(BOARD_LINE_FRAME_WIDTH) if _uses_shanhai_interface_style() else BOARD_OUTLINE_SHADOW_OUTSET
+	return Rect2(board_origin, source_size * source_scale).grow(outset)
 
 
 func _world_view_screen_rect() -> Rect2:
@@ -1117,6 +1116,7 @@ func debug_run_interaction_smoke() -> Dictionary:
 		"mode": current_mode,
 		"tray_scroll": true,
 		"pickup_drop": false,
+		"tray_drag_scale": true,
 		"hint": false,
 		"snap_preview": true,
 		"snap_shimmer_only": true,
@@ -1130,7 +1130,7 @@ func debug_run_interaction_smoke() -> Dictionary:
 	else:
 		await _debug_smoke_piece_mode(result)
 	var ok := true
-	for key in ["tray_scroll", "pickup_drop", "hint", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "undo", "complete"]:
+	for key in ["tray_scroll", "pickup_drop", "tray_drag_scale", "hint", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "undo", "complete"]:
 		ok = ok and bool(result.get(key, false))
 	result["ok"] = ok
 	return result
@@ -1154,16 +1154,42 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 	debug_scroll_tray_left()
 	if not tray_groups.is_empty():
 		var picked = tray_groups[0]
+		var original_screen_scale := _tray_original_screen_scale()
+		for candidate in tray_groups:
+			if candidate.tray_scale < original_screen_scale * 0.98:
+				picked = candidate
+				break
+		var started_scaled_down: bool = picked.tray_scale < original_screen_scale * 0.98
 		var center: Vector2 = picked.tray_slot.get_center()
 		var lift_position := Vector2(center.x, _tray_area().position.y - 72.0)
-		var drop_position := lift_position + Vector2(0.0, -64.0)
+		var reentered_position := Vector2(center.x, _tray_area().position.y + 48.0)
 		handle_input(_debug_mouse_button(center, true), false)
 		handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
-		handle_input(_debug_mouse_motion(drop_position, drop_position - lift_position), false)
-		var lifted: bool = dragging == picked and not picked.in_tray
-		handle_input(_debug_mouse_button(drop_position, false), false)
+		var lifted_at_original_scale: bool = dragging == picked and not picked.in_tray and picked.node.scale.is_equal_approx(Vector2.ONE)
+		handle_input(_debug_mouse_motion(reentered_position, reentered_position - lift_position), false)
+		var reentered_at_original_scale: bool = dragging == picked and picked.node.scale.is_equal_approx(Vector2.ONE)
+		handle_input(_debug_mouse_button(reentered_position, false), false)
+		if picked.tray_tween != null and picked.tray_tween.is_valid():
+			await picked.tray_tween.finished
 		await get_tree().process_frame
-		result["pickup_drop"] = lifted and picked.in_tray and dragging == null
+		var returned_scaled_down: bool = (
+			picked.in_tray
+			and picked.node.get_parent() == tray_root
+			and is_equal_approx(picked.node.scale.x, picked.tray_scale)
+		)
+		result["tray_drag_scale"] = lifted_at_original_scale and reentered_at_original_scale and returned_scaled_down
+		result["tray_drag_scale_details"] = {
+			"started_scaled_down": started_scaled_down,
+			"lifted_at_original_scale": lifted_at_original_scale,
+			"reentered_at_original_scale": reentered_at_original_scale,
+			"returned_scaled_down": returned_scaled_down,
+			"tray_scale": picked.tray_scale,
+			"node_scale": picked.node.scale.x,
+			"in_tray": picked.in_tray,
+			"parent": picked.node.get_parent().name if picked.node.get_parent() != null else "",
+			"original_screen_scale": original_screen_scale,
+		}
+		result["pickup_drop"] = lifted_at_original_scale and picked.in_tray and dragging == null
 	show_hint()
 	var hint_wait_started := Time.get_ticks_msec()
 	while hint_pending and Time.get_ticks_msec() - hint_wait_started < 1200:
@@ -1871,8 +1897,7 @@ func _add_level_background(level_config: Dictionary) -> void:
 func _level_background_color(level_config: Dictionary) -> Color:
 	if level_config.has("background") and typeof(level_config["background"]) == TYPE_DICTIONARY:
 		var bg: Dictionary = level_config["background"]
-		if str(bg.get("type", "color")) == "color":
-			return Color(str(bg.get("color", "#ead8bd")))
+		return Color(str(bg.get("color", "#ead8bd")))
 	return Color("#ead8bd")
 
 
@@ -1924,6 +1949,9 @@ func _source_average_luminance() -> float:
 func _add_board_outline_shadow() -> void:
 	if world_root == null or source_size.x <= 0.0 or source_size.y <= 0.0:
 		return
+	if _uses_shanhai_interface_style():
+		_add_board_line_frame()
+		return
 	var shadow := ColorRect.new()
 	shadow.name = "board_outline_shadow"
 	shadow.color = Color(0.36, 0.23, 0.12, 0.12)
@@ -1938,6 +1966,43 @@ func _add_board_outline_shadow() -> void:
 	target.size = source_size * source_scale
 	target.z_index = -49
 	world_root.add_child(target)
+
+
+func _add_board_line_frame() -> void:
+	var frame := Panel.new()
+	frame.name = "board_line_frame"
+	frame.position = board_origin
+	frame.size = source_size * source_scale
+	frame.z_index = -49
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	var outline := _topic_ui_color("outline", Color("#879174"))
+	outline.a = 0.78
+	style.border_color = outline
+	style.border_width_left = BOARD_LINE_FRAME_WIDTH
+	style.border_width_top = BOARD_LINE_FRAME_WIDTH
+	style.border_width_right = BOARD_LINE_FRAME_WIDTH
+	style.border_width_bottom = BOARD_LINE_FRAME_WIDTH
+	var radius := maxi(10, int(minf(frame.size.x, frame.size.y) * 0.018))
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	frame.add_theme_stylebox_override("panel", style)
+	world_root.add_child(frame)
+
+
+func _uses_shanhai_interface_style() -> bool:
+	return str(active_level_config.get("topic_id", "")) == "topic_01"
+
+
+func _topic_ui_color(key: String, fallback: Color) -> Color:
+	var palette_value = active_level_config.get("_topic_ui_palette", {})
+	if typeof(palette_value) != TYPE_DICTIONARY:
+		return fallback
+	var palette: Dictionary = palette_value
+	return Color(str(palette.get(key, fallback.to_html())))
 
 
 func _create_group(piece: Dictionary, locked_seed := false) -> void:
@@ -2021,23 +2086,23 @@ func _tray_area() -> Rect2:
 	return Rect2(Vector2(0, maxf(0.0, viewport.y - height)), Vector2(viewport.x, height))
 
 
-func _ensure_tray_background() -> void:
+func _ensure_tray_top_border() -> void:
 	if tray_root == null or not is_instance_valid(tray_root):
 		return
-	if tray_background == null or not is_instance_valid(tray_background):
-		tray_background = ColorRect.new()
-		tray_background.name = "tray_background"
-		tray_background.color = Color(0.18, 0.18, 0.18, 0.28)
-		tray_background.z_index = -10
-		tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tray_root.add_child(tray_background)
+	if tray_top_border == null or not is_instance_valid(tray_top_border):
+		tray_top_border = ColorRect.new()
+		tray_top_border.name = "tray_top_border"
+		tray_top_border.color = TRAY_TOP_BORDER_COLOR
+		tray_top_border.z_index = -10
+		tray_top_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tray_root.add_child(tray_top_border)
 	var area := _tray_area()
-	tray_background.position = area.position
-	tray_background.size = area.size
+	tray_top_border.position = area.position
+	tray_top_border.size = Vector2(area.size.x, TRAY_TOP_BORDER_HEIGHT)
 
 
 func _layout_tray(instant := false) -> void:
-	_ensure_tray_background()
+	_ensure_tray_top_border()
 	_layout_tray_items(instant)
 	var previous_scroll := tray_scroll_offset
 	_clamp_tray_scroll()
@@ -2261,15 +2326,13 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	tray_drag_screen_offset = Vector2.ZERO
 	tray_drag_target_screen_offset = Vector2.ZERO
 	last_drag_screen_pos = screen_pos
-	var initial_scale: float = group.tray_scale / maxf(0.001, view_scale)
-	var pointer_world := _screen_to_world(screen_pos)
-	var node_world := _screen_to_world(group.node.position)
-	_send_group_to_world(group, node_world, initial_scale)
-	tray_drag_local_grab = (pointer_world - node_world) / maxf(0.001, initial_scale)
-	dragging_at_tray_scale = true
+	var tray_node_screen_position: Vector2 = group.node.position
+	var tray_node_screen_scale: float = maxf(0.001, group.node.scale.x)
+	tray_drag_local_grab = (screen_pos - tray_node_screen_position) / tray_node_screen_scale
+	_send_group_to_world(group, _screen_to_world(tray_node_screen_position), 1.0)
 	group.node.z_index = TRAY_DRAG_Z_INDEX
 	_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
-	_update_tray_drag_scale(screen_pos)
+	_place_dragging_from_screen(screen_pos)
 	drag_offset = Vector2.ZERO
 	_notify_state_changed()
 
@@ -2278,7 +2341,6 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 	last_drag_screen_pos = screen_pos
 	if dragging_from_tray:
 		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
-		_update_tray_drag_scale(screen_pos)
 		_place_dragging_from_screen(screen_pos)
 		if _tray_area().has_point(screen_pos):
 			_clear_snap_preview()
@@ -2287,30 +2349,6 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 		return
 	_move_group_to(dragging, _screen_to_world(screen_pos) + drag_offset)
 	_update_snap_preview(dragging)
-
-
-func _update_tray_drag_scale(screen_pos: Vector2) -> void:
-	if dragging == null or not is_instance_valid(dragging.node):
-		return
-	var inside_tray := _tray_area().has_point(screen_pos)
-	if inside_tray == dragging_at_tray_scale:
-		return
-	dragging_at_tray_scale = inside_tray
-	var target_scale: float = dragging.tray_scale / maxf(0.001, view_scale) if inside_tray else 1.0
-	if tray_drag_scale_tween != null and tray_drag_scale_tween.is_valid():
-		tray_drag_scale_tween.kill()
-	var group = dragging
-	tray_drag_scale_tween = create_tween()
-	tray_drag_scale_tween.set_ease(Tween.EASE_OUT)
-	tray_drag_scale_tween.set_trans(Tween.TRANS_CUBIC)
-	var start_scale: float = group.node.scale.x
-	tray_drag_scale_tween.tween_method(func(t: float) -> void:
-		if not is_instance_valid(group.node):
-			return
-		group.node.scale = Vector2.ONE * lerpf(start_scale, target_scale, t)
-		if group == dragging:
-			_place_dragging_from_screen(last_drag_screen_pos)
-	, 0.0, 1.0, _motion_duration(TRAY_DRAG_SCALE_TIME))
 
 
 func _place_dragging_from_screen(screen_pos: Vector2) -> void:
@@ -2705,11 +2743,7 @@ func _end_drag() -> void:
 	if tray_drag_offset_tween != null and tray_drag_offset_tween.is_valid():
 		tray_drag_offset_tween.kill()
 	tray_drag_offset_tween = null
-	if tray_drag_scale_tween != null and tray_drag_scale_tween.is_valid():
-		tray_drag_scale_tween.kill()
-	tray_drag_scale_tween = null
 	tray_drag_local_grab = Vector2.ZERO
-	dragging_at_tray_scale = false
 	last_drag_screen_pos = Vector2.ZERO
 	_notify_state_changed(true)
 

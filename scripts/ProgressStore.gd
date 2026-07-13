@@ -232,13 +232,25 @@ func level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
 	return {}
 
 
+func last_level_in_topic(topic: Dictionary) -> Dictionary:
+	return level_by_id(topic, str(progress.get("last_level_id", progress.get("_last_level_id", ""))))
+
+
+func level_has_progress(topic: Dictionary, level: Dictionary, play_modes: Array[String]) -> bool:
+	var level_id := str(level.get("id", ""))
+	for play_mode in play_modes:
+		if is_done(level_id, play_mode) or not play_state(topic, level, play_mode).is_empty():
+			return true
+	return false
+
+
 func focus_level_id(topic: Dictionary) -> String:
 	var focus := focus_level(topic)
 	return str(focus.get("id", ""))
 
 
 func focus_level(topic: Dictionary) -> Dictionary:
-	var last_level := level_by_id(topic, str(progress.get("last_level_id", progress.get("_last_level_id", ""))))
+	var last_level := last_level_in_topic(topic)
 	if not last_level.is_empty() and level_has_unfinished_mode(last_level):
 		return last_level
 	for level in topic.get("levels", []):

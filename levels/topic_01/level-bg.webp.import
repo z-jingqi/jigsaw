@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bqyopwlyf7le7"
-path="res://.godot/imported/cover.jpg-817f3bf8365908693c247cd22143dabe.ctex"
+uid="uid://jimicndg2xoi"
+path="res://.godot/imported/level-bg.webp-a747a7613e4cb4186fb7342cae5b33ad.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://levels/topic_01/cover.jpg"
-dest_files=["res://.godot/imported/cover.jpg-817f3bf8365908693c247cd22143dabe.ctex"]
+source_file="res://levels/topic_01/level-bg.webp"
+dest_files=["res://.godot/imported/level-bg.webp-a747a7613e4cb4186fb7342cae5b33ad.ctex"]
 
 [params]
 

@@ -1,8 +1,8 @@
 extends SceneTree
 
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
-const MAX_EDGE := 800
-const WEBP_QUALITY := 0.86
+const TARGET_SIZE := Vector2i(450, 600)
+const WEBP_QUALITY := 0.80
 
 
 func _initialize() -> void:
@@ -33,9 +33,11 @@ func _run() -> void:
 				failed += 1
 				print("THUMBNAIL_SKIP %s load_failed" % str(level.get("id", "")))
 				continue
-			var longest_edge := maxi(image.get_width(), image.get_height())
-			if longest_edge > MAX_EDGE:
-				var ratio := float(MAX_EDGE) / float(longest_edge)
+			var ratio := minf(
+				1.0,
+				minf(float(TARGET_SIZE.x) / float(image.get_width()), float(TARGET_SIZE.y) / float(image.get_height()))
+			)
+			if ratio < 1.0:
 				image.resize(
 					maxi(1, roundi(float(image.get_width()) * ratio)),
 					maxi(1, roundi(float(image.get_height()) * ratio)),

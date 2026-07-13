@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chj0dvm8g3xea"
-path="res://.godot/imported/card-back.jpg-c94870cdb14b6409f924dff2c3ef906d.ctex"
+uid="uid://d3mewn33dcfwt"
+path="res://.godot/imported/title-mountains.webp-2e4e9f47687488effe891994b61aaf9b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://levels/topic_01/card-back.jpg"
-dest_files=["res://.godot/imported/card-back.jpg-c94870cdb14b6409f924dff2c3ef906d.ctex"]
+source_file="res://levels/topic_01/ui/title-mountains.webp"
+dest_files=["res://.godot/imported/title-mountains.webp-2e4e9f47687488effe891994b61aaf9b.ctex"]
 
 [params]
 

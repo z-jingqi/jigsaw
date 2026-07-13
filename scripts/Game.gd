@@ -31,9 +31,10 @@ const DevTestPanelScript := preload("res://scripts/DevTestPanel.gd")
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
-const CloudTransitionScript := preload("res://scripts/CloudTransition.gd")
 const PLAY_MODES := ["polygon", "knob", "swap"]
 const LEVEL_THUMBNAIL_SIZE := Vector2i(164, 164)
+const LEVEL_LIST_THUMBNAIL_SIZE := Vector2i(450, 600)
+const LEVEL_LIST_OVERSCAN_ROWS := 1.0
 const UI_ICON_BUTTON_SIZE := 64.0
 const UI_ICON_INSET := 8.0
 const GAME_HINT_BUTTON_SCALE := 2.0
@@ -76,6 +77,22 @@ void fragment() {
 	vec3 ember = mix(vec3(0.95, 0.25, 0.03), vec3(1.0, 0.85, 0.30), glow * flicker);
 	color = mix(color, ember, glow);
 	COLOR = vec4(color, tex.a);
+}
+"""
+const ROUNDED_TEXTURE_SHADER_CODE := """
+shader_type canvas_item;
+
+uniform vec2 rect_size = vec2(1.0);
+uniform float corner_radius = 0.0;
+
+void fragment() {
+	vec4 color = texture(TEXTURE, UV) * COLOR;
+	vec2 half_size = rect_size * 0.5;
+	vec2 point = abs(UV * rect_size - half_size) - (half_size - vec2(corner_radius));
+	float distance_to_edge = length(max(point, vec2(0.0))) + min(max(point.x, point.y), 0.0) - corner_radius;
+	float edge_alpha = 1.0 - smoothstep(-1.0, 1.0, distance_to_edge);
+	color.a *= edge_alpha;
+	COLOR = color;
 }
 """
 const HUD_DEBUG_MEASUREMENTS := false
@@ -319,18 +336,19 @@ var topics_drag_active := false
 var topics_drag_total := Vector2.ZERO
 var topics_drag_last_msec := 0
 var topics_island_items: Array[Dictionary] = []
+var level_virtual_items: Array[Dictionary] = []
+var level_virtual_nodes: Dictionary = {}
+var level_virtual_overscan := 0.0
 
 var status_label: Label
 var zoom_label: Label
 var swap_undo_button: Button
 var hud_blocker_controls: Array[Control] = []
 var rounded_topic_cover_cache: Dictionary = {}
-var rounded_level_thumbnail_cache: Dictionary = {}
+var rounded_texture_shader: Shader = null
 var unlock_burn_shader: Shader = null
 var unlock_burn_noise: Texture2D = null
 var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
-var screen_transition_active := false
-var skip_launch_reveal := false
 var rounded_complete_image_cache: Dictionary = {}
 var active_locale := "en"
 var newly_unlocked_topic_id := ""
@@ -378,7 +396,6 @@ func _ready() -> void:
 	_apply_level_media({})
 	set_process(false)
 	_show_topics()
-	_play_launch_reveal()
 
 
 func _lock_portrait_orientation() -> void:
@@ -591,6 +608,9 @@ func _clear_ui() -> void:
 	_stop_topics_inertia()
 	topics_drag_active = false
 	topics_island_items.clear()
+	level_virtual_items.clear()
+	level_virtual_nodes.clear()
+	level_virtual_overscan = 0.0
 	topics_content = null
 	for child in ui_layer.get_children():
 		child.queue_free()
@@ -742,35 +762,15 @@ func _rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radi
 	return result
 
 
-func _rounded_level_thumbnail_texture(image_path: String, target_size: Vector2i, radius: int) -> Texture2D:
-	var cache_key := "%s@%dx%d@%d" % [image_path, target_size.x, target_size.y, radius]
-	if rounded_level_thumbnail_cache.has(cache_key):
-		return rounded_level_thumbnail_cache[cache_key]
-	var source_texture := repository.texture_from_file(image_path)
-	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
-		return source_texture
-	var image := source_texture.get_image()
-	if image == null or image.is_empty():
-		return source_texture
-	var scale_factor := maxf(
-		float(target_size.x) / float(image.get_width()),
-		float(target_size.y) / float(image.get_height())
-	)
-	image.resize(
-		maxi(target_size.x, int(ceil(float(image.get_width()) * scale_factor))),
-		maxi(target_size.y, int(ceil(float(image.get_height()) * scale_factor))),
-		Image.INTERPOLATE_LANCZOS
-	)
-	var offset := Vector2i(
-		maxi(0, (image.get_width() - target_size.x) / 2),
-		maxi(0, (image.get_height() - target_size.y) / 2)
-	)
-	image = image.get_region(Rect2i(offset, target_size))
-	image.convert(Image.FORMAT_RGBA8)
-	_apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
-	var result := ImageTexture.create_from_image(image)
-	rounded_level_thumbnail_cache[cache_key] = result
-	return result
+func _rounded_texture_material(target_size: Vector2, radius: float) -> ShaderMaterial:
+	if rounded_texture_shader == null:
+		rounded_texture_shader = Shader.new()
+		rounded_texture_shader.code = ROUNDED_TEXTURE_SHADER_CODE
+	var material := ShaderMaterial.new()
+	material.shader = rounded_texture_shader
+	material.set_shader_parameter("rect_size", target_size)
+	material.set_shader_parameter("corner_radius", radius)
+	return material
 
 
 func _rounded_complete_image_texture(image_path: String, target_size: Vector2i, radius: int) -> Texture2D:
@@ -931,6 +931,7 @@ func _icon_button(
 	transparent := false,
 	normal_icon_color := soft_brown,
 	hover_icon_color := deep_orange,
+	outline_only := false,
 ) -> Button:
 	var button := Button.new()
 	button.text = ""
@@ -942,6 +943,17 @@ func _icon_button(
 	if transparent:
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	elif outline_only:
+		var normal := _outline_icon_style(button_size)
+		button.add_theme_stylebox_override("normal", normal)
+		var hover := normal.duplicate()
+		hover.bg_color = Color(0.53, 0.57, 0.46, 0.08)
+		button.add_theme_stylebox_override("hover", hover)
+		var pressed := normal.duplicate()
+		pressed.bg_color = Color(0.53, 0.57, 0.46, 0.14)
+		button.add_theme_stylebox_override("pressed", pressed)
+		for state in ["disabled", "focus"]:
+			button.add_theme_stylebox_override(state, normal.duplicate())
 	elif _show_hud_debug_measurements():
 		_apply_debug_control_background(button, Color(0.18, 0.52, 0.95, 0.24))
 	else:
@@ -983,6 +995,22 @@ func _icon_button(
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
+
+
+func _outline_icon_style(button_size: float) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color("#879174")
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	var radius := int(button_size * 0.18)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	return style
 
 
 func _round_icon_style(bg_color: Color, button_size := UI_ICON_BUTTON_SIZE, subtle_shadow := false) -> StyleBoxFlat:
@@ -1095,11 +1123,11 @@ func _show_last_topic_levels() -> void:
 	if topic.is_empty():
 		_show_topics()
 		return
-	_show_levels(topic, progress_store.focus_level_id(topic))
+	_show_levels(topic, _level_list_focus_level_id(topic))
 
 
 func _open_topic_levels(topic: Dictionary) -> void:
-	_play_forward_transition(_screen_transition_color(topic), func() -> void: _show_levels(topic, progress_store.focus_level_id(topic)))
+	_show_levels(topic, _level_list_focus_level_id(topic))
 
 
 func _show_topics() -> void:
@@ -1304,19 +1332,6 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 		cover.add_theme_stylebox_override("panel", _rounded_panel_style(Color("#FFF5E3").lerp(topic_color, 0.26), cover_radius))
 		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(cover)
-		var fallback_path := str(topic.get("island", ""))
-		var fallback_texture := repository.cached_texture(fallback_path) if not fallback_path.is_empty() else null
-		if fallback_texture != null:
-			var art := TextureRect.new()
-			art.name = "theme_card_cover_art"
-			art.texture = fallback_texture
-			art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			var art_inset := cover_height * 0.035
-			art.position = Vector2(pad + art_inset, top_y + art_inset)
-			art.size = Vector2(cover_width - art_inset * 2.0, cover_height - art_inset * 2.0)
-			art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			card.add_child(art)
 	var text_x := pad + cover_width + card_width * 0.04
 	var circle_size := card_height * 0.38
 	var right_edge := card_width - pad - card_width * 0.025
@@ -1475,6 +1490,45 @@ func _topics_max_scroll() -> float:
 func _apply_topics_scroll() -> void:
 	if topics_content != null and is_instance_valid(topics_content):
 		topics_content.position.y = -topics_scroll_offset
+	if current_screen == "levels":
+		_refresh_level_virtual_cards()
+
+
+func _refresh_level_virtual_cards() -> void:
+	if topics_content == null or not is_instance_valid(topics_content):
+		return
+	var viewport_size := get_viewport_rect().size
+	var visible_top := maxf(0.0, topics_scroll_offset - level_virtual_overscan)
+	var visible_bottom := topics_scroll_offset + viewport_size.y + level_virtual_overscan
+	var required: Dictionary = {}
+	for index in level_virtual_items.size():
+		var item: Dictionary = level_virtual_items[index]
+		var rect: Rect2 = item.get("rect", Rect2())
+		if rect.end.y < visible_top or rect.position.y > visible_bottom:
+			continue
+		required[index] = true
+		if level_virtual_nodes.has(index):
+			continue
+		var card := _level_grid_card(
+			item.get("topic", {}),
+			item.get("level", {}),
+			bool(item.get("unlocked", false)),
+			float(item.get("card_width", rect.size.x)),
+			float(item.get("ui_scale", 1.0)),
+		)
+		card.position = rect.position
+		topics_content.add_child(card)
+		level_virtual_nodes[index] = card
+		if bool(item.get("animate_unlock", false)):
+			_animate_new_unlock_card(card, item.get("topic", {}), float(item.get("card_width", rect.size.x)))
+			item["animate_unlock"] = false
+	for index in level_virtual_nodes.keys():
+		if required.has(index):
+			continue
+		var card: Control = level_virtual_nodes[index]
+		level_virtual_nodes.erase(index)
+		if is_instance_valid(card):
+			card.queue_free()
 
 
 func _impulse_topics_scroll(distance: float) -> void:
@@ -1542,12 +1596,21 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 		var x := side_margin + float(col) * (card_width + gap)
 		y = top + float(row) * (card_height + gap)
 		var unlocked: bool = locks.get(str(level.get("id", "")), false)
-		var card := _level_grid_card(topic, level, unlocked, card_width, ui_scale)
-		card.position = Vector2(x, y)
-		topics_content.add_child(card)
-		if unlocked and str(topic.get("id", "")) == newly_unlocked_topic_id and str(level.get("id", "")) == newly_unlocked_level_id:
-			_animate_new_unlock_card(card, topic, card_width)
-		var item := {"rect": Rect2(Vector2(x, y), Vector2(card_width, card_height))}
+		var item_rect := Rect2(Vector2(x, y), Vector2(card_width, card_height))
+		level_virtual_items.append({
+			"rect": item_rect,
+			"topic": topic,
+			"level": level,
+			"unlocked": unlocked,
+			"card_width": card_width,
+			"ui_scale": ui_scale,
+			"animate_unlock": (
+				unlocked
+				and str(topic.get("id", "")) == newly_unlocked_topic_id
+				and str(level.get("id", "")) == newly_unlocked_level_id
+			),
+		})
+		var item := {"rect": item_rect}
 		if unlocked:
 			item["action"] = func(l: Dictionary = level) -> void: _show_mode_dialog(l)
 		topics_island_items.append(item)
@@ -1556,6 +1619,7 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	if not levels.is_empty():
 		y += card_height
 	topics_content_height = y + 32.0 * ui_scale
+	level_virtual_overscan = (card_height + gap) * LEVEL_LIST_OVERSCAN_ROWS
 	var catcher := Control.new()
 	catcher.name = "levels_scroll_catcher"
 	catcher.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1570,6 +1634,33 @@ func _show_levels(topic: Dictionary, focus_level_id := "") -> void:
 	if str(topic.get("id", "")) == newly_unlocked_topic_id:
 		newly_unlocked_topic_id = ""
 		newly_unlocked_level_id = ""
+
+
+func _level_list_focus_level_id(topic: Dictionary) -> String:
+	var current_level := progress_store.last_level_in_topic(topic)
+	if not current_level.is_empty():
+		var current_modes := _available_modes_for_level(current_level)
+		if (
+			_level_has_unfinished_available_mode(current_level, current_modes)
+			and progress_store.level_has_progress(topic, current_level, current_modes)
+		):
+			return str(current_level.get("id", ""))
+	for level in topic.get("levels", []):
+		if typeof(level) != TYPE_DICTIONARY:
+			continue
+		var available_modes := _available_modes_for_level(level)
+		if _level_has_unfinished_available_mode(level, available_modes):
+			return str(level.get("id", ""))
+	var levels: Array = topic.get("levels", [])
+	return str(levels[0].get("id", "")) if not levels.is_empty() and typeof(levels[0]) == TYPE_DICTIONARY else ""
+
+
+func _level_has_unfinished_available_mode(level: Dictionary, available_modes: Array[String]) -> bool:
+	var level_id := str(level.get("id", ""))
+	for play_mode in available_modes:
+		if not progress_store.is_done(level_id, play_mode):
+			return true
+	return false
 
 
 func _compute_level_locks(topic: Dictionary) -> Dictionary:
@@ -1618,6 +1709,8 @@ func _add_level_list_background(topic: Dictionary) -> void:
 
 
 func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
+	if _is_shanhai_topic_data(topic):
+		return _shanhai_level_list_topbar(topic, ui_scale)
 	var viewport_width := get_viewport_rect().size.x
 	var palette := _topic_ui_palette(topic)
 	var surface: Color = palette.surface
@@ -1625,6 +1718,7 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	var outline: Color = palette.outline
 	var accent: Color = palette.accent
 	var bar := Control.new()
+	bar.name = "level_list_topbar"
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_bottom = _theme_topbar_height(ui_scale)
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1634,6 +1728,7 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	back_button.position = Vector2(side_margin, 20.0 * ui_scale)
 	bar.add_child(back_button)
 	var title_panel := Panel.new()
+	title_panel.name = "level_list_title_panel"
 	title_panel.position = Vector2(viewport_width * 0.22, 20.0 * ui_scale)
 	title_panel.size = Vector2(viewport_width * 0.56, button_size)
 	var title_style := _rounded_panel_style(surface, int(button_size * 0.48))
@@ -1649,6 +1744,7 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	title_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(title_panel)
 	var title := Label.new()
+	title.name = "level_list_title"
 	title.text = str(topic.get("name", ""))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1662,6 +1758,7 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	var total := _topic_available_mode_total(topic)
 	var pill_size := Vector2(96.0 * ui_scale, 34.0 * ui_scale)
 	var pill := Panel.new()
+	pill.name = "level_list_progress"
 	pill.position = Vector2(viewport_width - side_margin - pill_size.x, 20.0 * ui_scale + (button_size - pill_size.y) * 0.5)
 	pill.size = pill_size
 	var pill_style := _rounded_panel_style(surface, int(pill_size.y * 0.5))
@@ -1692,25 +1789,134 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	return bar
 
 
-func _level_back_button(button_size: float, palette: Dictionary) -> Button:
+func _shanhai_level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
+	var viewport_width := get_viewport_rect().size.x
+	var palette := _topic_ui_palette(topic)
+	var foreground: Color = palette.foreground
+	var outline: Color = palette.outline
+	var accent: Color = palette.accent
+	var bar := Control.new()
+	bar.name = "level_list_topbar"
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_bottom = _theme_topbar_height(ui_scale)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var title_height := 52.0 * ui_scale
+	var button_size := 34.0 * ui_scale
+	var side_margin := 20.0 * ui_scale
+	var top := 20.0 * ui_scale
+	var back_button := _level_back_button(button_size, palette, true)
+	back_button.position = Vector2(side_margin, top + (title_height - button_size) * 0.5)
+	bar.add_child(back_button)
+	var progress_size := Vector2(64.0 * ui_scale, title_height)
+	var progress := Control.new()
+	progress.name = "level_list_progress"
+	progress.position = Vector2(
+		viewport_width - side_margin - progress_size.x,
+		top,
+	)
+	progress.size = progress_size
+	progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(progress)
+	var done := _topic_available_done_count(topic)
+	var total := _topic_available_mode_total(topic)
+	var progress_bar_size := Vector2(56.0 * ui_scale, 7.0 * ui_scale)
+	var progress_label_height := 22.0 * ui_scale
+	var progress_gap := 3.0 * ui_scale
+	var progress_content_top := (progress_size.y - progress_label_height - progress_gap - progress_bar_size.y) * 0.5
+	var progress_bar := _topic_progress_bar(
+		done,
+		total,
+		progress_bar_size,
+		accent,
+		Color(outline, 0.24),
+	)
+	progress_bar.name = "level_list_progress_bar"
+	progress_bar.position = Vector2(
+		(progress_size.x - progress_bar_size.x) * 0.5,
+		progress_content_top + progress_label_height + progress_gap,
+	)
+	progress.add_child(progress_bar)
+	var progress_label := Label.new()
+	progress_label.name = "level_list_progress_label"
+	progress_label.text = "%d/%d" % [done, total]
+	progress_label.position = Vector2(0.0, progress_content_top)
+	progress_label.size = Vector2(progress_size.x, progress_label_height)
+	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	progress_label.add_theme_font_size_override("font_size", int(14.0 * ui_scale))
+	progress_label.add_theme_color_override("font_color", foreground)
+	progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	progress.add_child(progress_label)
+	var title := Label.new()
+	title.name = "level_list_title"
+	title.text = str(topic.get("name", ""))
+	title.position = Vector2(viewport_width * 0.28, top)
+	title.size = Vector2(viewport_width * 0.44, title_height)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.clip_text = true
+	title.add_theme_font_size_override("font_size", int(28.0 * ui_scale))
+	title.add_theme_color_override("font_color", foreground)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(title)
+	var title_font := title.get_theme_font("font")
+	var title_font_size := title.get_theme_font_size("font_size")
+	var title_text_width := title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_font_size).x
+	var decoration_gap := 6.0 * ui_scale
+	var decoration_clearance := 4.0 * ui_scale
+	var decoration_width := minf(
+		42.0 * ui_scale,
+		minf(
+			viewport_width * 0.5 - title_text_width * 0.5 - decoration_gap - (back_button.position.x + button_size) - decoration_clearance,
+			progress.position.x - (viewport_width * 0.5 + title_text_width * 0.5 + decoration_gap) - decoration_clearance,
+		),
+	)
+	_add_shanhai_title_decorations(
+		bar,
+		title,
+		title_height,
+		viewport_width * 0.5,
+		top,
+		Vector2(maxf(20.0 * ui_scale, decoration_width), 26.0 * ui_scale),
+		decoration_gap,
+		topic,
+	)
+	return bar
+
+
+func _level_back_button(button_size: float, palette: Dictionary, shanhai_style := false) -> Button:
 	var button := Button.new()
+	button.name = "level_list_back_button"
 	button.text = ""
 	button.tooltip_text = _t("back")
 	button.custom_minimum_size = Vector2(button_size, button_size)
 	button.size = button.custom_minimum_size
 	var surface: Color = palette.surface
 	var outline: Color = palette.outline
-	button.add_theme_stylebox_override("normal", _topic_nav_button_style(surface, outline, button_size))
-	button.add_theme_stylebox_override("hover", _topic_nav_button_style(surface.lightened(0.06), outline, button_size))
-	button.add_theme_stylebox_override("pressed", _topic_nav_button_style(surface.darkened(0.04), outline, button_size, false))
-	button.add_theme_stylebox_override("disabled", _topic_nav_button_style(surface, outline, button_size, false))
+	if shanhai_style:
+		button.add_theme_stylebox_override("normal", _shanhai_nav_button_style(outline, button_size))
+		button.add_theme_stylebox_override("hover", _shanhai_nav_button_style(outline, button_size, 0.08))
+		button.add_theme_stylebox_override("pressed", _shanhai_nav_button_style(outline, button_size, 0.14))
+		button.add_theme_stylebox_override("disabled", _shanhai_nav_button_style(outline, button_size))
+	else:
+		button.add_theme_stylebox_override("normal", _topic_nav_button_style(surface, outline, button_size))
+		button.add_theme_stylebox_override("hover", _topic_nav_button_style(surface.lightened(0.06), outline, button_size))
+		button.add_theme_stylebox_override("pressed", _topic_nav_button_style(surface.darkened(0.04), outline, button_size, false))
+		button.add_theme_stylebox_override("disabled", _topic_nav_button_style(surface, outline, button_size, false))
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var arrow := TextureRect.new()
-	arrow.texture = repository.cached_texture(THEME_ARROW_ICON_PATH)
+	arrow.name = "level_list_back_icon"
+	var arrow_texture := repository.cached_texture(THEME_ARROW_ICON_PATH)
+	if shanhai_style and arrow_texture != null:
+		var cropped_arrow := AtlasTexture.new()
+		cropped_arrow.atlas = arrow_texture
+		cropped_arrow.region = Rect2(415.0, 214.0, 500.0, 826.0)
+		arrow_texture = cropped_arrow
+	arrow.texture = arrow_texture
 	arrow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	arrow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	arrow.flip_h = true
-	var inset := button_size * 0.28
+	var inset := button_size * (0.20 if shanhai_style else 0.28)
 	arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
 	arrow.offset_left = inset
 	arrow.offset_top = inset
@@ -1719,10 +1925,25 @@ func _level_back_button(button_size: float, palette: Dictionary) -> Button:
 	arrow.modulate = palette.foreground
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(arrow)
-	button.pressed.connect(func() -> void:
-		_play_back_transition(_screen_transition_color(current_topic), _show_topics))
+	button.pressed.connect(_show_topics)
 	_wire_button_animation(button)
 	return button
+
+
+func _shanhai_nav_button_style(outline: Color, button_size: float, background_alpha := 0.0) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(outline, background_alpha)
+	style.border_color = outline
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	var radius := int(button_size * 0.24)
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	return style
 
 
 func _topic_nav_button_style(surface: Color, outline: Color, button_size: float, with_shadow := true) -> StyleBoxFlat:
@@ -1797,13 +2018,14 @@ func _add_level_card_cover(card: Control, level_config: Dictionary, topic_color:
 	var thumb_path := repository.level_thumbnail_source_path(level_config)
 	var cover_texture: Texture2D = null
 	if not thumb_path.is_empty() and (ResourceLoader.exists(thumb_path) or FileAccess.file_exists(repository.image_file_path(thumb_path))):
-		cover_texture = _rounded_level_thumbnail_texture(thumb_path, Vector2i(int(card_width), int(card_height)), radius)
+		cover_texture = repository.runtime_thumbnail(thumb_path, LEVEL_LIST_THUMBNAIL_SIZE)
 	if cover_texture != null:
 		var rect := TextureRect.new()
 		rect.name = "level_card_cover"
 		rect.texture = cover_texture
+		rect.material = _rounded_texture_material(Vector2(card_width, card_height), float(radius))
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		rect.stretch_mode = TextureRect.STRETCH_SCALE
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(rect)
@@ -2187,9 +2409,6 @@ func _summary_text_item(mark: String, text: String) -> HBoxContainer:
 func _show_mode_dialog(level: Dictionary) -> void:
 	current_level = level
 	var available_modes := _available_modes_for_level(level)
-	var preferred := _preferred_available_mode(level, available_modes)
-	if not preferred.is_empty():
-		progress_store.mark_last_played(current_topic, level, preferred)
 	_show_modal()
 	var box := _mode_modal_box(_mode_dialog_size(available_modes.size()))
 	box.add_child(_mode_dialog_header())
@@ -2653,46 +2872,6 @@ func _unlock_shatter_stage(overlay: Control, geometry: Dictionary, texture: Text
 		tween.tween_property(shard, "modulate:a", 0.0, duration * 0.7).set_delay(duration * 0.3)
 
 
-func _screen_transition_color(topic: Dictionary) -> Color:
-	if topic.is_empty():
-		return Color(0.18, 0.13, 0.09)
-	return _topic_color(topic).darkened(0.45)
-
-
-func _play_forward_transition(color: Color, switch_screen: Callable) -> void:
-	_play_screen_transition(CloudTransitionScript.DIRECTION_FORWARD, color, switch_screen)
-
-
-func _play_back_transition(color: Color, switch_screen: Callable) -> void:
-	_play_screen_transition(CloudTransitionScript.DIRECTION_BACK, color, switch_screen)
-
-
-func _play_screen_transition(direction: int, color: Color, switch_screen: Callable) -> void:
-	if screen_transition_active:
-		return
-	if _ui_motion_reduced():
-		switch_screen.call()
-		return
-	screen_transition_active = true
-	var transition := CloudTransitionScript.new()
-	add_child(transition)
-	transition.finished.connect(func() -> void: screen_transition_active = false)
-	transition.play(direction, color, switch_screen)
-
-
-func _play_launch_reveal() -> void:
-	if skip_launch_reveal or DisplayServer.get_name() == "headless" or _ui_motion_reduced() or screen_transition_active:
-		return
-	screen_transition_active = true
-	var transition := CloudTransitionScript.new()
-	add_child(transition)
-	transition.finished.connect(func() -> void: screen_transition_active = false)
-	transition.play_launch(
-		Color(0.18, 0.13, 0.09),
-		title_texture
-	)
-
-
 func _render_card_back_snapshot(topic: Dictionary, topic_color: Color, card_width: float, card_height: float, radius: int) -> Image:
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(maxi(2, int(card_width)), maxi(2, int(card_height)))
@@ -3018,7 +3197,7 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String, discard
 	current_screen = "game"
 	current_topic = topic
 	current_level = level
-	active_level_config = repository.load_level_config(current_level)
+	active_level_config = _level_config_with_topic_background(repository.load_level_config(current_level), topic)
 	var available_modes := _available_modes_for_config(active_level_config)
 	current_mode = _mode_key(play_mode)
 	if not available_modes.has(current_mode):
@@ -3038,6 +3217,22 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String, discard
 		status_label.text = _t("status_missing_mode")
 	elif not progress_store.tutorial_seen(current_mode):
 		_show_tutorial_modal()
+
+
+func _level_config_with_topic_background(level_config: Dictionary, topic: Dictionary) -> Dictionary:
+	var result := level_config.duplicate(true)
+	var background_path := str(topic.get("level_background", ""))
+	if background_path.is_empty():
+		return result
+	var palette_value = topic.get("ui_palette", {})
+	var palette: Dictionary = palette_value if typeof(palette_value) == TYPE_DICTIONARY else {}
+	result["_topic_ui_palette"] = palette.duplicate(true)
+	result["background"] = {
+		"type": "image",
+		"path": background_path,
+		"color": str(palette.get("surface", "#F5F0E3")),
+	}
+	return result
 
 
 func _set_game_status(text: String) -> void:
@@ -3083,7 +3278,22 @@ func _build_game_hud(level_title: String) -> void:
 	top_bar.offset_bottom = bar_height
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen_root.add_child(top_bar)
-	var back_button := _icon_button(icon_left_arrow, _return_to_current_level_list, _t("back"), hint_button_size, hint_icon_inset, false, true, brown, deep_orange)
+	var shanhai_style := _is_shanhai_topic()
+	var shanhai_foreground := Color("#3F4939")
+	var shanhai_hover := Color("#68735A")
+	var back_button := _icon_button(
+		icon_left_arrow,
+		_return_to_current_level_list,
+		_t("back"),
+		hint_button_size,
+		hint_icon_inset,
+		false,
+		not shanhai_style,
+		shanhai_foreground if shanhai_style else brown,
+		shanhai_hover if shanhai_style else deep_orange,
+		shanhai_style,
+	)
+	back_button.name = "game_back_button"
 	back_button.position = Vector2(10, (bar_height - hint_button_size) * 0.5)
 	top_bar.add_child(back_button)
 	var title := Label.new()
@@ -3095,12 +3305,15 @@ func _build_game_hud(level_title: String) -> void:
 	title.offset_top = (bar_height - hint_button_size) * 0.5
 	title.offset_right = -(hint_button_size + 22.0)
 	title.offset_bottom = title.offset_top + hint_button_size
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", brown)
-	title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.12))
-	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.add_theme_font_size_override("font_size", 38 if shanhai_style else 32)
+	title.add_theme_color_override("font_color", shanhai_foreground if shanhai_style else brown)
+	if not shanhai_style:
+		title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.12))
+		title.add_theme_constant_override("shadow_offset_y", 2)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(title)
+	if shanhai_style:
+		_add_shanhai_title_decorations(top_bar, title, bar_height)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -3115,7 +3328,19 @@ func _build_game_hud(level_title: String) -> void:
 		swap_undo_button = _tool_text_button(_t("undo"), puzzle_board.undo_last_swap, _t("undo"))
 		swap_undo_button.disabled = not puzzle_board.can_undo_swap()
 		top_actions.add_child(swap_undo_button)
-	var hint_button := _icon_button(icon_lightbulb, puzzle_board.show_hint, _t("hint"), hint_button_size, hint_icon_inset)
+	var hint_button := _icon_button(
+		icon_lightbulb,
+		puzzle_board.show_hint,
+		_t("hint"),
+		hint_button_size,
+		hint_icon_inset,
+		false,
+		false,
+		shanhai_foreground if shanhai_style else soft_brown,
+		shanhai_hover if shanhai_style else deep_orange,
+		shanhai_style,
+	)
+	hint_button.name = "game_hint_button"
 	top_actions.add_child(hint_button)
 	zoom_label = null
 	status_label = Label.new()
@@ -3137,6 +3362,79 @@ func _build_game_hud(level_title: String) -> void:
 	_animate_screen_in(screen_root)
 
 
+func _is_shanhai_topic() -> bool:
+	return _is_shanhai_topic_data(current_topic)
+
+
+func _is_shanhai_topic_data(topic: Dictionary) -> bool:
+	return str(topic.get("id", "")) == "topic_01"
+
+
+func _topic_ui_asset_texture(topic: Dictionary, key: String) -> Texture2D:
+	var assets_value = topic.get("ui_assets", {})
+	if typeof(assets_value) != TYPE_DICTIONARY:
+		return null
+	var assets := assets_value as Dictionary
+	var path := str(assets.get(key, ""))
+	var texture := repository.cached_texture(path) if not path.is_empty() else null
+	var region_value = assets.get("%s_region" % key, [])
+	if texture == null or typeof(region_value) != TYPE_ARRAY or region_value.size() != 4:
+		return texture
+	var atlas := AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = Rect2(
+		float(region_value[0]),
+		float(region_value[1]),
+		float(region_value[2]),
+		float(region_value[3]),
+	)
+	return atlas
+
+
+func _add_shanhai_title_decorations(
+	parent: Control,
+	title: Label,
+	bar_height: float,
+	requested_center_x := -1.0,
+	top_offset := 0.0,
+	requested_size := Vector2.ZERO,
+	requested_gap := -1.0,
+	topic_override: Dictionary = {},
+) -> void:
+	var asset_topic: Dictionary = topic_override if not topic_override.is_empty() else current_topic
+	var texture := _topic_ui_asset_texture(asset_topic, "title_mountains")
+	if texture == null:
+		return
+	var viewport_width := get_viewport_rect().size.x
+	var decoration_size: Vector2 = requested_size if requested_size != Vector2.ZERO else Vector2(clampf(viewport_width * 0.11, 104.0, 136.0), 42.0)
+	var font := title.get_theme_font("font")
+	var font_size := title.get_theme_font_size("font_size")
+	var measured_title_width := font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	var title_width := maxf(88.0, measured_title_width)
+	var gap: float = requested_gap if requested_gap >= 0.0 else 16.0
+	var center_x: float = requested_center_x if requested_center_x >= 0.0 else viewport_width * 0.5
+	var top := top_offset + (bar_height - decoration_size.y) * 0.5
+	var left := _shanhai_title_decoration(texture, false, decoration_size)
+	left.name = "shanhai_title_mountain_left"
+	left.position = Vector2(center_x - title_width * 0.5 - gap - decoration_size.x, top)
+	parent.add_child(left)
+	var right := _shanhai_title_decoration(texture, true, decoration_size)
+	right.name = "shanhai_title_mountain_right"
+	right.position = Vector2(center_x + title_width * 0.5 + gap, top)
+	parent.add_child(right)
+
+
+func _shanhai_title_decoration(texture: Texture2D, flipped: bool, size: Vector2) -> TextureRect:
+	var decoration := TextureRect.new()
+	decoration.texture = texture
+	decoration.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	decoration.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	decoration.flip_h = flipped
+	decoration.size = size
+	decoration.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return decoration
+
+
 func _hud_top_icons_width() -> float:
 	return _game_top_actions_width()
 
@@ -3155,10 +3453,6 @@ func _game_top_actions_width() -> float:
 func _set_swap_undo_available(available: bool) -> void:
 	if swap_undo_button != null and is_instance_valid(swap_undo_button):
 		swap_undo_button.disabled = not available
-
-
-func _hud_title_size(text: String) -> Vector2:
-	return Vector2(maxf(48.0, float(text.length()) * 24.0 * 0.9), _icon_button_size())
 
 
 func _hud_button_separation() -> float:
@@ -3305,11 +3599,11 @@ func _apply_level_media(level_config: Dictionary) -> void:
 
 func _return_to_current_level_list() -> void:
 	if current_topic.is_empty():
-		_play_back_transition(_screen_transition_color({}), _show_topics)
+		_show_topics()
 		return
 	var topic := current_topic
 	var focus_id := str(current_level.get("id", ""))
-	_play_back_transition(_screen_transition_color(topic), func() -> void: _show_levels(topic, focus_id))
+	_show_levels(topic, focus_id)
 
 
 func _show_settings_modal() -> void:

@@ -31,7 +31,8 @@ func _run() -> void:
 		var topic: Dictionary = game.topics[0] if not game.topics.is_empty() else {}
 		game._show_levels(topic)
 		await process_frame
-		var levels_ok := _grid_starts_left_and_fits(game.topics_island_items, viewport_size)
+		var level_topbar_style := _shanhai_level_topbar_style_check(game, topic, viewport_size)
+		var levels_ok := _grid_starts_left_and_fits(game.topics_island_items, viewport_size) and bool(level_topbar_style.get("ok", false))
 		var level_rects := _grid_rect_summary(game.topics_island_items)
 		game._show_settings_modal()
 		await process_frame
@@ -60,6 +61,7 @@ func _run() -> void:
 			"topic_style": topic_style,
 			"levels": levels_ok,
 			"level_rects": level_rects,
+			"level_topbar_style": level_topbar_style,
 			"settings": settings_ok,
 			"settings_rects": settings_rects,
 			"modes": modes_ok,
@@ -136,6 +138,61 @@ func _level_index_for_mode(game, topic: Dictionary, play_mode: String) -> int:
 		if game._available_modes_for_level(levels[index]).has(play_mode):
 			return index
 	return 0
+
+
+func _shanhai_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vector2) -> Dictionary:
+	var topbar: Control = game.screen_root.get_node_or_null("level_list_topbar")
+	var back: Button = topbar.get_node_or_null("level_list_back_button") if topbar != null else null
+	var back_icon: TextureRect = back.get_node_or_null("level_list_back_icon") if back != null else null
+	var title: Label = topbar.get_node_or_null("level_list_title") if topbar != null else null
+	var left: TextureRect = topbar.get_node_or_null("shanhai_title_mountain_left") if topbar != null else null
+	var right: TextureRect = topbar.get_node_or_null("shanhai_title_mountain_right") if topbar != null else null
+	var progress: Control = topbar.get_node_or_null("level_list_progress") if topbar != null else null
+	var progress_bar: Panel = progress.get_node_or_null("level_list_progress_bar") if progress != null else null
+	var progress_label: Label = progress.get_node_or_null("level_list_progress_label") if progress != null else null
+	var back_style = back.get_theme_stylebox("normal") if back != null else null
+	var rounded_outline: bool = (
+		back_style is StyleBoxFlat
+		and back_style.bg_color.a <= 0.001
+		and back_style.border_width_left > 0
+		and back_style.shadow_size == 0
+		and back_style.corner_radius_top_left >= int(back.size.x * 0.15)
+		and back_style.corner_radius_top_left <= int(back.size.x * 0.35)
+	)
+	var title_unframed: bool = title != null and topbar.get_node_or_null("level_list_title_panel") == null
+	var back_icon_fills_button: bool = back_icon != null and back_icon.size.y >= back.size.y * 0.58 and back_icon.size.y <= back.size.y * 0.62 and back_icon.texture is AtlasTexture
+	var progress_unframed: bool = progress != null and not progress is Panel and progress_bar != null and progress_label != null
+	var progress_stacked_centered: bool = (
+		progress_bar != null
+		and progress_label != null
+		and progress_label.get_rect().end.y <= progress_bar.position.y
+		and absf(progress_label.get_rect().get_center().x - progress_bar.get_rect().get_center().x) <= 1.0
+	)
+	var decorations_present: bool = left != null and right != null and left.texture != null and right.texture != null
+	var separated: bool = (
+		back != null
+		and left != null
+		and right != null
+		and progress != null
+		and back.get_global_rect().end.x < left.get_global_rect().position.x
+		and right.get_global_rect().end.x < progress.get_global_rect().position.x
+		and progress.get_global_rect().end.x <= viewport_size.x + 1.0
+	)
+	var assets_value = topic.get("ui_assets", {})
+	var asset_path := str((assets_value as Dictionary).get("title_mountains", "")) if typeof(assets_value) == TYPE_DICTIONARY else ""
+	var theme_local_asset := asset_path.begins_with("res://levels/topic_01/ui/")
+	var result := {
+		"rounded_outline_back": rounded_outline,
+		"back_icon_fills_button": back_icon_fills_button,
+		"title_unframed": title_unframed,
+		"progress_unframed": progress_unframed,
+		"progress_stacked_centered": progress_stacked_centered,
+		"decorations_present": decorations_present,
+		"separated": separated,
+		"theme_local_asset": theme_local_asset,
+	}
+	result["ok"] = rounded_outline and back_icon_fills_button and title_unframed and progress_unframed and progress_stacked_centered and decorations_present and separated and theme_local_asset
+	return result
 
 
 func _contains_level_count_label(node: Node) -> bool:

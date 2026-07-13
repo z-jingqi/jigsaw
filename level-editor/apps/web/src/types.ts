@@ -27,7 +27,6 @@ export type CatalogTopic = {
   color?: string;
   ui_palette?: Record<string, string>;
   icon?: string;
-  island?: string;
   level_background?: string;
   card_back?: string;
   sort_order: number;

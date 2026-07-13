@@ -24,7 +24,7 @@
 				"zh-Hans": "山海经",
 				"_": "山海经"
 			},
-			"cover": "res://levels/topic_01/cover.jpg",
+			"cover": "res://levels/topic_01/cover.webp",
 			"color": "#95A584",
 			"ui_palette": {
 				"surface": "#E9E3CD",
@@ -32,10 +32,13 @@
 				"outline": "#879174",
 				"accent": "#C8703F"
 			},
+			"ui_assets": {
+				"title_mountains": "res://levels/topic_01/ui/title-mountains.webp",
+				"title_mountains_region": [359, 191, 1471, 326]
+			},
 			"icon": "res://levels/topic_01/icon.png",
-			"island": "res://assets/web-ui/island-map/topic-shanhai.webp",
-			"level_background": "res://levels/topic_01/level-bg.jpg",
-			"card_back": "res://levels/topic_01/card-back.jpg",
+			"level_background": "res://levels/topic_01/level-bg.webp",
+			"card_back": "res://levels/topic_01/card-back.webp",
 			"sort_order": 0,
 			"levels": [
 				{
@@ -212,7 +215,6 @@
 				"accent": "#C96F45"
 			},
 			"icon": "res://levels/topic_02/icon.png",
-			"island": "res://assets/web-ui/island-map/topic-greek.webp",
 			"level_background": "res://levels/topic_02/level-bg.jpg",
 			"sort_order": 1,
 			"levels": [
@@ -515,7 +517,6 @@
 				"accent": "#D97843"
 			},
 			"icon": "res://levels/topic_03/icon.png",
-			"island": "res://assets/web-ui/island-map/topic-cat.webp",
 			"level_background": "res://levels/topic_03/level-bg.jpg",
 			"sort_order": 2,
 			"levels": [
@@ -598,7 +599,6 @@
 				"accent": "#D89A45"
 			},
 			"icon": "res://levels/topic_04/icon.png",
-			"island": "res://assets/web-ui/island-map/topic-dog.webp",
 			"level_background": "res://levels/topic_04/level-bg.jpg",
 			"sort_order": 3,
 			"levels": [

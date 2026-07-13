@@ -5,7 +5,6 @@ const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_THUMBNAIL_FILE := "thumbnail.webp"
 
 var texture_cache: Dictionary = {}
-var thumbnail_cache: Dictionary = {}
 var source_image_cache: Dictionary = {}
 var config_cache: Dictionary = {}
 var locale := "en"
@@ -56,8 +55,8 @@ func build_catalog() -> Array[Dictionary]:
 				"cover": str(topic.get("cover", "")),
 				"color": str(topic.get("color", "#D9933F")),
 				"ui_palette": topic.get("ui_palette", {}) if typeof(topic.get("ui_palette", {})) == TYPE_DICTIONARY else {},
+				"ui_assets": topic.get("ui_assets", {}) if typeof(topic.get("ui_assets", {})) == TYPE_DICTIONARY else {},
 				"icon": str(topic.get("icon", "")),
-				"island": str(topic.get("island", "")),
 				"level_background": str(topic.get("level_background", "")),
 				"card_back": str(topic.get("card_back", "")),
 				"levels": levels,
@@ -112,7 +111,7 @@ func load_config_path(config_path: String) -> Dictionary:
 func level_thumbnail(level: Dictionary, target_size := Vector2i(260, 260)) -> Texture2D:
 	var level_config := load_level_config(level)
 	var image_path := level_thumbnail_source_path(level_config)
-	return cached_runtime_thumbnail(image_path, target_size)
+	return runtime_thumbnail(image_path, target_size)
 
 
 func topic_cover_texture(topic: Dictionary) -> Texture2D:
@@ -123,11 +122,6 @@ func topic_cover_texture(topic: Dictionary) -> Texture2D:
 func topic_icon_texture(topic: Dictionary) -> Texture2D:
 	var icon_path := str(topic.get("icon", ""))
 	return cached_texture(icon_path) if not icon_path.is_empty() else null
-
-
-func topic_island_texture(topic: Dictionary) -> Texture2D:
-	var island_path := str(topic.get("island", ""))
-	return cached_texture(island_path) if not island_path.is_empty() else null
 
 
 func apply_level_media(level_config: Dictionary) -> Dictionary:
@@ -175,35 +169,26 @@ func cached_texture(path: String) -> Texture2D:
 	return null
 
 
-func texture_from_file(path: String) -> Texture2D:
-	if path.is_empty():
-		return null
-	var image := Image.load_from_file(image_file_path(path))
-	if image != null and not image.is_empty():
-		return ImageTexture.create_from_image(image)
-	return load(path) as Texture2D
-
-
-func cached_runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
+func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 	if path.is_empty() or target_size.x <= 0 or target_size.y <= 0:
 		return null
-	var key := "%s@%dx%d" % [path, target_size.x, target_size.y]
-	if thumbnail_cache.has(key):
-		return thumbnail_cache[key]
-	var image: Image = Image.load_from_file(image_file_path(path))
+	var source_texture: Texture2D = null
+	if path.begins_with("res://") and ResourceLoader.exists(path):
+		source_texture = load(path) as Texture2D
+	if source_texture != null and source_texture.get_width() <= target_size.x and source_texture.get_height() <= target_size.y:
+		return source_texture
+	var image: Image = source_texture.get_image() if source_texture != null else Image.load_from_file(image_file_path(path))
 	if image == null or image.is_empty():
 		return null
-	var ratio: float = minf(float(target_size.x) / float(image.get_width()), float(target_size.y) / float(image.get_height()))
+	var ratio: float = minf(
+		1.0,
+		minf(float(target_size.x) / float(image.get_width()), float(target_size.y) / float(image.get_height()))
+	)
 	var width: int = max(1, int(round(float(image.get_width()) * ratio)))
 	var height: int = max(1, int(round(float(image.get_height()) * ratio)))
-	image.resize(width, height, Image.INTERPOLATE_LANCZOS)
-	var texture := ImageTexture.create_from_image(image)
-	thumbnail_cache[key] = texture
-	return texture
-
-
-func has_runtime_thumbnail(path: String, target_size: Vector2i) -> bool:
-	return thumbnail_cache.has("%s@%dx%d" % [path, target_size.x, target_size.y])
+	if image.get_width() != width or image.get_height() != height:
+		image.resize(width, height, Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(image)
 
 
 func image_file_path(path: String) -> String:

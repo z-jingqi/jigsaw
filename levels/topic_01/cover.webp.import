@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ckq40ym4iv3sl"
-path="res://.godot/imported/topic-dog.webp-e481bbbfff427672c35de4023524f0f8.ctex"
+uid="uid://cce0p0tbvwh5x"
+path="res://.godot/imported/cover.webp-0e1fb5e7bf6606758bbe4179f73d94c7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/web-ui/island-map/topic-dog.webp"
-dest_files=["res://.godot/imported/topic-dog.webp-e481bbbfff427672c35de4023524f0f8.ctex"]
+source_file="res://levels/topic_01/cover.webp"
+dest_files=["res://.godot/imported/cover.webp-0e1fb5e7bf6606758bbe4179f73d94c7.ctex"]
 
 [params]
 
