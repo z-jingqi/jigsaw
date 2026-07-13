@@ -149,10 +149,8 @@ const UI_TEXT := {
 		"random_rotation": "Random piece rotation (polygon / jigsaw)",
 		"random_rotation_next": "Random rotation changes apply after restarting or entering another level.",
 		"close": "Close",
-		"tutorial_title": "How to play",
-		"tutorial_swap": "Drag one tile onto another to swap them.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
-		"tutorial_rotate": "Drag pieces beside matching neighbors. Double tap to rotate.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
-		"tutorial_drag": "Drag pieces beside matching neighbors; they snap together when aligned.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
+		"tutorial_swap": "Drag one tile onto another to swap.",
+		"tutorial_drag": "Drag matching pieces together to snap.",
 		"got_it": "Got it",
 		"complete": "Puzzle complete",
 		"completed_mode": "Completed: %s",
@@ -207,10 +205,8 @@ const UI_TEXT := {
 		"random_rotation": "碎片随机旋转（多边形 / 凹凸）",
 		"random_rotation_next": "随机旋转设置将在重新开始或进入下一关后生效。",
 		"close": "关闭",
-		"tutorial_title": "怎么玩",
-		"tutorial_swap": "拖动一块图片到另一块上，即可交换位置。\n拖动空白处移动桌布，双指缩放。",
-		"tutorial_rotate": "把碎片拖到匹配的相邻碎片旁，双击可旋转。\n拖动空白处移动桌布，双指缩放。",
-		"tutorial_drag": "把碎片拖到匹配的相邻碎片旁，对齐后会自动吸附。\n拖动空白处移动桌布，双指缩放。",
+		"tutorial_swap": "拖动图片块，交换位置。",
+		"tutorial_drag": "拖动碎片拼合，对齐后自动吸附。",
 		"got_it": "知道了",
 		"complete": "拼图完成",
 		"completed_mode": "已完成：%s",
@@ -265,10 +261,8 @@ const UI_TEXT := {
 		"random_rotation": "ピースをランダム回転（ポリゴン / ジグソー）",
 		"random_rotation_next": "ランダム回転の変更は再開または次のレベルから反映されます。",
 		"close": "閉じる",
-		"tutorial_title": "遊び方",
-		"tutorial_swap": "タイルを別のタイルへドラッグして入れ替えます。\n背景をドラッグして移動し、ピンチでズームできます。",
-		"tutorial_rotate": "ピースを合う隣へドラッグし、ダブルタップで回転します。\n背景をドラッグして移動し、ピンチでズームできます。",
-		"tutorial_drag": "ピースを合う隣へドラッグすると、揃った位置で吸着します。\n背景をドラッグして移動し、ピンチでズームできます。",
+		"tutorial_swap": "タイルを重ねて入れ替えます。",
+		"tutorial_drag": "ピースを合わせると吸着します。",
 		"got_it": "OK",
 		"complete": "パズル完成",
 		"completed_mode": "完成：%s",
@@ -3552,23 +3546,20 @@ func _show_settings_modal() -> void:
 
 func _show_tutorial_modal() -> void:
 	_show_modal()
-	var modal_size := _responsive_modal_size(860.0, 990.0)
+	var modal_size := _responsive_modal_size(860.0, 820.0)
 	var box := _modal_box(modal_size, Color("#FFF8EC"), 54.0)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 22)
-	box.add_child(_modal_title(_t("tutorial_title")))
 	var tutorial_texture := modal_tutorial_drag_texture
 	var tutorial_text := _t("tutorial_drag")
 	if current_mode == "swap":
 		tutorial_texture = modal_tutorial_swap_texture
 		tutorial_text = _t("tutorial_swap")
-	elif progress_store.random_rotation_enabled():
-		tutorial_text = _t("tutorial_rotate")
 	var art := _tutorial_illustration(tutorial_texture, Vector2(modal_size.x - 108.0, 430.0))
 	box.add_child(art)
 	_animate_tutorial_illustration(art)
 	var text := _modal_body_label(tutorial_text, 27, soft_brown)
-	text.custom_minimum_size.y = 112
+	text.custom_minimum_size.y = 64
 	box.add_child(text)
 	box.add_child(_modal_action_button(_t("got_it"), func() -> void:
 		progress_store.mark_tutorial_seen(current_mode)
