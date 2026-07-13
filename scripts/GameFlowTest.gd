@@ -49,9 +49,12 @@ func _run() -> void:
 	topic_media_ok = topic_media_ok and no_cover_fallback
 	print("TOPIC_MEDIA %s" % JSON.stringify({"ok": topic_media_ok, "no_cover_fallback": no_cover_fallback, "shared_background": shared_background_path, "cover": cover_path, "card_back": card_back_path, "topics": game.topics.size()}))
 	all_ok = all_ok and topic_media_ok
-	var title_layout_result := _shanhai_title_layout_probe(game)
-	print("SHANHAI_TITLE_LAYOUT %s" % JSON.stringify(title_layout_result))
+	var title_layout_result := _topic_title_layout_probe(game)
+	print("TOPIC_TITLE_LAYOUT %s" % JSON.stringify(title_layout_result))
 	all_ok = all_ok and bool(title_layout_result.get("ok", false))
+	var theme_header_result := await _theme_header_style_probe(game)
+	print("THEME_HEADER_STYLE %s" % JSON.stringify(theme_header_result))
+	all_ok = all_ok and bool(theme_header_result.get("ok", false))
 	var level_focus_result := await _level_list_focus_probe(game, first_topic)
 	print("LEVEL_LIST_FOCUS %s" % JSON.stringify(level_focus_result))
 	all_ok = all_ok and bool(level_focus_result.get("ok", false))
@@ -113,8 +116,17 @@ func _run() -> void:
 	game._show_levels(first_topic)
 	await process_frame
 	var locked_card = game._level_grid_card(first_topic, first_level, false, 300.0, 1.0)
-	var locked_card_ok: bool = locked_card.find_child("level_card_back", true, false) != null and locked_card.find_child("level_card_overlay", true, false) == null
-	print("LOCKED_CARD %s" % JSON.stringify({"ok": locked_card_ok, "has_modes": locked_card.find_child("level_card_overlay", true, false) != null}))
+	var locked_back = locked_card.find_child("level_card_back", true, false)
+	var locked_card_ok: bool = (
+		locked_back is TextureRect
+		and locked_back.material is ShaderMaterial
+		and locked_card.find_child("level_card_overlay", true, false) == null
+	)
+	print("LOCKED_CARD %s" % JSON.stringify({
+		"ok": locked_card_ok,
+		"rounded": locked_back is TextureRect and locked_back.material is ShaderMaterial,
+		"has_modes": locked_card.find_child("level_card_overlay", true, false) != null,
+	}))
 	all_ok = all_ok and locked_card_ok
 	locked_card.queue_free()
 	var dev_key_ok := _test_dev_key(game)
@@ -156,8 +168,8 @@ func _run() -> void:
 			)
 		var back_button = game.screen_root.find_child("game_back_button", true, false)
 		var hint_button = game.screen_root.find_child("game_hint_button", true, false)
-		var title_left = game.screen_root.find_child("shanhai_title_mountain_left", true, false)
-		var title_right = game.screen_root.find_child("shanhai_title_mountain_right", true, false)
+		var title_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
+		var title_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
 		var interface_style_ok := (
 			_outline_only_button(back_button)
 			and _outline_only_button(hint_button)
@@ -278,16 +290,95 @@ func _outline_only_button(value) -> bool:
 	)
 
 
-func _shanhai_title_layout_probe(game) -> Dictionary:
+func _icon_uses_color(value, expected: Color) -> bool:
+	if not value is TextureRect or not value.material is ShaderMaterial:
+		return false
+	var actual = value.material.get_shader_parameter("icon_color")
+	return typeof(actual) == TYPE_COLOR and actual.is_equal_approx(expected)
+
+
+func _theme_header_style_probe(game) -> Dictionary:
+	var details: Array[Dictionary] = []
+	var all_ok := true
+	for topic in game.topics:
+		var palette: Dictionary = game._topic_ui_palette(topic)
+		var foreground: Color = palette.foreground
+		var outline: Color = palette.outline
+		var assets_value = topic.get("ui_assets", {})
+		var assets: Dictionary = assets_value if typeof(assets_value) == TYPE_DICTIONARY else {}
+		var has_title_decoration := not str(assets.get("title_mountains", "")).is_empty()
+		game._show_levels(topic)
+		await process_frame
+		var level_topbar: Control = game.screen_root.get_node_or_null("level_list_topbar")
+		var level_back: Button = level_topbar.get_node_or_null("level_list_back_button") if level_topbar != null else null
+		var level_back_style = level_back.get_theme_stylebox("normal") if level_back != null else null
+		var level_back_icon: TextureRect = level_back.get_node_or_null("level_list_back_icon") if level_back != null else null
+		var level_title: Label = level_topbar.get_node_or_null("level_list_title") if level_topbar != null else null
+		var level_left = level_topbar.get_node_or_null("topic_title_decoration_left") if level_topbar != null else null
+		var level_right = level_topbar.get_node_or_null("topic_title_decoration_right") if level_topbar != null else null
+		var level_decorations_match: bool = (
+			(level_left is TextureRect and level_right is TextureRect) == has_title_decoration
+		)
+		var level_ok: bool = (
+			level_back_style is StyleBoxFlat
+			and level_back_style.border_color.is_equal_approx(outline)
+			and _icon_uses_color(level_back_icon, foreground)
+			and level_title != null
+			and level_title.get_theme_color("font_color").is_equal_approx(foreground)
+			and level_topbar.get_node_or_null("level_list_title_panel") == null
+			and level_decorations_match
+		)
+		game._clear_ui()
+		game.current_topic = topic
+		game.current_mode = "polygon"
+		game._build_game_hud("Header")
+		await process_frame
+		var game_back: Button = game.screen_root.find_child("game_back_button", true, false)
+		var hint_button: Button = game.screen_root.find_child("game_hint_button", true, false)
+		var game_title: Label = game.screen_root.find_child("game_title", true, false)
+		var game_back_style = game_back.get_theme_stylebox("normal") if game_back != null else null
+		var hint_style = hint_button.get_theme_stylebox("normal") if hint_button != null else null
+		var game_back_icon: TextureRect = game_back.get_child(0) if game_back != null and game_back.get_child_count() > 0 else null
+		var hint_icon: TextureRect = hint_button.get_child(0) if hint_button != null and hint_button.get_child_count() > 0 else null
+		var game_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
+		var game_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
+		var game_decorations_match: bool = (
+			(game_left is TextureRect and game_right is TextureRect) == has_title_decoration
+		)
+		var game_ok: bool = (
+			game_back_style is StyleBoxFlat
+			and game_back_style.border_color.is_equal_approx(outline)
+			and hint_style is StyleBoxFlat
+			and hint_style.border_color.is_equal_approx(outline)
+			and _icon_uses_color(game_back_icon, foreground)
+			and _icon_uses_color(hint_icon, foreground)
+			and game_title != null
+			and game_title.get_theme_color("font_color").is_equal_approx(foreground)
+			and game_decorations_match
+		)
+		var topic_ok := level_ok and game_ok
+		details.append({
+			"topic": str(topic.get("id", "")),
+			"level_header": level_ok,
+			"game_header": game_ok,
+			"has_decoration": has_title_decoration,
+		})
+		all_ok = all_ok and topic_ok
+	game._show_topics()
+	await process_frame
+	return {"ok": all_ok, "topics": details}
+
+
+func _topic_title_layout_probe(game) -> Dictionary:
 	var parent := Control.new()
 	game.screen_root.add_child(parent)
 	var title := Label.new()
 	title.text = "羲和浴日"
 	title.add_theme_font_size_override("font_size", 38)
 	parent.add_child(title)
-	game._add_shanhai_title_decorations(parent, title, game._game_top_bar_height(), -1.0, 0.0, Vector2.ZERO, -1.0, game.topics[0])
-	var left: TextureRect = parent.get_node_or_null("shanhai_title_mountain_left")
-	var right: TextureRect = parent.get_node_or_null("shanhai_title_mountain_right")
+	game._add_topic_title_decorations(parent, title, game._game_top_bar_height(), -1.0, 0.0, Vector2.ZERO, -1.0, game.topics[0])
+	var left: TextureRect = parent.get_node_or_null("topic_title_decoration_left")
+	var right: TextureRect = parent.get_node_or_null("topic_title_decoration_right")
 	var font := title.get_theme_font("font")
 	var text_width: float = font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title.get_theme_font_size("font_size")).x
 	var center_x: float = game.get_viewport_rect().size.x * 0.5

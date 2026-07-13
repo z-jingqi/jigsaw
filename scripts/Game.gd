@@ -86,13 +86,22 @@ uniform vec2 rect_size = vec2(1.0);
 uniform float corner_radius = 0.0;
 
 void fragment() {
-	vec4 color = texture(TEXTURE, UV) * COLOR;
+	vec4 color = COLOR;
 	vec2 half_size = rect_size * 0.5;
 	vec2 point = abs(UV * rect_size - half_size) - (half_size - vec2(corner_radius));
 	float distance_to_edge = length(max(point, vec2(0.0))) + min(max(point.x, point.y), 0.0) - corner_radius;
 	float edge_alpha = 1.0 - smoothstep(-1.0, 1.0, distance_to_edge);
 	color.a *= edge_alpha;
 	COLOR = color;
+}
+"""
+const ICON_TINT_SHADER_CODE := """
+shader_type canvas_item;
+
+uniform vec4 icon_color : source_color = vec4(1.0);
+
+void fragment() {
+	COLOR = vec4(icon_color.rgb, COLOR.a * icon_color.a);
 }
 """
 const HUD_DEBUG_MEASUREMENTS := false
@@ -346,6 +355,7 @@ var swap_undo_button: Button
 var hud_blocker_controls: Array[Control] = []
 var rounded_topic_cover_cache: Dictionary = {}
 var rounded_texture_shader: Shader = null
+var icon_tint_shader: Shader = null
 var unlock_burn_shader: Shader = null
 var unlock_burn_noise: Texture2D = null
 var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
@@ -773,6 +783,16 @@ func _rounded_texture_material(target_size: Vector2, radius: float) -> ShaderMat
 	return material
 
 
+func _icon_tint_material(color: Color) -> ShaderMaterial:
+	if icon_tint_shader == null:
+		icon_tint_shader = Shader.new()
+		icon_tint_shader.code = ICON_TINT_SHADER_CODE
+	var material := ShaderMaterial.new()
+	material.shader = icon_tint_shader
+	material.set_shader_parameter("icon_color", color)
+	return material
+
+
 func _rounded_complete_image_texture(image_path: String, target_size: Vector2i, radius: int) -> Texture2D:
 	var cache_key := "%s@%dx%d@%d" % [image_path, target_size.x, target_size.y, radius]
 	if rounded_complete_image_cache.has(cache_key):
@@ -932,6 +952,7 @@ func _icon_button(
 	normal_icon_color := soft_brown,
 	hover_icon_color := deep_orange,
 	outline_only := false,
+	outline_color := Color("#879174"),
 ) -> Button:
 	var button := Button.new()
 	button.text = ""
@@ -944,13 +965,13 @@ func _icon_button(
 		for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 			button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	elif outline_only:
-		var normal := _outline_icon_style(button_size)
+		var normal := _outline_icon_style(button_size, outline_color)
 		button.add_theme_stylebox_override("normal", normal)
 		var hover := normal.duplicate()
-		hover.bg_color = Color(0.53, 0.57, 0.46, 0.08)
+		hover.bg_color = Color(outline_color, 0.08)
 		button.add_theme_stylebox_override("hover", hover)
 		var pressed := normal.duplicate()
-		pressed.bg_color = Color(0.53, 0.57, 0.46, 0.14)
+		pressed.bg_color = Color(outline_color, 0.14)
 		button.add_theme_stylebox_override("pressed", pressed)
 		for state in ["disabled", "focus"]:
 			button.add_theme_stylebox_override(state, normal.duplicate())
@@ -978,29 +999,30 @@ func _icon_button(
 	icon_rect.offset_right = -icon_inset
 	icon_rect.offset_bottom = -icon_inset
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	icon_rect.modulate = normal_icon_color
+	var icon_material := _icon_tint_material(normal_icon_color)
+	icon_rect.material = icon_material
 	button.add_child(icon_rect)
 	button.mouse_entered.connect(func() -> void:
-		icon_rect.modulate = hover_icon_color
+		icon_material.set_shader_parameter("icon_color", hover_icon_color)
 	)
 	button.mouse_exited.connect(func() -> void:
-		icon_rect.modulate = normal_icon_color
+		icon_material.set_shader_parameter("icon_color", normal_icon_color)
 	)
 	button.button_down.connect(func() -> void:
-		icon_rect.modulate = hover_icon_color
+		icon_material.set_shader_parameter("icon_color", hover_icon_color)
 	)
 	button.button_up.connect(func() -> void:
-		icon_rect.modulate = normal_icon_color
+		icon_material.set_shader_parameter("icon_color", normal_icon_color)
 	)
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
 
 
-func _outline_icon_style(button_size: float) -> StyleBoxFlat:
+func _outline_icon_style(button_size: float, outline_color := Color("#879174")) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color.TRANSPARENT
-	style.border_color = Color("#879174")
+	style.border_color = outline_color
 	style.border_width_left = 2
 	style.border_width_top = 2
 	style.border_width_right = 2
@@ -1709,87 +1731,6 @@ func _add_level_list_background(topic: Dictionary) -> void:
 
 
 func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
-	if _is_shanhai_topic_data(topic):
-		return _shanhai_level_list_topbar(topic, ui_scale)
-	var viewport_width := get_viewport_rect().size.x
-	var palette := _topic_ui_palette(topic)
-	var surface: Color = palette.surface
-	var foreground: Color = palette.foreground
-	var outline: Color = palette.outline
-	var accent: Color = palette.accent
-	var bar := Control.new()
-	bar.name = "level_list_topbar"
-	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	bar.offset_bottom = _theme_topbar_height(ui_scale)
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var button_size := 52.0 * ui_scale
-	var side_margin := 20.0 * ui_scale
-	var back_button := _level_back_button(button_size, palette)
-	back_button.position = Vector2(side_margin, 20.0 * ui_scale)
-	bar.add_child(back_button)
-	var title_panel := Panel.new()
-	title_panel.name = "level_list_title_panel"
-	title_panel.position = Vector2(viewport_width * 0.22, 20.0 * ui_scale)
-	title_panel.size = Vector2(viewport_width * 0.56, button_size)
-	var title_style := _rounded_panel_style(surface, int(button_size * 0.48))
-	title_style.border_color = outline
-	title_style.border_width_left = maxi(1, int(ui_scale))
-	title_style.border_width_top = maxi(1, int(ui_scale))
-	title_style.border_width_right = maxi(1, int(ui_scale))
-	title_style.border_width_bottom = maxi(1, int(ui_scale))
-	title_style.shadow_color = Color(outline, 0.22)
-	title_style.shadow_size = maxi(2, int(4.0 * ui_scale))
-	title_style.shadow_offset = Vector2(0.0, 2.0 * ui_scale)
-	title_panel.add_theme_stylebox_override("panel", title_style)
-	title_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar.add_child(title_panel)
-	var title := Label.new()
-	title.name = "level_list_title"
-	title.text = str(topic.get("name", ""))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title.clip_text = true
-	title.add_theme_font_size_override("font_size", int(26.0 * ui_scale))
-	title.add_theme_color_override("font_color", foreground)
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title_panel.add_child(title)
-	var done := _topic_available_done_count(topic)
-	var total := _topic_available_mode_total(topic)
-	var pill_size := Vector2(96.0 * ui_scale, 34.0 * ui_scale)
-	var pill := Panel.new()
-	pill.name = "level_list_progress"
-	pill.position = Vector2(viewport_width - side_margin - pill_size.x, 20.0 * ui_scale + (button_size - pill_size.y) * 0.5)
-	pill.size = pill_size
-	var pill_style := _rounded_panel_style(surface, int(pill_size.y * 0.5))
-	pill_style.border_color = outline
-	pill_style.border_width_left = maxi(1, int(ui_scale))
-	pill_style.border_width_top = maxi(1, int(ui_scale))
-	pill_style.border_width_right = maxi(1, int(ui_scale))
-	pill_style.border_width_bottom = maxi(1, int(ui_scale))
-	pill_style.shadow_color = Color(outline, 0.18)
-	pill_style.shadow_size = maxi(1, int(3.0 * ui_scale))
-	pill_style.shadow_offset = Vector2(0.0, 1.0 * ui_scale)
-	pill.add_theme_stylebox_override("panel", pill_style)
-	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bar.add_child(pill)
-	var pill_bar := _topic_progress_bar(done, total, Vector2(pill_size.x * 0.42, 7.0 * ui_scale), accent, Color(outline, 0.28))
-	pill_bar.position = Vector2(pill_size.x * 0.10, (pill_size.y - 7.0 * ui_scale) * 0.5)
-	pill.add_child(pill_bar)
-	var pill_label := Label.new()
-	pill_label.text = "%d/%d" % [done, total]
-	pill_label.position = Vector2(pill_size.x * 0.56, 0.0)
-	pill_label.size = Vector2(pill_size.x * 0.38, pill_size.y)
-	pill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pill_label.add_theme_font_size_override("font_size", int(13.0 * ui_scale))
-	pill_label.add_theme_color_override("font_color", foreground)
-	pill_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pill.add_child(pill_label)
-	return bar
-
-
-func _shanhai_level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	var viewport_width := get_viewport_rect().size.x
 	var palette := _topic_ui_palette(topic)
 	var foreground: Color = palette.foreground
@@ -1804,7 +1745,7 @@ func _shanhai_level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	var button_size := 34.0 * ui_scale
 	var side_margin := 20.0 * ui_scale
 	var top := 20.0 * ui_scale
-	var back_button := _level_back_button(button_size, palette, true)
+	var back_button := _level_back_button(button_size, palette)
 	back_button.position = Vector2(side_margin, top + (title_height - button_size) * 0.5)
 	bar.add_child(back_button)
 	var progress_size := Vector2(64.0 * ui_scale, title_height)
@@ -1871,7 +1812,7 @@ func _shanhai_level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 			progress.position.x - (viewport_width * 0.5 + title_text_width * 0.5 + decoration_gap) - decoration_clearance,
 		),
 	)
-	_add_shanhai_title_decorations(
+	_add_topic_title_decorations(
 		bar,
 		title,
 		title_height,
@@ -1884,30 +1825,23 @@ func _shanhai_level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	return bar
 
 
-func _level_back_button(button_size: float, palette: Dictionary, shanhai_style := false) -> Button:
+func _level_back_button(button_size: float, palette: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = "level_list_back_button"
 	button.text = ""
 	button.tooltip_text = _t("back")
 	button.custom_minimum_size = Vector2(button_size, button_size)
 	button.size = button.custom_minimum_size
-	var surface: Color = palette.surface
 	var outline: Color = palette.outline
-	if shanhai_style:
-		button.add_theme_stylebox_override("normal", _shanhai_nav_button_style(outline, button_size))
-		button.add_theme_stylebox_override("hover", _shanhai_nav_button_style(outline, button_size, 0.08))
-		button.add_theme_stylebox_override("pressed", _shanhai_nav_button_style(outline, button_size, 0.14))
-		button.add_theme_stylebox_override("disabled", _shanhai_nav_button_style(outline, button_size))
-	else:
-		button.add_theme_stylebox_override("normal", _topic_nav_button_style(surface, outline, button_size))
-		button.add_theme_stylebox_override("hover", _topic_nav_button_style(surface.lightened(0.06), outline, button_size))
-		button.add_theme_stylebox_override("pressed", _topic_nav_button_style(surface.darkened(0.04), outline, button_size, false))
-		button.add_theme_stylebox_override("disabled", _topic_nav_button_style(surface, outline, button_size, false))
+	button.add_theme_stylebox_override("normal", _topic_outline_nav_button_style(outline, button_size))
+	button.add_theme_stylebox_override("hover", _topic_outline_nav_button_style(outline, button_size, 0.08))
+	button.add_theme_stylebox_override("pressed", _topic_outline_nav_button_style(outline, button_size, 0.14))
+	button.add_theme_stylebox_override("disabled", _topic_outline_nav_button_style(outline, button_size))
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var arrow := TextureRect.new()
 	arrow.name = "level_list_back_icon"
 	var arrow_texture := repository.cached_texture(THEME_ARROW_ICON_PATH)
-	if shanhai_style and arrow_texture != null:
+	if arrow_texture != null:
 		var cropped_arrow := AtlasTexture.new()
 		cropped_arrow.atlas = arrow_texture
 		cropped_arrow.region = Rect2(415.0, 214.0, 500.0, 826.0)
@@ -1916,13 +1850,13 @@ func _level_back_button(button_size: float, palette: Dictionary, shanhai_style :
 	arrow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	arrow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	arrow.flip_h = true
-	var inset := button_size * (0.20 if shanhai_style else 0.28)
+	var inset := button_size * 0.20
 	arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
 	arrow.offset_left = inset
 	arrow.offset_top = inset
 	arrow.offset_right = -inset
 	arrow.offset_bottom = -inset
-	arrow.modulate = palette.foreground
+	arrow.material = _icon_tint_material(palette.foreground)
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(arrow)
 	button.pressed.connect(_show_topics)
@@ -1930,7 +1864,7 @@ func _level_back_button(button_size: float, palette: Dictionary, shanhai_style :
 	return button
 
 
-func _shanhai_nav_button_style(outline: Color, button_size: float, background_alpha := 0.0) -> StyleBoxFlat:
+func _topic_outline_nav_button_style(outline: Color, button_size: float, background_alpha := 0.0) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(outline, background_alpha)
 	style.border_color = outline
@@ -1943,20 +1877,6 @@ func _shanhai_nav_button_style(outline: Color, button_size: float, background_al
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
-	return style
-
-
-func _topic_nav_button_style(surface: Color, outline: Color, button_size: float, with_shadow := true) -> StyleBoxFlat:
-	var style := _rounded_panel_style(surface, int(button_size * 0.5))
-	style.border_color = outline
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	if with_shadow:
-		style.shadow_color = Color(outline, 0.22)
-		style.shadow_size = maxi(2, int(button_size * 0.08))
-		style.shadow_offset = Vector2(0.0, button_size * 0.04)
 	return style
 
 
@@ -2051,6 +1971,7 @@ func _add_level_card_back(card: Control, topic: Dictionary, topic_color: Color, 
 		var rect := TextureRect.new()
 		rect.name = "level_card_back"
 		rect.texture = back_texture
+		rect.material = _rounded_texture_material(Vector2(card_width, card_height), float(radius))
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -3270,6 +3191,9 @@ func _build_game_hud(level_title: String) -> void:
 	var bar_height := _game_top_bar_height()
 	var hint_button_size := _game_hint_button_size()
 	var hint_icon_inset := UI_ICON_INSET * GAME_HINT_BUTTON_SCALE
+	var palette := _topic_ui_palette(current_topic)
+	var foreground: Color = palette.foreground
+	var outline: Color = palette.outline
 	var top_bar := Control.new()
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top_bar.offset_left = 0
@@ -3278,9 +3202,6 @@ func _build_game_hud(level_title: String) -> void:
 	top_bar.offset_bottom = bar_height
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen_root.add_child(top_bar)
-	var shanhai_style := _is_shanhai_topic()
-	var shanhai_foreground := Color("#3F4939")
-	var shanhai_hover := Color("#68735A")
 	var back_button := _icon_button(
 		icon_left_arrow,
 		_return_to_current_level_list,
@@ -3288,15 +3209,17 @@ func _build_game_hud(level_title: String) -> void:
 		hint_button_size,
 		hint_icon_inset,
 		false,
-		not shanhai_style,
-		shanhai_foreground if shanhai_style else brown,
-		shanhai_hover if shanhai_style else deep_orange,
-		shanhai_style,
+		false,
+		foreground,
+		outline,
+		true,
+		outline,
 	)
 	back_button.name = "game_back_button"
 	back_button.position = Vector2(10, (bar_height - hint_button_size) * 0.5)
 	top_bar.add_child(back_button)
 	var title := Label.new()
+	title.name = "game_title"
 	title.text = level_title
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -3305,15 +3228,11 @@ func _build_game_hud(level_title: String) -> void:
 	title.offset_top = (bar_height - hint_button_size) * 0.5
 	title.offset_right = -(hint_button_size + 22.0)
 	title.offset_bottom = title.offset_top + hint_button_size
-	title.add_theme_font_size_override("font_size", 38 if shanhai_style else 32)
-	title.add_theme_color_override("font_color", shanhai_foreground if shanhai_style else brown)
-	if not shanhai_style:
-		title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.12))
-		title.add_theme_constant_override("shadow_offset_y", 2)
+	title.add_theme_font_size_override("font_size", 38)
+	title.add_theme_color_override("font_color", foreground)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(title)
-	if shanhai_style:
-		_add_shanhai_title_decorations(top_bar, title, bar_height)
+	_add_topic_title_decorations(top_bar, title, bar_height)
 	var top_actions := HBoxContainer.new()
 	top_actions.alignment = BoxContainer.ALIGNMENT_END
 	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -3336,9 +3255,10 @@ func _build_game_hud(level_title: String) -> void:
 		hint_icon_inset,
 		false,
 		false,
-		shanhai_foreground if shanhai_style else soft_brown,
-		shanhai_hover if shanhai_style else deep_orange,
-		shanhai_style,
+		foreground,
+		outline,
+		true,
+		outline,
 	)
 	hint_button.name = "game_hint_button"
 	top_actions.add_child(hint_button)
@@ -3362,14 +3282,6 @@ func _build_game_hud(level_title: String) -> void:
 	_animate_screen_in(screen_root)
 
 
-func _is_shanhai_topic() -> bool:
-	return _is_shanhai_topic_data(current_topic)
-
-
-func _is_shanhai_topic_data(topic: Dictionary) -> bool:
-	return str(topic.get("id", "")) == "topic_01"
-
-
 func _topic_ui_asset_texture(topic: Dictionary, key: String) -> Texture2D:
 	var assets_value = topic.get("ui_assets", {})
 	if typeof(assets_value) != TYPE_DICTIONARY:
@@ -3391,7 +3303,7 @@ func _topic_ui_asset_texture(topic: Dictionary, key: String) -> Texture2D:
 	return atlas
 
 
-func _add_shanhai_title_decorations(
+func _add_topic_title_decorations(
 	parent: Control,
 	title: Label,
 	bar_height: float,
@@ -3414,17 +3326,17 @@ func _add_shanhai_title_decorations(
 	var gap: float = requested_gap if requested_gap >= 0.0 else 16.0
 	var center_x: float = requested_center_x if requested_center_x >= 0.0 else viewport_width * 0.5
 	var top := top_offset + (bar_height - decoration_size.y) * 0.5
-	var left := _shanhai_title_decoration(texture, false, decoration_size)
-	left.name = "shanhai_title_mountain_left"
+	var left := _topic_title_decoration(texture, false, decoration_size)
+	left.name = "topic_title_decoration_left"
 	left.position = Vector2(center_x - title_width * 0.5 - gap - decoration_size.x, top)
 	parent.add_child(left)
-	var right := _shanhai_title_decoration(texture, true, decoration_size)
-	right.name = "shanhai_title_mountain_right"
+	var right := _topic_title_decoration(texture, true, decoration_size)
+	right.name = "topic_title_decoration_right"
 	right.position = Vector2(center_x + title_width * 0.5 + gap, top)
 	parent.add_child(right)
 
 
-func _shanhai_title_decoration(texture: Texture2D, flipped: bool, size: Vector2) -> TextureRect:
+func _topic_title_decoration(texture: Texture2D, flipped: bool, size: Vector2) -> TextureRect:
 	var decoration := TextureRect.new()
 	decoration.texture = texture
 	decoration.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

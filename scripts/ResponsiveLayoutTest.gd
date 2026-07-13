@@ -31,7 +31,7 @@ func _run() -> void:
 		var topic: Dictionary = game.topics[0] if not game.topics.is_empty() else {}
 		game._show_levels(topic)
 		await process_frame
-		var level_topbar_style := _shanhai_level_topbar_style_check(game, topic, viewport_size)
+		var level_topbar_style := _topic_level_topbar_style_check(game, topic, viewport_size)
 		var levels_ok := _grid_starts_left_and_fits(game.topics_island_items, viewport_size) and bool(level_topbar_style.get("ok", false))
 		var level_rects := _grid_rect_summary(game.topics_island_items)
 		game._show_settings_modal()
@@ -140,20 +140,22 @@ func _level_index_for_mode(game, topic: Dictionary, play_mode: String) -> int:
 	return 0
 
 
-func _shanhai_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vector2) -> Dictionary:
+func _topic_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vector2) -> Dictionary:
 	var topbar: Control = game.screen_root.get_node_or_null("level_list_topbar")
 	var back: Button = topbar.get_node_or_null("level_list_back_button") if topbar != null else null
 	var back_icon: TextureRect = back.get_node_or_null("level_list_back_icon") if back != null else null
 	var title: Label = topbar.get_node_or_null("level_list_title") if topbar != null else null
-	var left: TextureRect = topbar.get_node_or_null("shanhai_title_mountain_left") if topbar != null else null
-	var right: TextureRect = topbar.get_node_or_null("shanhai_title_mountain_right") if topbar != null else null
+	var left: TextureRect = topbar.get_node_or_null("topic_title_decoration_left") if topbar != null else null
+	var right: TextureRect = topbar.get_node_or_null("topic_title_decoration_right") if topbar != null else null
 	var progress: Control = topbar.get_node_or_null("level_list_progress") if topbar != null else null
 	var progress_bar: Panel = progress.get_node_or_null("level_list_progress_bar") if progress != null else null
 	var progress_label: Label = progress.get_node_or_null("level_list_progress_label") if progress != null else null
 	var back_style = back.get_theme_stylebox("normal") if back != null else null
+	var palette: Dictionary = game._topic_ui_palette(topic)
 	var rounded_outline: bool = (
 		back_style is StyleBoxFlat
 		and back_style.bg_color.a <= 0.001
+		and back_style.border_color.is_equal_approx(palette.outline)
 		and back_style.border_width_left > 0
 		and back_style.shadow_size == 0
 		and back_style.corner_radius_top_left >= int(back.size.x * 0.15)
@@ -161,6 +163,14 @@ func _shanhai_level_topbar_style_check(game, topic: Dictionary, viewport_size: V
 	)
 	var title_unframed: bool = title != null and topbar.get_node_or_null("level_list_title_panel") == null
 	var back_icon_fills_button: bool = back_icon != null and back_icon.size.y >= back.size.y * 0.58 and back_icon.size.y <= back.size.y * 0.62 and back_icon.texture is AtlasTexture
+	var theme_colors: bool = (
+		title != null
+		and title.get_theme_color("font_color").is_equal_approx(palette.foreground)
+		and back_icon != null
+		and back_icon.material is ShaderMaterial
+		and typeof(back_icon.material.get_shader_parameter("icon_color")) == TYPE_COLOR
+		and back_icon.material.get_shader_parameter("icon_color").is_equal_approx(palette.foreground)
+	)
 	var progress_unframed: bool = progress != null and not progress is Panel and progress_bar != null and progress_label != null
 	var progress_stacked_centered: bool = (
 		progress_bar != null
@@ -184,6 +194,7 @@ func _shanhai_level_topbar_style_check(game, topic: Dictionary, viewport_size: V
 	var result := {
 		"rounded_outline_back": rounded_outline,
 		"back_icon_fills_button": back_icon_fills_button,
+		"theme_colors": theme_colors,
 		"title_unframed": title_unframed,
 		"progress_unframed": progress_unframed,
 		"progress_stacked_centered": progress_stacked_centered,
@@ -191,7 +202,7 @@ func _shanhai_level_topbar_style_check(game, topic: Dictionary, viewport_size: V
 		"separated": separated,
 		"theme_local_asset": theme_local_asset,
 	}
-	result["ok"] = rounded_outline and back_icon_fills_button and title_unframed and progress_unframed and progress_stacked_centered and decorations_present and separated and theme_local_asset
+	result["ok"] = rounded_outline and back_icon_fills_button and theme_colors and title_unframed and progress_unframed and progress_stacked_centered and decorations_present and separated and theme_local_asset
 	return result
 
 
