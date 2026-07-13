@@ -2,12 +2,10 @@ extends Node2D
 
 const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
 const LEVEL_NAME_BANNER_PATH := "res://assets/ui/level_name_banner.png"
-const OLIVE_BRANCH_PATH := "res://assets/ui/olive_branch.png"
 const MODE_TITLE_SIDE_DECORATION_PATH := "res://assets/ui/mode_title_side_decoration.png"
 const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
 const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
-const ICON_PAUSE_PATH := "res://assets/icons/pause.svg"
 const ICON_SETTING_PATH := "res://assets/icons/setting.svg"
 const ICON_CAT_PAW_PATH := "res://assets/icons/status/cat_paw.png"
 const ICON_MODE_KNOB_DONE_PATH := "res://assets/icons/status/mode_knob_done.png"
@@ -22,12 +20,18 @@ const THEME_SQUARE_BUTTON_PATH := "res://assets/ui/theme-list/square-button-base
 const THEME_CIRCLE_BUTTON_PATH := "res://assets/ui/theme-list/circle-arrow-button-base.png"
 const THEME_SETTINGS_ICON_PATH := "res://assets/ui/theme-list/settings-icon.png"
 const THEME_ARROW_ICON_PATH := "res://assets/ui/theme-list/arrow-right-icon.png"
+const MODAL_TUTORIAL_DRAG_PATH := "res://assets/ui/modals/tutorial-drag.png"
+const MODAL_TUTORIAL_SWAP_PATH := "res://assets/ui/modals/tutorial-swap.png"
+const MODAL_SETTING_VIBRATION_PATH := "res://assets/ui/modals/setting-vibration.png"
+const MODAL_SETTING_MUSIC_PATH := "res://assets/ui/modals/setting-music.png"
+const MODAL_SETTING_SFX_PATH := "res://assets/ui/modals/setting-sfx.png"
 const BoardLayoutScript := preload("res://scripts/BoardLayout.gd")
 const ConfettiEffectScript := preload("res://scripts/ConfettiEffect.gd")
 const DevTestPanelScript := preload("res://scripts/DevTestPanel.gd")
 const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/ProgressStore.gd")
 const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
+const CloudTransitionScript := preload("res://scripts/CloudTransition.gd")
 const PLAY_MODES := ["polygon", "knob", "swap"]
 const LEVEL_THUMBNAIL_SIZE := Vector2i(164, 164)
 const UI_ICON_BUTTON_SIZE := 64.0
@@ -99,20 +103,18 @@ const UI_TEXT := {
 		"status_drag_rotate": "Drag pieces. Double tap a piece to rotate. Drag the tablecloth and pinch to zoom.",
 		"status_drag": "Drag pieces. Drag the tablecloth and pinch to zoom.",
 		"status_missing_mode": "This level JSON is missing data for the current mode.",
-		"pause": "Paused",
-		"resume": "Resume",
 		"continue": "Continue",
 		"in_progress": "In progress",
 		"undo": "Undo",
 		"restart": "Restart",
 		"return_levels": "Level list",
 		"return_topics": "Topics",
-		"confirm_restart": "Restart this level?",
 		"confirm": "Confirm",
 		"settings_title": "Settings",
 		"music": "Music",
 		"sfx": "Sound effects",
 		"haptics": "Haptics",
+		"settings_done": "Done",
 		"reduce_motion": "Reduce motion",
 		"piece_edges": "Piece edge contrast",
 		"edge_auto": "Automatic",
@@ -122,11 +124,11 @@ const UI_TEXT := {
 		"random_rotation_next": "Random rotation changes apply after restarting or entering another level.",
 		"close": "Close",
 		"tutorial_title": "How to play",
-		"tutorial_swap": "Drag one tile onto another to swap their positions.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.\n\nRestore every tile to the correct order to finish.",
-		"tutorial_rotate": "Drag a piece from the tray and place it next to a locked neighboring piece.\n\nDouble tap a piece to rotate 90 degrees.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.",
-		"tutorial_drag": "Drag a piece from the tray and place it next to a locked neighboring piece.\n\nDrag the empty tablecloth to move the board. Pinch to zoom.",
+		"tutorial_swap": "Drag one tile onto another to swap them.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
+		"tutorial_rotate": "Drag pieces beside matching neighbors. Double tap to rotate.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
+		"tutorial_drag": "Drag pieces beside matching neighbors; they snap together when aligned.\nDrag the empty tablecloth to move the board, and pinch to zoom.",
 		"got_it": "Got it",
-		"complete": "Completed!",
+		"complete": "Puzzle complete",
 		"completed_mode": "Completed: %s",
 		"next": "Next",
 		"switch_mode": "Other mode",
@@ -159,20 +161,18 @@ const UI_TEXT := {
 		"status_drag_rotate": "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。",
 		"status_drag": "拖动碎片。空白处拖动桌布，双指缩放。",
 		"status_missing_mode": "关卡 JSON 缺少当前模式配置。",
-		"pause": "已暂停",
-		"resume": "继续游戏",
 		"continue": "继续",
 		"in_progress": "进行中",
 		"undo": "撤销",
 		"restart": "重新开始",
 		"return_levels": "返回关卡列表",
 		"return_topics": "返回主题选择",
-		"confirm_restart": "确认重新开始？",
 		"confirm": "确认",
 		"settings_title": "设置",
 		"music": "音乐",
 		"sfx": "音效",
-		"haptics": "震动反馈",
+		"haptics": "震动",
+		"settings_done": "完成",
 		"reduce_motion": "减少动态效果",
 		"piece_edges": "碎片边线对比度",
 		"edge_auto": "自动",
@@ -182,11 +182,11 @@ const UI_TEXT := {
 		"random_rotation_next": "随机旋转设置将在重新开始或进入下一关后生效。",
 		"close": "关闭",
 		"tutorial_title": "怎么玩",
-		"tutorial_swap": "拖动一块图片到另一块上，可以交换它们的位置。\n\n空白处拖动可以移动桌布，双指可以缩放。\n\n所有方格回到正确顺序后就会通关。",
-		"tutorial_rotate": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n双击碎片可以旋转 90 度。\n\n空白处拖动可以移动桌布，双指可以缩放。",
-		"tutorial_drag": "从托盘拖出碎片，把它拼到已固定的相邻碎片旁。\n\n空白处拖动可以移动桌布，双指可以缩放。",
+		"tutorial_swap": "拖动一块图片到另一块上，即可交换位置。\n拖动空白处移动桌布，双指缩放。",
+		"tutorial_rotate": "把碎片拖到匹配的相邻碎片旁，双击可旋转。\n拖动空白处移动桌布，双指缩放。",
+		"tutorial_drag": "把碎片拖到匹配的相邻碎片旁，对齐后会自动吸附。\n拖动空白处移动桌布，双指缩放。",
 		"got_it": "知道了",
-		"complete": "恭喜完成！",
+		"complete": "拼图完成",
 		"completed_mode": "已完成：%s",
 		"next": "下一关",
 		"switch_mode": "换个模式",
@@ -219,20 +219,18 @@ const UI_TEXT := {
 		"status_drag_rotate": "ピースをドラッグ。ダブルタップで回転。背景をドラッグし、ピンチでズーム。",
 		"status_drag": "ピースをドラッグ。背景をドラッグし、ピンチでズーム。",
 		"status_missing_mode": "このレベル JSON には現在のモード設定がありません。",
-		"pause": "一時停止",
-		"resume": "続ける",
 		"continue": "続きから",
 		"in_progress": "進行中",
 		"undo": "元に戻す",
 		"restart": "最初から",
 		"return_levels": "レベル一覧",
 		"return_topics": "テーマへ",
-		"confirm_restart": "このレベルをやり直しますか？",
 		"confirm": "確認",
 		"settings_title": "設定",
 		"music": "音楽",
 		"sfx": "効果音",
 		"haptics": "振動",
+		"settings_done": "完了",
 		"reduce_motion": "視差効果を減らす",
 		"piece_edges": "ピース境界線",
 		"edge_auto": "自動",
@@ -242,11 +240,11 @@ const UI_TEXT := {
 		"random_rotation_next": "ランダム回転の変更は再開または次のレベルから反映されます。",
 		"close": "閉じる",
 		"tutorial_title": "遊び方",
-		"tutorial_swap": "タイルを別のタイルにドラッグして位置を入れ替えます。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。\n\nすべて正しい順番に戻すと完成です。",
-		"tutorial_rotate": "トレイからピースをドラッグし、固定済みの隣接ピースの横に置きます。\n\nダブルタップで 90 度回転します。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。",
-		"tutorial_drag": "トレイからピースをドラッグし、固定済みの隣接ピースの横に置きます。\n\n空いている背景をドラッグして移動し、ピンチでズームできます。",
+		"tutorial_swap": "タイルを別のタイルへドラッグして入れ替えます。\n背景をドラッグして移動し、ピンチでズームできます。",
+		"tutorial_rotate": "ピースを合う隣へドラッグし、ダブルタップで回転します。\n背景をドラッグして移動し、ピンチでズームできます。",
+		"tutorial_drag": "ピースを合う隣へドラッグすると、揃った位置で吸着します。\n背景をドラッグして移動し、ピンチでズームできます。",
 		"got_it": "OK",
-		"complete": "完成！",
+		"complete": "パズル完成",
 		"completed_mode": "完成：%s",
 		"next": "次へ",
 		"switch_mode": "別モード",
@@ -275,12 +273,10 @@ var texture: Texture2D
 var repository = LevelRepositoryScript.new()
 var title_texture: Texture2D
 var level_name_banner_texture: Texture2D
-var olive_branch_texture: Texture2D
 var mode_title_side_decoration_texture: Texture2D
 var icon_album: Texture2D
 var icon_left_arrow: Texture2D
 var icon_lightbulb: Texture2D
-var icon_pause: Texture2D
 var icon_setting: Texture2D
 var icon_cat_paw: Texture2D
 var icon_mode_knob_done: Texture2D
@@ -289,6 +285,11 @@ var icon_mode_polygon_done: Texture2D
 var icon_mode_polygon_todo: Texture2D
 var icon_mode_swap_done: Texture2D
 var icon_mode_swap_todo: Texture2D
+var modal_tutorial_drag_texture: Texture2D
+var modal_tutorial_swap_texture: Texture2D
+var modal_setting_vibration_texture: Texture2D
+var modal_setting_music_texture: Texture2D
+var modal_setting_sfx_texture: Texture2D
 var source_image: Image
 var source_size := Vector2.ZERO
 var source_scale := 1.0
@@ -328,6 +329,8 @@ var rounded_level_thumbnail_cache: Dictionary = {}
 var unlock_burn_shader: Shader = null
 var unlock_burn_noise: Texture2D = null
 var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
+var screen_transition_active := false
+var skip_launch_reveal := false
 var rounded_complete_image_cache: Dictionary = {}
 var active_locale := "en"
 var newly_unlocked_topic_id := ""
@@ -338,12 +341,10 @@ func _ready() -> void:
 	_lock_portrait_orientation()
 	title_texture = repository.cached_texture(TITLE_IMAGE_PATH)
 	level_name_banner_texture = repository.cached_texture(LEVEL_NAME_BANNER_PATH)
-	olive_branch_texture = repository.cached_texture(OLIVE_BRANCH_PATH)
 	mode_title_side_decoration_texture = repository.cached_texture(MODE_TITLE_SIDE_DECORATION_PATH)
 	icon_album = load(ICON_ALBUM_PATH)
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
 	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
-	icon_pause = load(ICON_PAUSE_PATH)
 	icon_setting = load(ICON_SETTING_PATH)
 	icon_cat_paw = repository.cached_texture(ICON_CAT_PAW_PATH)
 	icon_mode_knob_done = repository.cached_texture(ICON_MODE_KNOB_DONE_PATH)
@@ -352,6 +353,11 @@ func _ready() -> void:
 	icon_mode_polygon_todo = repository.cached_texture(ICON_MODE_POLYGON_TODO_PATH)
 	icon_mode_swap_done = repository.cached_texture(ICON_MODE_SWAP_DONE_PATH)
 	icon_mode_swap_todo = repository.cached_texture(ICON_MODE_SWAP_TODO_PATH)
+	modal_tutorial_drag_texture = repository.cached_texture(MODAL_TUTORIAL_DRAG_PATH)
+	modal_tutorial_swap_texture = repository.cached_texture(MODAL_TUTORIAL_SWAP_PATH)
+	modal_setting_vibration_texture = repository.cached_texture(MODAL_SETTING_VIBRATION_PATH)
+	modal_setting_music_texture = repository.cached_texture(MODAL_SETTING_MUSIC_PATH)
+	modal_setting_sfx_texture = repository.cached_texture(MODAL_SETTING_SFX_PATH)
 	progress_store.load_from_disk()
 	active_locale = _detect_locale()
 	repository.set_locale(active_locale)
@@ -372,6 +378,7 @@ func _ready() -> void:
 	_apply_level_media({})
 	set_process(false)
 	_show_topics()
+	_play_launch_reveal()
 
 
 func _lock_portrait_orientation() -> void:
@@ -649,17 +656,14 @@ func _animate_modal_panel(panel: Control) -> void:
 		panel.scale = Vector2.ONE
 		return
 	panel.modulate.a = 0.0
-	panel.scale = Vector2(0.94, 0.94)
+	panel.scale = Vector2(0.965, 0.965)
 	await get_tree().process_frame
 	if not is_instance_valid(panel):
 		return
 	panel.pivot_offset = panel.size * 0.5
-	var tween := create_tween()
-	tween.set_parallel(true)
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
-	tween.tween_property(panel, "modulate:a", 1.0, 0.18)
-	tween.tween_property(panel, "scale", Vector2.ONE, 0.18)
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.22).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(panel, "scale", Vector2.ONE, 0.24).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 
 func _wire_button_animation(button: BaseButton) -> void:
@@ -1094,6 +1098,10 @@ func _show_last_topic_levels() -> void:
 	_show_levels(topic, progress_store.focus_level_id(topic))
 
 
+func _open_topic_levels(topic: Dictionary) -> void:
+	_play_forward_transition(_screen_transition_color(topic), func() -> void: _show_levels(topic, progress_store.focus_level_id(topic)))
+
+
 func _show_topics() -> void:
 	_persist_current_puzzle_state()
 	current_screen = "topics"
@@ -1134,7 +1142,7 @@ func _show_topics() -> void:
 		topics_content.add_child(card)
 		topics_island_items.append({
 			"rect": Rect2(Vector2(x, y), Vector2(card_width, card_height)),
-			"action": func(t: Dictionary = topic) -> void: _show_levels(t, progress_store.focus_level_id(t)),
+			"action": func(t: Dictionary = topic) -> void: _open_topic_levels(t),
 		})
 	if not topics.is_empty():
 		y += card_height
@@ -1711,7 +1719,8 @@ func _level_back_button(button_size: float, palette: Dictionary) -> Button:
 	arrow.modulate = palette.foreground
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(arrow)
-	button.pressed.connect(_show_topics)
+	button.pressed.connect(func() -> void:
+		_play_back_transition(_screen_transition_color(current_topic), _show_topics))
 	_wire_button_animation(button)
 	return button
 
@@ -2193,7 +2202,7 @@ func _show_mode_dialog(level: Dictionary) -> void:
 
 func _mode_dialog_size(mode_count: int) -> Vector2:
 	var mode_rows: int = maxi(1, mode_count)
-	var desired_height := 264.0 + float(mode_rows) * 192.0
+	var desired_height := 264.0 + float(mode_rows) * 220.0
 	var available_height := get_viewport_rect().size.y - _screen_margin() * 2.0 - 40.0
 	return Vector2(_mode_dialog_panel_width(), minf(1180.0, minf(desired_height, maxf(1.0, available_height))))
 
@@ -2356,7 +2365,8 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var card_width := _mode_dialog_content_width()
 	var card := Button.new()
 	card.text = ""
-	card.custom_minimum_size = Vector2(card_width, 168.0 * layout_scale)
+	var card_height := 208.0 if has_saved_state else 184.0
+	card.custom_minimum_size = Vector2(card_width, card_height * layout_scale)
 	var normal := _mode_select_style(play_mode, false)
 	card.add_theme_stylebox_override("normal", normal)
 	card.add_theme_stylebox_override("hover", _mode_select_style(play_mode, true))
@@ -2364,9 +2374,9 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var row := HBoxContainer.new()
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
 	row.offset_left = 42.0 * layout_scale
-	row.offset_top = 30.0 * layout_scale
+	row.offset_top = 26.0 * layout_scale
 	row.offset_right = -40.0 * layout_scale
-	row.offset_bottom = -30.0 * layout_scale
+	row.offset_bottom = -26.0 * layout_scale
 	row.add_theme_constant_override("separation", int(32.0 * layout_scale))
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2393,23 +2403,27 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var action: Callable = func() -> void:
 		_close_modal()
 		_show_game(current_topic, level, play_mode)
+	var restart_action: Callable = func() -> void:
+		progress_store.clear_play_state(current_topic, level, play_mode)
+		_close_modal()
+		_show_game(current_topic, level, play_mode, true)
 	var actions := VBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
-	actions.add_theme_constant_override("separation", maxi(6, int(8.0 * layout_scale)))
+	actions.add_theme_constant_override("separation", maxi(20, int(26.0 * layout_scale)))
 	row.add_child(actions)
 	actions.add_child(_mode_action_button(
 		_t("replay") if done else (_t("continue") if has_saved_state else _t("start_game")),
 		play_mode,
 		action,
-		Vector2(maxf(118.0, 168.0 * layout_scale), maxf(48.0, 58.0 * layout_scale)),
+		Vector2(maxf(128.0, 176.0 * layout_scale), maxf(50.0, 62.0 * layout_scale)),
 		maxi(18, int(24.0 * layout_scale))
 	))
 	if has_saved_state:
 		actions.add_child(_mode_secondary_action_button(
 			_t("restart"),
-			func() -> void: _show_mode_restart_confirm(level, play_mode),
-			Vector2(maxf(118.0, 168.0 * layout_scale), maxf(36.0, 42.0 * layout_scale)),
-			maxi(15, int(18.0 * layout_scale))
+			restart_action,
+			Vector2(maxf(128.0, 176.0 * layout_scale), maxf(42.0, 50.0 * layout_scale)),
+			maxi(16, int(19.0 * layout_scale))
 		))
 	if done:
 		card.add_child(_mode_corner_check_badge(_mode_accent_color(play_mode)))
@@ -2639,6 +2653,46 @@ func _unlock_shatter_stage(overlay: Control, geometry: Dictionary, texture: Text
 		tween.tween_property(shard, "modulate:a", 0.0, duration * 0.7).set_delay(duration * 0.3)
 
 
+func _screen_transition_color(topic: Dictionary) -> Color:
+	if topic.is_empty():
+		return Color(0.18, 0.13, 0.09)
+	return _topic_color(topic).darkened(0.45)
+
+
+func _play_forward_transition(color: Color, switch_screen: Callable) -> void:
+	_play_screen_transition(CloudTransitionScript.DIRECTION_FORWARD, color, switch_screen)
+
+
+func _play_back_transition(color: Color, switch_screen: Callable) -> void:
+	_play_screen_transition(CloudTransitionScript.DIRECTION_BACK, color, switch_screen)
+
+
+func _play_screen_transition(direction: int, color: Color, switch_screen: Callable) -> void:
+	if screen_transition_active:
+		return
+	if _ui_motion_reduced():
+		switch_screen.call()
+		return
+	screen_transition_active = true
+	var transition := CloudTransitionScript.new()
+	add_child(transition)
+	transition.finished.connect(func() -> void: screen_transition_active = false)
+	transition.play(direction, color, switch_screen)
+
+
+func _play_launch_reveal() -> void:
+	if skip_launch_reveal or DisplayServer.get_name() == "headless" or _ui_motion_reduced() or screen_transition_active:
+		return
+	screen_transition_active = true
+	var transition := CloudTransitionScript.new()
+	add_child(transition)
+	transition.finished.connect(func() -> void: screen_transition_active = false)
+	transition.play_launch(
+		Color(0.18, 0.13, 0.09),
+		title_texture
+	)
+
+
 func _render_card_back_snapshot(topic: Dictionary, topic_color: Color, card_width: float, card_height: float, radius: int) -> Image:
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(maxi(2, int(card_width)), maxi(2, int(card_height)))
@@ -2749,18 +2803,6 @@ func _mode_secondary_action_button(text: String, action: Callable, min_size: Vec
 	button.pressed.connect(action)
 	_wire_button_animation(button)
 	return button
-
-
-func _show_mode_restart_confirm(level: Dictionary, play_mode: String) -> void:
-	_show_modal()
-	var box := _modal_box(Vector2(360, 230))
-	box.add_child(_modal_title(_t("confirm_restart")))
-	box.add_child(_button(_t("confirm"), func() -> void:
-		progress_store.clear_play_state(current_topic, level, play_mode)
-		_close_modal()
-		_show_game(current_topic, level, play_mode, true)
-	))
-	box.add_child(_button(_t("back"), func() -> void: _show_mode_dialog(level), false))
 
 
 func _mode_select_style(play_mode: String, hover: bool) -> StyleBoxFlat:
@@ -3263,194 +3305,124 @@ func _apply_level_media(level_config: Dictionary) -> void:
 
 func _return_to_current_level_list() -> void:
 	if current_topic.is_empty():
-		_show_topics()
+		_play_back_transition(_screen_transition_color({}), _show_topics)
 		return
-	_show_levels(current_topic, str(current_level.get("id", "")))
-
-
-func _show_pause_modal() -> void:
-	_show_modal()
-	var box := _modal_box(Vector2(360, 360))
-	box.add_child(_modal_title(_t("pause")))
-	box.add_child(_button(_t("resume"), _close_modal))
-	box.add_child(_button(_t("restart"), _show_restart_confirm, false))
-	box.add_child(_button(_t("return_levels"), func() -> void:
-		_close_modal()
-		_show_levels(current_topic, str(current_level.get("id", "")))
-	, false))
-	box.add_child(_button(_t("return_topics"), func() -> void:
-		_close_modal()
-		_show_topics()
-	, false))
-
-
-func _show_restart_confirm() -> void:
-	_show_modal()
-	var box := _modal_box(Vector2(360, 230))
-	box.add_child(_modal_title(_t("confirm_restart")))
-	box.add_child(_button(_t("confirm"), func() -> void:
-		progress_store.clear_play_state(current_topic, current_level, current_mode)
-		_close_modal()
-		_show_game(current_topic, current_level, current_mode, true)
-	))
-	box.add_child(_button(_t("back"), _show_pause_modal, false))
+	var topic := current_topic
+	var focus_id := str(current_level.get("id", ""))
+	_play_back_transition(_screen_transition_color(topic), func() -> void: _show_levels(topic, focus_id))
 
 
 func _show_settings_modal() -> void:
 	_show_modal()
-	var box := _modal_box(Vector2(520, 520))
-	var panel := box.get_parent() as PanelContainer
-	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
-	panel_style.content_margin_left = 40
-	panel_style.content_margin_top = 34
-	panel_style.content_margin_right = 40
-	panel_style.content_margin_bottom = 34
+	var modal_size := _responsive_modal_size(820.0, 760.0)
+	var box := _modal_box(modal_size, Color("#FFF8EC"), 54.0, _close_modal)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 18)
+	box.add_theme_constant_override("separation", 16)
 	box.add_child(_modal_title(_t("settings_title")))
-	var haptics_check := CheckBox.new()
-	haptics_check.text = _t("haptics")
-	haptics_check.button_pressed = progress_store.haptics_enabled()
-	_style_settings_checkbox(haptics_check, 24)
-	haptics_check.toggled.connect(func(enabled: bool) -> void:
-		progress_store.set_haptics_enabled(enabled)
-		puzzle_board.set_feedback_preferences(enabled, progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
-	)
-	box.add_child(haptics_check)
-	var motion_check := CheckBox.new()
-	motion_check.text = _t("reduce_motion")
-	motion_check.button_pressed = progress_store.reduced_motion_enabled()
-	_style_settings_checkbox(motion_check, 24)
-	motion_check.toggled.connect(func(enabled: bool) -> void:
-		progress_store.set_reduced_motion_enabled(enabled)
-		puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), enabled, progress_store.edge_contrast_mode())
-	)
-	box.add_child(motion_check)
-	var edge_row := HBoxContainer.new()
-	edge_row.add_theme_constant_override("separation", 12)
-	var edge_label := Label.new()
-	edge_label.text = _t("piece_edges")
-	edge_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	edge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	edge_label.add_theme_font_size_override("font_size", 22)
-	edge_label.add_theme_color_override("font_color", brown)
-	edge_row.add_child(edge_label)
-	var edge_select := OptionButton.new()
-	edge_select.custom_minimum_size = Vector2(150, 52)
-	edge_select.add_theme_font_size_override("font_size", 20)
-	var edge_modes := ["auto", "dark", "light"]
-	for mode in edge_modes:
-		edge_select.add_item(_t("edge_%s" % mode))
-	edge_select.select(maxi(0, edge_modes.find(progress_store.edge_contrast_mode())))
-	edge_select.item_selected.connect(func(index: int) -> void:
-		var mode := str(edge_modes[clampi(index, 0, edge_modes.size() - 1)])
-		progress_store.set_edge_contrast_mode(mode)
-		puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), mode)
-	)
-	edge_row.add_child(edge_select)
-	box.add_child(edge_row)
-	var rotation_check := CheckBox.new()
-	rotation_check.text = _t("random_rotation")
-	rotation_check.button_pressed = progress_store.random_rotation_enabled()
-	_style_settings_checkbox(rotation_check, 22)
-	rotation_check.toggled.connect(func(enabled: bool) -> void:
-		progress_store.set_random_rotation_enabled(enabled)
-		if current_screen == "game":
-			_set_game_status(_t("random_rotation_next"))
-	)
-	box.add_child(rotation_check)
-	var close_button := _button(_t("close"), _close_modal, true, Vector2(420, 64))
-	close_button.add_theme_font_size_override("font_size", 22)
-	box.add_child(close_button)
-
-
-func _style_settings_checkbox(check: CheckBox, font_size: int) -> void:
-	check.add_theme_font_size_override("font_size", font_size)
-	for color_name in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color", "font_focus_color"]:
-		check.add_theme_color_override(color_name, brown)
+	box.add_child(_settings_row(
+		modal_setting_vibration_texture,
+		_t("haptics"),
+		progress_store.haptics_enabled(),
+		func(enabled: bool) -> void:
+			progress_store.set_haptics_enabled(enabled)
+			puzzle_board.set_feedback_preferences(enabled, progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
+	))
+	box.add_child(_modal_separator())
+	box.add_child(_settings_row(
+		modal_setting_music_texture,
+		_t("music"),
+		progress_store.music_enabled(),
+		func(enabled: bool) -> void: progress_store.set_music_enabled(enabled)
+	))
+	box.add_child(_modal_separator())
+	box.add_child(_settings_row(
+		modal_setting_sfx_texture,
+		_t("sfx"),
+		progress_store.sound_effects_enabled(),
+		func(enabled: bool) -> void: progress_store.set_sound_effects_enabled(enabled)
+	))
+	box.add_child(_modal_action_button(_t("settings_done"), _close_modal, true))
 
 
 func _show_tutorial_modal() -> void:
 	_show_modal()
-	var box := _modal_box(Vector2(420, 290))
+	var modal_size := _responsive_modal_size(860.0, 990.0)
+	var box := _modal_box(modal_size, Color("#FFF8EC"), 54.0)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 22)
 	box.add_child(_modal_title(_t("tutorial_title")))
-	var text := Label.new()
+	var tutorial_texture := modal_tutorial_drag_texture
+	var tutorial_text := _t("tutorial_drag")
 	if current_mode == "swap":
-		text.text = _t("tutorial_swap")
+		tutorial_texture = modal_tutorial_swap_texture
+		tutorial_text = _t("tutorial_swap")
 	elif progress_store.random_rotation_enabled():
-		text.text = _t("tutorial_rotate")
-	else:
-		text.text = _t("tutorial_drag")
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	text.add_theme_font_size_override("font_size", 20)
-	text.add_theme_color_override("font_color", brown)
+		tutorial_text = _t("tutorial_rotate")
+	var art := _tutorial_illustration(tutorial_texture, Vector2(modal_size.x - 108.0, 430.0))
+	box.add_child(art)
+	_animate_tutorial_illustration(art)
+	var text := _modal_body_label(tutorial_text, 27, soft_brown)
+	text.custom_minimum_size.y = 112
 	box.add_child(text)
-	box.add_child(_button(_t("got_it"), func() -> void:
+	box.add_child(_modal_action_button(_t("got_it"), func() -> void:
 		progress_store.mark_tutorial_seen(current_mode)
 		_close_modal()
 	))
 
 
 func _show_complete_modal() -> void:
-	_show_modal(Color(0.16, 0.11, 0.08, 0.78), true)
+	_show_modal(Color(0.14, 0.09, 0.05, 0.72), true)
 	var viewport_size := get_viewport_rect().size
 	var description := _level_description(current_level)
-	var content_width := minf(viewport_size.x * 0.82, 860.0)
-	var image_height := content_width * 4.0 / 3.0
-	var max_image_height := viewport_size.y * (0.46 if not description.is_empty() else 0.56)
-	if image_height > max_image_height:
-		image_height = max_image_height
-		content_width = image_height * 0.75
-	content_width = maxf(280.0, content_width)
-	image_height = content_width * 4.0 / 3.0
-	var button_size := Vector2(minf(360.0, content_width * 0.62), 72.0)
-	var description_height := 0.0 if description.is_empty() else 150.0
-	var total_height := 94.0 + image_height + 52.0 + description_height + button_size.y + 48.0
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(content_width, total_height)
-	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.offset_left = -content_width * 0.5
-	box.offset_top = -total_height * 0.5
-	box.offset_right = content_width * 0.5
-	box.offset_bottom = total_height * 0.5
+	var panel_width := minf(920.0, maxf(1.0, viewport_size.x - 96.0))
+	var content_width := maxf(1.0, panel_width - 104.0)
+	var image_height := minf(content_width * 4.0 / 3.0, viewport_size.y * 0.46)
+	var description_height := 0.0 if description.is_empty() else 110.0
+	var fixed_height := 74.0 + 60.0 + description_height + 84.0 + 184.0
+	var max_panel_height := maxf(1.0, viewport_size.y - 96.0)
+	var panel_height := image_height + fixed_height
+	if panel_height > max_panel_height:
+		image_height = maxf(280.0, image_height - (panel_height - max_panel_height))
+		panel_height = image_height + fixed_height
+	var box := _modal_box(Vector2(panel_width, minf(panel_height, max_panel_height)), Color("#FFF8EC"), 52.0)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 18)
-	box.z_index = 8
-	modal_root.add_child(box)
-	box.add_child(_complete_simple_title(content_width))
-	box.add_child(_complete_full_image(Vector2(content_width, image_height)))
+	var title := _modal_title(_t("complete"), 50)
+	title.add_theme_color_override("font_color", orange)
+	box.add_child(title)
+	var completed_image := _complete_full_image(Vector2(content_width, image_height))
+	box.add_child(completed_image)
 	var level_name := Label.new()
 	level_name.text = _level_display_title(current_level)
 	level_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	level_name.add_theme_font_size_override("font_size", 34)
-	level_name.add_theme_color_override("font_color", Color.WHITE)
-	level_name.add_theme_color_override("font_shadow_color", Color(0.22, 0.12, 0.05, 0.42))
-	level_name.add_theme_constant_override("shadow_offset_y", 3)
+	level_name.custom_minimum_size.y = 58
+	level_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	level_name.add_theme_font_size_override("font_size", 36)
+	level_name.add_theme_color_override("font_color", brown)
 	level_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(level_name)
+	var desc: Label = null
 	if not description.is_empty():
-		var desc := Label.new()
+		desc = Label.new()
 		desc.text = description
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		desc.custom_minimum_size.x = content_width
+		desc.custom_minimum_size = Vector2(content_width, description_height)
 		desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		desc.add_theme_font_size_override("font_size", 22)
-		desc.add_theme_color_override("font_color", Color(1.0, 0.96, 0.88, 0.94))
-		desc.add_theme_color_override("font_shadow_color", Color(0.22, 0.12, 0.05, 0.36))
-		desc.add_theme_constant_override("shadow_offset_y", 2)
-		desc.add_theme_constant_override("line_spacing", 6)
+		desc.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		desc.add_theme_font_size_override("font_size", 23)
+		desc.add_theme_color_override("font_color", soft_brown)
+		desc.add_theme_constant_override("line_spacing", 5)
 		desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_child(desc)
 	var button_holder := CenterContainer.new()
-	button_holder.custom_minimum_size = Vector2(content_width, button_size.y)
-	var confirm := _button(_t("confirm"), func() -> void:
+	button_holder.custom_minimum_size = Vector2(content_width, 84.0)
+	var confirm := _modal_action_button(_t("confirm"), func() -> void:
 		_close_modal()
-		_show_levels(current_topic, str(current_level.get("id", "")))
-	, true, button_size)
-	confirm.add_theme_font_size_override("font_size", 26)
+		_return_to_current_level_list()
+	, true, Vector2(minf(420.0, content_width), 84.0))
 	button_holder.add_child(confirm)
 	box.add_child(button_holder)
-	_animate_modal_panel(box)
+	_animate_completion_content(title, completed_image, level_name, desc, button_holder)
 	_start_complete_confetti()
 
 
@@ -3460,23 +3432,6 @@ func _level_description(level: Dictionary) -> String:
 		return description
 	var level_config := repository.load_level_config(level)
 	return str(level_config.get("description", "")).strip_edges()
-
-
-func _complete_simple_title(content_width: float) -> Control:
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(content_width, 78)
-	var label := Label.new()
-	label.text = _t("complete")
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	label.add_theme_font_size_override("font_size", 54)
-	label.add_theme_color_override("font_color", Color.WHITE)
-	label.add_theme_color_override("font_shadow_color", Color(0.28, 0.13, 0.03, 0.46))
-	label.add_theme_constant_override("shadow_offset_y", 4)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(label)
-	return holder
 
 
 func _complete_full_image(size: Vector2) -> Control:
@@ -3498,127 +3453,212 @@ func _complete_full_image(size: Vector2) -> Control:
 	return holder
 
 
-func _complete_heading() -> Control:
-	var holder := HBoxContainer.new()
-	holder.custom_minimum_size.y = 54
-	holder.alignment = BoxContainer.ALIGNMENT_CENTER
-	holder.add_theme_constant_override("separation", 10)
-	var left := _olive_branch(true)
-	holder.add_child(left)
+func _responsive_modal_size(max_width: float, desired_height: float) -> Vector2:
+	var viewport_size := get_viewport_rect().size
+	var margin := maxf(32.0, minf(56.0, viewport_size.x * 0.05))
+	return Vector2(
+		minf(max_width, maxf(1.0, viewport_size.x - margin * 2.0)),
+		minf(desired_height, maxf(1.0, viewport_size.y - margin * 2.0))
+	)
+
+
+func _modal_action_button(
+	text: String,
+	action: Callable,
+	primary := true,
+	min_size := Vector2(0, 82),
+) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.custom_minimum_size = min_size
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_theme_font_size_override("font_size", 28)
+	button.add_theme_color_override("font_color", Color.WHITE if primary else brown)
+	button.add_theme_color_override("font_hover_color", Color.WHITE if primary else deep_orange)
+	button.add_theme_color_override("font_pressed_color", Color.WHITE if primary else deep_orange)
+	button.add_theme_color_override("font_focus_color", Color.WHITE if primary else brown)
+	var normal := _rounded_panel_style(orange if primary else Color("#FFFDF7"), 22)
+	if primary:
+		normal.shadow_color = Color(0.42, 0.24, 0.07, 0.18)
+		normal.shadow_size = 7
+		normal.shadow_offset = Vector2(0, 3)
+	else:
+		normal.border_color = Color(soft_brown, 0.28)
+		normal.border_width_left = 2
+		normal.border_width_top = 2
+		normal.border_width_right = 2
+		normal.border_width_bottom = 2
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = deep_orange if primary else Color("#FFF3DE")
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = deep_orange.darkened(0.05) if primary else Color("#F8E7C7")
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", normal.duplicate())
+	button.pressed.connect(action)
+	_wire_button_animation(button)
+	return button
+
+
+func _modal_body_label(text: String, font_size := 25, color := Color("#8A6847")) -> Label:
 	var label := Label.new()
-	label.text = _t("complete")
-	label.add_theme_font_size_override("font_size", 34)
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.add_theme_constant_override("line_spacing", 6)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _modal_separator() -> HSeparator:
+	var separator := HSeparator.new()
+	separator.custom_minimum_size.y = 1
+	var line := StyleBoxLine.new()
+	line.color = Color(soft_brown, 0.18)
+	line.thickness = 1
+	separator.add_theme_stylebox_override("separator", line)
+	return separator
+
+
+func _settings_row(icon: Texture2D, label_text: String, enabled: bool, on_changed: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = 112
+	row.add_theme_constant_override("separation", 22)
+	var icon_rect := TextureRect.new()
+	icon_rect.texture = icon
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_rect.custom_minimum_size = Vector2(82, 82)
+	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon_rect)
+	var label := Label.new()
+	label.text = label_text
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 30)
 	label.add_theme_color_override("font_color", brown)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(label)
-	holder.add_child(_olive_branch(false))
-	return holder
-
-
-func _olive_branch(mirrored: bool) -> TextureRect:
-	var branch := TextureRect.new()
-	branch.texture = olive_branch_texture
-	branch.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	branch.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	branch.custom_minimum_size = Vector2(52, 44)
-	branch.flip_h = mirrored
-	branch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return branch
-
-
-func _complete_mode_badge() -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
-	row.add_child(_status_icon(current_mode, true, 30))
-	var label := Label.new()
-	label.text = _t("completed_mode") % _mode_label(current_mode)
-	label.add_theme_font_size_override("font_size", 18)
-	label.add_theme_color_override("font_color", soft_brown)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
+	row.add_child(_settings_toggle(enabled, label_text, on_changed))
 	return row
 
 
-func _complete_actions() -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 14)
-	var next := _next_level_target()
-	if not next.is_empty():
-		row.add_child(_button(_t("next"), _play_next_level, true, Vector2(132, 50)))
-	if _has_unfinished_alternate_mode():
-		row.add_child(_button(_t("switch_mode"), func() -> void:
-			_close_modal()
-			_show_game(current_topic, current_level, _next_mode_key(current_mode))
-		, false, Vector2(132, 50)))
-	row.add_child(_button(_t("return_levels"), func() -> void:
-		_close_modal()
-		_show_levels(current_topic, str(current_level.get("id", "")))
-	, false, Vector2(150, 50)))
-	return row
+func _settings_toggle(enabled: bool, tooltip: String, on_changed: Callable) -> Button:
+	var toggle := Button.new()
+	toggle.name = "SettingsToggle"
+	toggle.text = ""
+	toggle.tooltip_text = tooltip
+	toggle.toggle_mode = true
+	toggle.button_pressed = enabled
+	toggle.focus_mode = Control.FOCUS_ALL
+	toggle.custom_minimum_size = Vector2(112, 62)
+	toggle.size_flags_horizontal = Control.SIZE_SHRINK_END
+	toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var thumb := Panel.new()
+	thumb.name = "Thumb"
+	thumb.custom_minimum_size = Vector2(46, 46)
+	thumb.size = Vector2(46, 46)
+	thumb.position = Vector2(58, 8) if enabled else Vector2(8, 8)
+	thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var thumb_style := _rounded_panel_style(Color("#FFFDF8"), 23)
+	thumb_style.shadow_color = Color(0.24, 0.14, 0.07, 0.22)
+	thumb_style.shadow_size = 4
+	thumb_style.shadow_offset = Vector2(0, 2)
+	thumb.add_theme_stylebox_override("panel", thumb_style)
+	toggle.add_child(thumb)
+	_refresh_settings_toggle(toggle, enabled, false)
+	toggle.toggled.connect(func(is_enabled: bool) -> void:
+		_refresh_settings_toggle(toggle, is_enabled, true)
+		on_changed.call(is_enabled)
+	)
+	_wire_button_animation(toggle)
+	return toggle
 
 
-func _has_unfinished_alternate_mode() -> bool:
-	for play_mode in _available_modes_for_level(current_level):
-		if _mode_key(play_mode) != current_mode and not progress_store.is_done(current_level["id"], play_mode):
-			return true
-	return false
-
-
-func _next_mode_key(mode: String) -> String:
-	var modes := _available_modes_for_level(current_level)
-	if modes.is_empty():
-		return _mode_key(mode)
-	var key := _mode_key(mode)
-	var index := modes.find(key)
-	if index < 0:
-		return modes[0]
-	return modes[(index + 1) % modes.size()]
-
-
-func _add_complete_paw_marks(panel: Control) -> void:
-	var marks := [
-		{ "pos": Vector2(34, 110), "size": 34.0, "rot": -0.25, "alpha": 0.16 },
-		{ "pos": Vector2(492, 112), "size": 30.0, "rot": 0.22, "alpha": 0.14 },
-		{ "pos": Vector2(62, 480), "size": 28.0, "rot": 0.18, "alpha": 0.12 },
-		{ "pos": Vector2(462, 448), "size": 36.0, "rot": -0.16, "alpha": 0.12 },
-	]
-	for item in marks:
-		var paw := TextureRect.new()
-		paw.texture = icon_cat_paw
-		paw.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		paw.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		paw.custom_minimum_size = Vector2(item["size"], item["size"])
-		paw.position = item["pos"]
-		paw.rotation = item["rot"]
-		paw.modulate = Color(0.82, 0.50, 0.22, item["alpha"])
-		paw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		panel.add_child(paw)
-
-
-func _play_next_level() -> void:
-	var target := _next_level_target()
-	if target.is_empty():
-		_close_modal()
-		_show_levels(current_topic, str(current_level.get("id", "")))
+func _refresh_settings_toggle(toggle: Button, enabled: bool, animate: bool) -> void:
+	var normal := _settings_toggle_style(enabled)
+	toggle.add_theme_stylebox_override("normal", normal)
+	toggle.add_theme_stylebox_override("pressed", normal.duplicate())
+	toggle.add_theme_stylebox_override("focus", normal.duplicate())
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = hover.bg_color.lightened(0.04)
+	toggle.add_theme_stylebox_override("hover", hover)
+	var thumb := toggle.get_node_or_null("Thumb") as Panel
+	if thumb == null:
 		return
-	_close_modal()
-	_show_game(target["topic"], target["level"], target["mode"])
+	var target := Vector2(58, 8) if enabled else Vector2(8, 8)
+	if not animate or _ui_motion_reduced():
+		thumb.position = target
+		return
+	var tween := create_tween().bind_node(toggle)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.tween_property(thumb, "position", target, 0.18)
 
 
-func _next_level_target() -> Dictionary:
-	var seen_current := false
-	for topic in topics:
-		for level in topic.get("levels", []):
-			if seen_current:
-				var modes := _available_modes_for_level(level)
-				if not modes.is_empty():
-					var next_mode := current_mode if modes.has(current_mode) else modes[0]
-					return {"topic": topic, "level": level, "mode": next_mode}
-			elif str(topic.get("id", "")) == str(current_topic.get("id", "")) and str(level.get("id", "")) == str(current_level.get("id", "")):
-				seen_current = true
-	return {}
+func _settings_toggle_style(enabled: bool) -> StyleBoxFlat:
+	var style := _rounded_panel_style(green if enabled else Color("#D8CDBB"), 31)
+	style.border_color = Color(brown, 0.12)
+	style.border_width_left = 1
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	return style
+
+
+func _tutorial_illustration(tutorial_texture: Texture2D, size: Vector2) -> TextureRect:
+	var art := TextureRect.new()
+	art.texture = tutorial_texture
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	art.custom_minimum_size = size
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return art
+
+
+func _animate_tutorial_illustration(art: Control) -> void:
+	if _ui_motion_reduced():
+		return
+	await get_tree().process_frame
+	if not is_instance_valid(art):
+		return
+	art.pivot_offset = art.size * 0.5
+	var tween := create_tween().bind_node(art).set_loops()
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.tween_property(art, "scale", Vector2(1.015, 1.015), 0.9)
+	tween.tween_property(art, "scale", Vector2.ONE, 0.9)
+
+
+func _animate_completion_content(
+	title: Control,
+	completed_image: Control,
+	level_name: Control,
+	description: Control,
+	button_holder: Control,
+) -> void:
+	if _ui_motion_reduced():
+		return
+	var controls: Array[Control] = [title, completed_image, level_name]
+	if description != null:
+		controls.append(description)
+	controls.append(button_holder)
+	for control in controls:
+		control.modulate.a = 0.0
+	await get_tree().process_frame
+	if not is_instance_valid(completed_image):
+		return
+	completed_image.pivot_offset = completed_image.size * 0.5
+	completed_image.scale = Vector2(0.975, 0.975)
+	var tween := create_tween().set_parallel(true)
+	for index in controls.size():
+		var control := controls[index]
+		tween.tween_property(control, "modulate:a", 1.0, 0.22).set_delay(0.08 + float(index) * 0.055).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tween.tween_property(completed_image, "scale", Vector2.ONE, 0.28).set_delay(0.1).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 
 func _show_album() -> void:
@@ -3681,7 +3721,7 @@ func _start_complete_confetti() -> void:
 	complete_confetti_layer.name = "CompleteConfettiLayer"
 	complete_confetti_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
 	complete_confetti_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	complete_confetti_layer.z_index = 20
+	complete_confetti_layer.z_index = 1
 	modal_root.add_child(complete_confetti_layer)
 	complete_confetti_layer.add_child(ConfettiEffectScript.new())
 
@@ -3701,6 +3741,7 @@ func _show_modal(shade_color := Color(0, 0, 0, 0.42), blur_background := false) 
 	modal_open = true
 	modal_root.mouse_filter = Control.MOUSE_FILTER_STOP
 	var shade := ColorRect.new()
+	shade.name = "ModalShade"
 	shade.color = shade_color
 	if blur_background:
 		shade.color = Color.WHITE
@@ -3736,9 +3777,17 @@ void fragment() {
 	return material
 
 
-func _modal_box(size: Vector2, bg_color := Color("#FFF6E6")) -> VBoxContainer:
-	var panel := PanelContainer.new()
+func _modal_box(
+	size: Vector2,
+	bg_color := Color("#FFF6E6"),
+	padding := 52.0,
+	close_action := Callable(),
+) -> VBoxContainer:
+	var panel := Panel.new()
+	panel.name = "ModalPanel"
 	panel.custom_minimum_size = size
+	panel.clip_contents = false
+	panel.z_index = 2
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -size.x * 0.5
 	panel.offset_top = -size.y * 0.5
@@ -3746,17 +3795,54 @@ func _modal_box(size: Vector2, bg_color := Color("#FFF6E6")) -> VBoxContainer:
 	panel.offset_bottom = size.y * 0.5
 	var style := StyleBoxFlat.new()
 	style.bg_color = bg_color
-	style.corner_radius_top_left = 18
-	style.corner_radius_top_right = 18
-	style.corner_radius_bottom_left = 18
-	style.corner_radius_bottom_right = 18
+	style.border_color = Color("#E4B77F")
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 34
+	style.corner_radius_top_right = 34
+	style.corner_radius_bottom_left = 34
+	style.corner_radius_bottom_right = 34
+	style.shadow_color = Color(0.28, 0.16, 0.07, 0.20)
+	style.shadow_size = 12
+	style.shadow_offset = Vector2(0, 6)
 	panel.add_theme_stylebox_override("panel", style)
 	modal_root.add_child(panel)
 	_animate_modal_panel(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = padding
+	box.offset_top = padding
+	box.offset_right = -padding
+	box.offset_bottom = -padding
+	box.add_theme_constant_override("separation", 18)
 	panel.add_child(box)
+	if close_action.is_valid():
+		panel.add_child(_modal_close_button(close_action))
 	return box
+
+
+func _modal_close_button(action: Callable) -> Button:
+	var button := Button.new()
+	button.text = "×"
+	button.tooltip_text = _t("close")
+	button.custom_minimum_size = Vector2(84, 84)
+	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	button.offset_left = -100
+	button.offset_top = 12
+	button.offset_right = -18
+	button.offset_bottom = 96
+	button.add_theme_font_size_override("font_size", 52)
+	button.add_theme_color_override("font_color", soft_brown)
+	button.add_theme_color_override("font_hover_color", deep_orange)
+	button.add_theme_color_override("font_pressed_color", deep_orange)
+	button.add_theme_color_override("font_focus_color", brown)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	button.pressed.connect(action)
+	_wire_button_animation(button)
+	return button
 
 
 func _mode_modal_box(size: Vector2) -> VBoxContainer:
@@ -3802,66 +3888,55 @@ func _mode_modal_box(size: Vector2) -> VBoxContainer:
 func _mode_close_button() -> Button:
 	var button := Button.new()
 	button.text = "×"
-	button.custom_minimum_size = Vector2(58, 58)
+	button.custom_minimum_size = Vector2(104, 104)
 	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	button.offset_left = -78
-	button.offset_top = 26
-	button.offset_right = -20
-	button.offset_bottom = 84
-	button.add_theme_font_size_override("font_size", 34)
+	button.offset_left = -126
+	button.offset_top = 14
+	button.offset_right = -22
+	button.offset_bottom = 118
+	button.add_theme_font_size_override("font_size", 68)
 	button.add_theme_color_override("font_color", brown)
 	button.add_theme_color_override("font_hover_color", deep_orange)
 	button.add_theme_color_override("font_pressed_color", deep_orange)
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		button.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var normal := _rounded_panel_style(Color(1.0, 0.98, 0.93, 0.0), 52)
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(1.0, 0.93, 0.82, 0.78)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover.duplicate())
+	button.add_theme_stylebox_override("focus", normal.duplicate())
+	button.add_theme_stylebox_override("disabled", normal.duplicate())
 	button.pressed.connect(_close_modal)
 	_wire_button_animation(button)
 	return button
 
 
-func _complete_modal_box(size: Vector2) -> VBoxContainer:
-	var panel := Panel.new()
-	panel.custom_minimum_size = size
-	panel.clip_contents = false
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -size.x * 0.5
-	panel.offset_top = -size.y * 0.5
-	panel.offset_right = size.x * 0.5
-	panel.offset_bottom = size.y * 0.5
-	var style := StyleBoxFlat.new()
-	style.bg_color = cream
-	style.corner_radius_top_left = 18
-	style.corner_radius_top_right = 18
-	style.corner_radius_bottom_left = 18
-	style.corner_radius_bottom_right = 18
-	panel.add_theme_stylebox_override("panel", style)
-	modal_root.add_child(panel)
-	_animate_modal_panel(panel)
-	_add_complete_paw_marks(panel)
-	var box := VBoxContainer.new()
-	box.clip_contents = false
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 32
-	box.offset_top = 0
-	box.offset_right = -32
-	box.offset_bottom = -28
-	panel.add_child(box)
-	return box
-
-
-func _modal_title(text: String) -> Label:
+func _modal_title(text: String, font_size := 44) -> Label:
 	var label := Label.new()
 	label.text = text
+	label.custom_minimum_size.y = 70
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 26)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", brown)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return label
 
 
 func _close_modal() -> void:
 	_stop_complete_confetti()
-	for child in modal_root.get_children():
-		if not child.is_queued_for_deletion():
-			child.queue_free()
 	modal_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	modal_open = false
+	for child in modal_root.get_children():
+		if child.is_queued_for_deletion():
+			continue
+		if _ui_motion_reduced() or not child is Control:
+			child.queue_free()
+			continue
+		var control := child as Control
+		var tween := create_tween().bind_node(control).set_parallel(true)
+		tween.tween_property(control, "modulate:a", 0.0, 0.14).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+		if control.name == "ModalPanel":
+			control.pivot_offset = control.size * 0.5
+			tween.tween_property(control, "scale", Vector2(0.98, 0.98), 0.14).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+		tween.chain().tween_callback(control.queue_free)

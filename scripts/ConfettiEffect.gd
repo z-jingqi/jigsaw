@@ -29,9 +29,9 @@ func _fire_volley() -> void:
 	volleys_fired += 1
 	volley_timer = 0.0
 	var origin_y := viewport_size.y + 26.0
-	_burst(Vector2(viewport_size.x * 0.10, origin_y), -72.0, 110)
-	_burst(Vector2(viewport_size.x * 0.90, origin_y), -108.0, 110)
-	_burst(Vector2(viewport_size.x * 0.50, origin_y), -90.0, 80)
+	_burst(Vector2(viewport_size.x * 0.10, origin_y), -72.0, 54)
+	_burst(Vector2(viewport_size.x * 0.90, origin_y), -108.0, 54)
+	_burst(Vector2(viewport_size.x * 0.50, origin_y), -90.0, 34)
 
 
 func _process(delta: float) -> void:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://v3hgb60h0xob"
-path="res://.godot/imported/cloud-wide.webp-17e3088edf9c7a92909ba50cff57dc47.ctex"
+uid="uid://jl5cjfgrpb7i"
+path="res://.godot/imported/cloud-right.png-7a310fa9d8f74525a88fba7c859f7bee.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/web-ui/island-map/cloud-wide.webp"
-dest_files=["res://.godot/imported/cloud-wide.webp-17e3088edf9c7a92909ba50cff57dc47.ctex"]
+source_file="res://assets/ui/transitions/clouds/cloud-right.png"
+dest_files=["res://.godot/imported/cloud-right.png-7a310fa9d8f74525a88fba7c859f7bee.ctex"]
 
 [params]
 

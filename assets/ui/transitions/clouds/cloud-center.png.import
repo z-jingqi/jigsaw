@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://df30yb8cw6lj6"
-path="res://.godot/imported/cloud-round.webp-c89bcd4cedc473a63027ea90c89db9d1.ctex"
+uid="uid://bd2alsgjb366v"
+path="res://.godot/imported/cloud-center.png-ba76264c2ce277ea3a4e2af4b69139e6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/web-ui/island-map/cloud-round.webp"
-dest_files=["res://.godot/imported/cloud-round.webp-c89bcd4cedc473a63027ea90c89db9d1.ctex"]
+source_file="res://assets/ui/transitions/clouds/cloud-center.png"
+dest_files=["res://.godot/imported/cloud-center.png-ba76264c2ce277ea3a4e2af4b69139e6.ctex"]
 
 [params]
 

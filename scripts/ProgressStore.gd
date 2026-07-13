@@ -134,6 +134,24 @@ func set_haptics_enabled(enabled: bool) -> void:
 	save_to_disk()
 
 
+func music_enabled() -> bool:
+	return bool(progress.get("music_enabled", true))
+
+
+func set_music_enabled(enabled: bool) -> void:
+	progress["music_enabled"] = enabled
+	save_to_disk()
+
+
+func sound_effects_enabled() -> bool:
+	return bool(progress.get("sound_effects_enabled", true))
+
+
+func set_sound_effects_enabled(enabled: bool) -> void:
+	progress["sound_effects_enabled"] = enabled
+	save_to_disk()
+
+
 func reduced_motion_enabled() -> bool:
 	return bool(progress.get("reduced_motion_enabled", false))
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dxci40vby7ktl"
-path="res://.godot/imported/cloud-medium.webp-2af411f7bcda1f45c3aad2cdbbca4f7f.ctex"
+uid="uid://p1mge40ptk58"
+path="res://.godot/imported/tutorial-drag.png-535bb47c690c222778df532b177ae5a1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/web-ui/island-map/cloud-medium.webp"
-dest_files=["res://.godot/imported/cloud-medium.webp-2af411f7bcda1f45c3aad2cdbbca4f7f.ctex"]
+source_file="res://assets/ui/modals/tutorial-drag.png"
+dest_files=["res://.godot/imported/tutorial-drag.png-535bb47c690c222778df532b177ae5a1.ctex"]
 
 [params]
 
