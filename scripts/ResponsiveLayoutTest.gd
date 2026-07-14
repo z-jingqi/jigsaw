@@ -48,6 +48,7 @@ func _run() -> void:
 		var polygon_level_index := _level_index_for_mode(game, topic, "polygon")
 		game.debug_enter_level(polygon_level_index, "polygon")
 		await process_frame
+		var puzzle_layout := _puzzle_layout_check(game, viewport_size)
 		game.debug_preview_complete()
 		await process_frame
 		var complete_ok := _modal_content_fits(game.modal_root, viewport_size)
@@ -66,10 +67,11 @@ func _run() -> void:
 			"settings_rects": settings_rects,
 			"modes": modes_ok,
 			"mode_rects": mode_rects,
+			"puzzle_layout": puzzle_layout,
 			"complete": complete_ok,
 			"complete_rects": complete_rects,
 		}
-		result["ok"] = topics_ok and levels_ok and settings_ok and modes_ok and complete_ok
+		result["ok"] = topics_ok and levels_ok and settings_ok and modes_ok and bool(puzzle_layout.get("ok", false)) and complete_ok
 		all_ok = all_ok and bool(result["ok"])
 		print("RESPONSIVE_LAYOUT %s" % JSON.stringify(result))
 		game.queue_free()
@@ -203,6 +205,57 @@ func _topic_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vec
 		"theme_local_asset": theme_local_asset,
 	}
 	result["ok"] = rounded_outline and back_icon_fills_button and theme_colors and title_unframed and progress_unframed and progress_stacked_centered and decorations_present and separated and theme_local_asset
+	return result
+
+
+func _puzzle_layout_check(game, viewport_size: Vector2) -> Dictionary:
+	var board = game.puzzle_board
+	var board_rect := Rect2(
+		board._world_to_screen(board.board_origin),
+		board.source_size * board.source_scale * board.view_scale,
+	)
+	var play_area: Rect2 = board._world_view_screen_rect()
+	var left_gap := board_rect.position.x - play_area.position.x
+	var right_gap := play_area.end.x - board_rect.end.x
+	var top_gap := board_rect.position.y - play_area.position.y
+	var bottom_gap := play_area.end.y - board_rect.end.y
+	var expected_tray_top: float = board._tray_area().position.y
+	var keeps_aspect := absf(
+		board_rect.size.x / maxf(1.0, board_rect.size.y)
+		- board.source_size.x / maxf(1.0, board.source_size.y)
+	) <= 0.001
+	var no_overlap := (
+		board_rect.position.y >= play_area.position.y - 0.75
+		and board_rect.end.y <= play_area.end.y + 0.75
+		and board_rect.position.x >= play_area.position.x - 0.75
+		and board_rect.end.x <= play_area.end.x + 0.75
+	)
+	var result := {
+		"board": [roundi(board_rect.position.x), roundi(board_rect.position.y), roundi(board_rect.size.x), roundi(board_rect.size.y)],
+		"play_area": [roundi(play_area.position.x), roundi(play_area.position.y), roundi(play_area.size.x), roundi(play_area.size.y)],
+		"left_gap": snappedf(left_gap, 0.01),
+		"right_gap": snappedf(right_gap, 0.01),
+		"top_gap": snappedf(top_gap, 0.01),
+		"bottom_gap": snappedf(bottom_gap, 0.01),
+		"horizontal_centered": absf(left_gap - right_gap) <= 0.75,
+		"vertical_centered": absf(top_gap - bottom_gap) <= 0.75,
+		"minimum_phone_side_gap": left_gap >= board.BOARD_SCREEN_EDGE_GAP - 0.75 and right_gap >= board.BOARD_SCREEN_EDGE_GAP - 0.75,
+		"header_excluded": absf(play_area.position.y - game._game_top_bar_height()) <= 0.75,
+		"tray_excluded": absf(play_area.end.y - expected_tray_top) <= 0.75,
+		"keeps_aspect": keeps_aspect,
+		"no_overlap": no_overlap,
+		"viewport_matches": absf(play_area.size.x - viewport_size.x) <= 0.75,
+	}
+	result["ok"] = (
+		result["horizontal_centered"]
+		and result["vertical_centered"]
+		and result["minimum_phone_side_gap"]
+		and result["header_excluded"]
+		and result["tray_excluded"]
+		and result["keeps_aspect"]
+		and result["no_overlap"]
+		and result["viewport_matches"]
+	)
 	return result
 
 

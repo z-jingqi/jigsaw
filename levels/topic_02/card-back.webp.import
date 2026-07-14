@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b45dk11oxb8xc"
-path="res://.godot/imported/level-bg.jpg-df5dbd6696f5c5a0e5fcf2b8e32a8ae6.ctex"
+uid="uid://c0clvuxw3rax"
+path="res://.godot/imported/card-back.webp-73d99d54149b1f602c4b273b8715a356.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://levels/topic_03/level-bg.jpg"
-dest_files=["res://.godot/imported/level-bg.jpg-df5dbd6696f5c5a0e5fcf2b8e32a8ae6.ctex"]
+source_file="res://levels/topic_02/card-back.webp"
+dest_files=["res://.godot/imported/card-back.webp-73d99d54149b1f602c4b273b8715a356.ctex"]
 
 [params]
 

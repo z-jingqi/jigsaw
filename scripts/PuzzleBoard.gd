@@ -1,7 +1,6 @@
 extends Node2D
 class_name PuzzleBoard
 
-signal status_changed(text: String)
 signal zoom_changed(percent: int)
 signal completed
 signal state_changed(state: Dictionary)
@@ -19,9 +18,9 @@ const VIEW_WHEEL_STEP := 0.08
 const TRACKPAD_MAGNIFY_MIN := 0.86
 const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
-const BOARD_SCREEN_EDGE_GAP := 10.0
-const BOARD_OUTLINE_SHADOW_OUTSET := 5.0
+const BOARD_SCREEN_EDGE_GAP := 5.0
 const BOARD_LINE_FRAME_WIDTH := 2
+const BOARD_TARGET_BACKGROUND_ALPHA := 0.25
 const VIEW_HINT_PADDING := 58.0
 const VIEW_HINT_MAX_RATIO := 1.45
 const HINT_GLOW_COLOR := Color(0.20, 0.78, 1.0, 0.22)
@@ -140,7 +139,7 @@ var pinch_active := false
 var pinch_start_distance := 0.0
 var pinch_start_scale := 1.0
 var pinch_start_world_midpoint := Vector2.ZERO
-var hud_icon_size := 56.0
+var hud_top_reserved_height := 56.0
 var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
 var randomize_piece_rotation := false
@@ -156,7 +155,6 @@ var snap_preview_key := ""
 var snap_ready_key := ""
 var debug_bounds_overlay_enabled := false
 var debug_bounds_overlay: Control
-var texts := {}
 var state_emit_pending := false
 var last_state_emit_msec := 0
 var haptics_enabled := true
@@ -192,18 +190,10 @@ func _process(delta: float) -> void:
 	_notify_state_changed()
 
 
-func set_texts(next_texts: Dictionary) -> void:
-	texts = next_texts.duplicate()
-
-
 func set_feedback_preferences(next_haptics_enabled: bool, next_reduced_motion: bool, next_edge_contrast_mode := "auto") -> void:
 	haptics_enabled = next_haptics_enabled
 	reduced_motion = next_reduced_motion
 	edge_contrast_mode = next_edge_contrast_mode if ["auto", "dark", "light"].has(next_edge_contrast_mode) else "auto"
-
-
-func _bt(key: String) -> String:
-	return str(texts.get(key, key))
 
 
 func _motion_duration(duration: float) -> float:
@@ -436,7 +426,7 @@ func _json_vector(value, fallback := Vector2.ZERO) -> Vector2:
 	return fallback
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, icon_size: float, random_rotation_enabled := false, restore_state := {}) -> bool:
+func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -444,7 +434,7 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	source_image = image
 	source_size = image_size
 	piece_visual_style = _piece_visual_style()
-	hud_icon_size = icon_size
+	hud_top_reserved_height = top_reserved_height
 	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
@@ -761,7 +751,6 @@ func _begin_pan(screen_pos: Vector2, touch_index: int) -> void:
 	panning = true
 	pan_touch_index = touch_index
 	pan_last_screen = screen_pos
-	status_changed.emit(_bt("pan_hint"))
 
 
 func _end_pan() -> void:
@@ -854,16 +843,18 @@ func _clamped_board_view_offset(offset: Vector2, scale: float) -> Vector2:
 func _board_outline_world_rect() -> Rect2:
 	if source_size.x <= 0.0 or source_size.y <= 0.0:
 		return Rect2(board_origin, Vector2.ZERO)
-	var outset := float(BOARD_LINE_FRAME_WIDTH) if _uses_shanhai_interface_style() else BOARD_OUTLINE_SHADOW_OUTSET
-	return Rect2(board_origin, source_size * source_scale).grow(outset)
+	return Rect2(board_origin, source_size * source_scale).grow(float(BOARD_LINE_FRAME_WIDTH))
 
 
 func _world_view_screen_rect() -> Rect2:
 	var viewport := get_viewport_rect().size
-	if current_mode == "swap":
-		return Rect2(Vector2.ZERO, viewport)
-	var tray := _tray_area()
-	return Rect2(Vector2.ZERO, Vector2(viewport.x, maxf(120.0, tray.position.y)))
+	var content_top := clampf(hud_top_reserved_height, 0.0, viewport.y)
+	var content_bottom := viewport.y if current_mode == "swap" else _tray_area().position.y
+	content_bottom = clampf(content_bottom, content_top, viewport.y)
+	return Rect2(
+		Vector2(0.0, content_top),
+		Vector2(viewport.x, maxf(1.0, content_bottom - content_top)),
+	)
 
 
 func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
@@ -871,11 +862,12 @@ func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
 	if board.size.x <= 0.0 or board.size.y <= 0.0:
 		return
 	var view_rect := _world_view_screen_rect()
-	var target_scale := maxf(0.001, (view_rect.size.x - BOARD_SCREEN_EDGE_GAP * 2.0) / maxf(1.0, board.size.x))
-	var target_offset := Vector2(
-		view_rect.position.x + BOARD_SCREEN_EDGE_GAP - board.position.x * target_scale,
-		view_rect.position.y + view_rect.size.y * 0.5 - board.get_center().y * target_scale
-	)
+	var usable_size := view_rect.size - Vector2.ONE * BOARD_SCREEN_EDGE_GAP * 2.0
+	var target_scale := maxf(0.001, minf(
+		maxf(1.0, usable_size.x) / maxf(1.0, board.size.x),
+		maxf(1.0, usable_size.y) / maxf(1.0, board.size.y),
+	))
+	var target_offset := view_rect.get_center() - board.get_center() * target_scale
 	if set_baseline:
 		base_view_scale = target_scale
 		base_view_offset = target_offset
@@ -891,11 +883,11 @@ func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
 
 
 func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX_RATIO, set_baseline := false) -> void:
-	var viewport := get_viewport_rect().size
+	var view_rect := _world_view_screen_rect()
 	var target_center := bounds.get_center()
-	var target_scale := minf(viewport.x / maxf(1.0, bounds.size.x), viewport.y / maxf(1.0, bounds.size.y))
+	var target_scale := minf(view_rect.size.x / maxf(1.0, bounds.size.x), view_rect.size.y / maxf(1.0, bounds.size.y))
 	target_scale = maxf(0.001, target_scale)
-	var target_offset := viewport * 0.5 - target_center * target_scale
+	var target_offset := view_rect.get_center() - target_center * target_scale
 	target_offset = _clamped_view_offset(target_offset, target_scale)
 	if set_baseline:
 		base_view_scale = target_scale
@@ -903,7 +895,7 @@ func _fit_view_to_world_rect(bounds: Rect2, animate: bool, max_ratio := VIEW_MAX
 		view_target_ratio = 1.0
 	else:
 		target_scale = _clamped_actual_scale(clampf(target_scale, base_view_scale * VIEW_MIN_RATIO, base_view_scale * minf(max_ratio, VIEW_MAX_RATIO)))
-		target_offset = viewport * 0.5 - target_center * target_scale
+		target_offset = view_rect.get_center() - target_center * target_scale
 		target_offset = _clamped_view_offset(target_offset, target_scale)
 	if animate:
 		_animate_view_to(target_scale, target_offset, 0.22)
@@ -992,10 +984,8 @@ func show_hint() -> void:
 	var pair := _find_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
-		status_changed.emit(_bt("hint_none"))
 		return
 	hint_pending = true
-	status_changed.emit(_bt("hint_pair"))
 	_animate_tray_scroll_to_group(pair[0], func() -> void:
 		if not hint_pending:
 			return
@@ -1613,7 +1603,6 @@ func _start_swap_session() -> bool:
 	for slot_index in range(order.size()):
 		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)
 	fit_view_to_pieces(false)
-	status_changed.emit(_bt("status_swap"))
 	return true
 
 
@@ -1711,12 +1700,12 @@ func _swap_slot_position(slot_index: int, cols := SWAP_FALLBACK_COLS, rows := SW
 
 
 func _mobile_board_layout() -> Dictionary:
+	var bottom_reserved_height := 0.0 if current_mode == "swap" else _tray_area().size.y
 	return BoardLayoutScript.mobile_board_layout(
 		source_size,
 		get_viewport_rect().size,
-		active_level_config,
-		_current_mode_piece_count(),
-		hud_icon_size
+		hud_top_reserved_height,
+		bottom_reserved_height,
 	)
 
 
@@ -1949,23 +1938,7 @@ func _source_average_luminance() -> float:
 func _add_board_outline_shadow() -> void:
 	if world_root == null or source_size.x <= 0.0 or source_size.y <= 0.0:
 		return
-	if _uses_shanhai_interface_style():
-		_add_board_line_frame()
-		return
-	var shadow := ColorRect.new()
-	shadow.name = "board_outline_shadow"
-	shadow.color = Color(0.36, 0.23, 0.12, 0.12)
-	shadow.position = board_origin - Vector2.ONE * BOARD_OUTLINE_SHADOW_OUTSET
-	shadow.size = source_size * source_scale + Vector2.ONE * BOARD_OUTLINE_SHADOW_OUTSET * 2.0
-	shadow.z_index = -50
-	world_root.add_child(shadow)
-	var target := ColorRect.new()
-	target.name = "board_target_area"
-	target.color = Color(1.0, 0.96, 0.86, 0.22)
-	target.position = board_origin
-	target.size = source_size * source_scale
-	target.z_index = -49
-	world_root.add_child(target)
+	_add_board_line_frame()
 
 
 func _add_board_line_frame() -> void:
@@ -1976,7 +1949,9 @@ func _add_board_line_frame() -> void:
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color.TRANSPARENT
+	var surface := _topic_ui_color("surface", Color("#F5F0E3"))
+	surface.a = BOARD_TARGET_BACKGROUND_ALPHA
+	style.bg_color = surface
 	var outline := _topic_ui_color("outline", Color("#879174"))
 	outline.a = 0.78
 	style.border_color = outline
@@ -1991,10 +1966,6 @@ func _add_board_line_frame() -> void:
 	style.corner_radius_bottom_right = radius
 	frame.add_theme_stylebox_override("panel", style)
 	world_root.add_child(frame)
-
-
-func _uses_shanhai_interface_style() -> bool:
-	return str(active_level_config.get("topic_id", "")) == "topic_01"
 
 
 func _topic_ui_color(key: String, fallback: Color) -> Color:
@@ -2841,7 +2812,6 @@ func _end_swap_drag() -> void:
 		target["slot_index"] = swap_drag_start_slot
 		_animate_swap_tile_to(released, _swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
 		_animate_swap_tile_to(target, _swap_slot_position(swap_drag_start_slot, _swap_cols(), _swap_rows()))
-		status_changed.emit(_bt("swapped"))
 		undo_available_changed.emit(true)
 		_trigger_haptic("swap")
 	_set_swap_tile_lifted(released, false)
@@ -3013,7 +2983,6 @@ func undo_last_swap() -> void:
 	second["slot_index"] = int(entry.get("second_slot", second["slot_index"]))
 	_animate_swap_tile_to(first, _swap_slot_position(int(first["slot_index"]), _swap_cols(), _swap_rows()))
 	_animate_swap_tile_to(second, _swap_slot_position(int(second["slot_index"]), _swap_cols(), _swap_rows()))
-	status_changed.emit(_bt("undone"))
 	undo_available_changed.emit(not swap_history.is_empty())
 	_trigger_haptic("swap")
 	_notify_state_changed(true)
@@ -3030,7 +2999,6 @@ func _show_swap_hint() -> void:
 	var pair := _find_swap_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
-		status_changed.emit(_bt("hint_none"))
 		return
 	var hint_key := "swap:%d:%d" % [int(pair[0]["correct_index"]), int(pair[1]["correct_index"])]
 	if hint_key == active_hint_key and _has_active_hint_highlights():
@@ -3043,7 +3011,6 @@ func _show_swap_hint() -> void:
 	for tile in pair:
 		_add_swap_hint_outline(tile)
 	_auto_clear_hint_highlights(hint_highlight_token)
-	status_changed.emit(_bt("hint_pair"))
 
 
 func _find_swap_hint_pair() -> Array:

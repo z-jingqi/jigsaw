@@ -10,12 +10,13 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_remove_test_save()
-	root.size = Vector2i(1206, 2622)
+	root.size = Vector2i(603, 1200)
 	var game = MAIN_SCENE.instantiate()
 	game.progress_store.save_path = TEST_SAVE_PATH
 	root.add_child(game)
 	await process_frame
 	await process_frame
+	await create_timer(0.1).timeout
 	var all_ok := true
 	var first_topic: Dictionary = game.topics[0] if not game.topics.is_empty() else {}
 	var first_level: Dictionary = first_topic.get("levels", [])[0] if not first_topic.get("levels", []).is_empty() else {}
@@ -161,8 +162,9 @@ func _run() -> void:
 			line_frame_ok = (
 				line_frame is Panel
 				and frame_style is StyleBoxFlat
-				and frame_style.bg_color.a <= 0.001
+				and is_equal_approx(frame_style.bg_color.a, game.puzzle_board.BOARD_TARGET_BACKGROUND_ALPHA)
 				and frame_style.shadow_size == 0
+				and frame_style.border_width_left == game.puzzle_board.BOARD_LINE_FRAME_WIDTH
 				and world_root.get_node_or_null("board_outline_shadow") == null
 				and world_root.get_node_or_null("board_target_area") == null
 			)
@@ -170,12 +172,16 @@ func _run() -> void:
 		var hint_button = game.screen_root.find_child("game_hint_button", true, false)
 		var title_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
 		var title_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
+		var no_gameplay_copy := _tree_label_count(game.screen_root) == 1
+		var no_alt_text := not _tree_has_tooltip(game.screen_root) and not _tree_has_tooltip(game.modal_root)
 		var interface_style_ok := (
 			_outline_only_button(back_button)
 			and _outline_only_button(hint_button)
 			and title_left is TextureRect
 			and title_right is TextureRect
 			and line_frame_ok
+			and no_gameplay_copy
+			and no_alt_text
 		)
 		var loaded: bool = (
 			game.current_screen == "game"
@@ -197,6 +203,8 @@ func _run() -> void:
 			"tray_top_border": tray_style_ok,
 			"line_frame": line_frame_ok,
 			"line_buttons_and_title": interface_style_ok,
+			"no_gameplay_copy": no_gameplay_copy,
+			"no_alt_text": no_alt_text,
 			"modal": modal_visible,
 			"completed": completed,
 			"state_cleared": state_cleared,
@@ -306,7 +314,11 @@ func _theme_header_style_probe(game) -> Dictionary:
 		var outline: Color = palette.outline
 		var assets_value = topic.get("ui_assets", {})
 		var assets: Dictionary = assets_value if typeof(assets_value) == TYPE_DICTIONARY else {}
-		var has_title_decoration := not str(assets.get("title_mountains", "")).is_empty()
+		var has_title_decoration := (
+			not str(assets.get("title_side", "")).is_empty()
+			or not str(assets.get("title_mountains", "")).is_empty()
+		)
+		var has_title_ears := not str(assets.get("title_ear", "")).is_empty()
 		game._show_levels(topic)
 		await process_frame
 		var level_topbar: Control = game.screen_root.get_node_or_null("level_list_topbar")
@@ -316,9 +328,20 @@ func _theme_header_style_probe(game) -> Dictionary:
 		var level_title: Label = level_topbar.get_node_or_null("level_list_title") if level_topbar != null else null
 		var level_left = level_topbar.get_node_or_null("topic_title_decoration_left") if level_topbar != null else null
 		var level_right = level_topbar.get_node_or_null("topic_title_decoration_right") if level_topbar != null else null
+		var level_ear_left = level_topbar.get_node_or_null("topic_title_ear_left") if level_topbar != null else null
+		var level_ear_right = level_topbar.get_node_or_null("topic_title_ear_right") if level_topbar != null else null
 		var level_decorations_match: bool = (
 			(level_left is TextureRect and level_right is TextureRect) == has_title_decoration
 		)
+		var level_ears_match: bool = (
+			(level_ear_left is TextureRect and level_ear_right is TextureRect) == has_title_ears
+		)
+		var level_back_position := level_back.global_position if level_back != null else Vector2.ZERO
+		var level_back_size := level_back.size if level_back != null else Vector2.ZERO
+		var level_title_position := level_title.global_position if level_title != null else Vector2.ZERO
+		var level_title_size := level_title.size if level_title != null else Vector2.ZERO
+		var level_title_font_size := level_title.get_theme_font_size("font_size") if level_title != null else 0
+		var level_topbar_height := level_topbar.size.y if level_topbar != null else 0.0
 		var level_ok: bool = (
 			level_back_style is StyleBoxFlat
 			and level_back_style.border_color.is_equal_approx(outline)
@@ -327,6 +350,7 @@ func _theme_header_style_probe(game) -> Dictionary:
 			and level_title.get_theme_color("font_color").is_equal_approx(foreground)
 			and level_topbar.get_node_or_null("level_list_title_panel") == null
 			and level_decorations_match
+			and level_ears_match
 		)
 		game._clear_ui()
 		game.current_topic = topic
@@ -336,15 +360,52 @@ func _theme_header_style_probe(game) -> Dictionary:
 		var game_back: Button = game.screen_root.find_child("game_back_button", true, false)
 		var hint_button: Button = game.screen_root.find_child("game_hint_button", true, false)
 		var game_title: Label = game.screen_root.find_child("game_title", true, false)
+		var game_topbar: Control = game.screen_root.find_child("game_topbar", true, false)
 		var game_back_style = game_back.get_theme_stylebox("normal") if game_back != null else null
 		var hint_style = hint_button.get_theme_stylebox("normal") if hint_button != null else null
 		var game_back_icon: TextureRect = game_back.get_child(0) if game_back != null and game_back.get_child_count() > 0 else null
 		var hint_icon: TextureRect = hint_button.get_child(0) if hint_button != null and hint_button.get_child_count() > 0 else null
 		var game_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
 		var game_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
+		var game_ear_left = game.screen_root.find_child("topic_title_ear_left", true, false)
+		var game_ear_right = game.screen_root.find_child("topic_title_ear_right", true, false)
 		var game_decorations_match: bool = (
 			(game_left is TextureRect and game_right is TextureRect) == has_title_decoration
 		)
+		var game_ears_match: bool = (
+			(game_ear_left is TextureRect and game_ear_right is TextureRect) == has_title_ears
+		)
+		var header_layout_matches := (
+			game_back != null
+			and hint_button != null
+			and game_title != null
+			and game_topbar != null
+			and game_back.global_position.is_equal_approx(level_back_position)
+			and game_back.size.is_equal_approx(level_back_size)
+			and hint_button.size.is_equal_approx(level_back_size)
+			and is_equal_approx(hint_button.global_position.y, level_back_position.y)
+			and is_equal_approx(hint_button.global_position.x + hint_button.size.x, game.get_viewport_rect().size.x - level_back_position.x)
+			and game_title.global_position.is_equal_approx(level_title_position)
+			and game_title.size.is_equal_approx(level_title_size)
+			and game_title.get_theme_font_size("font_size") == level_title_font_size
+			and is_equal_approx(game_topbar.size.y, level_topbar_height)
+		)
+		var layout_values := {}
+		if not header_layout_matches:
+			layout_values = {
+				"level_back_position": level_back_position,
+				"game_back_position": game_back.global_position if game_back != null else Vector2.ZERO,
+				"level_back_size": level_back_size,
+				"game_back_size": game_back.size if game_back != null else Vector2.ZERO,
+				"hint_position": hint_button.global_position if hint_button != null else Vector2.ZERO,
+				"hint_size": hint_button.size if hint_button != null else Vector2.ZERO,
+				"level_title_position": level_title_position,
+				"game_title_position": game_title.global_position if game_title != null else Vector2.ZERO,
+				"level_title_size": level_title_size,
+				"game_title_size": game_title.size if game_title != null else Vector2.ZERO,
+				"level_topbar_height": level_topbar_height,
+				"game_topbar_height": game_topbar.size.y if game_topbar != null else 0.0,
+			}
 		var game_ok: bool = (
 			game_back_style is StyleBoxFlat
 			and game_back_style.border_color.is_equal_approx(outline)
@@ -354,15 +415,22 @@ func _theme_header_style_probe(game) -> Dictionary:
 			and _icon_uses_color(hint_icon, foreground)
 			and game_title != null
 			and game_title.get_theme_color("font_color").is_equal_approx(foreground)
+			and header_layout_matches
 			and game_decorations_match
+			and game_ears_match
 		)
 		var topic_ok := level_ok and game_ok
-		details.append({
+		var detail := {
 			"topic": str(topic.get("id", "")),
 			"level_header": level_ok,
 			"game_header": game_ok,
+			"layout_matches": header_layout_matches,
 			"has_decoration": has_title_decoration,
-		})
+			"has_ears": has_title_ears,
+		}
+		if not layout_values.is_empty():
+			detail["layout_values"] = layout_values
+		details.append(detail)
 		all_ok = all_ok and topic_ok
 	game._show_topics()
 	await process_frame
@@ -404,6 +472,22 @@ func _tree_has_text(node: Node, expected: String) -> bool:
 		return true
 	for child in node.get_children():
 		if _tree_has_text(child, expected):
+			return true
+	return false
+
+
+func _tree_label_count(node: Node) -> int:
+	var count := 1 if node is Label else 0
+	for child in node.get_children():
+		count += _tree_label_count(child)
+	return count
+
+
+func _tree_has_tooltip(node: Node) -> bool:
+	if node is Control and not (node as Control).tooltip_text.is_empty():
+		return true
+	for child in node.get_children():
+		if _tree_has_tooltip(child):
 			return true
 	return false
 

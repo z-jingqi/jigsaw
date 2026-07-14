@@ -35,7 +35,6 @@ const LEVEL_LIST_THUMBNAIL_SIZE := Vector2i(450, 600)
 const LEVEL_LIST_OVERSCAN_ROWS := 1.0
 const UI_ICON_BUTTON_SIZE := 64.0
 const UI_ICON_INSET := 8.0
-const GAME_HINT_BUTTON_SCALE := 2.0
 const HOME_ICON_BUTTON_SIZE := 72.0
 const HOME_ICON_INSET := 8.0
 const GAME_FOOTER_MARGIN := 18.0
@@ -108,10 +107,7 @@ const BUTTON_BOUNDS_DEBUG_COLOR := Color(0.16, 0.56, 1.0, 0.20)
 const HUD_TEXT_BUTTON_FONT_SIZE := 22
 const UI_TEXT := {
 	"en": {
-		"back": "Back",
 		"album": "Album",
-		"settings": "Settings",
-		"hint": "Hint",
 		"no_topics": "No topics yet",
 		"no_levels": "No levels yet",
 		"series_progress": "Progress",
@@ -123,10 +119,6 @@ const UI_TEXT := {
 		"done": "Completed",
 		"todo": "Not completed",
 		"replay": "Play again",
-		"status_swap": "Drag one tile onto another to swap positions.",
-		"status_drag_rotate": "Drag pieces. Double tap a piece to rotate. Drag the tablecloth and pinch to zoom.",
-		"status_drag": "Drag pieces. Drag the tablecloth and pinch to zoom.",
-		"status_missing_mode": "This level JSON is missing data for the current mode.",
 		"continue": "Continue",
 		"in_progress": "In progress",
 		"undo": "Undo",
@@ -146,7 +138,6 @@ const UI_TEXT := {
 		"edge_light": "Light",
 		"random_rotation": "Random piece rotation (polygon / jigsaw)",
 		"random_rotation_next": "Random rotation changes apply after restarting or entering another level.",
-		"close": "Close",
 		"tutorial_swap": "Drag one tile onto another to swap.",
 		"tutorial_drag": "Drag matching pieces together to snap.",
 		"got_it": "Got it",
@@ -155,19 +146,10 @@ const UI_TEXT := {
 		"next": "Next",
 		"switch_mode": "Other mode",
 		"album_hint": "Album only stores completed puzzles. Finish more levels to unlock more.",
-		"completed_modes": "Completed modes: %s",
-		"swap_hint": "Drag any tile onto another tile to swap them.",
-		"hint_none": "No nearby pieces can be hinted right now.",
-		"hint_pair": "The highlighted pieces fit together.",
-		"swapped": "Two tiles swapped.",
-		"undone": "Last swap undone.",
-		"pan_hint": "Drag the tablecloth to move the view. Pinch to zoom."
+		"completed_modes": "Completed modes: %s"
 	},
 	"zh": {
-		"back": "返回",
 		"album": "相册",
-		"settings": "设置",
-		"hint": "提示",
 		"no_topics": "暂无主题",
 		"no_levels": "暂无关卡",
 		"series_progress": "进度",
@@ -179,10 +161,6 @@ const UI_TEXT := {
 		"done": "已完成",
 		"todo": "未完成",
 		"replay": "再玩一次",
-		"status_swap": "拖动图片块到另一块上交换位置。",
-		"status_drag_rotate": "拖动碎片。双击碎片旋转，空白处拖动桌布，双指缩放。",
-		"status_drag": "拖动碎片。空白处拖动桌布，双指缩放。",
-		"status_missing_mode": "关卡 JSON 缺少当前模式配置。",
 		"continue": "继续",
 		"in_progress": "进行中",
 		"undo": "撤销",
@@ -202,7 +180,6 @@ const UI_TEXT := {
 		"edge_light": "浅色",
 		"random_rotation": "碎片随机旋转（多边形 / 凹凸）",
 		"random_rotation_next": "随机旋转设置将在重新开始或进入下一关后生效。",
-		"close": "关闭",
 		"tutorial_swap": "拖动图片块，交换位置。",
 		"tutorial_drag": "拖动碎片拼合，对齐后自动吸附。",
 		"got_it": "知道了",
@@ -211,19 +188,10 @@ const UI_TEXT := {
 		"next": "下一关",
 		"switch_mode": "换个模式",
 		"album_hint": "相册只收录已完成的拼图，继续完成关卡可解锁更多收藏。",
-		"completed_modes": "已完成模式：%s",
-		"swap_hint": "拖动任意一块图片到另一块上，即可交换它们的位置。",
-		"hint_none": "暂时没有可提示的相邻碎片。",
-		"hint_pair": "高亮的两块可以拼在一起。",
-		"swapped": "已交换两块图片。",
-		"undone": "已撤销上一次交换。",
-		"pan_hint": "拖动桌布可移动视角，双指可缩放。"
+		"completed_modes": "已完成模式：%s"
 	},
 	"ja": {
-		"back": "戻る",
 		"album": "アルバム",
-		"settings": "設定",
-		"hint": "ヒント",
 		"no_topics": "テーマはまだありません",
 		"no_levels": "レベルはまだありません",
 		"series_progress": "進行度",
@@ -235,10 +203,6 @@ const UI_TEXT := {
 		"done": "完成済み",
 		"todo": "未完成",
 		"replay": "もう一度",
-		"status_swap": "画像タイルを別のタイルにドラッグして入れ替えます。",
-		"status_drag_rotate": "ピースをドラッグ。ダブルタップで回転。背景をドラッグし、ピンチでズーム。",
-		"status_drag": "ピースをドラッグ。背景をドラッグし、ピンチでズーム。",
-		"status_missing_mode": "このレベル JSON には現在のモード設定がありません。",
 		"continue": "続きから",
 		"in_progress": "進行中",
 		"undo": "元に戻す",
@@ -258,7 +222,6 @@ const UI_TEXT := {
 		"edge_light": "明るい色",
 		"random_rotation": "ピースをランダム回転（ポリゴン / ジグソー）",
 		"random_rotation_next": "ランダム回転の変更は再開または次のレベルから反映されます。",
-		"close": "閉じる",
 		"tutorial_swap": "タイルを重ねて入れ替えます。",
 		"tutorial_drag": "ピースを合わせると吸着します。",
 		"got_it": "OK",
@@ -267,13 +230,7 @@ const UI_TEXT := {
 		"next": "次へ",
 		"switch_mode": "別モード",
 		"album_hint": "アルバムには完成したパズルだけが保存されます。さらに完成させると増えます。",
-		"completed_modes": "完成モード：%s",
-		"swap_hint": "任意のタイルを別のタイルへドラッグして入れ替えます。",
-		"hint_none": "今はヒントにできる隣接ピースがありません。",
-		"hint_pair": "ハイライトされた 2 つはつながります。",
-		"swapped": "2 枚のタイルを交換しました。",
-		"undone": "直前の交換を元に戻しました。",
-		"pan_hint": "背景をドラッグして移動し、ピンチでズームできます。"
+		"completed_modes": "完成モード：%s"
 	}
 }
 
@@ -339,7 +296,6 @@ var level_virtual_items: Array[Dictionary] = []
 var level_virtual_nodes: Dictionary = {}
 var level_virtual_overscan := 0.0
 
-var status_label: Label
 var zoom_label: Label
 var swap_undo_button: Button
 var hud_blocker_controls: Array[Control] = []
@@ -378,8 +334,6 @@ func _ready() -> void:
 	active_locale = _detect_locale()
 	repository.set_locale(active_locale)
 	puzzle_board = PuzzleBoardScript.new()
-	puzzle_board.set_texts(_puzzle_board_texts())
-	puzzle_board.status_changed.connect(_set_game_status)
 	puzzle_board.zoom_changed.connect(_set_zoom_label)
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
@@ -587,18 +541,6 @@ func _detect_locale() -> String:
 func _t(key: String) -> String:
 	var table: Dictionary = UI_TEXT.get(active_locale, UI_TEXT["en"])
 	return str(table.get(key, UI_TEXT["en"].get(key, key)))
-
-
-func _puzzle_board_texts() -> Dictionary:
-	return {
-		"swap_hint": _t("swap_hint"),
-		"hint_none": _t("hint_none"),
-		"hint_pair": _t("hint_pair"),
-		"swapped": _t("swapped"),
-		"undone": _t("undone"),
-		"status_swap": _t("status_swap"),
-		"pan_hint": _t("pan_hint"),
-	}
 
 
 func _clear_ui() -> void:
@@ -884,7 +826,7 @@ func _header(parent: VBoxContainer, title: String, back: Callable = Callable()) 
 	row.custom_minimum_size.y = 84
 	parent.add_child(row)
 	if back.is_valid():
-		var back_button := _icon_button(icon_left_arrow, back, _t("back"), UI_ICON_BUTTON_SIZE, UI_ICON_INSET, false, true, brown, deep_orange)
+		var back_button := _icon_button(icon_left_arrow, back, UI_ICON_BUTTON_SIZE, UI_ICON_INSET, false, true, brown, deep_orange)
 		back_button.position = Vector2(0, 12)
 		row.add_child(back_button)
 	var label := Label.new()
@@ -932,7 +874,6 @@ func _button(text: String, action: Callable, primary := true, min_size := Vector
 func _icon_button(
 	icon: Texture2D,
 	action: Callable,
-	tooltip: String,
 	button_size := UI_ICON_BUTTON_SIZE,
 	icon_inset := UI_ICON_INSET,
 	subtle_shadow := false,
@@ -944,7 +885,6 @@ func _icon_button(
 ) -> Button:
 	var button := Button.new()
 	button.text = ""
-	button.tooltip_text = tooltip
 	var icon_size := Vector2(button_size, button_size)
 	button.custom_minimum_size = icon_size
 	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1051,10 +991,9 @@ func _rounded_panel_style(bg_color: Color, radius: int) -> StyleBoxFlat:
 	return style
 
 
-func _tool_text_button(text: String, action: Callable, tooltip: String) -> Button:
+func _tool_text_button(text: String, action: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
-	button.tooltip_text = tooltip
 	button.custom_minimum_size = Vector2(_hud_text_button_width(text), _hud_text_button_height())
 	button.add_theme_font_size_override("font_size", HUD_TEXT_BUTTON_FONT_SIZE)
 	button.add_theme_color_override("font_color", soft_brown)
@@ -1234,7 +1173,7 @@ func _theme_list_topbar(ui_scale: float) -> Control:
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var button_size := 64.0 * ui_scale
 	var side_margin := 20.0 * ui_scale
-	var settings_button := _theme_square_button(THEME_SETTINGS_ICON_PATH, _show_settings_modal, _t("settings"), button_size)
+	var settings_button := _theme_square_button(THEME_SETTINGS_ICON_PATH, _show_settings_modal, button_size)
 	settings_button.name = "theme_settings_button"
 	settings_button.position = Vector2(viewport_width - side_margin - button_size, 18.0 * ui_scale)
 	bar.add_child(settings_button)
@@ -1252,10 +1191,9 @@ func _theme_list_topbar(ui_scale: float) -> Control:
 	return bar
 
 
-func _theme_square_button(icon_path: String, action: Callable, tooltip: String, button_size: float) -> Button:
+func _theme_square_button(icon_path: String, action: Callable, button_size: float) -> Button:
 	var button := Button.new()
 	button.text = ""
-	button.tooltip_text = tooltip
 	button.custom_minimum_size = Vector2(button_size, button_size)
 	button.size = button.custom_minimum_size
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
@@ -1813,19 +1751,14 @@ func _level_list_topbar(topic: Dictionary, ui_scale: float) -> Control:
 	return bar
 
 
-func _level_back_button(button_size: float, palette: Dictionary) -> Button:
+func _level_back_button(button_size: float, palette: Dictionary, action: Callable = Callable()) -> Button:
 	var button := Button.new()
 	button.name = "level_list_back_button"
 	button.text = ""
-	button.tooltip_text = _t("back")
 	button.custom_minimum_size = Vector2(button_size, button_size)
 	button.size = button.custom_minimum_size
 	var outline: Color = palette.outline
-	button.add_theme_stylebox_override("normal", _topic_outline_nav_button_style(outline, button_size))
-	button.add_theme_stylebox_override("hover", _topic_outline_nav_button_style(outline, button_size, 0.08))
-	button.add_theme_stylebox_override("pressed", _topic_outline_nav_button_style(outline, button_size, 0.14))
-	button.add_theme_stylebox_override("disabled", _topic_outline_nav_button_style(outline, button_size))
-	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_apply_topic_outline_nav_button_styles(button, outline, button_size)
 	var arrow := TextureRect.new()
 	arrow.name = "level_list_back_icon"
 	var arrow_texture := repository.cached_texture(THEME_ARROW_ICON_PATH)
@@ -1847,9 +1780,17 @@ func _level_back_button(button_size: float, palette: Dictionary) -> Button:
 	arrow.material = _icon_tint_material(palette.foreground)
 	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(arrow)
-	button.pressed.connect(_show_topics)
+	button.pressed.connect(action if action.is_valid() else _show_topics)
 	_wire_button_animation(button)
 	return button
+
+
+func _apply_topic_outline_nav_button_styles(button: Button, outline: Color, button_size: float) -> void:
+	button.add_theme_stylebox_override("normal", _topic_outline_nav_button_style(outline, button_size))
+	button.add_theme_stylebox_override("hover", _topic_outline_nav_button_style(outline, button_size, 0.08))
+	button.add_theme_stylebox_override("pressed", _topic_outline_nav_button_style(outline, button_size, 0.14))
+	button.add_theme_stylebox_override("disabled", _topic_outline_nav_button_style(outline, button_size))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
 func _topic_outline_nav_button_style(outline: Color, button_size: float, background_alpha := 0.0) -> StyleBoxFlat:
@@ -3075,11 +3016,9 @@ func _show_game(topic: Dictionary, level: Dictionary, play_mode: String, discard
 	_clear_ui()
 	_clear_board()
 	var random_rotation := progress_store.random_rotation_enabled() and current_mode != "swap"
-	var loaded: bool = puzzle_board.start(active_level_config, current_mode, texture, source_image, source_size, _icon_button_size(), random_rotation, restore_state)
+	var loaded: bool = puzzle_board.start(active_level_config, current_mode, texture, source_image, source_size, _game_top_bar_height(), random_rotation, restore_state)
 	_build_game_hud(_level_display_title(level))
-	if not loaded:
-		status_label.text = _t("status_missing_mode")
-	elif not progress_store.tutorial_seen(current_mode):
+	if loaded and not progress_store.tutorial_seen(current_mode):
 		_show_tutorial_modal()
 
 
@@ -3097,12 +3036,6 @@ func _level_config_with_topic_background(level_config: Dictionary, topic: Dictio
 		"color": str(palette.get("surface", "#F5F0E3")),
 	}
 	return result
-
-
-func _set_game_status(text: String) -> void:
-	if status_label != null and is_instance_valid(status_label):
-		status_label.text = text
-		status_label.visible = not text.is_empty()
 
 
 func _set_zoom_label(percent: int) -> void:
@@ -3131,13 +3064,20 @@ func _on_puzzle_state_changed(state: Dictionary) -> void:
 
 
 func _build_game_hud(level_title: String) -> void:
+	var ui_scale := _topics_ui_scale()
+	var viewport_width := get_viewport_rect().size.x
 	var bar_height := _game_top_bar_height()
-	var hint_button_size := _game_hint_button_size()
-	var hint_icon_inset := UI_ICON_INSET * GAME_HINT_BUTTON_SCALE
+	var title_height := 52.0 * ui_scale
+	var button_size := _game_hint_button_size()
+	var icon_inset := button_size * 0.20
+	var side_margin := 20.0 * ui_scale
+	var top := 20.0 * ui_scale
+	var button_top := top + (title_height - button_size) * 0.5
 	var palette := _topic_ui_palette(current_topic)
 	var foreground: Color = palette.foreground
 	var outline: Color = palette.outline
 	var top_bar := Control.new()
+	top_bar.name = "game_topbar"
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top_bar.offset_left = 0
 	top_bar.offset_top = 0
@@ -3145,57 +3085,42 @@ func _build_game_hud(level_title: String) -> void:
 	top_bar.offset_bottom = bar_height
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen_root.add_child(top_bar)
-	var back_button := _icon_button(
-		icon_left_arrow,
+	var back_button := _level_back_button(
+		button_size,
+		palette,
 		_return_to_current_level_list,
-		_t("back"),
-		hint_button_size,
-		hint_icon_inset,
-		false,
-		false,
-		foreground,
-		outline,
-		true,
-		outline,
 	)
 	back_button.name = "game_back_button"
-	back_button.position = Vector2(10, (bar_height - hint_button_size) * 0.5)
+	back_button.position = Vector2(side_margin, button_top)
 	top_bar.add_child(back_button)
 	var title := Label.new()
 	title.name = "game_title"
 	title.text = level_title
+	title.position = Vector2(viewport_width * 0.28, top)
+	title.size = Vector2(viewport_width * 0.44, title_height)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_left = hint_button_size + 22.0
-	title.offset_top = (bar_height - hint_button_size) * 0.5
-	title.offset_right = -(hint_button_size + 22.0)
-	title.offset_bottom = title.offset_top + hint_button_size
-	title.add_theme_font_size_override("font_size", 38)
+	title.clip_text = true
+	title.add_theme_font_size_override("font_size", int(28.0 * ui_scale))
 	title.add_theme_color_override("font_color", foreground)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(title)
-	_add_topic_title_decorations(top_bar, title, bar_height)
-	var top_actions := HBoxContainer.new()
-	top_actions.alignment = BoxContainer.ALIGNMENT_END
-	top_actions.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top_actions.offset_left = -_game_top_actions_width()
-	top_actions.offset_top = (bar_height - hint_button_size) * 0.5
-	top_actions.offset_right = -10
-	top_actions.offset_bottom = top_actions.offset_top + hint_button_size
-	top_actions.add_theme_constant_override("separation", 6)
-	top_bar.add_child(top_actions)
+	var top_actions_width := _game_top_actions_width()
+	var top_actions_left := viewport_width - side_margin - top_actions_width
 	swap_undo_button = null
 	if current_mode == "swap":
-		swap_undo_button = _tool_text_button(_t("undo"), puzzle_board.undo_last_swap, _t("undo"))
+		swap_undo_button = _tool_text_button(_t("undo"), puzzle_board.undo_last_swap)
 		swap_undo_button.disabled = not puzzle_board.can_undo_swap()
-		top_actions.add_child(swap_undo_button)
+		swap_undo_button.position = Vector2(
+			top_actions_left,
+			button_top + (button_size - swap_undo_button.custom_minimum_size.y) * 0.5,
+		)
+		top_bar.add_child(swap_undo_button)
 	var hint_button := _icon_button(
 		icon_lightbulb,
 		puzzle_board.show_hint,
-		_t("hint"),
-		hint_button_size,
-		hint_icon_inset,
+		button_size,
+		icon_inset,
 		false,
 		false,
 		foreground,
@@ -3204,25 +3129,42 @@ func _build_game_hud(level_title: String) -> void:
 		outline,
 	)
 	hint_button.name = "game_hint_button"
-	top_actions.add_child(hint_button)
+	var hint_icon := hint_button.get_child(0) as TextureRect
+	if hint_icon != null:
+		hint_icon.custom_minimum_size = Vector2.ZERO
+	_apply_topic_outline_nav_button_styles(hint_button, outline, button_size)
+	hint_button.position = Vector2(viewport_width - side_margin - button_size, button_top)
+	hint_button.size = Vector2(button_size, button_size)
+	top_bar.add_child(hint_button)
+	var title_font := title.get_theme_font("font")
+	var title_font_size := title.get_theme_font_size("font_size")
+	var title_text_width := title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_font_size).x
+	var decoration_gap := 6.0 * ui_scale
+	var decoration_clearance := 4.0 * ui_scale
+	var decoration_width := minf(
+		42.0 * ui_scale,
+		minf(
+			viewport_width * 0.5 - title_text_width * 0.5 - decoration_gap - (back_button.position.x + button_size) - decoration_clearance,
+			top_actions_left - (viewport_width * 0.5 + title_text_width * 0.5 + decoration_gap) - decoration_clearance,
+		),
+	)
+	_add_topic_title_decorations(
+		top_bar,
+		title,
+		title_height,
+		viewport_width * 0.5,
+		top,
+		Vector2(maxf(20.0 * ui_scale, decoration_width), 26.0 * ui_scale),
+		decoration_gap,
+		current_topic,
+	)
 	zoom_label = null
-	status_label = Label.new()
-	status_label.text = ""
-	status_label.visible = false
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 18)
-	status_label.add_theme_color_override("font_color", brown)
-	screen_root.add_child(status_label)
-	_layout_game_status_label()
 	hud_blocker_controls.clear()
 	hud_blocker_controls.append(back_button)
 	if swap_undo_button != null:
 		hud_blocker_controls.append(swap_undo_button)
 	hud_blocker_controls.append(hint_button)
-	hud_blocker_controls.append(status_label)
 	_queue_game_drag_blocker_refresh()
-	_animate_screen_in(screen_root)
 
 
 func _topic_ui_asset_texture(topic: Dictionary, key: String) -> Texture2D:
@@ -3257,7 +3199,9 @@ func _add_topic_title_decorations(
 	topic_override: Dictionary = {},
 ) -> void:
 	var asset_topic: Dictionary = topic_override if not topic_override.is_empty() else current_topic
-	var texture := _topic_ui_asset_texture(asset_topic, "title_mountains")
+	var texture := _topic_ui_asset_texture(asset_topic, "title_side")
+	if texture == null:
+		texture = _topic_ui_asset_texture(asset_topic, "title_mountains")
 	if texture == null:
 		return
 	var viewport_width := get_viewport_rect().size.x
@@ -3277,6 +3221,46 @@ func _add_topic_title_decorations(
 	right.name = "topic_title_decoration_right"
 	right.position = Vector2(center_x + title_width * 0.5 + gap, top)
 	parent.add_child(right)
+	var ear_texture := _topic_ui_asset_texture(asset_topic, "title_ear")
+	if ear_texture != null:
+		_add_topic_title_ears(
+			parent,
+			ear_texture,
+			center_x,
+			title_width,
+			font_size,
+			bar_height,
+			top_offset,
+			decoration_size,
+		)
+
+
+func _add_topic_title_ears(
+	parent: Control,
+	texture: Texture2D,
+	center_x: float,
+	title_width: float,
+	font_size: float,
+	bar_height: float,
+	top_offset: float,
+	decoration_size: Vector2,
+) -> void:
+	var texture_size := texture.get_size()
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return
+	var ear_height := minf(decoration_size.y * 0.55, font_size * 0.48)
+	var ear_width := ear_height * texture_size.x / texture_size.y
+	var ear_size := Vector2(ear_width, ear_height)
+	var ear_top := top_offset + (bar_height - font_size) * 0.5 - ear_height
+	var ear_center_distance := maxf(ear_width + 2.0, title_width * 0.65)
+	var left := _topic_title_decoration(texture, false, ear_size)
+	left.name = "topic_title_ear_left"
+	left.position = Vector2(center_x - ear_center_distance * 0.5 - ear_width * 0.5, ear_top)
+	parent.add_child(left)
+	var right := _topic_title_decoration(texture, true, ear_size)
+	right.name = "topic_title_ear_right"
+	right.position = Vector2(center_x + ear_center_distance * 0.5 - ear_width * 0.5, ear_top)
+	parent.add_child(right)
 
 
 func _topic_title_decoration(texture: Texture2D, flipped: bool, size: Vector2) -> TextureRect:
@@ -3295,13 +3279,13 @@ func _hud_top_icons_width() -> float:
 
 
 func _game_top_bar_height() -> float:
-	return _game_hint_button_size() + 22.0
+	return _theme_topbar_height(_topics_ui_scale())
 
 
 func _game_top_actions_width() -> float:
-	var width := _game_hint_button_size() + 20.0
+	var width := _game_hint_button_size()
 	if current_mode == "swap":
-		width += _hud_text_button_width(_t("undo")) + 12.0
+		width += _hud_text_button_width(_t("undo")) + 6.0 * _topics_ui_scale()
 	return width
 
 
@@ -3319,20 +3303,7 @@ func _icon_button_size() -> float:
 
 
 func _game_hint_button_size() -> float:
-	return _icon_button_size() * GAME_HINT_BUTTON_SCALE
-
-
-func _layout_game_status_label() -> void:
-	if status_label == null or not is_instance_valid(status_label):
-		return
-	var viewport_width := get_viewport_rect().size.x
-	var margin := 18.0
-	status_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	status_label.offset_left = margin
-	status_label.offset_top = _game_top_bar_height()
-	status_label.offset_right = -margin
-	status_label.offset_bottom = _game_top_bar_height() + 34.0
-	status_label.custom_minimum_size = Vector2(maxf(0.0, viewport_width - margin * 2.0), 34.0)
+	return 34.0 * _topics_ui_scale()
 
 
 func _texture_size(icon: Texture2D) -> Vector2:
@@ -3423,12 +3394,7 @@ func _topic_mode_done_count(topic: Dictionary, play_mode: String) -> int:
 	return done
 
 
-func _game_bottom_reserved_height() -> float:
-	return BoardLayoutScript.game_bottom_reserved_height(_icon_button_size())
-
-
 func _queue_game_drag_blocker_refresh() -> void:
-	_layout_game_status_label()
 	call_deferred("_refresh_game_drag_blockers")
 
 
@@ -3689,15 +3655,14 @@ func _settings_row(icon: Texture2D, label_text: String, enabled: bool, on_change
 	label.add_theme_color_override("font_color", brown)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(label)
-	row.add_child(_settings_toggle(enabled, label_text, on_changed))
+	row.add_child(_settings_toggle(enabled, on_changed))
 	return row
 
 
-func _settings_toggle(enabled: bool, tooltip: String, on_changed: Callable) -> Button:
+func _settings_toggle(enabled: bool, on_changed: Callable) -> Button:
 	var toggle := Button.new()
 	toggle.name = "SettingsToggle"
 	toggle.text = ""
-	toggle.tooltip_text = tooltip
 	toggle.toggle_mode = true
 	toggle.button_pressed = enabled
 	toggle.focus_mode = Control.FOCUS_ALL
@@ -3972,7 +3937,6 @@ func _modal_box(
 func _modal_close_button(action: Callable) -> Button:
 	var button := Button.new()
 	button.text = "×"
-	button.tooltip_text = _t("close")
 	button.custom_minimum_size = Vector2(84, 84)
 	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	button.offset_left = -100

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dwdxtw8uak6vp"
-path="res://.godot/imported/level-bg.jpg-9b0cab81efb54ae2e9a957a6dbbd6a8e.ctex"
+uid="uid://bab2gflj7v4pl"
+path="res://.godot/imported/title-whisker-left.webp-8a92724cda66a4286435921e2cecb071.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://levels/topic_04/level-bg.jpg"
-dest_files=["res://.godot/imported/level-bg.jpg-9b0cab81efb54ae2e9a957a6dbbd6a8e.ctex"]
+source_file="res://levels/topic_03/ui/title-whisker-left.webp"
+dest_files=["res://.godot/imported/title-whisker-left.webp-8a92724cda66a4286435921e2cecb071.ctex"]
 
 [params]
 

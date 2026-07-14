@@ -207,15 +207,16 @@
 				"_": "希腊神话"
 			},
 			"cover": "res://levels/topic_02/cover.jpg",
-			"color": "#4F8F9E",
+			"color": "#5F8F9B",
 			"ui_palette": {
-				"surface": "#E8F0EC",
-				"foreground": "#3D3A32",
-				"outline": "#6E9EA5",
-				"accent": "#C96F45"
+				"surface": "#F4F0E5",
+				"foreground": "#3B4D50",
+				"outline": "#6E969D",
+				"accent": "#C87850"
 			},
 			"icon": "res://levels/topic_02/icon.png",
-			"level_background": "res://levels/topic_02/level-bg.jpg",
+			"level_background": "res://levels/topic_02/level-bg.webp",
+			"card_back": "res://levels/topic_02/card-back.webp",
 			"sort_order": 1,
 			"levels": [
 				{
@@ -509,15 +510,20 @@
 				"_": "猫"
 			},
 			"cover": "res://levels/topic_03/cover.jpg",
-			"color": "#2D8C92",
+			"color": "#D97843",
 			"ui_palette": {
-				"surface": "#E6F0EB",
+				"surface": "#F3DDC9",
 				"foreground": "#43372F",
-				"outline": "#6A9F9B",
+				"outline": "#B9684D",
 				"accent": "#D97843"
 			},
+			"ui_assets": {
+				"title_side": "res://levels/topic_03/ui/title-whisker-left.webp",
+				"title_ear": "res://levels/topic_03/ui/title-ear-left.webp"
+			},
 			"icon": "res://levels/topic_03/icon.png",
-			"level_background": "res://levels/topic_03/level-bg.jpg",
+			"level_background": "res://levels/topic_03/level-bg.webp",
+			"card_back": "res://levels/topic_03/card-back.webp",
 			"sort_order": 2,
 			"levels": [
 				{
@@ -591,15 +597,16 @@
 				"_": "狗"
 			},
 			"cover": "res://levels/topic_04/cover.jpg",
-			"color": "#8FA75E",
+			"color": "#6F9FA8",
 			"ui_palette": {
-				"surface": "#EDF0D6",
+				"surface": "#F5EBD3",
 				"foreground": "#3D4934",
-				"outline": "#8DA06D",
-				"accent": "#D89A45"
+				"outline": "#6F9FA8",
+				"accent": "#D6A04A"
 			},
 			"icon": "res://levels/topic_04/icon.png",
-			"level_background": "res://levels/topic_04/level-bg.jpg",
+			"level_background": "res://levels/topic_04/level-bg.webp",
+			"card_back": "res://levels/topic_04/card-back.webp",
 			"sort_order": 3,
 			"levels": [
 				{
