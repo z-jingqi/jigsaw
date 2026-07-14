@@ -1,7 +1,5 @@
 extends Node2D
 
-const TITLE_IMAGE_PATH := "res://assets/ui/title.png"
-const LEVEL_NAME_BANNER_PATH := "res://assets/ui/level_name_banner.png"
 const MODE_TITLE_SIDE_DECORATION_PATH := "res://assets/ui/mode_title_side_decoration.png"
 const ICON_ALBUM_PATH := "res://assets/icons/album.svg"
 const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
@@ -291,8 +289,6 @@ var muted := Color("#b7aa97")
 
 var texture: Texture2D
 var repository = LevelRepositoryScript.new()
-var title_texture: Texture2D
-var level_name_banner_texture: Texture2D
 var mode_title_side_decoration_texture: Texture2D
 var icon_album: Texture2D
 var icon_left_arrow: Texture2D
@@ -361,8 +357,6 @@ var newly_unlocked_level_id := ""
 
 func _ready() -> void:
 	_lock_portrait_orientation()
-	title_texture = repository.cached_texture(TITLE_IMAGE_PATH)
-	level_name_banner_texture = repository.cached_texture(LEVEL_NAME_BANNER_PATH)
 	mode_title_side_decoration_texture = repository.cached_texture(MODE_TITLE_SIDE_DECORATION_PATH)
 	icon_album = load(ICON_ALBUM_PATH)
 	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
@@ -2419,51 +2413,6 @@ func _mode_title_side_decoration(position_value: Vector2, flipped: bool) -> Text
 	rect.flip_h = flipped
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return rect
-
-
-func _mode_header_mark(position: Vector2, text: String, color: Color, font_size: int) -> Label:
-	var mark := Label.new()
-	mark.text = text
-	mark.position = position
-	mark.custom_minimum_size = Vector2(32, 32)
-	mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mark.add_theme_font_size_override("font_size", font_size)
-	mark.add_theme_color_override("font_color", color)
-	mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return mark
-
-
-func _mode_title_block(text: String) -> Control:
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(432, 76)
-	var banner := TextureRect.new()
-	banner.texture = level_name_banner_texture
-	banner.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	banner.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	banner.offset_left = -156
-	banner.offset_top = -4
-	banner.offset_right = 156
-	banner.offset_bottom = 72
-	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(banner)
-	var title := Label.new()
-	title.text = text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	title.add_theme_color_override("font_shadow_color", Color(0.42, 0.20, 0.06, 0.42))
-	title.add_theme_constant_override("shadow_offset_y", 2)
-	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.offset_left = -128
-	title.offset_top = 8
-	title.offset_right = 128
-	title.offset_bottom = 58
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(title)
-	return holder
 
 
 func _decor_paw(position: Vector2, size: float, rotation_value: float) -> TextureRect:
