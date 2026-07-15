@@ -9,6 +9,7 @@ func _init(owner: Node2D) -> void:
 
 
 func _begin_swap_drag(screen_pos: Vector2) -> void:
+	host._clear_hint_highlights()
 	var world_pos: Vector2 = host._screen_to_world(screen_pos)
 	var tile = _swap_tile_at_world(world_pos)
 	if tile == null:
@@ -17,7 +18,6 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	if bool(tile.get("is_animating", false)):
 		return
 	_clear_swap_target_preview()
-	host._clear_hint_highlights()
 	host.swap_dragging = tile
 	host.swap_drag_start_slot = int(tile["slot_index"])
 	host.swap_drag_offset = tile["node"].position - world_pos
@@ -37,17 +37,10 @@ func _end_swap_drag() -> void:
 		_animate_swap_tile_to(released, host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows()))
 	else:
 		var target_slot := int(target["slot_index"])
-		host.swap_history.append({
-			"first": int(released["correct_index"]),
-			"second": int(target["correct_index"]),
-			"first_slot": host.swap_drag_start_slot,
-			"second_slot": target_slot,
-		})
 		released["slot_index"] = target_slot
 		target["slot_index"] = host.swap_drag_start_slot
 		_animate_swap_tile_to(released, host._swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
 		_animate_swap_tile_to(target, host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows()))
-		host.undo_available_changed.emit(true)
 		host._trigger_haptic("swap")
 	_set_swap_tile_lifted(released, false)
 	host.swap_dragging = null
@@ -197,37 +190,77 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	)
 
 
-func can_undo_swap() -> bool:
-	return host.current_mode == "swap" and not host.swap_history.is_empty()
-
-
-func undo_last_swap() -> void:
-	if not can_undo_swap() or host.swap_dragging != null:
-		return
+func can_shift_rows() -> bool:
+	if host.current_mode != "swap" or host.swap_tiles.is_empty() or host.swap_dragging != null or host.panning or host.pinch_active:
+		return false
+	if _swap_rows() <= 1:
+		return false
 	for tile in host.swap_tiles:
 		if bool(tile.get("is_animating", false)):
-			return
-	var entry: Dictionary = host.swap_history.pop_back()
-	var first = _swap_tile_by_correct_index(int(entry.get("first", -1)))
-	var second = _swap_tile_by_correct_index(int(entry.get("second", -1)))
-	if first == null or second == null:
-		host.undo_available_changed.emit(not host.swap_history.is_empty())
+			return false
+	return true
+
+
+func shift_rows(direction: int) -> void:
+	var step := signi(direction)
+	if step == 0 or not can_shift_rows():
 		return
 	host._clear_hint_highlights()
-	first["slot_index"] = int(entry.get("first_slot", first["slot_index"]))
-	second["slot_index"] = int(entry.get("second_slot", second["slot_index"]))
-	_animate_swap_tile_to(first, host._swap_slot_position(int(first["slot_index"]), _swap_cols(), _swap_rows()))
-	_animate_swap_tile_to(second, host._swap_slot_position(int(second["slot_index"]), _swap_cols(), _swap_rows()))
-	host.undo_available_changed.emit(not host.swap_history.is_empty())
+	_clear_swap_target_preview()
+	var cols := _swap_cols()
+	var rows := _swap_rows()
+	var pending := {"count": host.swap_tiles.size()}
+	for tile in host.swap_tiles:
+		var old_slot := int(tile["slot_index"])
+		var old_row := int(old_slot / cols)
+		var col := old_slot % cols
+		var new_row := posmod(old_row + step, rows)
+		var new_slot := new_row * cols + col
+		var wraps := (step > 0 and old_row == rows - 1) or (step < 0 and old_row == 0)
+		tile["slot_index"] = new_slot
+		tile["is_animating"] = true
+		_animate_row_shift_tile(tile, host._swap_slot_position(new_slot, cols, rows), step, wraps, pending)
+
+
+func _animate_row_shift_tile(tile, target_position: Vector2, direction: int, wraps: bool, pending: Dictionary) -> void:
+	var node: Node2D = tile["node"]
+	if not is_instance_valid(node):
+		_finish_row_shift_tile(tile, pending)
+		return
+	if host.reduced_motion:
+		node.position = target_position
+		_finish_row_shift_tile(tile, pending)
+		return
+	var duration: float = host.SWAP_ROW_SHIFT_ANIMATION_TIME
+	var tween := host.create_tween()
+	tween.bind_node(node)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_SINE)
+	if wraps:
+		var tile_height: float = float(tile.get("size", Vector2.ZERO).y)
+		var travel := Vector2(0.0, tile_height * float(direction))
+		tween.tween_property(node, "position", node.position + travel, duration * 0.5)
+		tween.tween_callback(func() -> void:
+			if is_instance_valid(node):
+				node.position = target_position - travel
+		)
+		tween.tween_property(node, "position", target_position, duration * 0.5)
+	else:
+		tween.tween_property(node, "position", target_position, duration)
+	tween.finished.connect(func() -> void:
+		_finish_row_shift_tile(tile, pending)
+	)
+
+
+func _finish_row_shift_tile(tile, pending: Dictionary) -> void:
+	if tile != null:
+		tile["is_animating"] = false
+	pending["count"] = maxi(0, int(pending.get("count", 1)) - 1)
+	if int(pending["count"]) > 0:
+		return
+	_check_swap_complete()
 	host._trigger_haptic("swap")
 	host._notify_state_changed(true)
-
-
-func _swap_tile_by_correct_index(correct_index: int):
-	for tile in host.swap_tiles:
-		if int(tile.get("correct_index", -1)) == correct_index:
-			return tile
-	return null
 
 
 func _show_swap_hint() -> void:
@@ -237,12 +270,12 @@ func _show_swap_hint() -> void:
 		return
 	var hint_key := "swap:%d:%d" % [int(pair[0]["correct_index"]), int(pair[1]["correct_index"])]
 	if hint_key == host.active_hint_key and host._has_active_hint_highlights():
-		host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.HINT_DURATION * 1000.0)
+		host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.SWAP_HINT_DURATION * 1000.0)
 		return
 	host._clear_hint_highlights()
 	host.hint_highlight_token += 1
 	host.active_hint_key = hint_key
-	host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.HINT_DURATION * 1000.0)
+	host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.SWAP_HINT_DURATION * 1000.0)
 	for tile in pair:
 		_add_swap_hint_outline(tile)
 	host._auto_clear_hint_highlights(host.hint_highlight_token)
@@ -277,7 +310,15 @@ func _add_swap_hint_outline(tile) -> void:
 		size,
 		Vector2(0.0, size.y),
 	])
-	host._spawn_dashed_outline(node, [rect_polygon], Vector2.ZERO, 30)
+	host._spawn_dashed_outline(
+		node,
+		[rect_polygon],
+		Vector2.ZERO,
+		30,
+		host.SWAP_HINT_SCREEN_WIDTH,
+		host.HINT_TARGET_COLOR,
+		true,
+	)
 
 
 func _check_swap_complete() -> void:

@@ -215,7 +215,7 @@ func _board_outline_world_rect() -> Rect2:
 func _world_view_screen_rect() -> Rect2:
 	var viewport: Vector2 = host.get_viewport_rect().size
 	var content_top: float = clampf(host.hud_top_reserved_height, 0.0, viewport.y)
-	var content_bottom: float = viewport.y if host.current_mode == "swap" else host._tray_area().position.y
+	var content_bottom: float = viewport.y - host.hud_bottom_reserved_height if host.current_mode == "swap" else host._tray_area().position.y
 	content_bottom = clampf(content_bottom, content_top, viewport.y)
 	return Rect2(
 		Vector2(0.0, content_top),

@@ -151,6 +151,15 @@ func rounded_panel_style(bg_color: Color, radius: int) -> StyleBoxFlat:
 	return style
 
 
+func capsule_panel_style(bg_color: Color, height: float) -> StyleBoxFlat:
+	var radius := maxi(1, ceili(height * 0.5))
+	var style := rounded_panel_style(bg_color, radius)
+	style.corner_detail = 12
+	style.anti_aliasing = true
+	style.anti_aliasing_size = 1.0
+	return style
+
+
 func tool_text_button(game: Node, text: String, action: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -268,32 +277,22 @@ func topic_ui_color(palette: Dictionary, key: String, fallback: Color) -> Color:
 
 
 func topic_progress_bar(done: int, total: int, size: Vector2, fill_color: Color, track_color := Color(0.78, 0.64, 0.48, 0.22)) -> Panel:
+	var bar_size := Vector2(maxf(0.0, size.x), maxf(0.0, size.y))
 	var holder := Panel.new()
-	holder.custom_minimum_size = size
+	holder.custom_minimum_size = bar_size
+	holder.size = bar_size
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var track := StyleBoxFlat.new()
-	track.bg_color = track_color
-	var radius := int(size.y * 0.5)
-	track.corner_radius_top_left = radius
-	track.corner_radius_top_right = radius
-	track.corner_radius_bottom_left = radius
-	track.corner_radius_bottom_right = radius
+	var track := capsule_panel_style(track_color, bar_size.y)
 	holder.add_theme_stylebox_override("panel", track)
 	var ratio := 0.0 if total <= 0 else clampf(float(done) / float(total), 0.0, 1.0)
 	var fill := Panel.new()
-	fill.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	fill.offset_left = 0
-	fill.offset_top = 0
-	fill.offset_right = size.x * ratio
-	fill.offset_bottom = 0
+	fill.name = "progress_fill"
+	var proportional_width := bar_size.x * ratio
+	var minimum_visible_width := minf(bar_size.x, bar_size.y)
+	fill.size = Vector2(clampf(maxf(proportional_width, minimum_visible_width), 0.0, bar_size.x), bar_size.y) if ratio > 0.0 else Vector2(0.0, bar_size.y)
 	fill.visible = ratio > 0.0
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fill_style := StyleBoxFlat.new()
-	fill_style.bg_color = fill_color
-	fill_style.corner_radius_top_left = radius
-	fill_style.corner_radius_top_right = radius
-	fill_style.corner_radius_bottom_left = radius
-	fill_style.corner_radius_bottom_right = radius
+	var fill_style := capsule_panel_style(fill_color, bar_size.y)
 	fill.add_theme_stylebox_override("panel", fill_style)
 	holder.add_child(fill)
 	return holder

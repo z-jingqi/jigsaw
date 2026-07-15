@@ -169,14 +169,17 @@ func _run() -> void:
 				and world_root.get_node_or_null("board_target_area") == null
 			)
 		var back_button = game.screen_root.find_child("game_back_button", true, false)
+		var restart_button = game.screen_root.find_child("game_restart_button", true, false)
 		var hint_button = game.screen_root.find_child("game_hint_button", true, false)
 		var title_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
 		var title_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
 		var no_gameplay_copy := _tree_label_count(game.screen_root) == 1
 		var no_alt_text := not _tree_has_tooltip(game.screen_root) and not _tree_has_tooltip(game.modal_root)
 		var interface_style_ok := (
-			_outline_only_button(back_button)
-			and _outline_only_button(hint_button)
+			back_button is Button
+			and restart_button is Button
+			and hint_button is Button
+			and _bottom_actions_valid(game, play_mode)
 			and title_left is TextureRect
 			and title_right is TextureRect
 			and line_frame_ok
@@ -361,10 +364,6 @@ func _theme_header_style_probe(game) -> Dictionary:
 		var hint_button: Button = game.screen_root.find_child("game_hint_button", true, false)
 		var game_title: Label = game.screen_root.find_child("game_title", true, false)
 		var game_topbar: Control = game.screen_root.find_child("game_topbar", true, false)
-		var game_back_style = game_back.get_theme_stylebox("normal") if game_back != null else null
-		var hint_style = hint_button.get_theme_stylebox("normal") if hint_button != null else null
-		var game_back_icon: TextureRect = game_back.get_child(0) if game_back != null and game_back.get_child_count() > 0 else null
-		var hint_icon: TextureRect = hint_button.get_child(0) if hint_button != null and hint_button.get_child_count() > 0 else null
 		var game_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
 		var game_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
 		var game_ear_left = game.screen_root.find_child("topic_title_ear_left", true, false)
@@ -380,22 +379,16 @@ func _theme_header_style_probe(game) -> Dictionary:
 			and hint_button != null
 			and game_title != null
 			and game_topbar != null
-			and game_back.global_position.is_equal_approx(level_back_position)
-			and game_back.size.is_equal_approx(level_back_size)
-			and hint_button.size.is_equal_approx(level_back_size)
-			and is_equal_approx(hint_button.global_position.y, level_back_position.y)
-			and is_equal_approx(hint_button.global_position.x + hint_button.size.x, game.get_viewport_rect().size.x - level_back_position.x)
 			and game_title.global_position.is_equal_approx(level_title_position)
 			and game_title.size.is_equal_approx(level_title_size)
 			and game_title.get_theme_font_size("font_size") == level_title_font_size
 			and is_equal_approx(game_topbar.size.y, level_topbar_height)
+			and _bottom_actions_valid(game, "polygon")
 		)
 		var layout_values := {}
 		if not header_layout_matches:
 			layout_values = {
-				"level_back_position": level_back_position,
 				"game_back_position": game_back.global_position if game_back != null else Vector2.ZERO,
-				"level_back_size": level_back_size,
 				"game_back_size": game_back.size if game_back != null else Vector2.ZERO,
 				"hint_position": hint_button.global_position if hint_button != null else Vector2.ZERO,
 				"hint_size": hint_button.size if hint_button != null else Vector2.ZERO,
@@ -407,13 +400,7 @@ func _theme_header_style_probe(game) -> Dictionary:
 				"game_topbar_height": game_topbar.size.y if game_topbar != null else 0.0,
 			}
 		var game_ok: bool = (
-			game_back_style is StyleBoxFlat
-			and game_back_style.border_color.is_equal_approx(outline)
-			and hint_style is StyleBoxFlat
-			and hint_style.border_color.is_equal_approx(outline)
-			and _icon_uses_color(game_back_icon, foreground)
-			and _icon_uses_color(hint_icon, foreground)
-			and game_title != null
+			game_title != null
 			and game_title.get_theme_color("font_color").is_equal_approx(foreground)
 			and header_layout_matches
 			and game_decorations_match
@@ -435,6 +422,35 @@ func _theme_header_style_probe(game) -> Dictionary:
 	game._show_topics()
 	await process_frame
 	return {"ok": all_ok, "topics": details}
+
+
+func _bottom_actions_valid(game, play_mode: String) -> bool:
+	var bar: Control = game.screen_root.find_child("game_bottom_actions", true, false)
+	var row: HBoxContainer = game.screen_root.find_child("game_bottom_actions_row", true, false)
+	if bar == null or row == null:
+		return false
+	var expected_names: Array[String] = ["game_back_button", "game_restart_button", "game_hint_button"]
+	var expected_texts: Array[String] = [game._t("back"), game._t("restart"), game._t("hint")]
+	if play_mode == "swap":
+		expected_names.append_array(["game_shift_up_button", "game_shift_down_button"])
+		expected_texts.append_array([game._t("shift_row_up"), game._t("shift_row_down")])
+	if row.get_child_count() != expected_names.size():
+		return false
+	var previous_right := -INF
+	for index in expected_names.size():
+		var button := row.get_child(index) as Button
+		if button == null or button.name != expected_names[index] or button.text != expected_texts[index]:
+			return false
+		var rect := button.get_global_rect()
+		if rect.position.x < previous_right or rect.position.y < bar.global_position.y - 0.75 or rect.end.y > bar.global_position.y + bar.size.y + 0.75:
+			return false
+		previous_right = rect.end.x
+	var viewport: Vector2 = game.get_viewport_rect().size
+	return (
+		absf(row.get_global_rect().get_center().x - viewport.x * 0.5) <= 1.0
+		and absf(bar.get_global_rect().end.y - viewport.y) <= 1.0
+		and game.screen_root.find_child("game_undo_button", true, false) == null
+	)
 
 
 func _topic_title_layout_probe(game) -> Dictionary:

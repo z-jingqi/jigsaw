@@ -13,7 +13,8 @@ func _init(owner: Node2D) -> void:
 func _tray_area() -> Rect2:
 	var viewport: Vector2 = host.get_viewport_rect().size
 	var height: float = maxf(host.TRAY_MIN_HEIGHT, viewport.y * host.TRAY_HEIGHT_RATIO)
-	return Rect2(Vector2(0, maxf(0.0, viewport.y - height)), Vector2(viewport.x, height))
+	var bottom: float = maxf(0.0, viewport.y - host.hud_bottom_reserved_height)
+	return Rect2(Vector2(0, maxf(0.0, bottom - height)), Vector2(viewport.x, height))
 
 
 func _ensure_tray_top_border() -> void:

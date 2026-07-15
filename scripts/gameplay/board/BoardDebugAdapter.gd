@@ -83,11 +83,13 @@ func debug_run_interaction_smoke() -> Dictionary:
 		"pickup_drop": false,
 		"tray_drag_scale": true,
 		"hint": false,
+		"hint_timeout": true,
+		"hint_stops_on_drag": true,
 		"snap_preview": true,
 		"snap_shimmer_only": true,
 		"swap_preview": true,
 		"snap": true,
-		"undo": true,
+		"row_shift": true,
 		"complete": false,
 	}
 	if host.current_mode == "swap":
@@ -95,7 +97,7 @@ func debug_run_interaction_smoke() -> Dictionary:
 	else:
 		await _debug_smoke_piece_mode(result)
 	var ok := true
-	for key in ["tray_scroll", "pickup_drop", "tray_drag_scale", "hint", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "undo", "complete"]:
+	for key in ["tray_scroll", "pickup_drop", "tray_drag_scale", "hint", "hint_timeout", "hint_stops_on_drag", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "row_shift", "complete"]:
 		ok = ok and bool(result.get(key, false))
 	result["ok"] = ok
 	return result
@@ -220,15 +222,20 @@ func _debug_mouse_motion(position: Vector2, relative: Vector2) -> InputEventMous
 
 
 func _debug_smoke_swap(result: Dictionary) -> void:
+	var reduced_motion_before: bool = host.reduced_motion
+	host.reduced_motion = false
 	host.show_hint()
 	await host.get_tree().process_frame
-	result["hint"] = host._has_active_hint_highlights()
-	debug_clear_hint()
+	result["hint"] = host._has_active_hint_highlights() and _debug_swap_hint_visuals_valid()
+	var hint_remaining_msec: int = host.hint_expires_at_msec - Time.get_ticks_msec()
+	result["hint_timeout"] = hint_remaining_msec > 4500 and hint_remaining_msec <= int(host.SWAP_HINT_DURATION * 1000.0)
+	host.reduced_motion = reduced_motion_before
 	var pair: Array = host._find_swap_hint_pair()
 	if pair.size() < 2:
+		debug_clear_hint()
 		result["pickup_drop"] = false
 		result["swap_preview"] = false
-		result["undo"] = false
+		result["hint_stops_on_drag"] = false
 	else:
 		var first = pair[0]
 		var second = pair[1]
@@ -236,6 +243,7 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 		var second_slot := int(second["slot_index"])
 		var first_center: Vector2 = first["node"].position + first["size"] * 0.5
 		host._begin_swap_drag(host._world_to_screen(first_center))
+		result["hint_stops_on_drag"] = not host._has_active_hint_highlights() and host.hint_blink_tweens.is_empty()
 		var lifted: bool = host.swap_dragging == first
 		host._move_swap_tile_to(first, second["node"].position)
 		result["swap_preview"] = host.swap_target_preview == second and host.swap_target_preview_root != null and is_instance_valid(host.swap_target_preview_root)
@@ -243,12 +251,50 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 		await host.get_tree().create_timer(host._motion_duration(host.SWAP_ANIMATION_TIME) + 0.03).timeout
 		var swapped := int(first["slot_index"]) == second_slot and int(second["slot_index"]) == first_slot
 		result["pickup_drop"] = lifted and swapped and host.swap_dragging == null
-		var undo_was_available: bool = host.can_undo_swap()
-		host.undo_last_swap()
-		await host.get_tree().create_timer(host._motion_duration(host.SWAP_ANIMATION_TIME) + 0.03).timeout
-		result["undo"] = undo_was_available and int(first["slot_index"]) == first_slot and int(second["slot_index"]) == second_slot
+	result["row_shift"] = await _debug_check_row_shift()
 	debug_force_complete()
 	result["complete"] = host.completion_emitted
+
+
+func _debug_swap_hint_visuals_valid() -> bool:
+	if host.hint_blink_tweens.is_empty():
+		return false
+	var found_thick_blue_line := false
+	for root in host.hint_highlighted_nodes:
+		if root == null or not is_instance_valid(root):
+			continue
+		for child in root.get_children():
+			if not child is Line2D:
+				continue
+			var line := child as Line2D
+			var width := float(line.get_meta("screen_width", 0.0))
+			if width >= host.SWAP_HINT_SCREEN_WIDTH and line.default_color.is_equal_approx(host.HINT_TARGET_COLOR):
+				found_thick_blue_line = true
+				break
+	return found_thick_blue_line
+
+
+func _debug_check_row_shift() -> bool:
+	if not host.can_shift_swap_rows():
+		return false
+	var cols: int = host._swap_cols()
+	var rows: int = host._swap_rows()
+	var before := {}
+	for tile in host.swap_tiles:
+		before[int(tile["correct_index"])] = int(tile["slot_index"])
+	host.shift_swap_rows_down()
+	await host.get_tree().create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04).timeout
+	var shifted_down := true
+	for tile in host.swap_tiles:
+		var old_slot := int(before[int(tile["correct_index"])])
+		var expected: int = posmod(int(old_slot / cols) + 1, rows) * cols + old_slot % cols
+		shifted_down = shifted_down and int(tile["slot_index"]) == expected
+	host.shift_swap_rows_up()
+	await host.get_tree().create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04).timeout
+	var restored := true
+	for tile in host.swap_tiles:
+		restored = restored and int(tile["slot_index"]) == int(before[int(tile["correct_index"])])
+	return shifted_down and restored
 
 
 func debug_force_complete() -> void:
@@ -287,17 +333,10 @@ func debug_prepare_restore_snapshot() -> Dictionary:
 			var second = pair[1]
 			var first_slot := int(first["slot_index"])
 			var second_slot := int(second["slot_index"])
-			host.swap_history.append({
-				"first": int(first["correct_index"]),
-				"second": int(second["correct_index"]),
-				"first_slot": first_slot,
-				"second_slot": second_slot,
-			})
 			first["slot_index"] = second_slot
 			second["slot_index"] = first_slot
 			first["node"].position = host._swap_slot_position(second_slot, host._swap_cols(), host._swap_rows())
 			second["node"].position = host._swap_slot_position(first_slot, host._swap_cols(), host._swap_rows())
-			host.undo_available_changed.emit(true)
 	else:
 		var pair: Array = host._find_hint_pair()
 		if not pair.is_empty():
@@ -319,7 +358,6 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 	}
 	if host.current_mode == "swap":
 		checks["pieces"] = _debug_swap_state_matches(actual.get("tiles", []), expected.get("tiles", []))
-		checks["history"] = actual.get("swap_history", []).size() == expected.get("swap_history", []).size()
 	else:
 		checks["pieces"] = _debug_group_state_matches(actual.get("groups", []), expected.get("groups", []))
 		checks["tray_order"] = actual.get("tray_order", []) == expected.get("tray_order", [])

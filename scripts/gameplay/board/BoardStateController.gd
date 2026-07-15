@@ -36,7 +36,6 @@ func snapshot() -> Dictionary:
 				"z": int(node.z_index),
 			})
 		snapshot["tiles"] = tiles
-		snapshot["swap_history"] = board.swap_history.duplicate(true)
 	else:
 		var group_states := []
 		for group in board.groups:
@@ -171,14 +170,6 @@ func restore_swap_state(snapshot: Dictionary) -> void:
 	board.swap_tiles = next_tiles
 	for index in board.swap_tiles.size():
 		board.swap_tiles[index]["node"].z_index = index * board.GROUP_Z_STEP
-	var history: Array = snapshot.get("swap_history", []) if typeof(snapshot.get("swap_history", [])) == TYPE_ARRAY else []
-	board.swap_history.clear()
-	for entry in history:
-		if typeof(entry) != TYPE_DICTIONARY:
-			continue
-		var entry_copy: Dictionary = entry.duplicate(true)
-		board.swap_history.append(entry_copy)
-	board.undo_available_changed.emit(not board.swap_history.is_empty())
 
 
 func restore_view_state(snapshot: Dictionary) -> void:

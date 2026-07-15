@@ -44,6 +44,7 @@ func show_game(game: Node, topic: Dictionary, level: Dictionary, play_mode: Stri
 		game._game_top_bar_height(),
 		random_rotation,
 		restore_state,
+		game._game_bottom_bar_height(),
 	)
 	game._build_game_hud(game._level_display_title(level))
 	if loaded and not game.progress_store.tutorial_seen(game.current_mode):

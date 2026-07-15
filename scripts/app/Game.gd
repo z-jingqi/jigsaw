@@ -2,8 +2,6 @@ extends Node2D
 
 const TopicsScreenScript := preload("res://scripts/catalog/TopicsScreen.gd")
 const MODE_TITLE_SIDE_DECORATION_PATH := "res://assets/ui/mode_title_side_decoration.png"
-const ICON_LEFT_ARROW_PATH := "res://assets/icons/left-arrow.svg"
-const ICON_LIGHTBULB_PATH := "res://assets/icons/lightbulb.svg"
 const ICON_MODE_KNOB_DONE_PATH := "res://assets/icons/status/mode_knob_done.png"
 const ICON_MODE_KNOB_TODO_PATH := "res://assets/icons/status/mode_knob_todo.png"
 const ICON_MODE_POLYGON_DONE_PATH := "res://assets/icons/status/mode_polygon_done.png"
@@ -16,6 +14,7 @@ const MODAL_SETTING_VIBRATION_PATH := "res://assets/ui/modals/setting-vibration.
 const MODAL_SETTING_MUSIC_PATH := "res://assets/ui/modals/setting-music.png"
 const MODAL_SETTING_SFX_PATH := "res://assets/ui/modals/setting-sfx.png"
 const CatalogScrollControllerScript := preload("res://scripts/catalog/CatalogScrollController.gd")
+const TopicPagerControllerScript := preload("res://scripts/catalog/TopicPagerController.gd")
 const DevTestPanelScript := preload("res://scripts/debug/DevTestPanel.gd")
 const GameDebugAdapterScript := preload("res://scripts/debug/GameDebugAdapter.gd")
 const GameHudScript := preload("res://scripts/gameplay/GameHud.gd")
@@ -53,13 +52,12 @@ var green := Color("#6f9d67")
 var texture: Texture2D
 var topics_screen
 var catalog_scroll_controller
+var topic_pager_controller
 var game_strings = GameStringsScript.new()
 var modal_host = GameModalHostScript.new()
 var repository = LevelRepositoryScript.new()
 var texture_service
 var mode_title_side_decoration_texture: Texture2D
-var icon_left_arrow: Texture2D
-var icon_lightbulb: Texture2D
 var icon_mode_knob_done: Texture2D
 var icon_mode_knob_todo: Texture2D
 var icon_mode_polygon_done: Texture2D
@@ -112,7 +110,6 @@ var level_virtual_items: Array[Dictionary] = []
 var level_virtual_nodes: Dictionary = {}
 var level_virtual_overscan := 0.0
 
-var swap_undo_button: Button
 var hud_blocker_controls: Array[Control] = []
 var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
 var unlock_reveal_effect = UnlockRevealEffectScript.new()
@@ -125,14 +122,13 @@ func _ready() -> void:
 	_lock_portrait_orientation()
 	topics_screen = TopicsScreenScript.new(self)
 	catalog_scroll_controller = CatalogScrollControllerScript.new(self)
+	topic_pager_controller = TopicPagerControllerScript.new(self)
 	debug_adapter = GameDebugAdapterScript.new(self)
 	game_hud = GameHudScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
 	ui_motion = GameUiMotionScript.new(self, progress_store)
 	texture_service = GameTextureServiceScript.new(repository)
 	mode_title_side_decoration_texture = repository.cached_texture(MODE_TITLE_SIDE_DECORATION_PATH)
-	icon_left_arrow = load(ICON_LEFT_ARROW_PATH)
-	icon_lightbulb = load(ICON_LIGHTBULB_PATH)
 	icon_mode_knob_done = repository.cached_texture(ICON_MODE_KNOB_DONE_PATH)
 	icon_mode_knob_todo = repository.cached_texture(ICON_MODE_KNOB_TODO_PATH)
 	icon_mode_polygon_done = repository.cached_texture(ICON_MODE_POLYGON_DONE_PATH)
@@ -156,7 +152,6 @@ func _ready() -> void:
 	puzzle_board = PuzzleBoardScript.new()
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
-	puzzle_board.undo_available_changed.connect(_set_swap_undo_available)
 	puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
 	add_child(puzzle_board)
 	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
@@ -172,7 +167,7 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if ui_motion != null:
 		ui_motion.host = null
-	for helper in [topics_screen, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, mode_select_modal, game_hud, game_dialogs]:
+	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, mode_select_modal, game_hud, game_dialogs]:
 		if helper == null:
 			continue
 		if "game" in helper:
@@ -344,8 +339,8 @@ func _highlight_button_bounds(button: BaseButton) -> void:
 	ui_factory.highlight_button_bounds(self, button)
 
 
-func _rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
-	return texture_service.rounded_topic_cover_texture(topic, target_size, radius)
+func _left_rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
+	return texture_service.left_rounded_topic_cover_texture(topic, target_size, radius)
 
 
 func _rounded_texture_material(target_size: Vector2, radius: float) -> ShaderMaterial:
@@ -383,6 +378,10 @@ func _rounded_panel_style(bg_color: Color, radius: int) -> StyleBoxFlat:
 	return ui_factory.rounded_panel_style(bg_color, radius)
 
 
+func _capsule_panel_style(bg_color: Color, height: float) -> StyleBoxFlat:
+	return ui_factory.capsule_panel_style(bg_color, height)
+
+
 func _tool_text_button(text: String, action: Callable) -> Button:
 	return ui_factory.tool_text_button(self, text, action)
 
@@ -412,7 +411,10 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 
 
 func _on_topics_gui_input(event: InputEvent) -> void:
-	catalog_scroll_controller.handle_gui_input(event)
+	if current_screen == "topics":
+		topic_pager_controller.handle_gui_input(event)
+	else:
+		catalog_scroll_controller.handle_gui_input(event)
 
 
 func _scroll_topics_to(target: float) -> void:
@@ -428,6 +430,8 @@ func _apply_topics_scroll() -> void:
 
 
 func _stop_topics_inertia() -> void:
+	if topic_pager_controller != null:
+		topic_pager_controller.reset()
 	if catalog_scroll_controller != null:
 		catalog_scroll_controller.stop_inertia()
 
@@ -549,8 +553,8 @@ func _game_top_bar_height() -> float:
 	return game_hud.top_bar_height()
 
 
-func _set_swap_undo_available(available: bool) -> void:
-	game_hud.set_swap_undo_available(available)
+func _game_bottom_bar_height() -> float:
+	return game_hud.bottom_bar_height()
 
 
 func _hud_text_button_width(text: String) -> float:

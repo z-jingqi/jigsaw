@@ -26,7 +26,7 @@ func _run() -> void:
 		await process_frame
 		var viewport_size: Vector2 = game.get_viewport_rect().size
 		var topic_style := _theme_list_style_check(game, viewport_size)
-		var topics_ok := _grid_starts_left_and_fits(game.topics_island_items, viewport_size) and bool(topic_style.get("ok", false))
+		var topics_ok := _topic_page_fits(game.topics_island_items, viewport_size, game.topics.size()) and bool(topic_style.get("ok", false))
 		var topic_rects := _grid_rect_summary(game.topics_island_items)
 		var topic: Dictionary = game.topics[0] if not game.topics.is_empty() else {}
 		game._show_levels(topic)
@@ -49,6 +49,10 @@ func _run() -> void:
 		game.debug_enter_level(polygon_level_index, "polygon")
 		await process_frame
 		var puzzle_layout := _puzzle_layout_check(game, viewport_size)
+		var swap_level_index := _level_index_for_mode(game, topic, "swap")
+		game.debug_enter_level(swap_level_index, "swap")
+		await process_frame
+		var swap_actions := _swap_action_layout_check(game, viewport_size)
 		game.debug_preview_complete()
 		await process_frame
 		var complete_ok := _modal_content_fits(game.modal_root, viewport_size)
@@ -68,10 +72,11 @@ func _run() -> void:
 			"modes": modes_ok,
 			"mode_rects": mode_rects,
 			"puzzle_layout": puzzle_layout,
+			"swap_actions": swap_actions,
 			"complete": complete_ok,
 			"complete_rects": complete_rects,
 		}
-		result["ok"] = topics_ok and levels_ok and settings_ok and modes_ok and bool(puzzle_layout.get("ok", false)) and complete_ok
+		result["ok"] = topics_ok and levels_ok and settings_ok and modes_ok and bool(puzzle_layout.get("ok", false)) and bool(swap_actions.get("ok", false)) and complete_ok
 		all_ok = all_ok and bool(result["ok"])
 		print("RESPONSIVE_LAYOUT %s" % JSON.stringify(result))
 		game.queue_free()
@@ -93,6 +98,25 @@ func _grid_starts_left_and_fits(items: Array, viewport_size: Vector2) -> bool:
 	return true
 
 
+func _topic_page_fits(items: Array, viewport_size: Vector2, topic_count: int) -> bool:
+	var expected_count := mini(4, topic_count)
+	var current_page_items: Array = []
+	for item in items:
+		if int(item.get("page_index", 0)) == 0:
+			current_page_items.append(item)
+	if current_page_items.size() != expected_count:
+		return false
+	for item in current_page_items:
+		var rect: Rect2 = item.get("rect", Rect2())
+		if rect.position.x < -1.0 or rect.end.x > viewport_size.x + 1.0:
+			return false
+		if rect.position.y < -1.0 or rect.end.y > viewport_size.y + 1.0:
+			return false
+		if absf(rect.get_center().x - viewport_size.x * 0.5) > 1.0:
+			return false
+	return true
+
+
 func _theme_list_style_check(game, viewport_size: Vector2) -> Dictionary:
 	var topbar: Control = game.screen_root.get_node_or_null("theme_topbar")
 	var settings: Control = topbar.get_node_or_null("theme_settings_button") if topbar != null else null
@@ -104,34 +128,113 @@ func _theme_list_style_check(game, viewport_size: Vector2) -> Dictionary:
 				topbar_button_count += 1
 	var settings_right := settings != null and settings.position.x >= viewport_size.x * 0.70
 	var logo_centered := logo != null and absf(logo.get_rect().get_center().x - viewport_size.x * 0.5) <= 2.0
-	var card: Control = game.topics_content.get_child(0) if game.topics_content != null and game.topics_content.get_child_count() > 0 else null
+	var card: Control = game.topics_content.find_child("theme_card_*", true, false) if game.topics_content != null else null
 	var aspect := 0.0 if card == null or card.size.x <= 0.0 else card.size.y / card.size.x
 	var cover: Control = card.get_node_or_null("theme_card_cover") if card != null else null
-	var badge: Control = card.get_node_or_null("theme_card_percent_badge") if card != null else null
+	var base: Control = card.get_node_or_null("theme_card_base") if card != null else null
 	var title: Label = card.get_node_or_null("theme_card_title") if card != null else null
-	var compact_card := aspect >= 0.275 and aspect <= 0.295
-	var badge_in_info_column := cover != null and badge != null and badge.position.x >= cover.position.x + cover.size.x
+	var compact_card := aspect >= 0.435 and aspect <= 0.445
+	var uses_topic_background := base is TextureRect and (base as TextureRect).texture != null
 	var localized_title := title != null and not title.text.is_empty() and title.text == str(game.topics[0].get("name", ""))
 	var no_level_count_label := card != null and not _contains_level_count_label(card)
-	var all_covers_present: bool = game.topics_content != null and game.topics_content.get_child_count() == game.topics.size()
-	if all_covers_present:
-		for candidate in game.topics_content.get_children():
-			if not (candidate.get_node_or_null("theme_card_cover") is TextureRect):
+	var no_badge_or_arrow := card != null and card.get_node_or_null("theme_card_percent_badge") == null and card.get_node_or_null("theme_card_arrow_button") == null
+	var first_page: Control = game.topic_pager_controller.rendered_pages.get(0, null)
+	var all_covers_present: bool = first_page != null and first_page.get_child_count() == mini(game.topic_pager_controller.PAGE_SIZE, game.topics.size())
+	var all_decorations_present := all_covers_present
+	if all_covers_present and first_page != null:
+		for candidate in first_page.get_children():
+			var candidate_cover = candidate.get_node_or_null("theme_card_cover")
+			if not candidate_cover is TextureRect or not _cover_has_left_only_rounding(candidate_cover as TextureRect):
 				all_covers_present = false
 				break
+			var candidate_decoration = candidate.get_node_or_null("theme_card_decoration")
+			if not candidate_decoration is TextureRect or (candidate_decoration as TextureRect).texture == null:
+				all_decorations_present = false
+	var pager_state: Dictionary = game.topic_pager_controller.debug_state()
+	var single_page_lazy := int(pager_state.get("page_count", 0)) == 1 and int(pager_state.get("rendered_page_count", 0)) == 1
+	var progress_capsules := _progress_capsule_style_check(game)
+	var pager_capsule := _pager_capsule_style_check(game)
 	var result := {
 		"settings_right": settings_right,
 		"single_topbar_button": topbar_button_count == 1,
 		"logo_centered": logo_centered,
 		"card_aspect": snappedf(aspect, 0.001),
 		"compact_card": compact_card,
-		"badge_in_info_column": badge_in_info_column,
+		"uses_topic_background": uses_topic_background,
 		"localized_title": localized_title,
 		"no_level_count_label": no_level_count_label,
+		"no_badge_or_arrow": no_badge_or_arrow,
 		"all_covers_present": all_covers_present,
+		"all_decorations_present": all_decorations_present,
+		"single_page_lazy": single_page_lazy,
+		"progress_capsules": progress_capsules,
+		"pager_capsule": pager_capsule,
 	}
-	result["ok"] = settings_right and topbar_button_count == 1 and logo_centered and compact_card and badge_in_info_column and localized_title and no_level_count_label and all_covers_present
+	result["ok"] = settings_right and topbar_button_count == 1 and logo_centered and compact_card and uses_topic_background and localized_title and no_level_count_label and no_badge_or_arrow and all_covers_present and all_decorations_present and single_page_lazy and progress_capsules and pager_capsule
 	return result
+
+
+func _cover_has_left_only_rounding(cover: TextureRect) -> bool:
+	if cover == null or cover.texture == null:
+		return false
+	var image := cover.texture.get_image()
+	if image == null or image.is_empty():
+		return false
+	var right := image.get_width() - 1
+	var bottom := image.get_height() - 1
+	return (
+		image.get_pixel(0, 0).a <= 0.05
+		and image.get_pixel(0, bottom).a <= 0.05
+		and image.get_pixel(right, 0).a >= 0.95
+		and image.get_pixel(right, bottom).a >= 0.95
+	)
+
+
+func _progress_capsule_style_check(game) -> bool:
+	var sample: Panel = game._topic_progress_bar(1, 100, Vector2(100.0, 10.0), Color("#E57A16"))
+	var fill: Panel = sample.get_node_or_null("progress_fill")
+	var full_sample: Panel = game._topic_progress_bar(100, 100, Vector2(100.0, 10.0), Color("#E57A16"))
+	var full_fill: Panel = full_sample.get_node_or_null("progress_fill")
+	var track_style = sample.get_theme_stylebox("panel")
+	var fill_style = fill.get_theme_stylebox("panel") if fill != null else null
+	var valid := (
+		fill != null
+		and full_fill != null
+		and fill.visible
+		and fill.size.x >= sample.size.y
+		and fill.size.x <= sample.size.x
+		and is_equal_approx(full_fill.size.x, full_sample.size.x)
+		and _is_capsule_style(track_style, sample.size.y)
+		and _is_capsule_style(fill_style, sample.size.y)
+	)
+	sample.free()
+	full_sample.free()
+	return valid
+
+
+func _pager_capsule_style_check(game) -> bool:
+	var indicator: Panel = game.screen_root.get_node_or_null("topic_pager_indicator")
+	var thumb: Panel = indicator.get_node_or_null("topic_pager_thumb") if indicator != null else null
+	return (
+		indicator != null
+		and thumb != null
+		and _is_capsule_style(indicator.get_theme_stylebox("panel"), indicator.size.y)
+		and _is_capsule_style(thumb.get_theme_stylebox("panel"), thumb.size.y)
+	)
+
+
+func _is_capsule_style(style, height: float) -> bool:
+	if not style is StyleBoxFlat:
+		return false
+	var minimum_radius := ceili(height * 0.5)
+	return (
+		style.corner_radius_top_left >= minimum_radius
+		and style.corner_radius_top_right >= minimum_radius
+		and style.corner_radius_bottom_left >= minimum_radius
+		and style.corner_radius_bottom_right >= minimum_radius
+		and style.corner_detail >= 12
+		and style.anti_aliasing
+	)
 
 
 func _level_index_for_mode(game, topic: Dictionary, play_mode: String) -> int:
@@ -256,6 +359,42 @@ func _puzzle_layout_check(game, viewport_size: Vector2) -> Dictionary:
 		and result["no_overlap"]
 		and result["viewport_matches"]
 	)
+	return result
+
+
+func _swap_action_layout_check(game, viewport_size: Vector2) -> Dictionary:
+	var bar: Control = game.screen_root.find_child("game_bottom_actions", true, false)
+	var row: HBoxContainer = game.screen_root.find_child("game_bottom_actions_row", true, false)
+	var board = game.puzzle_board
+	var bar_rect := bar.get_global_rect() if bar != null else Rect2()
+	var row_rect := row.get_global_rect() if row != null else Rect2()
+	var expected_names: Array[String] = [
+		"game_back_button",
+		"game_restart_button",
+		"game_hint_button",
+		"game_shift_up_button",
+		"game_shift_down_button",
+	]
+	var names_match := row != null and row.get_child_count() == expected_names.size()
+	if names_match:
+		for index in expected_names.size():
+			if row.get_child(index).name != expected_names[index]:
+				names_match = false
+				break
+	var centered := row != null and absf(row_rect.get_center().x - viewport_size.x * 0.5) <= 1.0
+	var fits_width := row != null and row_rect.position.x >= -0.75 and row_rect.end.x <= viewport_size.x + 0.75
+	var pinned_bottom := bar != null and absf(bar_rect.end.y - viewport_size.y) <= 1.0
+	var board_excludes_actions: bool = bar != null and board._world_view_screen_rect().end.y <= bar_rect.position.y + 0.75
+	var result := {
+		"names": names_match,
+		"centered": centered,
+		"fits_width": fits_width,
+		"pinned_bottom": pinned_bottom,
+		"board_excludes_actions": board_excludes_actions,
+		"bar": [roundi(bar_rect.position.x), roundi(bar_rect.position.y), roundi(bar_rect.size.x), roundi(bar_rect.size.y)],
+		"row": [roundi(row_rect.position.x), roundi(row_rect.position.y), roundi(row_rect.size.x), roundi(row_rect.size.y)],
+	}
+	result["ok"] = names_match and centered and fits_width and pinned_bottom and board_excludes_actions
 	return result
 
 

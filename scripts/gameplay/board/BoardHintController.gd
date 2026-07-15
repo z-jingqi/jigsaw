@@ -144,35 +144,47 @@ func _add_hint_target_outline(group) -> void:
 	_spawn_dashed_outline(host.world_root, polygons, group.anchor_home, host.HINT_TARGET_Z_INDEX)
 
 
-func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int) -> Node2D:
+func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int, screen_width := 0.0, color := Color.TRANSPARENT, breathe := false) -> Node2D:
+	var outline_width: float = host.HINT_TARGET_SCREEN_WIDTH if screen_width <= 0.0 else screen_width
+	var outline_color: Color = host.HINT_TARGET_COLOR if color.a <= 0.0 else color
 	var root := Node2D.new()
 	root.name = "hint_dashed_outline"
 	root.position = local_position
 	root.z_index = z_index_value
 	parent.add_child(root)
 	host.hint_highlighted_nodes.append(root)
-	_redraw_dashed_outline(root, polygons, 0.0)
+	_redraw_dashed_outline(root, polygons, 0.0, outline_width, outline_color)
 	if host.reduced_motion:
 		return root
-	var tween := host.create_tween()
-	tween.bind_node(root)
-	tween.set_loops()
-	tween.set_trans(Tween.TRANS_LINEAR)
+	var dash_tween := host.create_tween()
+	dash_tween.bind_node(root)
+	dash_tween.set_loops()
+	dash_tween.set_trans(Tween.TRANS_LINEAR)
 	var dash_cycle: float = host.HINT_TARGET_DASH_LENGTH + host.HINT_TARGET_DASH_GAP
-	tween.tween_method(func(phase: float) -> void:
-		_redraw_dashed_outline(root, polygons, phase)
+	dash_tween.tween_method(func(phase: float) -> void:
+		_redraw_dashed_outline(root, polygons, phase, outline_width, outline_color)
 	, 0.0, dash_cycle, 0.64)
+	if breathe:
+		root.modulate.a = host.SWAP_HINT_BREATHE_ALPHA
+		var breathe_tween := host.create_tween()
+		breathe_tween.bind_node(root)
+		breathe_tween.set_loops()
+		breathe_tween.set_ease(Tween.EASE_IN_OUT)
+		breathe_tween.set_trans(Tween.TRANS_SINE)
+		breathe_tween.tween_property(root, "modulate:a", 1.0, host.SWAP_HINT_BREATHE_CYCLE * 0.5)
+		breathe_tween.tween_property(root, "modulate:a", host.SWAP_HINT_BREATHE_ALPHA, host.SWAP_HINT_BREATHE_CYCLE * 0.5)
+		host.hint_blink_tweens.append(breathe_tween)
 	return root
 
 
-func _redraw_dashed_outline(root: Node2D, polygons: Array, phase: float) -> void:
+func _redraw_dashed_outline(root: Node2D, polygons: Array, phase: float, screen_width: float, color: Color) -> void:
 	if not is_instance_valid(root):
 		return
 	for child in root.get_children():
 		child.free()
 	for polygon in polygons:
 		for dash in _dashed_polygon_segments(polygon, host.HINT_TARGET_DASH_LENGTH, host.HINT_TARGET_DASH_GAP, phase):
-			_add_hint_outline_line(root, dash, host.HINT_TARGET_SCREEN_WIDTH, host.HINT_TARGET_COLOR, 0, false, false)
+			_add_hint_outline_line(root, dash, screen_width, color, 0, false, false)
 
 
 func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, gap_length: float, phase: float) -> Array[PackedVector2Array]:

@@ -3,7 +3,6 @@ class_name PuzzleBoard
 
 signal completed
 signal state_changed(state: Dictionary)
-signal undo_available_changed(available: bool)
 
 const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
@@ -39,6 +38,11 @@ const SHIMMER_DURATION := 0.7
 const SWAP_FALLBACK_COLS := 5
 const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
+const SWAP_ROW_SHIFT_ANIMATION_TIME := 0.34
+const SWAP_HINT_DURATION := 5.0
+const SWAP_HINT_SCREEN_WIDTH := 9.0
+const SWAP_HINT_BREATHE_ALPHA := 0.48
+const SWAP_HINT_BREATHE_CYCLE := 1.0
 const SWAP_TARGET_PREVIEW_COLOR := Color(0.96, 0.58, 0.20, 0.96)
 const SWAP_TARGET_PREVIEW_FILL := Color(1.0, 0.72, 0.30, 0.20)
 const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
@@ -108,7 +112,6 @@ var tray_scroll_velocity := 0.0
 var tray_last_pan_msec := 0
 var tray_inertia_active := false
 var swap_tiles: Array = []
-var swap_history: Array[Dictionary] = []
 var dragging = null
 var dragging_from_tray := false
 var dragging_tray_index := -1
@@ -138,6 +141,7 @@ var pinch_start_distance := 0.0
 var pinch_start_scale := 1.0
 var pinch_start_world_midpoint := Vector2.ZERO
 var hud_top_reserved_height := 56.0
+var hud_bottom_reserved_height := 0.0
 var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
 var randomize_piece_rotation := false
@@ -313,7 +317,7 @@ func _json_vector(value, fallback := Vector2.ZERO) -> Vector2:
 	return state_controller.json_vector(value, fallback)
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}) -> bool:
+func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}, bottom_reserved_height := 0.0) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -322,6 +326,7 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	source_size = image_size
 	piece_visual_style = _piece_visual_style()
 	hud_top_reserved_height = top_reserved_height
+	hud_bottom_reserved_height = maxf(0.0, bottom_reserved_height)
 	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
@@ -359,7 +364,6 @@ func clear() -> void:
 	tray_last_pan_msec = 0
 	tray_inertia_active = false
 	swap_tiles.clear()
-	swap_history.clear()
 	dragging = null
 	dragging_from_tray = false
 	dragging_tray_index = -1
@@ -411,7 +415,6 @@ func clear() -> void:
 	randomize_piece_rotation = false
 	state_emit_pending = false
 	last_state_emit_msec = 0
-	undo_available_changed.emit(false)
 
 
 func handle_input(event: InputEvent, modal_open: bool) -> bool:
@@ -746,12 +749,16 @@ func _swap_tile_bounds(tile, target_position: Vector2) -> Rect2:
 	return swap_controller._swap_tile_bounds(tile, target_position)
 
 
-func can_undo_swap() -> bool:
-	return swap_controller.can_undo_swap()
+func can_shift_swap_rows() -> bool:
+	return swap_controller.can_shift_rows()
 
 
-func undo_last_swap() -> void:
-	swap_controller.undo_last_swap()
+func shift_swap_rows_up() -> void:
+	swap_controller.shift_rows(-1)
+
+
+func shift_swap_rows_down() -> void:
+	swap_controller.shift_rows(1)
 
 
 func _show_swap_hint() -> void:
@@ -830,8 +837,8 @@ func _has_active_hint_highlights() -> bool:
 	return hint_controller._has_active_hint_highlights()
 
 
-func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int) -> Node2D:
-	return hint_controller._spawn_dashed_outline(parent, polygons, local_position, z_index_value)
+func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int, screen_width := 0.0, color := Color.TRANSPARENT, breathe := false) -> Node2D:
+	return hint_controller._spawn_dashed_outline(parent, polygons, local_position, z_index_value, screen_width, color, breathe)
 
 
 func _refresh_hint_line_widths() -> void:

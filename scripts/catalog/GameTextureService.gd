@@ -28,7 +28,7 @@ void fragment() {
 """
 
 var repository
-var rounded_topic_cover_cache: Dictionary = {}
+var left_rounded_topic_cover_cache: Dictionary = {}
 var rounded_complete_image_cache: Dictionary = {}
 var rounded_texture_shader: Shader
 var icon_tint_shader: Shader
@@ -38,10 +38,10 @@ func _init(level_repository) -> void:
 	repository = level_repository
 
 
-func rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
+func left_rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radius: int) -> Texture2D:
 	var cache_key := "%s@%dx%d@%d" % [str(topic.get("id", "")), target_size.x, target_size.y, radius]
-	if rounded_topic_cover_cache.has(cache_key):
-		return rounded_topic_cover_cache[cache_key]
+	if left_rounded_topic_cover_cache.has(cache_key):
+		return left_rounded_topic_cover_cache[cache_key]
 	var source_texture: Texture2D = repository.topic_cover_texture(topic)
 	if source_texture == null or target_size.x <= 0 or target_size.y <= 0:
 		return source_texture
@@ -63,9 +63,9 @@ func rounded_topic_cover_texture(topic: Dictionary, target_size: Vector2i, radiu
 	)
 	image = image.get_region(Rect2i(offset, target_size))
 	image.convert(Image.FORMAT_RGBA8)
-	apply_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
+	apply_left_rounded_image_alpha(image, mini(radius, mini(target_size.x, target_size.y) / 2))
 	var result := ImageTexture.create_from_image(image)
-	rounded_topic_cover_cache[cache_key] = result
+	left_rounded_topic_cover_cache[cache_key] = result
 	return result
 
 
@@ -130,6 +130,26 @@ func apply_rounded_image_alpha(image: Image, radius: int) -> void:
 			var edge_y := minf(float(y) + 0.5, float(height - y) - 0.5)
 			if edge_x >= radius or edge_y >= radius:
 				continue
+			var coverage := clampf(float(radius) + 0.5 - Vector2(edge_x, edge_y).distance_to(corner_center), 0.0, 1.0)
+			if coverage >= 1.0:
+				continue
+			var color := image.get_pixel(x, y)
+			color.a *= coverage
+			image.set_pixel(x, y, color)
+
+
+func apply_left_rounded_image_alpha(image: Image, radius: int) -> void:
+	if radius <= 0:
+		return
+	var width := image.get_width()
+	var height := image.get_height()
+	var corner_center := Vector2(radius, radius)
+	for y in height:
+		var edge_y := minf(float(y) + 0.5, float(height - y) - 0.5)
+		if edge_y >= radius:
+			continue
+		for x in mini(radius, width):
+			var edge_x := float(x) + 0.5
 			var coverage := clampf(float(radius) + 0.5 - Vector2(edge_x, edge_y).distance_to(corner_center), 0.0, 1.0)
 			if coverage >= 1.0:
 				continue

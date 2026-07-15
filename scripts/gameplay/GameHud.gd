@@ -13,14 +13,9 @@ func build(level_title: String) -> void:
 	var viewport_width: float = game.get_viewport_rect().size.x
 	var bar_height: float = top_bar_height()
 	var title_height: float = 52.0 * ui_scale
-	var button_size: float = hint_button_size()
-	var icon_inset: float = button_size * 0.20
-	var side_margin: float = 20.0 * ui_scale
 	var top: float = 20.0 * ui_scale
-	var button_top: float = top + (title_height - button_size) * 0.5
 	var palette: Dictionary = game._topic_ui_palette(game.current_topic)
 	var foreground: Color = palette.foreground
-	var outline: Color = palette.outline
 	var top_bar := Control.new()
 	top_bar.name = "game_topbar"
 	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -30,14 +25,6 @@ func build(level_title: String) -> void:
 	top_bar.offset_bottom = bar_height
 	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	game.screen_root.add_child(top_bar)
-	var back_button: Button = game._level_back_button(
-		button_size,
-		palette,
-		Callable(game, "_return_to_current_level_list"),
-	)
-	back_button.name = "game_back_button"
-	back_button.position = Vector2(side_margin, button_top)
-	top_bar.add_child(back_button)
 	var title := Label.new()
 	title.name = "game_title"
 	title.text = level_title
@@ -50,48 +37,13 @@ func build(level_title: String) -> void:
 	title.add_theme_color_override("font_color", foreground)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	top_bar.add_child(title)
-	var top_actions_width: float = top_actions_width()
-	var top_actions_left: float = viewport_width - side_margin - top_actions_width
-	game.swap_undo_button = null
-	if game.current_mode == "swap":
-		game.swap_undo_button = game._tool_text_button(game._t("undo"), game.puzzle_board.undo_last_swap)
-		game.swap_undo_button.disabled = not game.puzzle_board.can_undo_swap()
-		game.swap_undo_button.position = Vector2(
-			top_actions_left,
-			button_top + (button_size - game.swap_undo_button.custom_minimum_size.y) * 0.5,
-		)
-		top_bar.add_child(game.swap_undo_button)
-	var hint_button: Button = game._icon_button(
-		game.icon_lightbulb,
-		game.puzzle_board.show_hint,
-		button_size,
-		icon_inset,
-		false,
-		false,
-		foreground,
-		outline,
-		true,
-		outline,
-	)
-	hint_button.name = "game_hint_button"
-	var hint_icon := hint_button.get_child(0) as TextureRect
-	if hint_icon != null:
-		hint_icon.custom_minimum_size = Vector2.ZERO
-	game._apply_topic_outline_nav_button_styles(hint_button, outline, button_size)
-	hint_button.position = Vector2(viewport_width - side_margin - button_size, button_top)
-	hint_button.size = Vector2(button_size, button_size)
-	top_bar.add_child(hint_button)
 	var title_font := title.get_theme_font("font")
 	var title_font_size := title.get_theme_font_size("font_size")
 	var title_text_width := title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, title_font_size).x
 	var decoration_gap: float = 6.0 * ui_scale
-	var decoration_clearance: float = 4.0 * ui_scale
 	var decoration_width := minf(
 		42.0 * ui_scale,
-		minf(
-			viewport_width * 0.5 - title_text_width * 0.5 - decoration_gap - (back_button.position.x + button_size) - decoration_clearance,
-			top_actions_left - (viewport_width * 0.5 + title_text_width * 0.5 + decoration_gap) - decoration_clearance,
-		),
+		viewport_width * 0.5 - title_text_width * 0.5 - decoration_gap - 20.0 * ui_scale,
 	)
 	add_topic_title_decorations(
 		top_bar,
@@ -103,11 +55,46 @@ func build(level_title: String) -> void:
 		decoration_gap,
 		game.current_topic,
 	)
+	var bottom_bar := Control.new()
+	bottom_bar.name = "game_bottom_actions"
+	bottom_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_bar.offset_left = 0.0
+	bottom_bar.offset_top = -bottom_bar_height()
+	bottom_bar.offset_right = 0.0
+	bottom_bar.offset_bottom = 0.0
+	bottom_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	game.screen_root.add_child(bottom_bar)
+	var center := CenterContainer.new()
+	center.name = "game_bottom_actions_center"
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.offset_left = 0.0
+	center.offset_top = 0.0
+	center.offset_right = 0.0
+	center.offset_bottom = 0.0
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_bar.add_child(center)
+	var actions := HBoxContainer.new()
+	actions.name = "game_bottom_actions_row"
+	actions.add_theme_constant_override("separation", roundi(clampf(8.0 * ui_scale, 10.0, 24.0)))
+	actions.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(actions)
+	var restart_action := func() -> void:
+		game._show_game(game.current_topic, game.current_level, game.current_mode, true)
+	var action_specs: Array[Dictionary] = [
+		{"name": "game_back_button", "text": game._t("back"), "action": Callable(game, "_return_to_current_level_list")},
+		{"name": "game_restart_button", "text": game._t("restart"), "action": restart_action},
+		{"name": "game_hint_button", "text": game._t("hint"), "action": game.puzzle_board.show_hint},
+	]
+	if game.current_mode == "swap":
+		action_specs.append({"name": "game_shift_up_button", "text": game._t("shift_row_up"), "action": game.puzzle_board.shift_swap_rows_up})
+		action_specs.append({"name": "game_shift_down_button", "text": game._t("shift_row_down"), "action": game.puzzle_board.shift_swap_rows_down})
 	game.hud_blocker_controls.clear()
-	game.hud_blocker_controls.append(back_button)
-	if game.swap_undo_button != null:
-		game.hud_blocker_controls.append(game.swap_undo_button)
-	game.hud_blocker_controls.append(hint_button)
+	game.hud_blocker_controls.append(top_bar)
+	game.hud_blocker_controls.append(bottom_bar)
+	for spec in action_specs:
+		var button := bottom_action_button(str(spec["text"]), spec["action"], ui_scale)
+		button.name = str(spec["name"])
+		actions.add_child(button)
 	queue_drag_blocker_refresh()
 
 
@@ -222,20 +209,21 @@ func top_bar_height() -> float:
 	return game._theme_topbar_height(game._topics_ui_scale())
 
 
-func top_actions_width() -> float:
-	var width := hint_button_size()
-	if game.current_mode == "swap":
-		width += text_button_width(game._t("undo")) + 6.0 * game._topics_ui_scale()
-	return width
+func bottom_bar_height() -> float:
+	return maxf(72.0, 56.0 * game._topics_ui_scale())
 
 
-func set_swap_undo_available(available: bool) -> void:
-	if game.swap_undo_button != null and is_instance_valid(game.swap_undo_button):
-		game.swap_undo_button.disabled = not available
-
-
-func hint_button_size() -> float:
-	return 34.0 * game._topics_ui_scale()
+func bottom_action_button(text: String, action: Callable, ui_scale: float) -> Button:
+	var button: Button = game._tool_text_button(text, action)
+	var font_size := roundi(clampf(18.0 * ui_scale, 22.0, 32.0))
+	button.add_theme_font_size_override("font_size", font_size)
+	var font: Font = button.get_theme_font("font")
+	var text_width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+	button.custom_minimum_size = Vector2(
+		ceilf(text_width + clampf(12.0 * ui_scale, 20.0, 32.0)),
+		maxf(48.0, 30.0 * ui_scale),
+	)
+	return button
 
 
 func text_button_width(text: String) -> float:

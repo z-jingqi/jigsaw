@@ -33,6 +33,8 @@
 				"accent": "#C8703F"
 			},
 			"ui_assets": {
+				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
+				"topic_card_decoration": "res://assets/ui/theme-list/decorations/shanhai-decoration.webp",
 				"title_mountains": "res://levels/topic_01/ui/title-mountains.webp",
 				"title_mountains_region": [359, 191, 1471, 326]
 			},
@@ -213,6 +215,10 @@
 				"foreground": "#3B4D50",
 				"outline": "#6E969D",
 				"accent": "#C87850"
+			},
+			"ui_assets": {
+				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
+				"topic_card_decoration": "res://assets/ui/theme-list/decorations/greek-mythology-decoration.webp"
 			},
 			"icon": "res://levels/topic_02/icon.png",
 			"level_background": "res://levels/topic_02/level-bg.webp",
@@ -518,6 +524,8 @@
 				"accent": "#D97843"
 			},
 			"ui_assets": {
+				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
+				"topic_card_decoration": "res://assets/ui/theme-list/decorations/cat-decoration.webp",
 				"title_side": "res://levels/topic_03/ui/title-whisker-left.webp",
 				"title_ear": "res://levels/topic_03/ui/title-ear-left.webp"
 			},
@@ -603,6 +611,10 @@
 				"foreground": "#3D4934",
 				"outline": "#6F9FA8",
 				"accent": "#D6A04A"
+			},
+			"ui_assets": {
+				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
+				"topic_card_decoration": "res://assets/ui/theme-list/decorations/dog-decoration.webp"
 			},
 			"icon": "res://levels/topic_04/icon.png",
 			"level_background": "res://levels/topic_04/level-bg.webp",

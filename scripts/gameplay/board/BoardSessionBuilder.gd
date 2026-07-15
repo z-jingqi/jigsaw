@@ -200,8 +200,6 @@ func _start_swap_session() -> bool:
 	host.source_scale = layout["source_scale"]
 	host.board_origin = layout["board_origin"]
 	var order: Array = _swap_shuffled_order(cols, rows)
-	host.swap_history.clear()
-	host.undo_available_changed.emit(false)
 	for slot_index in range(order.size()):
 		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)
 	host.fit_view_to_pieces(false)
@@ -302,7 +300,9 @@ func _swap_slot_position(slot_index: int, cols := SWAP_FALLBACK_COLS, rows := SW
 
 
 func _mobile_board_layout() -> Dictionary:
-	var bottom_reserved_height: float = 0.0 if host.current_mode == "swap" else host._tray_area().size.y
+	var bottom_reserved_height: float = host.hud_bottom_reserved_height
+	if host.current_mode != "swap":
+		bottom_reserved_height += host._tray_area().size.y
 	return host.BoardLayoutScript.mobile_board_layout(
 		host.source_size,
 		host.get_viewport_rect().size,
