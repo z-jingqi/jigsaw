@@ -1,6 +1,6 @@
 extends SceneTree
 
-const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
+const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
 const TARGET_SIZE := Vector2i(450, 600)
 const WEBP_QUALITY := 0.80
 

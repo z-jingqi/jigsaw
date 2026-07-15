@@ -1,7 +1,7 @@
 extends SceneTree
 
-const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
-const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
+const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
+const PuzzleBoardScript := preload("res://scripts/gameplay/board/PuzzleBoard.gd")
 const LEVEL_PATH := "res://levels/topic_01/level_01/level.json"
 
 
@@ -21,7 +21,10 @@ func _run() -> void:
 		source_board.set_feedback_preferences(false, true)
 		var source_loaded: bool = source_board.start(level_config, play_mode, media["texture"], media["image"], media["source_size"], 64.0)
 		await process_frame
-		var expected := source_board.debug_prepare_restore_snapshot() if source_loaded else {}
+		var expected: Dictionary = source_board.debug_prepare_restore_snapshot() if source_loaded else {}
+		var persisted_snapshot = JSON.parse_string(JSON.stringify(expected))
+		if typeof(persisted_snapshot) == TYPE_DICTIONARY:
+			expected = persisted_snapshot
 		source_board.queue_free()
 		await process_frame
 		await process_frame

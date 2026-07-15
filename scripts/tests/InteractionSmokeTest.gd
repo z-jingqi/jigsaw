@@ -1,7 +1,7 @@
 extends SceneTree
 
-const LevelRepositoryScript := preload("res://scripts/LevelRepository.gd")
-const PuzzleBoardScript := preload("res://scripts/PuzzleBoard.gd")
+const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
+const PuzzleBoardScript := preload("res://scripts/gameplay/board/PuzzleBoard.gd")
 const LEVEL_PATH := "res://levels/topic_01/level_01/level.json"
 
 

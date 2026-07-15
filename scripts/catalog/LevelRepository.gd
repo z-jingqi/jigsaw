@@ -3,9 +3,11 @@ class_name LevelRepository
 
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_THUMBNAIL_FILE := "thumbnail.webp"
+const LevelAssetCacheScript = preload("res://scripts/catalog/LevelAssetCache.gd")
 
-var texture_cache: Dictionary = {}
-var source_image_cache: Dictionary = {}
+var asset_cache := LevelAssetCacheScript.new()
+var texture_cache: Dictionary = asset_cache.texture_cache
+var source_image_cache: Dictionary = asset_cache.source_image_cache
 var config_cache: Dictionary = {}
 var locale := "en"
 
@@ -144,70 +146,23 @@ func apply_level_media(level_config: Dictionary) -> Dictionary:
 
 
 func cached_texture(path: String) -> Texture2D:
-	if path.is_empty():
-		return null
-	if texture_cache.has(path):
-		return texture_cache[path]
-	var extension := path.get_extension().to_lower()
-	if ["png", "jpg", "jpeg", "webp"].has(extension):
-		var file_path := image_file_path(path)
-		var image := Image.load_from_file(file_path)
-		if image != null and not image.is_empty():
-			var image_texture := ImageTexture.create_from_image(image)
-			texture_cache[path] = image_texture
-			return image_texture
-	var loaded: Texture2D = load(path)
-	if loaded != null:
-		texture_cache[path] = loaded
-		return loaded
-	var file_path := image_file_path(path)
-	var image := Image.load_from_file(file_path)
-	if image != null and not image.is_empty():
-		var image_texture := ImageTexture.create_from_image(image)
-		texture_cache[path] = image_texture
-		return image_texture
-	return null
+	return asset_cache.cached_texture(path)
 
 
 func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
-	if path.is_empty() or target_size.x <= 0 or target_size.y <= 0:
-		return null
-	var source_texture: Texture2D = null
-	if path.begins_with("res://") and ResourceLoader.exists(path):
-		source_texture = load(path) as Texture2D
-	if source_texture != null and source_texture.get_width() <= target_size.x and source_texture.get_height() <= target_size.y:
-		return source_texture
-	var image: Image = source_texture.get_image() if source_texture != null else Image.load_from_file(image_file_path(path))
-	if image == null or image.is_empty():
-		return null
-	var ratio: float = minf(
-		1.0,
-		minf(float(target_size.x) / float(image.get_width()), float(target_size.y) / float(image.get_height()))
-	)
-	var width: int = max(1, int(round(float(image.get_width()) * ratio)))
-	var height: int = max(1, int(round(float(image.get_height()) * ratio)))
-	if image.get_width() != width or image.get_height() != height:
-		image.resize(width, height, Image.INTERPOLATE_LANCZOS)
-	return ImageTexture.create_from_image(image)
+	return asset_cache.runtime_thumbnail(path, target_size)
 
 
 func image_file_path(path: String) -> String:
-	return ProjectSettings.globalize_path(path) if path.begins_with("res://") or path.begins_with("user://") else path
+	return asset_cache.image_file_path(path)
 
 
 func placeholder_texture() -> Texture2D:
-	var image := Image.create(640, 640, false, Image.FORMAT_RGBA8)
-	image.fill(Color("#F6EBD4"))
-	return ImageTexture.create_from_image(image)
+	return asset_cache.placeholder_texture()
 
 
 func cached_source_image(path: String, source_texture: Texture2D) -> Image:
-	if not path.is_empty() and source_image_cache.has(path):
-		return source_image_cache[path]
-	var image := source_texture.get_image()
-	if not path.is_empty():
-		source_image_cache[path] = image
-	return image
+	return asset_cache.cached_source_image(path, source_texture)
 
 
 func level_list_image_path(level_config: Dictionary) -> String:

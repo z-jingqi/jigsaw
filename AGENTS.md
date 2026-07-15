@@ -6,10 +6,10 @@ Examples:
 
 ```bash
 # macOS
-/Applications/Godot.app/Contents/MacOS/Godot --path "$PWD" --script res://scripts/GameFlowTest.gd
+/Applications/Godot.app/Contents/MacOS/Godot --path "$PWD" --script res://scripts/tests/GameFlowTest.gd
 
 # Windows, if Godot is on PATH
-Godot.exe --path <repo-root> --script res://scripts/GameFlowTest.gd
+Godot.exe --path <repo-root> --script res://scripts/tests/GameFlowTest.gd
 ```
 
 Use the most focused existing script when one matches the change, such as `GameFlowTest.gd`, `ResponsiveLayoutTest.gd`, `TransitionVisualTest.gd`, or `InteractionSmokeTest.gd`. Treat a zero exit code together with the script's `"ok": true` results as the validation criterion.

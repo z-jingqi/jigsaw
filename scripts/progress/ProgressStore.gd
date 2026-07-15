@@ -1,22 +1,19 @@
 extends RefCounted
 class_name ProgressStore
 
+const ProgressPersistenceScript = preload("res://scripts/progress/ProgressPersistence.gd")
+
 var save_path := "user://jigcat_progress.json"
 var progress := {}
+var persistence := ProgressPersistenceScript.new()
 
 
 func load_from_disk() -> void:
-	if not FileAccess.file_exists(save_path):
-		progress = {}
-		return
-	var file := FileAccess.open(save_path, FileAccess.READ)
-	var parsed = JSON.parse_string(file.get_as_text())
-	progress = parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+	progress = persistence.load_data(save_path)
 
 
 func save_to_disk() -> void:
-	var file := FileAccess.open(save_path, FileAccess.WRITE)
-	file.store_string(JSON.stringify(progress))
+	persistence.save_data(save_path, progress)
 
 
 func is_done(level_id: String, play_mode: String) -> bool:

@@ -2,11 +2,6 @@ extends RefCounted
 class_name SnapSolver
 
 
-static func find_match(active, others: Array, snap_tolerance: float, rotation_tolerance: float):
-	var match := find_match_data(active, others, snap_tolerance, rotation_tolerance)
-	return match.get("other", null)
-
-
 static func find_match_data(active, others: Array, snap_tolerance: float, rotation_tolerance: float) -> Dictionary:
 	var best := {}
 	var best_distance := INF
@@ -24,11 +19,6 @@ static func find_match_data(active, others: Array, snap_tolerance: float, rotati
 			best = candidate
 			best["other"] = other
 	return best
-
-
-static func _groups_can_snap(a, b, snap_tolerance: float) -> bool:
-	var match := _closest_neighbor_match(a, b)
-	return not match.is_empty() and float(match["distance"]) <= snap_tolerance
 
 
 static func _closest_neighbor_match(a, b) -> Dictionary:

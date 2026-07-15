@@ -29,13 +29,6 @@ func _init(group_node: Node2D, piece: Dictionary) -> void:
 	}]
 
 
-func contains_piece(piece_id: String) -> bool:
-	for member in members:
-		if member["id"] == piece_id:
-			return true
-	return false
-
-
 func absorb(other: PieceGroup, visual_gap := 0.0) -> void:
 	for member in other.members:
 		other.node.remove_child(member["visual"])

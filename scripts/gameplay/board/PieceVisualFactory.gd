@@ -1,12 +1,6 @@
 extends RefCounted
 class_name PieceVisualFactory
 
-const SEPARATOR_COLOR := Color(0.22, 0.17, 0.12, 0.92)
-const SEPARATOR_LIFT_COLOR := Color(0.64, 0.35, 0.10, 0.98)
-const OUTLINE_COLOR := Color(0.36, 0.27, 0.18, 0.88)
-const OUTLINE_LIFT_COLOR := Color("#D9933F")
-const INNER_SHADE_COLOR := Color(0.18, 0.13, 0.08, 0.30)
-const INNER_HIGHLIGHT_COLOR := Color("#FFF6E6", 0.82)
 const CUT_LINE_COLOR := Color(0.26, 0.20, 0.14, 0.70)
 const CUT_LINE_LIFT_COLOR := Color(0.72, 0.43, 0.18, 0.78)
 const SURFACE_LIGHT_COLOR := Color(1.0, 0.96, 0.88, 0.06)
@@ -116,22 +110,6 @@ static func _piece_lift_shadow(points: PackedVector2Array) -> Node2D:
 		layer.z_index = -2 + i
 		shadow.add_child(layer)
 	return shadow
-
-
-static func _piece_outline_line(points: PackedVector2Array, width: float, color: Color, z_index: int, line_name: String, offset := Vector2.ZERO) -> Line2D:
-	var line := Line2D.new()
-	line.name = line_name
-	line.width = width
-	line.default_color = color
-	line.closed = true
-	line.joint_mode = Line2D.LINE_JOINT_ROUND
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND
-	line.antialiased = true
-	line.z_index = z_index
-	line.position = offset
-	line.points = points
-	return line
 
 
 static func _piece_cut_line(points: PackedVector2Array, width: float, color: Color, lift_color: Color, z_index: int) -> Line2D:
