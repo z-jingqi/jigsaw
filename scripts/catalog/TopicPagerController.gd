@@ -19,6 +19,7 @@ var drag_velocity_x := 0.0
 var drag_last_usec := 0
 var interrupted_snap := false
 var snap_tween: Tween
+var pressed_item: Dictionary = {}
 
 
 func _init(owner: Node) -> void:
@@ -45,11 +46,13 @@ func configure(
 
 func reset() -> void:
 	_kill_snap()
+	_unregister_rendered_pages()
 	drag_active = false
 	drag_total = Vector2.ZERO
 	drag_velocity_x = 0.0
 	drag_last_usec = 0
 	interrupted_snap = false
+	pressed_item.clear()
 	rendered_pages.clear()
 	track = null
 	page_builder = Callable()
@@ -89,7 +92,7 @@ func handle_gui_input(event: InputEvent) -> void:
 		drag_by(screen_drag.relative)
 
 
-func begin_drag(_screen_position: Vector2) -> void:
+func begin_drag(screen_position: Vector2) -> void:
 	if track == null or page_count <= 0:
 		return
 	interrupted_snap = snap_tween != null and snap_tween.is_valid()
@@ -100,6 +103,9 @@ func begin_drag(_screen_position: Vector2) -> void:
 	drag_last_usec = Time.get_ticks_usec()
 	game.topics_drag_active = true
 	game.topics_drag_total = Vector2.ZERO
+	pressed_item = _item_at(screen_position)
+	if not pressed_item.is_empty():
+		game.topic_home_motion.press_card(str(pressed_item.get("topic_id", "")))
 
 
 func drag_by(delta: Vector2, elapsed_override := -1.0) -> void:
@@ -112,6 +118,8 @@ func drag_by(delta: Vector2, elapsed_override := -1.0) -> void:
 	drag_last_usec = now
 	drag_total += delta
 	game.topics_drag_total = drag_total
+	if not pressed_item.is_empty() and drag_total.length() > TAP_THRESHOLD * game._topics_ui_scale():
+		_cancel_pressed_item()
 	var instant_velocity := delta.x / elapsed
 	drag_velocity_x = lerpf(drag_velocity_x, instant_velocity, 0.45)
 	_set_track_x(_drag_constrained_x(track.position.x + delta.x))
@@ -127,8 +135,16 @@ func end_drag(screen_position: Vector2) -> void:
 	var settled := absf(page_position - float(nearest_page)) <= 0.015
 	if drag_total.length() <= TAP_THRESHOLD * game._topics_ui_scale() and settled and not interrupted_snap:
 		current_page = nearest_page
-		_activate_item_at(screen_position)
+		var released_item := _item_at(screen_position)
+		if not pressed_item.is_empty() and str(pressed_item.get("topic_id", "")) == str(released_item.get("topic_id", "")):
+			var topic_id := str(pressed_item.get("topic_id", ""))
+			var action = pressed_item.get("action", null)
+			pressed_item.clear()
+			game.topic_home_motion.release_card(topic_id, action if action is Callable else Callable())
+		else:
+			_cancel_pressed_item()
 		return
+	_cancel_pressed_item()
 	var target_page := nearest_page
 	var fling_threshold := page_width * 0.85
 	if drag_velocity_x <= -fling_threshold:
@@ -173,6 +189,7 @@ func debug_state() -> Dictionary:
 		"rendered_page_count": indices.size(),
 		"rendered_card_count": _rendered_card_count(),
 		"drag_active": drag_active,
+		"pressed_topic_id": str(pressed_item.get("topic_id", "")),
 		"track_x": track.position.x if track != null else 0.0,
 	}
 
@@ -198,6 +215,7 @@ func _set_track_x(next_x: float) -> void:
 	var center_page := clampi(roundi(visual_page_position()), 0, maxi(0, page_count - 1))
 	_ensure_render_window(center_page)
 	_update_indicator()
+	game.topic_home_motion.update_page_transition(rendered_pages, visual_page_position())
 
 
 func _complete_snap(target_page: int) -> void:
@@ -210,6 +228,7 @@ func _complete_snap(target_page: int) -> void:
 		track.position.x = -float(current_page) * page_width
 	_ensure_render_window(current_page)
 	_update_indicator()
+	game.topic_home_motion.update_page_transition(rendered_pages, visual_page_position())
 
 
 func _ensure_render_window(center_page: int) -> void:
@@ -223,6 +242,7 @@ func _ensure_render_window(center_page: int) -> void:
 			continue
 		var old_page: Control = rendered_pages[page_index]
 		rendered_pages.erase(page_index)
+		game.topic_home_motion.unregister_page(int(page_index))
 		if is_instance_valid(old_page):
 			if old_page.get_parent() == track:
 				track.remove_child(old_page)
@@ -239,18 +259,23 @@ func _ensure_render_window(center_page: int) -> void:
 		rendered_pages[page_index] = page
 
 
-func _activate_item_at(screen_position: Vector2) -> void:
+func _item_at(screen_position: Vector2) -> Dictionary:
 	if track == null:
-		return
+		return {}
 	var content_position := screen_position - track.position
 	for item in game.topics_island_items:
 		var rect: Rect2 = item.get("rect", Rect2())
 		if not rect.has_point(content_position):
 			continue
-		var action = item.get("action", null)
-		if action is Callable and action.is_valid():
-			action.call()
+		return item
+	return {}
+
+
+func _cancel_pressed_item() -> void:
+	if pressed_item.is_empty():
 		return
+	game.topic_home_motion.cancel_card(str(pressed_item.get("topic_id", "")))
+	pressed_item.clear()
 
 
 func _update_indicator() -> void:
@@ -270,6 +295,13 @@ func _rendered_card_count() -> int:
 		if page is Control and is_instance_valid(page):
 			count += (page as Control).get_child_count()
 	return count
+
+
+func _unregister_rendered_pages() -> void:
+	if game == null or game.topic_home_motion == null:
+		return
+	for page_index in rendered_pages.keys():
+		game.topic_home_motion.unregister_page(int(page_index))
 
 
 func _kill_snap() -> void:

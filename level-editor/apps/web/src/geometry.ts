@@ -120,10 +120,15 @@ export function fillCoverageGaps(sourcePieces: LevelPiece[], imageWidth: number,
     .map((points) => [closedRing(points)] as Polygon);
   if (!inputPolygons.length) return sourcePieces;
   const [firstPolygon, ...restPolygons] = inputPolygons;
-  const union = polygonClipping.union(firstPolygon, ...restPolygons) as MultiPolygon;
   const imageBounds: Point[] = [[0, 0], [imageWidth, 0], [imageWidth, imageHeight], [0, imageHeight]];
   const imageRect: Polygon = [closedRing(imageBounds)];
-  const gaps = polygonClipping.difference(imageRect, union) as MultiPolygon;
+  let gaps: MultiPolygon;
+  try {
+    const union = polygonClipping.union(firstPolygon, ...restPolygons) as MultiPolygon;
+    gaps = polygonClipping.difference(imageRect, union) as MultiPolygon;
+  } catch {
+    return sourcePieces;
+  }
   const minGapArea = Math.max(16, (imageWidth * imageHeight) / 50000);
   const existingIds = new Set(sourcePieces.map((piece) => piece.id));
   let gapIndex = 1;

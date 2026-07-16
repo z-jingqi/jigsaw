@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import fs from "node:fs/promises";
 import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
-import type { CatalogRenameOperation, LevelCatalog, LevelConfig } from "./types.js";
+import type { CatalogRenameOperation, LevelCatalog, LevelConfig, SelectedLevel, TinyPieceAuditResult } from "./types.js";
 import {
   applyCatalogRenames,
   assertPortrait3x4,
@@ -21,6 +21,7 @@ import {
   writeLevel,
 } from "./lib.js";
 import { repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath } from "./paths.js";
+import { DEFAULT_TINY_PIECE_THRESHOLD_PERCENT, findTinyPieces } from "./tiny-piece-audit.js";
 
 const app = new Hono();
 
@@ -69,6 +70,57 @@ app.get("/api/levels/:topicId/:groupId/:levelId", async (c) => {
   const levelId = c.req.param("levelId");
   const level = await readLevel(topicId, groupId, levelId);
   return c.json(level);
+});
+
+app.post("/api/audits/tiny-pieces", async (c) => {
+  const body = (await c.req.json()) as { levels?: SelectedLevel[] };
+  const requested = Array.isArray(body.levels) ? body.levels : [];
+  const catalog = await readCatalog();
+  const available = new Map<string, { target: SelectedLevel; title: string }>();
+  for (const topic of catalog.topics) {
+    for (const group of topic.groups) {
+      for (const level of group.levels) {
+        const target = { topicId: topic.id, groupId: group.id, levelId: level.id };
+        available.set(`${target.topicId}/${target.groupId}/${target.levelId}`, {
+          target,
+          title: level.title || level.id,
+        });
+      }
+    }
+  }
+
+  const uniqueTargets = new Map<string, { target: SelectedLevel; title: string }>();
+  for (const target of requested) {
+    const key = `${target.topicId}/${target.groupId}/${target.levelId}`;
+    const match = available.get(key);
+    if (match) uniqueTargets.set(key, match);
+  }
+
+  const selected = [...uniqueTargets.values()];
+  const results: TinyPieceAuditResult[] = [];
+  const batchSize = 8;
+  for (let offset = 0; offset < selected.length; offset += batchSize) {
+    const batch = selected.slice(offset, offset + batchSize);
+    const audited = await Promise.all(
+      batch.map(async ({ target, title }) => {
+        const level = await readLevel(target.topicId, target.groupId, target.levelId, title);
+        return {
+          ...target,
+          title: level.title || title,
+          tinyPieces: findTinyPieces(level),
+        };
+      }),
+    );
+    results.push(...audited);
+  }
+
+  return c.json({
+    thresholdPercent: DEFAULT_TINY_PIECE_THRESHOLD_PERCENT,
+    checkedCount: results.length,
+    abnormalCount: results.filter((result) => result.tinyPieces.length > 0).length,
+    tinyPieceCount: results.reduce((count, result) => count + result.tinyPieces.length, 0),
+    results,
+  });
 });
 
 app.put("/api/levels/:topicId/:groupId/:levelId", async (c) => {

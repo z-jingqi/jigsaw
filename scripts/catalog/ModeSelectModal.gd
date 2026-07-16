@@ -119,7 +119,7 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var card_width: float = _mode_dialog_content_width()
 	var card := Button.new()
 	card.text = ""
-	var card_height: float = 208.0 if has_saved_state else 184.0
+	var card_height := 184.0
 	card.custom_minimum_size = Vector2(card_width, card_height * layout_scale)
 	var normal: StyleBoxFlat = _mode_select_style(play_mode, false)
 	card.add_theme_stylebox_override("normal", normal)
@@ -157,10 +157,6 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	var action: Callable = func() -> void:
 		game._close_modal()
 		game._show_game(game.current_topic, level, play_mode)
-	var restart_action: Callable = func() -> void:
-		game.progress_store.clear_play_state(game.current_topic, level, play_mode)
-		game._close_modal()
-		game._show_game(game.current_topic, level, play_mode, true)
 	var actions := VBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_CENTER
 	actions.add_theme_constant_override("separation", maxi(20, int(26.0 * layout_scale)))
@@ -172,13 +168,6 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 		Vector2(maxf(128.0, 176.0 * layout_scale), maxf(50.0, 62.0 * layout_scale)),
 		maxi(18, int(24.0 * layout_scale))
 	))
-	if has_saved_state:
-		actions.add_child(_mode_secondary_action_button(
-			game._t("restart"),
-			restart_action,
-			Vector2(maxf(128.0, 176.0 * layout_scale), maxf(42.0, 50.0 * layout_scale)),
-			maxi(16, int(19.0 * layout_scale))
-		))
 	if done:
 		card.add_child(_mode_corner_check_badge(_mode_accent_color(play_mode)))
 	card.pressed.connect(func() -> void:
@@ -187,31 +176,6 @@ func _mode_select_card(level: Dictionary, play_mode: String) -> Button:
 	)
 	game._wire_button_animation(card)
 	return card
-
-
-func _mode_secondary_action_button(text: String, action: Callable, min_size: Vector2, font_size: int) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = min_size
-	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", game.soft_brown)
-	button.add_theme_color_override("font_hover_color", game.deep_orange)
-	button.add_theme_color_override("font_pressed_color", game.deep_orange)
-	button.add_theme_color_override("font_disabled_color", Color(game.soft_brown, 0.34))
-	var normal: StyleBoxFlat = game._rounded_panel_style(Color(1.0, 1.0, 1.0, 0.34), int(min_size.y * 0.42))
-	normal.border_color = Color(game.soft_brown, 0.40)
-	normal.border_width_left = 1
-	normal.border_width_top = 1
-	normal.border_width_right = 1
-	normal.border_width_bottom = 1
-	button.add_theme_stylebox_override("normal", normal)
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(1.0, 0.95, 0.84, 0.72)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	button.pressed.connect(action)
-	game._wire_button_animation(button)
-	return button
 
 
 func _mode_select_style(play_mode: String, hover: bool) -> StyleBoxFlat:

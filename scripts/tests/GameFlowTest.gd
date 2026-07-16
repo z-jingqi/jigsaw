@@ -133,6 +133,9 @@ func _run() -> void:
 	var dev_key_ok := _test_dev_key(game)
 	print("DEV_KEY %s" % JSON.stringify({"ok": dev_key_ok}))
 	all_ok = all_ok and dev_key_ok
+	var no_restart_result := await _saved_mode_modal_has_no_restart(game, first_topic, first_level)
+	print("NO_RESTART_UI %s" % JSON.stringify(no_restart_result))
+	all_ok = all_ok and bool(no_restart_result.get("ok", false))
 	for play_mode in ["polygon", "knob", "swap"]:
 		var level_index := _level_index_for_mode(game, first_topic, play_mode)
 		if level_index < 0:
@@ -177,7 +180,7 @@ func _run() -> void:
 		var no_alt_text := not _tree_has_tooltip(game.screen_root) and not _tree_has_tooltip(game.modal_root)
 		var interface_style_ok := (
 			back_button is Button
-			and restart_button is Button
+			and restart_button == null
 			and hint_button is Button
 			and _bottom_actions_valid(game, play_mode)
 			and title_left is TextureRect
@@ -229,6 +232,35 @@ func _level_index_for_mode(game, topic: Dictionary, play_mode: String) -> int:
 		if game._available_modes_for_level(levels[index]).has(play_mode):
 			return index
 	return -1
+
+
+func _saved_mode_modal_has_no_restart(game, topic: Dictionary, level: Dictionary) -> Dictionary:
+	var available_modes: Array[String] = game._available_modes_for_level(level)
+	if available_modes.is_empty():
+		return {"ok": false, "reason": "no_available_mode"}
+	var original_progress: Dictionary = game.progress_store.progress.duplicate(true)
+	var play_mode := available_modes[0]
+	game.progress_store.progress["play_states"] = {
+		game.progress_store.play_state_key(topic, level, play_mode): {"started": true},
+	}
+	game._show_levels(topic)
+	game._show_mode_dialog(level)
+	await process_frame
+	var continue_found := false
+	var restart_found := false
+	for node in game.modal_root.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button == null:
+			continue
+		continue_found = continue_found or button.text == game._t("continue")
+		restart_found = restart_found or ["Restart", "重新开始", "最初から"].has(button.text)
+	game._close_modal()
+	game.progress_store.progress = original_progress
+	return {
+		"ok": continue_found and not restart_found,
+		"continue_found": continue_found,
+		"restart_found": restart_found,
+	}
 
 
 func _level_list_focus_probe(game, topic: Dictionary) -> Dictionary:
@@ -427,13 +459,20 @@ func _theme_header_style_probe(game) -> Dictionary:
 func _bottom_actions_valid(game, play_mode: String) -> bool:
 	var bar: Control = game.screen_root.find_child("game_bottom_actions", true, false)
 	var row: HBoxContainer = game.screen_root.find_child("game_bottom_actions_row", true, false)
+	var topbar: Control = game.screen_root.find_child("game_topbar", true, false)
+	var back_button: Button = game.screen_root.find_child("game_back_button", true, false)
+	var hint_button: Button = game.screen_root.find_child("game_hint_button", true, false)
+	var restart_button = game.screen_root.find_child("game_restart_button", true, false)
+	if topbar == null or back_button == null or hint_button == null or restart_button != null:
+		return false
+	if back_button.get_parent() != topbar or hint_button.get_parent() != topbar:
+		return false
+	if play_mode != "swap":
+		return bar == null and row == null and is_zero_approx(game._game_bottom_bar_height())
 	if bar == null or row == null:
 		return false
-	var expected_names: Array[String] = ["game_back_button", "game_restart_button", "game_hint_button"]
-	var expected_texts: Array[String] = [game._t("back"), game._t("restart"), game._t("hint")]
-	if play_mode == "swap":
-		expected_names.append_array(["game_shift_up_button", "game_shift_down_button"])
-		expected_texts.append_array([game._t("shift_row_up"), game._t("shift_row_down")])
+	var expected_names: Array[String] = ["game_shift_up_button", "game_shift_down_button"]
+	var expected_texts: Array[String] = [game._t("shift_row_up"), game._t("shift_row_down")]
 	if row.get_child_count() != expected_names.size():
 		return false
 	var previous_right := -INF
@@ -450,6 +489,7 @@ func _bottom_actions_valid(game, play_mode: String) -> bool:
 		absf(row.get_global_rect().get_center().x - viewport.x * 0.5) <= 1.0
 		and absf(bar.get_global_rect().end.y - viewport.y) <= 1.0
 		and game.screen_root.find_child("game_undo_button", true, false) == null
+		and game._game_bottom_bar_height() > 0.0
 	)
 
 

@@ -15,6 +15,7 @@ const MODAL_SETTING_MUSIC_PATH := "res://assets/ui/modals/setting-music.png"
 const MODAL_SETTING_SFX_PATH := "res://assets/ui/modals/setting-sfx.png"
 const CatalogScrollControllerScript := preload("res://scripts/catalog/CatalogScrollController.gd")
 const TopicPagerControllerScript := preload("res://scripts/catalog/TopicPagerController.gd")
+const TopicHomeMotionScript := preload("res://scripts/catalog/TopicHomeMotion.gd")
 const DevTestPanelScript := preload("res://scripts/debug/DevTestPanel.gd")
 const GameDebugAdapterScript := preload("res://scripts/debug/GameDebugAdapter.gd")
 const GameHudScript := preload("res://scripts/gameplay/GameHud.gd")
@@ -53,6 +54,7 @@ var texture: Texture2D
 var topics_screen
 var catalog_scroll_controller
 var topic_pager_controller
+var topic_home_motion
 var game_strings = GameStringsScript.new()
 var modal_host = GameModalHostScript.new()
 var repository = LevelRepositoryScript.new()
@@ -123,6 +125,7 @@ func _ready() -> void:
 	topics_screen = TopicsScreenScript.new(self)
 	catalog_scroll_controller = CatalogScrollControllerScript.new(self)
 	topic_pager_controller = TopicPagerControllerScript.new(self)
+	topic_home_motion = TopicHomeMotionScript.new(self)
 	debug_adapter = GameDebugAdapterScript.new(self)
 	game_hud = GameHudScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
@@ -167,6 +170,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if ui_motion != null:
 		ui_motion.host = null
+	if topic_home_motion != null:
+		topic_home_motion.shutdown()
 	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, mode_select_modal, game_hud, game_dialogs]:
 		if helper == null:
 			continue

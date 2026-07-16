@@ -19,6 +19,7 @@ func show() -> void:
 	game.current_screen = "topics"
 	game._clear_ui()
 	game._clear_board()
+	game.topic_home_motion.begin_screen(game.topics)
 	var scale := ui_scale()
 	var viewport_size: Vector2 = game.get_viewport_rect().size
 	_add_background()
@@ -65,8 +66,10 @@ func show() -> void:
 	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
 	catcher.gui_input.connect(Callable(game, "_on_topics_gui_input"))
 	game.screen_root.add_child(catcher)
-	game.screen_root.add_child(_build_topbar(scale))
-	game._fade_control_in(game.topics_content)
+	var topbar := _build_topbar(scale)
+	game.screen_root.add_child(topbar)
+	var first_page: Control = game.topic_pager_controller.rendered_pages.get(0, null)
+	game.topic_home_motion.animate_entrance(topbar, first_page, pager_indicator, scale)
 
 
 func ui_scale() -> float:
@@ -129,6 +132,7 @@ func _build_page(page_index: int) -> Control:
 		var card := build_card(topic, card_width, scale)
 		card.position = Vector2(side_margin, top + float(row) * (card_height + gap))
 		page.add_child(card)
+		game.topic_home_motion.register_card(card, topic, page_index, row)
 	return page
 
 
@@ -149,6 +153,7 @@ func _build_topic_hit_items() -> void:
 		)
 		game.topics_island_items.append({
 			"page_index": page_index,
+			"topic_id": str(topic.get("id", "")),
 			"rect": Rect2(position, Vector2(card_width, card_height)),
 			"action": func(t: Dictionary = topic) -> void: game._open_topic_levels(t),
 		})
@@ -262,6 +267,8 @@ func build_card(topic: Dictionary, card_width: float, scale: float) -> Control:
 	card.custom_minimum_size = Vector2(card_width, card_height)
 	card.size = card.custom_minimum_size
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.set_meta("topic_progress_done", done)
+	card.set_meta("topic_progress_total", total)
 	var card_radius := int(card_height * 0.10)
 	var shadow := Panel.new()
 	shadow.name = "theme_card_shadow"

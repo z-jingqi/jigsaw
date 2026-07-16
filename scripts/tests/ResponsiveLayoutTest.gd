@@ -369,9 +369,6 @@ func _swap_action_layout_check(game, viewport_size: Vector2) -> Dictionary:
 	var bar_rect := bar.get_global_rect() if bar != null else Rect2()
 	var row_rect := row.get_global_rect() if row != null else Rect2()
 	var expected_names: Array[String] = [
-		"game_back_button",
-		"game_restart_button",
-		"game_hint_button",
 		"game_shift_up_button",
 		"game_shift_down_button",
 	]
@@ -385,16 +382,28 @@ func _swap_action_layout_check(game, viewport_size: Vector2) -> Dictionary:
 	var fits_width := row != null and row_rect.position.x >= -0.75 and row_rect.end.x <= viewport_size.x + 0.75
 	var pinned_bottom := bar != null and absf(bar_rect.end.y - viewport_size.y) <= 1.0
 	var board_excludes_actions: bool = bar != null and board._world_view_screen_rect().end.y <= bar_rect.position.y + 0.75
+	var topbar: Control = game.screen_root.find_child("game_topbar", true, false)
+	var back_button: Button = game.screen_root.find_child("game_back_button", true, false)
+	var hint_button: Button = game.screen_root.find_child("game_hint_button", true, false)
+	var top_actions_restored := (
+		topbar != null
+		and back_button != null
+		and hint_button != null
+		and back_button.get_parent() == topbar
+		and hint_button.get_parent() == topbar
+		and game.screen_root.find_child("game_restart_button", true, false) == null
+	)
 	var result := {
 		"names": names_match,
 		"centered": centered,
 		"fits_width": fits_width,
 		"pinned_bottom": pinned_bottom,
 		"board_excludes_actions": board_excludes_actions,
+		"top_actions_restored": top_actions_restored,
 		"bar": [roundi(bar_rect.position.x), roundi(bar_rect.position.y), roundi(bar_rect.size.x), roundi(bar_rect.size.y)],
 		"row": [roundi(row_rect.position.x), roundi(row_rect.position.y), roundi(row_rect.size.x), roundi(row_rect.size.y)],
 	}
-	result["ok"] = names_match and centered and fits_width and pinned_bottom and board_excludes_actions
+	result["ok"] = names_match and centered and fits_width and pinned_bottom and board_excludes_actions and top_actions_restored
 	return result
 
 

@@ -32,12 +32,6 @@
 				"outline": "#879174",
 				"accent": "#C8703F"
 			},
-			"ui_assets": {
-				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
-				"topic_card_decoration": "res://assets/ui/theme-list/decorations/shanhai-decoration.webp",
-				"title_mountains": "res://levels/topic_01/ui/title-mountains.webp",
-				"title_mountains_region": [359, 191, 1471, 326]
-			},
 			"icon": "res://levels/topic_01/icon.png",
 			"level_background": "res://levels/topic_01/level-bg.webp",
 			"card_back": "res://levels/topic_01/card-back.webp",
@@ -59,9 +53,9 @@
 					"path": "res://levels/topic_01/shanhai_03/level.json"
 				},
 				{
-					"id": "level_01",
+					"id": "shanhai_04",
 					"sort_order": 3,
-					"path": "res://levels/topic_01/level_01/level.json"
+					"path": "res://levels/topic_01/shanhai_04/level.json"
 				},
 				{
 					"id": "shanhai_05",
@@ -215,10 +209,6 @@
 				"foreground": "#3B4D50",
 				"outline": "#6E969D",
 				"accent": "#C87850"
-			},
-			"ui_assets": {
-				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
-				"topic_card_decoration": "res://assets/ui/theme-list/decorations/greek-mythology-decoration.webp"
 			},
 			"icon": "res://levels/topic_02/icon.png",
 			"level_background": "res://levels/topic_02/level-bg.webp",
@@ -523,12 +513,6 @@
 				"outline": "#B9684D",
 				"accent": "#D97843"
 			},
-			"ui_assets": {
-				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
-				"topic_card_decoration": "res://assets/ui/theme-list/decorations/cat-decoration.webp",
-				"title_side": "res://levels/topic_03/ui/title-whisker-left.webp",
-				"title_ear": "res://levels/topic_03/ui/title-ear-left.webp"
-			},
 			"icon": "res://levels/topic_03/icon.png",
 			"level_background": "res://levels/topic_03/level-bg.webp",
 			"card_back": "res://levels/topic_03/card-back.webp",
@@ -611,10 +595,6 @@
 				"foreground": "#3D4934",
 				"outline": "#6F9FA8",
 				"accent": "#D6A04A"
-			},
-			"ui_assets": {
-				"topic_card_background": "res://assets/ui/theme-list/cards/card-background-base.png",
-				"topic_card_decoration": "res://assets/ui/theme-list/decorations/dog-decoration.webp"
 			},
 			"icon": "res://levels/topic_04/icon.png",
 			"level_background": "res://levels/topic_04/level-bg.webp",

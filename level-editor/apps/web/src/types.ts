@@ -102,6 +102,26 @@ export type SelectedLevel = {
   levelId: string;
 };
 
+export type TinyPieceFinding = {
+  pieceId: string;
+  area: number;
+  areaPercent: number;
+  minDimension: number | null;
+};
+
+export type TinyPieceAuditResult = SelectedLevel & {
+  title: string;
+  tinyPieces: TinyPieceFinding[];
+};
+
+export type TinyPieceAuditResponse = {
+  thresholdPercent: number;
+  checkedCount: number;
+  abnormalCount: number;
+  tinyPieceCount: number;
+  results: TinyPieceAuditResult[];
+};
+
 export type CatalogRenameOperation =
   | { kind: "topic"; fromTopicId: string; toTopicId: string }
   | { kind: "group"; topicId: string; fromGroupId: string; toGroupId: string }

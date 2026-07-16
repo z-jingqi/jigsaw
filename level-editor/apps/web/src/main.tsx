@@ -24,6 +24,9 @@ import Cropper, { type Area } from "react-easy-crop";
 import { toast } from "sonner";
 import { assetUrl, loadCatalog, loadLevel, saveCatalog, saveLevel, sourceUrl, uploadSource, uploadTopicAsset } from "./api";
 import { Button } from "./components/ui/button";
+import { PolygonPieceLegend } from "./components/PolygonPieceLegend";
+import { TinyPieceAuditPanel } from "./components/TinyPieceAuditPanel";
+import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { Input } from "./components/ui/input";
 import { Toaster } from "./components/ui/sonner";
 import {
@@ -46,6 +49,11 @@ import {
 } from "./components/ui/dialog";
 import { fillCoverageGaps, generatePieces, manualShapePolygon, mergePieces, sequentialId, withNeighbors, zhI18n, type ManualShape, type ShapeKind, type ShapeRequest } from "./geometry";
 import { cn } from "./lib/utils";
+import { findTinyPieceIds } from "./tiny-piece";
+import { useEditorDirtyState } from "./hooks/use-editor-dirty-state";
+import { useTinyPieceAudit } from "./hooks/use-tiny-piece-audit";
+import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
+import { levelDetailsSignature, restoreCatalogLevelSummary } from "./level-draft";
 import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelPiece, LevelStatus, Point, SeedAssist, SelectedLevel } from "./types";
 import "./styles.css";
 import "react-easy-crop/react-easy-crop.css";
@@ -131,6 +139,24 @@ function filterAssistPieceIds(assist: SeedAssist, validIds: Set<string>) {
   return normalizeAssist(assist, assist.seed.count, validIds);
 }
 
+function levelMatchesSelection(level: LevelConfig | null, selection: TreeSelection | null) {
+  return Boolean(
+    level
+      && selection?.kind === "level"
+      && level.topic_id === selection.topicId
+      && level.group_id === selection.groupId
+      && level.id === selection.levelId,
+  );
+}
+
+function sameTreeSelection(left: TreeSelection | null, right: TreeSelection | null) {
+  if (!left || !right || left.kind !== right.kind || left.topicId !== right.topicId) return left === right;
+  if (left.kind === "topic" || right.kind === "topic") return true;
+  if (left.groupId !== right.groupId) return false;
+  if (left.kind === "group" || right.kind === "group") return true;
+  return left.levelId === right.levelId;
+}
+
 function App() {
   const [catalog, setCatalog] = React.useState<LevelCatalog>(emptyCatalog);
   const [statuses, setStatuses] = React.useState<LevelStatus[]>([]);
@@ -145,13 +171,17 @@ function App() {
   const [catalogFuture, setCatalogFuture] = React.useState<LevelCatalog[]>([]);
   const [levelPast, setLevelPast] = React.useState<LevelConfig[]>([]);
   const [levelFuture, setLevelFuture] = React.useState<LevelConfig[]>([]);
+  const [levelSession, setLevelSession] = React.useState(0);
   const skipNextLevelLoad = React.useRef(false);
+  const savedLevelRef = React.useRef<LevelConfig | null>(null);
+  const unsavedChanges = useUnsavedChangesGuard();
 
   React.useEffect(() => {
     void refresh();
   }, []);
 
   React.useEffect(() => {
+    let cancelled = false;
     if (!selected || selected.kind !== "level") {
       setLevel(null);
       return;
@@ -161,8 +191,19 @@ function App() {
       return;
     }
     loadLevel(selected)
-      .then(setLevel)
-      .catch((error) => toast.error(error.message));
+      .then((loaded) => {
+        if (!cancelled) {
+          savedLevelRef.current = loaded;
+          unsavedChanges.setHasUnsavedChanges(false);
+          setLevel(loaded);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selected]);
 
   async function refresh() {
@@ -205,6 +246,7 @@ function App() {
   }
 
   const names = selectedNames();
+  const selectedLevel = levelMatchesSelection(level, selected) ? level : null;
 
   function commitCatalog(next: LevelCatalog | ((current: LevelCatalog) => LevelCatalog)) {
     setCatalog((current) => {
@@ -221,6 +263,7 @@ function App() {
       const value = typeof next === "function" ? next(current) : next;
       setLevelPast((history) => [...history.slice(-39), current]);
       setLevelFuture([]);
+      unsavedChanges.setHasUnsavedChanges(levelDetailsSignature(value) !== levelDetailsSignature(savedLevelRef.current));
       return value;
     });
   }
@@ -252,6 +295,7 @@ function App() {
       const previous = history[history.length - 1];
       setLevelFuture((future) => [level, ...future].slice(0, 40));
       setLevel(previous);
+      unsavedChanges.setHasUnsavedChanges(levelDetailsSignature(previous) !== levelDetailsSignature(savedLevelRef.current));
       return history.slice(0, -1);
     });
   }
@@ -262,19 +306,77 @@ function App() {
       const next = future[0];
       setLevelPast((history) => (level ? [...history.slice(-39), level] : history));
       setLevel(next);
+      unsavedChanges.setHasUnsavedChanges(levelDetailsSignature(next) !== levelDetailsSignature(savedLevelRef.current));
       return future.slice(1);
     });
   }
 
-  function updateSelected(next: TreeSelection | null) {
+  function applySelection(next: TreeSelection | null) {
+    setLevelSession((current) => current + 1);
+    if (!levelMatchesSelection(level, next)) {
+      savedLevelRef.current = null;
+      setLevel(null);
+    }
+    if (next?.kind !== "level") {
+      setEditingPolygon(false);
+      setEditingKnob(false);
+    }
     setSelected(next);
     setLevelPast([]);
     setLevelFuture([]);
   }
 
+  function updateSelected(next: TreeSelection | null) {
+    if (sameTreeSelection(selected, next)) return;
+    unsavedChanges.requestNavigation(() => applySelection(next), discardLevelDraft);
+  }
+
+  function discardLevelDraft() {
+    const saved = savedLevelRef.current;
+    if (saved && selected?.kind === "level") {
+      setLevel(saved);
+      setCatalog((current) => restoreCatalogLevelSummary(current, selected, saved));
+    }
+    setLevelPast([]);
+    setLevelFuture([]);
+    setCatalogPast([]);
+    setCatalogFuture([]);
+  }
+
+  async function leaveEditor() {
+    setEditingPolygon(false);
+    setEditingKnob(false);
+    unsavedChanges.setHasUnsavedChanges(false);
+    if (!selected || selected.kind !== "level") return;
+    try {
+      const fresh = await loadLevel(selected);
+      savedLevelRef.current = fresh;
+      setLevel(fresh);
+      await refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "重新加载关卡失败");
+    }
+  }
+
+  function requestEditorExit() {
+    unsavedChanges.requestNavigation(() => void leaveEditor(), discardLevelDraft);
+  }
+
   function updateSelectedAfterIdRename(next: SelectedLevel) {
     skipNextLevelLoad.current = true;
     setSelected({ kind: "level", ...next });
+    if (savedLevelRef.current) {
+      savedLevelRef.current = {
+        ...savedLevelRef.current,
+        id: next.levelId,
+        topic_id: next.topicId,
+        group_id: next.groupId,
+        image: {
+          ...savedLevelRef.current.image,
+          path: `res://levels/${next.topicId}/${next.groupId}/${next.levelId}/source.jpg`,
+        },
+      };
+    }
     setLevel((current) =>
       current
         ? {
@@ -298,6 +400,11 @@ function App() {
   return (
     <main className="h-screen bg-background text-foreground">
       <Toaster />
+      <UnsavedChangesDialog
+        open={unsavedChanges.confirmationOpen}
+        onCancel={unsavedChanges.cancelNavigation}
+        onDiscard={unsavedChanges.discardAndContinue}
+      />
       <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
         <div>
           <div className="text-lg font-semibold">JigCat 关卡编辑器</div>
@@ -318,7 +425,10 @@ function App() {
             editMode={editMode}
             onExpanded={setExpanded}
             onSelect={updateSelected}
-            onClearSelection={() => setSelected(null)}
+            onClearSelection={() => {
+              discardLevelDraft();
+              applySelection(null);
+            }}
             onChange={commitCatalog}
             onEditMode={setEditMode}
             onRename={recordRename}
@@ -334,47 +444,46 @@ function App() {
           />
         </aside>
         <section className="min-w-0 overflow-hidden">
-          {editingPolygon && selected?.kind === "level" && level ? (
+          {editingPolygon && selected?.kind === "level" && selectedLevel ? (
             <PolygonEditor
+              key={`polygon:${levelSession}`}
               target={selected}
-              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${level.title}`}
-              level={level}
-              onBack={async () => {
-                setEditingPolygon(false);
-                const fresh = await loadLevel(selected);
-                setLevel(fresh);
-                await refresh();
-              }}
+              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${selectedLevel.title}`}
+              level={selectedLevel}
+              onBack={requestEditorExit}
+              onDirtyChange={unsavedChanges.setHasUnsavedChanges}
               onSave={async (next) => {
                 const saved = await saveLevel(next);
+                savedLevelRef.current = saved;
                 setLevel(saved);
+                unsavedChanges.setHasUnsavedChanges(false);
                 toast.success("已保存多边形碎片");
                 await refresh();
               }}
             />
-          ) : editingKnob && selected?.kind === "level" && level ? (
+          ) : editingKnob && selected?.kind === "level" && selectedLevel ? (
             <KnobEditor
+              key={`knob:${levelSession}`}
               target={selected}
-              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${level.title}`}
-              level={level}
-              onBack={async () => {
-                setEditingKnob(false);
-                const fresh = await loadLevel(selected);
-                setLevel(fresh);
-                await refresh();
-              }}
+              title={`${names.topic?.name || names.topic?.id || ""} / ${names.group?.name || names.group?.id || ""} / ${selectedLevel.title}`}
+              level={selectedLevel}
+              onBack={requestEditorExit}
+              onDirtyChange={unsavedChanges.setHasUnsavedChanges}
               onSave={async (next) => {
                 const saved = await saveLevel(next);
+                savedLevelRef.current = saved;
                 setLevel(saved);
+                unsavedChanges.setHasUnsavedChanges(false);
                 toast.success("已保存凹凸 Seed");
                 await refresh();
               }}
             />
-          ) : selected?.kind === "level" && level ? (
+          ) : selected?.kind === "level" && selectedLevel ? (
             <LevelDetails
+              key={`level:${levelSession}`}
               catalog={catalog}
               target={selected}
-              level={level}
+              level={selectedLevel}
               status={statusFor(selected)}
               editMode={editMode}
               onLevel={commitLevel}
@@ -386,6 +495,7 @@ function App() {
               onUpload={async (file) => {
                 try {
                   const saved = await uploadSource(selected, file);
+                  savedLevelRef.current = saved;
                   setLevel(saved);
                   toast.success("图片已上传");
                   await refresh();
@@ -395,19 +505,24 @@ function App() {
               }}
               onSave={async () => {
                 try {
-                  const saved = await saveLevel(level);
+                  const saved = await saveLevel(selectedLevel);
+                  savedLevelRef.current = saved;
                   setLevel(saved);
+                  unsavedChanges.setHasUnsavedChanges(false);
                   toast.success("关卡已保存");
                   await refresh();
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : "保存失败");
                 }
               }}
-              onEditPolygon={() => setEditingPolygon(true)}
-              onEditKnob={() => setEditingKnob(true)}
+              onEditPolygon={() => unsavedChanges.requestNavigation(() => setEditingPolygon(true), discardLevelDraft)}
+              onEditKnob={() => unsavedChanges.requestNavigation(() => setEditingKnob(true), discardLevelDraft)}
             />
+          ) : selected?.kind === "level" ? (
+            <div className="grid h-full place-items-center text-muted-foreground">正在加载关卡…</div>
           ) : selected?.kind === "topic" && names.topic ? (
             <TopicDetails
+              key={`topic:${selected.topicId}`}
               topic={names.topic}
               catalog={catalog}
               editMode={editMode}
@@ -427,6 +542,7 @@ function App() {
             />
           ) : selected?.kind === "group" && names.topic && names.group ? (
             <GroupDetails
+              key={`group:${selected.topicId}/${selected.groupId}`}
               topic={names.topic}
               group={names.group}
               catalog={catalog}
@@ -567,6 +683,7 @@ function TreePanel(props: {
   const { catalog, statuses, expanded, selected, editMode, onExpanded, onSelect, onClearSelection, onChange, onEditMode, onRename, onRenameSelection, onTopicAsset } = props;
   const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(null);
   const [draggingId, setDraggingId] = React.useState<string | null>(null);
+  const tinyPieceAudit = useTinyPieceAudit(catalog);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -925,6 +1042,20 @@ function TreePanel(props: {
         )}
         </div>
       </div>
+      <TinyPieceAuditPanel
+        totalCount={tinyPieceAudit.totalCount}
+        selectedCount={tinyPieceAudit.selectedCount}
+        running={tinyPieceAudit.running}
+        summary={tinyPieceAudit.summary}
+        onSelectAll={tinyPieceAudit.selectAll}
+        onInvertSelection={tinyPieceAudit.invertSelection}
+        onSelectLastAbnormal={tinyPieceAudit.selectLastAbnormal}
+        onRun={() => {
+          void tinyPieceAudit
+            .run()
+            .catch((error) => toast.error(error instanceof Error ? error.message : "小碎片检测失败"));
+        }}
+      />
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragCancel={() => setDraggingId(null)} onDragEnd={handleDragEnd}>
         <div className="flex-1 space-y-1 overflow-auto p-2 text-sm">
           <SortableContext items={catalog.topics.map((topic) => `topic:${topic.id}`)} strategy={verticalListSortingStrategy}>
@@ -1008,11 +1139,14 @@ function TreePanel(props: {
                                       {({ handleProps }) => (
                                         <LevelTreeRow
                                           active={active}
+                                          auditSelected={tinyPieceAudit.isSelected(target)}
                                           editMode={editMode}
                                           level={level}
                                           status={status}
+                                          tinyPieceCount={tinyPieceAudit.findingFor(target)?.tinyPieces.length || 0}
                                           isDraggingTree={draggingId !== null}
                                           handleProps={handleProps}
+                                          onAuditSelection={(checked) => tinyPieceAudit.setSelected(target, checked)}
                                           onSelect={() => onSelect({ kind: "level", ...target })}
                                           onDelete={() => setDeleteTarget({ kind: "level", topic, group, level })}
                                         />
@@ -1286,22 +1420,41 @@ function AssetUploadButton(props: {
 
 function LevelTreeRow(props: {
   active: boolean;
+  auditSelected: boolean;
   editMode: boolean;
   level: CatalogLevel;
   status?: LevelStatus;
+  tinyPieceCount: number;
   isDraggingTree: boolean;
   handleProps: Record<string, unknown>;
+  onAuditSelection: (checked: boolean) => void;
   onSelect: () => void;
   onDelete: () => void;
 }) {
   return (
-    <div className={cn("flex h-9 items-center gap-2 rounded-md px-2 text-muted-foreground", !props.isDraggingTree && "hover:bg-accent hover:text-foreground", props.active && "bg-accent text-foreground")} style={{ paddingLeft: "58px" }}>
+    <div
+      className={cn(
+        "flex h-9 items-center gap-2 rounded-md border border-transparent px-2 text-muted-foreground",
+        !props.isDraggingTree && "hover:bg-accent hover:text-foreground",
+        props.active && "bg-accent text-foreground",
+        props.tinyPieceCount > 0 && "border-destructive/60 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+      )}
+      style={{ paddingLeft: "58px" }}
+      data-tiny-piece-abnormal={props.tinyPieceCount > 0 ? "true" : undefined}
+    >
       {props.editMode && (
         <button className="grid h-7 w-5 cursor-grab place-items-center text-muted-foreground active:cursor-grabbing" {...props.handleProps} title="拖拽排序">
           <GripVertical size={14} />
         </button>
       )}
       {!props.editMode && <span className="h-7 w-5 shrink-0" />}
+      <input
+        type="checkbox"
+        className="h-4 w-4 shrink-0 accent-primary"
+        checked={props.auditSelected}
+        onChange={(event) => props.onAuditSelection(event.target.checked)}
+        aria-label={`检测 ${props.level.title || props.level.id}`}
+      />
       <span className="grid shrink-0 gap-0.5">
         <span className="grid h-6 w-6 place-items-center rounded-full bg-secondary">
           <Gamepad2 className="h-3.5 w-3.5 text-primary" />
@@ -1309,6 +1462,11 @@ function LevelTreeRow(props: {
         <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
       </span>
       <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
+      {props.tinyPieceCount > 0 && (
+        <span className="min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-destructive-foreground" aria-label={`${props.tinyPieceCount} 块小碎片`}>
+          {props.tinyPieceCount}
+        </span>
+      )}
       {props.status?.hasSource && <ImageUp className="h-4 w-4 shrink-0 text-success" aria-label="已有原图" />}
       {props.status?.hasPolygon && <Hexagon className="h-4 w-4 shrink-0 text-success" aria-label="已有多边形" />}
       {props.editMode && (
@@ -2068,8 +2226,9 @@ function KnobEditor(props: {
   level: LevelConfig;
   onBack: () => void;
   onSave: (level: LevelConfig) => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
-  const { target, title, level, onBack, onSave } = props;
+  const { target, title, level, onBack, onSave, onDirtyChange } = props;
   const knob = level.modes.knob || { auto: true as const, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE, assist: defaultAssist(DEFAULT_KNOB_SEED_COUNT) };
   const cols = knob.cols || DEFAULT_KNOB_COLS;
   const rows = knob.rows || DEFAULT_KNOB_ROWS;
@@ -2086,6 +2245,8 @@ function KnobEditor(props: {
   const currentSignature = knobEditorSignature({ cols, rows, knobSize, assist: currentAssist });
   if (!initialSignatureRef.current) initialSignatureRef.current = currentSignature;
   const hasChanges = currentSignature !== initialSignatureRef.current;
+
+  useEditorDirtyState(onDirtyChange, hasChanges);
 
   async function save() {
     if (!hasChanges) return;
@@ -2265,8 +2426,9 @@ function PolygonEditor(props: {
   level: LevelConfig;
   onBack: () => void;
   onSave: (level: LevelConfig) => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
-  const { target, title, level, onBack, onSave } = props;
+  const { target, title, level, onBack, onSave, onDirtyChange } = props;
   const width = level.image.width || 1080;
   const height = level.image.height || 1440;
   const initialPieces = React.useMemo(
@@ -2573,8 +2735,6 @@ function PolygonEditor(props: {
     setPolygonAssist(savedAssist);
     currentSnapshotRef.current = savedSnapshot;
     initialSignatureRef.current = polygonEditorSignature(savedSnapshot);
-    setPastStack([]);
-    setFutureStack([]);
   }
 
   function updateShape(kind: ShapeKind, delta: number) {
@@ -2594,9 +2754,12 @@ function PolygonEditor(props: {
   }
 
   const effectiveLineColor = HEX_COLOR_RE.test(lineColor) ? lineColor : "#FFF6E6";
+  const tinyPieceIds = React.useMemo(() => findTinyPieceIds(pieces, width, height), [height, pieces, width]);
   const currentSignature = polygonEditorSignature(snapshotEditorState());
   if (!initialSignatureRef.current) initialSignatureRef.current = currentSignature;
   const hasChanges = currentSignature !== initialSignatureRef.current;
+
+  useEditorDirtyState(onDirtyChange, hasChanges);
 
   React.useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -2755,14 +2918,21 @@ function PolygonEditor(props: {
               {pieces.map((piece, index) => {
                 const selected = selectedIds.includes(piece.id);
                 const seedSelected = polygonAssist.seed.mode === "manual" && polygonAssist.seed.piece_ids.includes(piece.id);
+                const tiny = tinyPieceIds.has(piece.id);
+                const pieceStroke = selected ? "#38BDF8" : seedSelected ? "#2f7667" : tiny ? "#DC2626" : effectiveLineColor;
                 return (
                   <g key={piece.id}>
                     <polygon
                       points={piece.points.map((point) => point.join(",")).join(" ")}
-                      fill={`hsla(${(index * 47) % 360}, 74%, 62%, 0.28)`}
-                      stroke={seedSelected ? "#2f7667" : effectiveLineColor}
-                      strokeWidth={selected || seedSelected ? 7 : 3}
+                      fill={tiny ? "rgba(220, 38, 38, 0.42)" : `hsla(${(index * 47) % 360}, 74%, 62%, 0.28)`}
+                      stroke={pieceStroke}
+                      strokeWidth={selected || seedSelected ? 7 : tiny ? 5 : 3}
+                      strokeDasharray={tiny && !selected && !seedSelected ? "14 10" : undefined}
                       pointerEvents="none"
+                      data-piece-id={piece.id}
+                      data-tiny-piece={tiny ? "true" : undefined}
+                      data-selected-piece={selected ? "true" : undefined}
+                      data-seed-piece={seedSelected ? "true" : undefined}
                     />
                     {seedSelected && (
                       <g pointerEvents="none">
@@ -2777,7 +2947,7 @@ function PolygonEditor(props: {
                         cy={point[1]}
                         r={8}
                         fill="#FFF6E6"
-                        stroke={effectiveLineColor}
+                        stroke="#38BDF8"
                         strokeWidth={4}
                         onPointerDown={(event) => {
                           event.stopPropagation();
@@ -2794,6 +2964,7 @@ function PolygonEditor(props: {
         <aside className="min-h-0 overflow-auto border-l border-border bg-card p-4 text-sm">
           <div className="mb-2 text-sm font-semibold text-foreground">编辑说明</div>
           <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Cmd/Ctrl 可多选并合并。选中碎片后拖动圆点微调轮廓。</p>
+          <PolygonPieceLegend tinyPieceCount={tinyPieceIds.size} />
           <div className="mb-4 border-y border-border py-3">
             <div className="mb-2 text-sm font-semibold text-foreground">指定形状</div>
             <div className="grid grid-cols-2 gap-2">

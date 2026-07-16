@@ -1,4 +1,4 @@
-import type { CatalogRenameOperation, LevelCatalog, LevelConfig, LevelStatus } from "./types";
+import type { CatalogRenameOperation, LevelCatalog, LevelConfig, LevelStatus, SelectedLevel, TinyPieceAuditResponse } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -30,6 +30,13 @@ export function saveCatalog(catalog: LevelCatalog, renames: CatalogRenameOperati
 
 export function loadLevel(target: { topicId: string; groupId: string; levelId: string }) {
   return request<LevelConfig>(`/api/levels/${target.topicId}/${target.groupId}/${target.levelId}`);
+}
+
+export function auditTinyPieces(levels: SelectedLevel[]) {
+  return request<TinyPieceAuditResponse>("/api/audits/tiny-pieces", {
+    method: "POST",
+    body: JSON.stringify({ levels }),
+  });
 }
 
 export function saveLevel(config: LevelConfig) {

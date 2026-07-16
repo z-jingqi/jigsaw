@@ -23,7 +23,7 @@
 	},
 	"background": {
 		"type": "color",
-		"color": "#E6EEF0"
+		"color": "#F6EBD4"
 	},
 	"modes": {
 		"polygon": {
@@ -245,46 +245,6 @@
 					],
 					"cells": [
 						"shape:blob:1"
-					]
-				},
-				{
-					"id": "shape_triangle_2",
-					"points": [
-						[
-							561.2601211585218,
-							725.7624216306413
-						],
-						[
-							947.924245712131,
-							699.4680725675877
-						],
-						[
-							777.3637576999064,
-							1047.4762016946104
-						]
-					],
-					"home": [
-						762.1827081901864,
-						824.235565297613
-					],
-					"neighbors": [
-						"piece_9",
-						"piece_14",
-						"piece_20",
-						"piece_21",
-						"piece_25",
-						"piece_33",
-						"piece_34",
-						"gap_1"
-					],
-					"visible_bounds": [
-						561.2601211585218,
-						699.4680725675877,
-						386.6641245536092,
-						348.0081291270227
-					],
-					"cells": [
-						"shape:triangle:2"
 					]
 				},
 				{
@@ -616,12 +576,11 @@
 						1077.1938810570084
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_20",
 						"piece_22",
 						"piece_31",
 						"piece_33",
-						"gap_1"
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						777.9399479294786,
@@ -869,13 +828,13 @@
 						683.2352030870375
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_8",
 						"piece_15",
 						"piece_18",
 						"piece_21",
 						"piece_28",
-						"piece_34"
+						"piece_34",
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						403.8485059517519,
@@ -1193,12 +1152,11 @@
 						761.6041059347758
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_9",
 						"piece_13",
 						"piece_16",
 						"piece_34",
-						"gap_1"
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						770.4691109118528,
@@ -1243,11 +1201,11 @@
 						776.75226688447
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_8",
 						"piece_14",
 						"piece_25",
-						"piece_34"
+						"piece_34",
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						504.91104536786884,
@@ -1440,13 +1398,13 @@
 						964.337149662278
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_8",
 						"piece_15",
 						"piece_21",
 						"piece_23",
 						"piece_33",
-						"piece_37"
+						"piece_37",
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						443.98287258888706,
@@ -1910,11 +1868,11 @@
 						1123.9985922731678
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_9",
 						"piece_22",
 						"piece_23",
-						"piece_25"
+						"piece_25",
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						564.4004306011702,
@@ -1972,12 +1930,12 @@
 					],
 					"neighbors": [
 						"shape_blob_1",
-						"shape_triangle_2",
 						"piece_14",
 						"piece_16",
 						"piece_20",
 						"piece_21",
-						"piece_28"
+						"piece_28",
+						"gap_1_shape_triangle_2"
 					],
 					"visible_bounds": [
 						551.4989541521389,
@@ -2144,11 +2102,11 @@
 					]
 				},
 				{
-					"id": "gap_1",
+					"id": "gap_1_shape_triangle_2",
 					"points": [
 						[
-							817.8272128997173,
-							964.9153958115267
+							561.2601211585218,
+							725.7624216306413
 						],
 						[
 							947.924245712131,
@@ -2161,37 +2119,50 @@
 						[
 							864.3256390295069,
 							902.7938545286339
+						],
+						[
+							817.8272128997173,
+							964.9153958115267
+						],
+						[
+							777.3637576999064,
+							1047.4762016946104
 						]
 					],
 					"home": [
-						870.9973477672344,
-						864.6163647277527
+						803.7688783212276,
+						871.9506803727104
 					],
 					"neighbors": [
-						"shape_triangle_2",
 						"piece_9",
-						"piece_20"
+						"piece_14",
+						"piece_20",
+						"piece_21",
+						"piece_25",
+						"piece_33",
+						"piece_34"
 					],
 					"visible_bounds": [
-						817.8272128997173,
+						561.2601211585218,
 						699.4680725675877,
-						130.09703281241366,
-						265.44732324393897
+						386.6641245536092,
+						348.0081291270227
 					],
 					"cells": [
-						"gap:1"
+						"gap:1",
+						"shape:triangle:2"
 					]
 				}
 			],
 			"generator": {
-				"target_count": 37,
+				"target_count": 38,
 				"shapes": [
 					{
-						"kind": "blob",
+						"kind": "triangle",
 						"count": 1
 					},
 					{
-						"kind": "triangle",
+						"kind": "blob",
 						"count": 1
 					}
 				],
@@ -2210,7 +2181,15 @@
 			"auto": true,
 			"cols": 6,
 			"rows": 8,
-			"knob_size": 0.24
+			"knob_size": 0.24,
+			"assist": {
+				"outline": true,
+				"seed": {
+					"mode": "auto",
+					"count": 1,
+					"piece_ids": []
+				}
+			}
 		},
 		"swap": {
 			"auto": true,
