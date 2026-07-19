@@ -213,8 +213,8 @@ func _on_current_topic_changed(topic_index: int) -> void:
 	controls.set_fitted_label_text(title_label, str(topic.get("name", "")), maxi(28, int(35.0 * ui_scale())), maxi(20, int(24.0 * ui_scale())))
 	progress_label.text = "%d/%d" % [game._topic_available_done_count(topic), game._topic_available_mode_total(topic)]
 	var scale := ui_scale()
-	controls.set_fitted_label_text(previous_label, str(game.topics[posmod(current_topic_index - 1, game.topics.size())].get("name", "")), maxi(15, int(16.0 * scale)), maxi(12, int(12.0 * scale)))
-	controls.set_fitted_label_text(next_label, str(game.topics[posmod(current_topic_index + 1, game.topics.size())].get("name", "")), maxi(15, int(16.0 * scale)), maxi(12, int(12.0 * scale)))
+	controls.set_responsive_nav_label_text(previous_label, str(game.topics[posmod(current_topic_index - 1, game.topics.size())].get("name", "")), maxi(15, int(16.0 * scale)), maxi(12, int(12.0 * scale)))
+	controls.set_responsive_nav_label_text(next_label, str(game.topics[posmod(current_topic_index + 1, game.topics.size())].get("name", "")), maxi(15, int(16.0 * scale)), maxi(12, int(12.0 * scale)))
 	selector.update_current(current_topic_index)
 	if chrome_initialized:
 		game.topic_home_motion.animate_topic_text_change([title_label, progress_label, previous_label, next_label])

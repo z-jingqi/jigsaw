@@ -25,13 +25,17 @@ func _run() -> void:
 	var midpoint: Dictionary = game.topic_pager_controller.debug_state()
 	var outgoing: Control = game.topic_pager_controller.rendered_pages.get(0, null)
 	var incoming: Control = game.topic_pager_controller.rendered_pages.get(1, null)
+	var overlap_ratio := 0.0
+	if outgoing != null and incoming != null:
+		overlap_ratio = outgoing.get_global_rect().intersection(incoming.get_global_rect()).size.x / viewport_width
 	var fade_ok := (
 		outgoing != null
 		and incoming != null
-		and outgoing.modulate.a < 0.9
-		and incoming.modulate.a < 0.9
-		and outgoing.modulate.a > 0.6
-		and incoming.modulate.a > 0.6
+		and outgoing.modulate.a < 0.72
+		and incoming.modulate.a < 0.72
+		and outgoing.modulate.a > 0.28
+		and incoming.modulate.a > 0.28
+		and overlap_ratio > 0.85
 	)
 	var midpoint_ok := (
 		absf(float(midpoint.get("visual_page", 0.0)) - 0.45) <= 0.03
@@ -65,6 +69,7 @@ func _run() -> void:
 		"midpoint": midpoint,
 		"midpoint_ok": midpoint_ok,
 		"fade": fade_ok,
+		"overlap_ratio": overlap_ratio,
 		"swipe": swipe_ok,
 		"direct": direct_ok,
 		"wrap": wrap_ok,

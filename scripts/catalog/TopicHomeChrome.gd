@@ -111,15 +111,10 @@ func _build_navigation(viewport_size: Vector2, scale: float, layout: Dictionary,
 	var height := float(layout.nav_height)
 	var top := float(layout.nav_top)
 	var gap := 6.0 * scale
-	var side_width := 120.0 * scale
-	var center_width := 108.0 * scale
-	var total_width := side_width * 2.0 + center_width + gap * 2.0
-	if total_width > viewport_size.x - 24.0 * scale:
-		var ratio := (viewport_size.x - 24.0 * scale) / total_width
-		side_width *= ratio
-		center_width *= ratio
-		gap *= ratio
-		total_width = side_width * 2.0 + center_width + gap * 2.0
+	var total_width := minf(viewport_size.x - 24.0 * scale, 520.0 * scale)
+	var usable_width := total_width - gap * 2.0
+	var center_width := clampf(usable_width * 0.27, 96.0 * scale, 140.0 * scale)
+	var side_width := (usable_width - center_width) * 0.5
 	var left := (viewport_size.x - total_width) * 0.5
 	var previous := controls.text_icon_button("", TopicHomeControls.CHEVRON_LEFT_PATH, Vector2(side_width, height), scale, actions.previous, false)
 	previous.name = "topic_previous_button"

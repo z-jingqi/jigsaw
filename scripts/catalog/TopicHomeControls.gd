@@ -50,7 +50,7 @@ func text_icon_button(
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.size = Vector2(icon_size, icon_size)
-	icon.position = Vector2(size.x - icon_size - size.y * 0.30, (size.y - icon_size) * 0.5) if icon_after else Vector2(size.y * 0.28, (size.y - icon_size) * 0.5)
+	icon.position = Vector2(size.x - icon_size - size.y * 0.22, (size.y - icon_size) * 0.5) if icon_after else Vector2(size.y * 0.22, (size.y - icon_size) * 0.5)
 	icon.pivot_offset = icon.size * 0.5
 	if mirrored:
 		icon.scale.x = -1.0
@@ -59,17 +59,20 @@ func text_icon_button(
 	var label := Label.new()
 	label.name = "label"
 	label.text = text
-	var left_inset := size.y * (0.24 if icon_after else 0.68)
-	var right_inset := size.y * (0.68 if icon_after else 0.24)
+	var left_inset := size.y * (0.14 if icon_after else 0.52)
+	var right_inset := size.y * (0.52 if icon_after else 0.14)
 	label.position = Vector2(left_inset, 0.0)
 	label.size = Vector2(maxf(1.0, size.x - left_inset - right_inset), size.y)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.clip_text = true
-	label.add_theme_font_size_override("font_size", maxi(15, int((20.0 if primary else 16.0) * scale)))
+	var preferred_font_size := maxi(15, int((20.0 if primary else 16.0) * scale))
+	var minimum_font_size := maxi(12, int((15.0 if primary else 12.0) * scale))
+	label.add_theme_font_size_override("font_size", preferred_font_size)
 	label.add_theme_color_override("font_color", PRIMARY_TEXT if primary else DEEP_TEAL)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(label)
+	set_fitted_label_text(label, text, preferred_font_size, minimum_font_size)
 	button.pressed.connect(action)
 	game._wire_button_animation(button)
 	return button
@@ -113,6 +116,9 @@ func apply_selector_style(button: Button, selected: bool, scale: float) -> void:
 
 func set_fitted_label_text(label: Label, text: String, preferred_size: int, minimum_size: int) -> void:
 	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.max_lines_visible = -1
+	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	var font := label.get_theme_font("font")
 	var font_size := preferred_size
@@ -120,6 +126,18 @@ func set_fitted_label_text(label: Label, text: String, preferred_size: int, mini
 		font_size -= 1
 	label.add_theme_font_size_override("font_size", font_size)
 	label.tooltip_text = text if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x else ""
+
+
+func set_responsive_nav_label_text(label: Label, text: String, preferred_size: int, minimum_size: int) -> void:
+	set_fitted_label_text(label, text, preferred_size, minimum_size)
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= label.size.x:
+		return
+	label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	label.max_lines_visible = 2
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.tooltip_text = text
 
 
 func style_box(color: Color, radius: int) -> StyleBoxFlat:

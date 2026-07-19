@@ -1,8 +1,9 @@
 extends RefCounted
 class_name TopicHomeMotion
 
-const PAGE_EDGE_ALPHA := 0.58
-const PAGE_EDGE_SCALE := 1.0
+const PAGE_EDGE_ALPHA := 0.0
+const PAGE_EDGE_SCALE := 0.985
+const PAGE_PARALLAX_RATIO := 0.07
 
 var game: Node
 var screen_tweens: Array[Tween] = []
@@ -58,14 +59,20 @@ func update_page_transition(rendered_pages: Dictionary, visual_offset: float) ->
 			continue
 		var control := page as Control
 		control.pivot_offset = control.size * 0.5
+		var distance := clampf(absf(float(offset_value) - visual_offset), 0.0, 1.0)
 		if _reduced():
 			control.scale = Vector2.ONE
-			control.modulate.a = 1.0
+			control.modulate.a = 1.0 if distance < 0.5 else 0.0
 			continue
-		var distance := clampf(absf(float(offset_value) - visual_offset), 0.0, 1.0)
-		var scale_value := lerpf(1.0, PAGE_EDGE_SCALE, distance)
+		var parent := control.get_parent_control()
+		if parent != null:
+			var screen_offset := (float(offset_value) - visual_offset) * control.size.x * PAGE_PARALLAX_RATIO
+			control.position.x = -parent.position.x + screen_offset
+		var focus := 1.0 - distance
+		var eased_focus := smoothstep(0.0, 1.0, focus)
+		var scale_value := lerpf(PAGE_EDGE_SCALE, 1.0, eased_focus)
 		control.scale = Vector2(scale_value, scale_value)
-		control.modulate.a = lerpf(1.0, PAGE_EDGE_ALPHA, distance)
+		control.modulate.a = lerpf(PAGE_EDGE_ALPHA, 1.0, eased_focus)
 
 
 func animate_topic_text_change(items: Array) -> void:

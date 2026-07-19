@@ -54,6 +54,10 @@ func _validate_viewport(game, label: String, expected_size: Vector2i) -> Diction
 	var previous: Button = game.screen_root.find_child("topic_previous_button", true, false)
 	var all_topics: Button = game.screen_root.find_child("topic_all_button", true, false)
 	var next: Button = game.screen_root.find_child("topic_next_button", true, false)
+	var previous_icon: TextureRect = previous.get_node_or_null("icon") if previous != null else null
+	var next_icon: TextureRect = next.get_node_or_null("icon") if next != null else null
+	var next_label: Label = next.get_node_or_null("label") if next != null else null
+	var all_label: Label = all_topics.get_node_or_null("label") if all_topics != null else null
 	var logo: TextureRect = game.screen_root.find_child("theme_logo", true, false)
 	var settings: Button = game.screen_root.find_child("theme_settings_button", true, false)
 	var initial_index: int = game.topic_pager_controller.current_page
@@ -76,6 +80,15 @@ func _validate_viewport(game, label: String, expected_size: Vector2i) -> Diction
 	for control in controls:
 		bounds_ok = bounds_ok and control != null and _inside_viewport(control.get_global_rect(), viewport_size)
 	var cover_ok := cover != null and cover.texture != null and cover.size.is_equal_approx(viewport_size)
+	var direction_icons_ok := (
+		previous_icon != null
+		and next_icon != null
+		and previous_icon.position.x < previous.size.x * 0.4
+		and next_icon.position.x > next.size.x * 0.6
+		and previous_icon.scale.x > 0.0
+		and next_icon.scale.x < 0.0
+	)
+	var nav_text_ok := _label_fits_or_wraps(next_label) and _label_fits_or_wraps(all_label)
 	var persisted := str(game.progress_store.progress.get("current_topic_id", "")) == str(game.topics[initial_index].get("id", ""))
 	var structure_ok: bool = (
 		fixed_ui != null
@@ -87,7 +100,7 @@ func _validate_viewport(game, label: String, expected_size: Vector2i) -> Diction
 	)
 	await _save_frame("%s/topic-home-%s.png" % [OUTPUT_DIR, label])
 	return {
-		"ok": covers_ok and structure_ok and bounds_ok and cover_ok and selector_ok and wraps and persisted,
+		"ok": covers_ok and structure_ok and bounds_ok and cover_ok and selector_ok and wraps and persisted and direction_icons_ok and nav_text_ok,
 		"viewport": viewport_size,
 		"expected": expected_size,
 		"topic_order": order,
@@ -99,12 +112,23 @@ func _validate_viewport(game, label: String, expected_size: Vector2i) -> Diction
 		"selector": selector_ok,
 		"wraps": wraps,
 		"persisted": persisted,
+		"direction_icons": direction_icons_ok,
+		"nav_text": nav_text_ok,
 		"pager": pager,
 	}
 
 
 func _inside_viewport(rect: Rect2, viewport_size: Vector2) -> bool:
 	return rect.position.x >= -0.5 and rect.position.y >= -0.5 and rect.end.x <= viewport_size.x + 0.5 and rect.end.y <= viewport_size.y + 0.5
+
+
+func _label_fits_or_wraps(label: Label) -> bool:
+	if label == null or label.text.is_empty():
+		return false
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	var fits_one_line := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= label.size.x + 0.5
+	return fits_one_line or (label.autowrap_mode != TextServer.AUTOWRAP_OFF and label.max_lines_visible == 2)
 
 
 func _save_frame(path: String) -> void:
