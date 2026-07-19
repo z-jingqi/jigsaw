@@ -18,7 +18,13 @@ def patterned_image(size: tuple[int, int]) -> Image.Image:
     return image
 
 
-def compress(src: Path, dst: Path, target_bytes: int | None = None):
+def compress(
+    src: Path,
+    dst: Path,
+    target_bytes: int | None = None,
+    output_format: str | None = None,
+    webp_quality: int = 76,
+):
     return compress_one(
         src,
         dst,
@@ -27,8 +33,9 @@ def compress(src: Path, dst: Path, target_bytes: int | None = None):
         png_colors=256,
         jpeg_quality=88,
         jpeg_min_quality=60,
-        webp_quality=86,
+        webp_quality=webp_quality,
         target_bytes=target_bytes,
+        output_format=output_format,
     )
 
 
@@ -84,6 +91,36 @@ class CompressImagesTest(unittest.TestCase):
             self.assertIn(result.status, {"wrote", "copied"})
             self.assertTrue(dst.exists())
             self.assertTrue(transparency_is_preserved(src, dst))
+
+    def test_png_can_be_converted_to_webp_at_cover_quality(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            src = root / "cover.png"
+            dst = root / "out" / "cover.webp"
+            patterned_image((480, 960)).save(src, format="PNG")
+
+            result = compress(src, dst, output_format="WEBP")
+
+            self.assertEqual(result.status, "wrote")
+            with Image.open(dst) as output:
+                self.assertEqual(output.format, "WEBP")
+                self.assertEqual(output.size, (480, 960))
+            self.assertIn("quality=76", result.detail)
+
+    def test_webp_conversion_preserves_alpha_geometry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            src = root / "alpha.png"
+            dst = root / "alpha.webp"
+            image = Image.new("RGBA", (240, 180), (17, 33, 91, 0))
+            draw = ImageDraw.Draw(image)
+            draw.rounded_rectangle((30, 20, 210, 160), radius=24, fill=(230, 110, 60, 220))
+            image.save(src, format="PNG")
+
+            result = compress(src, dst, output_format="WEBP")
+
+            self.assertEqual(result.status, "wrote")
+            self.assertTrue(transparency_is_preserved(src, dst, preserve_transparent_rgb=False))
 
 
 if __name__ == "__main__":

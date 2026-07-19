@@ -4,6 +4,8 @@ class_name GameStrings
 const TEXT := {
 	"en": {
 		"no_topics": "No topics yet",
+		"enter_topic": "Enter theme",
+		"all_topics": "All themes",
 		"no_levels": "No levels yet",
 		"series_progress": "Progress",
 		"mode_empty": "This level has no playable modes yet.",
@@ -45,6 +47,8 @@ const TEXT := {
 	},
 	"zh": {
 		"no_topics": "暂无主题",
+		"enter_topic": "进入主题",
+		"all_topics": "全部主题",
 		"no_levels": "暂无关卡",
 		"series_progress": "进度",
 		"mode_empty": "这个关卡还没有可玩的模式。",
@@ -86,6 +90,8 @@ const TEXT := {
 	},
 	"ja": {
 		"no_topics": "テーマはまだありません",
+		"enter_topic": "テーマへ",
+		"all_topics": "すべて",
 		"no_levels": "レベルはまだありません",
 		"series_progress": "進行度",
 		"mode_empty": "このレベルにはまだ遊べるモードがありません。",

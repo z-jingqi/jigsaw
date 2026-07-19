@@ -202,7 +202,7 @@
 				"zh-Hans": "希腊神话",
 				"_": "希腊神话"
 			},
-			"cover": "res://levels/topic_02/cover.jpg",
+			"cover": "res://levels/topic_02/cover.webp",
 			"color": "#5F8F9B",
 			"ui_palette": {
 				"surface": "#F4F0E5",
@@ -505,7 +505,7 @@
 				"zh-Hans": "猫",
 				"_": "猫"
 			},
-			"cover": "res://levels/topic_03/cover.jpg",
+			"cover": "res://levels/topic_03/cover.webp",
 			"color": "#D97843",
 			"ui_palette": {
 				"surface": "#F3DDC9",
@@ -588,7 +588,7 @@
 				"zh-Hans": "狗",
 				"_": "狗"
 			},
-			"cover": "res://levels/topic_04/cover.jpg",
+			"cover": "res://levels/topic_04/cover.webp",
 			"color": "#6F9FA8",
 			"ui_palette": {
 				"surface": "#F5EBD3",

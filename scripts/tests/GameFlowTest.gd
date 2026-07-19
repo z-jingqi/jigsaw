@@ -176,6 +176,10 @@ func _run() -> void:
 		var hint_button = game.screen_root.find_child("game_hint_button", true, false)
 		var title_left = game.screen_root.find_child("topic_title_decoration_left", true, false)
 		var title_right = game.screen_root.find_child("topic_title_decoration_right", true, false)
+		var topic_assets_value = game.current_topic.get("ui_assets", {})
+		var topic_assets: Dictionary = topic_assets_value if typeof(topic_assets_value) == TYPE_DICTIONARY else {}
+		var expects_title_decoration := not str(topic_assets.get("title_side", topic_assets.get("title_mountains", ""))).is_empty()
+		var title_decoration_matches := (title_left is TextureRect and title_right is TextureRect) == expects_title_decoration
 		var no_gameplay_copy := _tree_label_count(game.screen_root) == 1
 		var no_alt_text := not _tree_has_tooltip(game.screen_root) and not _tree_has_tooltip(game.modal_root)
 		var interface_style_ok := (
@@ -183,8 +187,7 @@ func _run() -> void:
 			and restart_button == null
 			and hint_button is Button
 			and _bottom_actions_valid(game, play_mode)
-			and title_left is TextureRect
-			and title_right is TextureRect
+			and title_decoration_matches
 			and line_frame_ok
 			and no_gameplay_copy
 			and no_alt_text
@@ -510,8 +513,13 @@ func _topic_title_layout_probe(game) -> Dictionary:
 	var text_right: float = center_x + text_width * 0.5
 	var left_gap: float = text_left - left.get_rect().end.x if left != null else -INF
 	var right_gap: float = right.position.x - text_right if right != null else -INF
+	var assets_value = game.topics[0].get("ui_assets", {})
+	var assets: Dictionary = assets_value if typeof(assets_value) == TYPE_DICTIONARY else {}
+	var expects_decoration := not str(assets.get("title_side", assets.get("title_mountains", ""))).is_empty()
+	var decoration_ok := left != null and right != null and left_gap >= 15.5 and right_gap >= 15.5 if expects_decoration else left == null and right == null
 	var result := {
-		"ok": left != null and right != null and left_gap >= 15.5 and right_gap >= 15.5,
+		"ok": decoration_ok,
+		"expects_decoration": expects_decoration,
 		"title": title.text,
 		"text_width": text_width,
 		"left_gap": left_gap,

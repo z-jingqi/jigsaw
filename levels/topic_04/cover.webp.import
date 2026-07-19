@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bkooo74xxebnc"
-path="res://.godot/imported/mode_title_side_decoration.png-eaf0253dcdb912bcde22013ceb68c194.ctex"
+uid="uid://dib2sanrkx2ju"
+path="res://.godot/imported/cover.webp-1ceca6d7d922483957c5770c5c53c3bd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mode_title_side_decoration.png"
-dest_files=["res://.godot/imported/mode_title_side_decoration.png-eaf0253dcdb912bcde22013ceb68c194.ctex"]
+source_file="res://levels/topic_04/cover.webp"
+dest_files=["res://.godot/imported/cover.webp-1ceca6d7d922483957c5770c5c53c3bd.ctex"]
 
 [params]
 

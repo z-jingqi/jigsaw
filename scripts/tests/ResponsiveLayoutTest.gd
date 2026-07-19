@@ -26,7 +26,7 @@ func _run() -> void:
 		await process_frame
 		var viewport_size: Vector2 = game.get_viewport_rect().size
 		var topic_style := _theme_list_style_check(game, viewport_size)
-		var topics_ok := _topic_page_fits(game.topics_island_items, viewport_size, game.topics.size()) and bool(topic_style.get("ok", false))
+		var topics_ok := bool(topic_style.get("ok", false))
 		var topic_rects := _grid_rect_summary(game.topics_island_items)
 		var topic: Dictionary = game.topics[0] if not game.topics.is_empty() else {}
 		game._show_levels(topic)
@@ -118,60 +118,49 @@ func _topic_page_fits(items: Array, viewport_size: Vector2, topic_count: int) ->
 
 
 func _theme_list_style_check(game, viewport_size: Vector2) -> Dictionary:
-	var topbar: Control = game.screen_root.get_node_or_null("theme_topbar")
-	var settings: Control = topbar.get_node_or_null("theme_settings_button") if topbar != null else null
-	var logo: Control = topbar.get_node_or_null("theme_logo") if topbar != null else null
-	var topbar_button_count := 0
-	if topbar != null:
-		for child in topbar.get_children():
-			if child is Button:
-				topbar_button_count += 1
-	var settings_right := settings != null and settings.position.x >= viewport_size.x * 0.70
-	var logo_centered := logo != null and absf(logo.get_rect().get_center().x - viewport_size.x * 0.5) <= 2.0
-	var card: Control = game.topics_content.find_child("theme_card_*", true, false) if game.topics_content != null else null
-	var aspect := 0.0 if card == null or card.size.x <= 0.0 else card.size.y / card.size.x
-	var cover: Control = card.get_node_or_null("theme_card_cover") if card != null else null
-	var base: Control = card.get_node_or_null("theme_card_base") if card != null else null
-	var title: Label = card.get_node_or_null("theme_card_title") if card != null else null
-	var compact_card := aspect >= 0.435 and aspect <= 0.445
-	var uses_topic_background := base is TextureRect and (base as TextureRect).texture != null
-	var localized_title := title != null and not title.text.is_empty() and title.text == str(game.topics[0].get("name", ""))
-	var no_level_count_label := card != null and not _contains_level_count_label(card)
-	var no_badge_or_arrow := card != null and card.get_node_or_null("theme_card_percent_badge") == null and card.get_node_or_null("theme_card_arrow_button") == null
-	var first_page: Control = game.topic_pager_controller.rendered_pages.get(0, null)
-	var all_covers_present: bool = first_page != null and first_page.get_child_count() == mini(game.topic_pager_controller.PAGE_SIZE, game.topics.size())
-	var all_decorations_present := all_covers_present
-	if all_covers_present and first_page != null:
-		for candidate in first_page.get_children():
-			var candidate_cover = candidate.get_node_or_null("theme_card_cover")
-			if not candidate_cover is TextureRect or not _cover_has_left_only_rounding(candidate_cover as TextureRect):
-				all_covers_present = false
-				break
-			var candidate_decoration = candidate.get_node_or_null("theme_card_decoration")
-			if not candidate_decoration is TextureRect or (candidate_decoration as TextureRect).texture == null:
-				all_decorations_present = false
+	var fixed_ui: Control = game.screen_root.get_node_or_null("topic_home_fixed_ui")
+	var settings: Control = game.screen_root.find_child("theme_settings_button", true, false)
+	var logo: TextureRect = game.screen_root.find_child("theme_logo", true, false)
+	var title: Label = game.screen_root.find_child("topic_home_title", true, false)
+	var progress: Control = game.screen_root.find_child("topic_home_progress", true, false)
+	var enter: Button = game.screen_root.find_child("topic_enter_button", true, false)
+	var previous: Button = game.screen_root.find_child("topic_previous_button", true, false)
+	var all_topics: Button = game.screen_root.find_child("topic_all_button", true, false)
+	var next: Button = game.screen_root.find_child("topic_next_button", true, false)
+	var page: Control = game.topic_pager_controller.rendered_pages.get(0, null)
+	var cover: TextureRect = page.get_node_or_null("topic_home_cover") if page != null else null
 	var pager_state: Dictionary = game.topic_pager_controller.debug_state()
-	var single_page_lazy := int(pager_state.get("page_count", 0)) == 1 and int(pager_state.get("rendered_page_count", 0)) == 1
-	var progress_capsules := _progress_capsule_style_check(game)
-	var pager_capsule := _pager_capsule_style_check(game)
+	var controls: Array[Control] = [settings, logo, title, progress, enter, previous, all_topics, next]
+	var bounds_ok := true
+	for control in controls:
+		bounds_ok = bounds_ok and control != null and _rect_fits(control.get_global_rect(), viewport_size)
+	var logo_uses_new_asset := (
+		logo != null
+		and logo.texture != null
+		and logo.texture.get_width() == 768
+		and FileAccess.file_exists("res://assets/ui/topic-home/logo.png")
+	)
+	var cover_ok := cover != null and cover.texture != null and cover.size.is_equal_approx(viewport_size)
+	var lazy_ring: bool = int(pager_state.get("page_count", 0)) == game.topics.size() and int(pager_state.get("rendered_page_count", 0)) <= 3
+	var selector: Panel = game.screen_root.get_node_or_null("topic_selector_panel")
+	var selector_grid: GridContainer = selector.get_node_or_null("topic_selector_scroll/topic_selector_grid") if selector != null else null
+	var selector_ok: bool = selector != null and selector_grid != null and selector_grid.columns == 2 and selector_grid.get_child_count() == game.topics.size()
 	var result := {
-		"settings_right": settings_right,
-		"single_topbar_button": topbar_button_count == 1,
-		"logo_centered": logo_centered,
-		"card_aspect": snappedf(aspect, 0.001),
-		"compact_card": compact_card,
-		"uses_topic_background": uses_topic_background,
-		"localized_title": localized_title,
-		"no_level_count_label": no_level_count_label,
-		"no_badge_or_arrow": no_badge_or_arrow,
-		"all_covers_present": all_covers_present,
-		"all_decorations_present": all_decorations_present,
-		"single_page_lazy": single_page_lazy,
-		"progress_capsules": progress_capsules,
-		"pager_capsule": pager_capsule,
+		"fixed_ui": fixed_ui != null,
+		"bounds": bounds_ok,
+		"logo_asset": logo_uses_new_asset,
+		"title": title.text if title != null else "",
+		"cover": cover_ok,
+		"lazy_ring": lazy_ring,
+		"selector": selector_ok,
+		"pager": pager_state,
 	}
-	result["ok"] = settings_right and topbar_button_count == 1 and logo_centered and compact_card and uses_topic_background and localized_title and no_level_count_label and no_badge_or_arrow and all_covers_present and all_decorations_present and single_page_lazy and progress_capsules and pager_capsule
+	result["ok"] = fixed_ui != null and bounds_ok and logo_uses_new_asset and cover_ok and lazy_ring and selector_ok
 	return result
+
+
+func _rect_fits(rect: Rect2, viewport_size: Vector2) -> bool:
+	return rect.position.x >= -1.0 and rect.position.y >= -1.0 and rect.end.x <= viewport_size.x + 1.0 and rect.end.y <= viewport_size.y + 1.0
 
 
 func _cover_has_left_only_rounding(cover: TextureRect) -> bool:
@@ -283,19 +272,20 @@ func _topic_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vec
 		and progress_label.get_rect().end.y <= progress_bar.position.y
 		and absf(progress_label.get_rect().get_center().x - progress_bar.get_rect().get_center().x) <= 1.0
 	)
-	var decorations_present: bool = left != null and right != null and left.texture != null and right.texture != null
-	var separated: bool = (
-		back != null
-		and left != null
-		and right != null
-		and progress != null
-		and back.get_global_rect().end.x < left.get_global_rect().position.x
-		and right.get_global_rect().end.x < progress.get_global_rect().position.x
-		and progress.get_global_rect().end.x <= viewport_size.x + 1.0
-	)
 	var assets_value = topic.get("ui_assets", {})
-	var asset_path := str((assets_value as Dictionary).get("title_mountains", "")) if typeof(assets_value) == TYPE_DICTIONARY else ""
-	var theme_local_asset := asset_path.begins_with("res://levels/topic_01/ui/")
+	var assets: Dictionary = assets_value if typeof(assets_value) == TYPE_DICTIONARY else {}
+	var asset_path := str(assets.get("title_mountains", assets.get("title_side", "")))
+	var expects_decorations := not asset_path.is_empty()
+	var decorations_present: bool = left != null and right != null and left.texture != null and right.texture != null
+	var decorations_match := decorations_present == expects_decorations
+	var separated := false
+	if back != null and progress != null and title != null:
+		if decorations_present:
+			separated = back.get_global_rect().end.x < left.get_global_rect().position.x and right.get_global_rect().end.x < progress.get_global_rect().position.x
+		else:
+			separated = back.get_global_rect().end.x < title.get_global_rect().position.x and title.get_global_rect().end.x < progress.get_global_rect().position.x
+		separated = separated and progress.get_global_rect().end.x <= viewport_size.x + 1.0
+	var theme_local_asset := asset_path.is_empty() or asset_path.begins_with("res://levels/%s/ui/" % str(topic.get("id", "")))
 	var result := {
 		"rounded_outline_back": rounded_outline,
 		"back_icon_fills_button": back_icon_fills_button,
@@ -304,10 +294,11 @@ func _topic_level_topbar_style_check(game, topic: Dictionary, viewport_size: Vec
 		"progress_unframed": progress_unframed,
 		"progress_stacked_centered": progress_stacked_centered,
 		"decorations_present": decorations_present,
+		"decorations_match": decorations_match,
 		"separated": separated,
 		"theme_local_asset": theme_local_asset,
 	}
-	result["ok"] = rounded_outline and back_icon_fills_button and theme_colors and title_unframed and progress_unframed and progress_stacked_centered and decorations_present and separated and theme_local_asset
+	result["ok"] = rounded_outline and back_icon_fills_button and theme_colors and title_unframed and progress_unframed and progress_stacked_centered and decorations_match and separated and theme_local_asset
 	return result
 
 

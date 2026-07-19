@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bkooo74xxebnc"
-path="res://.godot/imported/mode_title_side_decoration.png-eaf0253dcdb912bcde22013ceb68c194.ctex"
+uid="uid://bj5348000tqpf"
+path="res://.godot/imported/paw.png-195198d28e236f5e3ed2bc73a054adbc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/mode_title_side_decoration.png"
-dest_files=["res://.godot/imported/mode_title_side_decoration.png-eaf0253dcdb912bcde22013ceb68c194.ctex"]
+source_file="res://assets/ui/topic-home/paw.png"
+dest_files=["res://.godot/imported/paw.png-195198d28e236f5e3ed2bc73a054adbc.ctex"]
 
 [params]
 

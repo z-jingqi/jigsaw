@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Shrink image files with visually near-lossless compression.
 
-The tool accepts files or directories, keeps each file's original format, and
-only writes a result when the candidate is smaller and preserves image geometry.
-For images with transparency, alpha and fully transparent pixels are preserved.
+The tool accepts files or directories and keeps each file's original format by
+default. It can also convert supported still images to WebP while preserving
+image geometry and alpha.
 """
 
 from __future__ import annotations
@@ -79,11 +79,14 @@ def collect_inputs(inputs: list[Path], recursive: bool) -> list[InputFile]:
     return files
 
 
-def output_path_for(input_file: InputFile, output_dir: Path | None) -> Path:
+def output_path_for(input_file: InputFile, output_dir: Path | None, output_format: str | None) -> Path:
     src = input_file.path
+    relative_path = input_file.relative_path
+    if output_format == "WEBP":
+        relative_path = relative_path.with_suffix(".webp")
     if output_dir is None:
-        return src
-    return (output_dir.resolve() / input_file.relative_path).resolve()
+        return src if output_format is None else src.with_suffix(".webp")
+    return (output_dir.resolve() / relative_path).resolve()
 
 
 def frame_geometry(path: Path) -> list[tuple[int, int]]:
@@ -101,7 +104,7 @@ def same_geometry(left: Path, right: Path) -> bool:
         return False
 
 
-def transparency_is_preserved(left: Path, right: Path) -> bool:
+def transparency_is_preserved(left: Path, right: Path, preserve_transparent_rgb: bool = True) -> bool:
     try:
         with Image.open(left) as left_image, Image.open(right) as right_image:
             for left_frame, right_frame in zip(ImageSequence.Iterator(left_image), ImageSequence.Iterator(right_image)):
@@ -113,7 +116,7 @@ def transparency_is_preserved(left: Path, right: Path) -> bool:
                 right_alpha = right_rgba.getchannel("A")
                 if left_alpha.tobytes() != right_alpha.tobytes():
                     return False
-                if left_alpha.getextrema() == (255, 255):
+                if not preserve_transparent_rgb or left_alpha.getextrema() == (255, 255):
                     continue
                 transparent_mask = left_alpha.point(lambda alpha: 255 if alpha == 0 else 0)
                 difference = ImageChops.difference(left_rgba, right_rgba)
@@ -223,15 +226,17 @@ def save_candidate(
     jpeg_min_quality: int,
     webp_quality: int,
     target_bytes: int | None,
+    output_format: str | None,
 ) -> str:
     with Image.open(src) as image:
-        image_format = image.format
-        if not image_format:
+        source_format = image.format
+        if not source_format:
             raise ValueError("unknown image format")
+        image_format = output_format or source_format.upper()
 
         frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
         metadata = copy_color_and_orientation_info(image)
-        if image_format.upper() in {"JPEG", "MPO"} and len(frames) == 1:
+        if image_format in {"JPEG", "MPO"} and len(frames) == 1:
             used_quality = save_jpeg_to_target(
                 frames[0],
                 candidate,
@@ -242,7 +247,7 @@ def save_candidate(
             )
             return f"jpeg quality={used_quality}"
         save_kwargs = {**metadata, **compression_options(image_format, jpeg_quality, webp_quality)}
-        if image_format.upper() == "PNG":
+        if image_format == "PNG":
             frames = [quantize_png_frame(frame, png_colors) for frame in frames]
         if len(frames) > 1:
             frames[0].save(
@@ -253,10 +258,16 @@ def save_candidate(
                 **copy_animation_info(image),
                 **save_kwargs,
             )
-            return image_format.upper()
+            return format_detail(image_format, webp_quality)
 
         frames[0].save(candidate, format=image_format, **save_kwargs)
-        return image_format.upper()
+        return format_detail(image_format, webp_quality)
+
+
+def format_detail(image_format: str, webp_quality: int) -> str:
+    if image_format == "WEBP":
+        return f"webp quality={webp_quality}"
+    return image_format
 
 
 def quantize_png_frame(image: Image.Image, colors: int) -> Image.Image:
@@ -301,9 +312,12 @@ def compress_one(
     jpeg_min_quality: int,
     webp_quality: int,
     target_bytes: int | None,
+    output_format: str | None = None,
 ) -> Result:
     before = src.stat().st_size
     dst.parent.mkdir(parents=True, exist_ok=True)
+    source_format = src.suffix.lower().removeprefix(".")
+    conversion_requested = output_format == "WEBP" and source_format != "webp"
 
     marked_quality = jpeg_quality_marker(src)
     marker_satisfies_request = marked_quality is not None and marked_quality <= jpeg_quality
@@ -336,10 +350,11 @@ def compress_one(
             jpeg_min_quality,
             webp_quality,
             target_bytes,
+            output_format,
         )
         after = candidate.stat().st_size
         required_savings = max(min_savings, math.ceil(before * min_savings_percent / 100.0))
-        if after + required_savings > before:
+        if not conversion_requested and after + required_savings > before:
             if src.resolve() != dst.resolve():
                 shutil.copy2(src, dst)
                 return Result(src, dst, before, before, "copied", "candidate was not smaller enough")
@@ -348,7 +363,7 @@ def compress_one(
             if src.resolve() != dst.resolve():
                 shutil.copy2(src, dst)
             return Result(src, dst, before, after, "kept", "candidate changed frame geometry")
-        if not transparency_is_preserved(src, candidate):
+        if not transparency_is_preserved(src, candidate, preserve_transparent_rgb=not conversion_requested):
             if src.resolve() != dst.resolve():
                 shutil.copy2(src, dst)
             return Result(src, dst, before, after, "kept", "candidate changed transparency")
@@ -423,10 +438,16 @@ def parse_args() -> argparse.Namespace:
         help="Optional maximum JPEG size in KiB; already-small JPEGs are copied without re-encoding",
     )
     parser.add_argument(
+        "--output-format",
+        choices=("keep", "webp"),
+        default="keep",
+        help="Keep the source format or convert output to WebP. Default: keep",
+    )
+    parser.add_argument(
         "--webp-quality",
         type=bounded_int(1, 100),
-        default=86,
-        help="WebP quality for visually near-lossless output. Default: 86",
+        default=76,
+        help="WebP quality calibrated to the JigCat cover reference. Default: 76",
     )
     return parser.parse_args()
 
@@ -435,6 +456,7 @@ def main() -> int:
     args = parse_args()
     if args.jpeg_min_quality > args.jpeg_quality:
         raise SystemExit("--jpeg-min-quality must not exceed --jpeg-quality")
+    output_format = "WEBP" if args.output_format == "webp" else None
     files = collect_inputs(args.inputs, args.recursive)
     if not files:
         print("No files to process.")
@@ -446,7 +468,7 @@ def main() -> int:
     target_bytes = args.target_kb * 1024 if args.target_kb else None
     for input_file in files:
         src = input_file.path
-        dst = output_path_for(input_file, args.output_dir)
+        dst = output_path_for(input_file, args.output_dir, output_format)
         result = compress_one(
             src,
             dst,
@@ -457,6 +479,7 @@ def main() -> int:
             args.jpeg_min_quality,
             args.webp_quality,
             target_bytes,
+            output_format,
         )
         print_result(result)
         if result.status == "wrote" and result.after is not None:

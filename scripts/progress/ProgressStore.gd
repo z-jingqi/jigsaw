@@ -215,6 +215,21 @@ func last_topic_or_first(topics: Array[Dictionary]) -> Dictionary:
 	return topics[0] if not topics.is_empty() else {}
 
 
+func current_topic_or_first(topics: Array[Dictionary]) -> Dictionary:
+	var topic_id := str(progress.get("current_topic_id", ""))
+	var topic := topic_by_id(topics, topic_id)
+	if not topic.is_empty():
+		return topic
+	return last_topic_or_first(topics)
+
+
+func set_current_topic(topic_id: String) -> void:
+	if topic_id.is_empty() or str(progress.get("current_topic_id", "")) == topic_id:
+		return
+	progress["current_topic_id"] = topic_id
+	save_to_disk()
+
+
 func topic_by_id(topics: Array[Dictionary], topic_id: String) -> Dictionary:
 	for topic in topics:
 		if str(topic.get("id", "")) == topic_id:
