@@ -43,16 +43,25 @@ func animate_modal_panel(panel: Control) -> void:
 
 
 func wire_button(button: BaseButton) -> void:
+	if not is_instance_valid(button):
+		return
 	button.pivot_offset = button.size * 0.5
 	button.button_down.connect(func() -> void:
-		_animate_button_press(button)
+		if is_instance_valid(button):
+			_animate_button_press(button)
 	)
 	button.button_up.connect(func() -> void:
-		_animate_button_release(button)
+		if is_instance_valid(button):
+			_animate_button_release(button)
 	)
 	button.mouse_exited.connect(func() -> void:
-		_animate_button_cancel(button)
+		if is_instance_valid(button):
+			_animate_button_cancel(button)
 	)
+	var button_id := button.get_instance_id()
+	button.tree_exiting.connect(func() -> void:
+		_kill_button_tween_by_id(button_id)
+	, CONNECT_ONE_SHOT)
 
 
 func tween_control_scale(control: Control, target: Vector2, duration: float) -> void:
@@ -68,6 +77,8 @@ func tween_control_scale(control: Control, target: Vector2, duration: float) -> 
 
 
 func _animate_button_press(button: BaseButton) -> void:
+	if not is_instance_valid(button):
+		return
 	_kill_button_tween(button)
 	if reduced():
 		button.scale = Vector2.ONE
@@ -84,10 +95,12 @@ func _animate_button_press(button: BaseButton) -> void:
 		var direction := float(button.get_meta("direction_sign", 1.0))
 		button.set_meta("motion_icon_origin_x", icon.position.x)
 		tween.tween_property(icon, "position:x", icon.position.x + 4.0 * direction * _button_scale(button), 0.07)
-	button_tweens[button.get_instance_id()] = tween
+	_track_button_tween(button, tween)
 
 
 func _animate_button_release(button: BaseButton) -> void:
+	if not is_instance_valid(button):
+		return
 	_kill_button_tween(button)
 	var kind := str(button.get_meta("button_motion_kind", "default"))
 	var icon := button.get_node_or_null("icon") as Control
@@ -105,11 +118,12 @@ func _animate_button_release(button: BaseButton) -> void:
 	elif icon != null and kind == "direction":
 		var origin_x := float(button.get_meta("motion_icon_origin_x", icon.position.x))
 		tween.parallel().tween_property(icon, "position:x", origin_x, 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	button_tweens[button.get_instance_id()] = tween
-	tween.finished.connect(func() -> void: button_tweens.erase(button.get_instance_id()))
+	_track_button_tween(button, tween)
 
 
 func _animate_button_cancel(button: BaseButton) -> void:
+	if not is_instance_valid(button):
+		return
 	if not button.button_pressed:
 		return
 	_kill_button_tween(button)
@@ -126,11 +140,11 @@ func _animate_button_cancel(button: BaseButton) -> void:
 			tween.tween_property(icon, "rotation", 0.0, 0.10)
 		elif button.has_meta("motion_icon_origin_x"):
 			tween.tween_property(icon, "position:x", float(button.get_meta("motion_icon_origin_x")), 0.10)
-	button_tweens[button.get_instance_id()] = tween
+	_track_button_tween(button, tween)
 
 
 func _reset_special_icon(button: BaseButton, icon: Control) -> void:
-	if icon == null:
+	if not is_instance_valid(button) or not is_instance_valid(icon):
 		return
 	icon.rotation = 0.0
 	if button.has_meta("motion_icon_origin_x"):
@@ -138,12 +152,31 @@ func _reset_special_icon(button: BaseButton, icon: Control) -> void:
 
 
 func _kill_button_tween(button: BaseButton) -> void:
-	var key := button.get_instance_id()
-	var active = button_tweens.get(key, null)
+	if not is_instance_valid(button):
+		return
+	_kill_button_tween_by_id(button.get_instance_id())
+
+
+func _kill_button_tween_by_id(button_id: int) -> void:
+	var active = button_tweens.get(button_id, null)
 	if active is Tween and active.is_valid():
 		active.kill()
-	button_tweens.erase(key)
+	button_tweens.erase(button_id)
+
+
+func _track_button_tween(button: BaseButton, tween: Tween) -> void:
+	if not is_instance_valid(button):
+		if tween.is_valid():
+			tween.kill()
+		return
+	var button_id := button.get_instance_id()
+	button_tweens[button_id] = tween
+	tween.finished.connect(func() -> void:
+		button_tweens.erase(button_id)
+	, CONNECT_ONE_SHOT)
 
 
 func _button_scale(button: BaseButton) -> float:
+	if not is_instance_valid(button):
+		return 1.0
 	return maxf(1.0, button.size.x / 112.0)

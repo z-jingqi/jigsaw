@@ -292,6 +292,8 @@ func _t(key: String) -> String:
 
 func _clear_ui() -> void:
 	_stop_complete_confetti()
+	if level_list_screen != null:
+		level_list_screen.cancel_motion()
 	_stop_topics_inertia()
 	topics_drag_active = false
 	topics_island_items.clear()

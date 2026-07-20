@@ -205,7 +205,7 @@ func mode_state_icon(game: Node, play_mode: String, state: String, size: float) 
 	if state == "active":
 		var dot_size := size * 0.36
 		var dot := Panel.new()
-		dot.position = Vector2(size - dot_size * 0.80, size - dot_size * 0.80)
+		dot.position = Vector2(size - dot_size * 0.80, -dot_size * 0.20)
 		dot.size = Vector2(dot_size, dot_size)
 		var dot_style := rounded_panel_style(game.orange, int(dot_size * 0.5))
 		dot_style.border_color = Color.WHITE
