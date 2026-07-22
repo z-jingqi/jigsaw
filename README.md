@@ -66,7 +66,7 @@ Jigsaw 是一个使用 Godot 从零重写的轮廓拼图游戏原型。当前版
 
 ## 运行方式
 
-使用 Godot 4.4 或更新版本打开项目根目录，然后运行主场景：
+使用与 `project.godot` 的 `config/features` 声明兼容的 Godot 版本（或更新版本）打开项目根目录，然后运行主场景。不要从本文档中的固定版本号推断项目要求；`project.godot` 是版本要求的唯一来源。
 
 ```text
 scenes/Main.tscn

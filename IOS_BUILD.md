@@ -23,7 +23,7 @@ The prototype uses a 768x1024 portrait viewport as the baseline, locks runtime o
 
 To export an iOS build, the local machine needs:
 
-- Godot 4.4 or newer.
+- A Godot version compatible with the `config/features` declaration in `project.godot`, or newer. Treat `project.godot` as the source of truth instead of copying a fixed version into this guide.
 - Godot iOS export templates installed.
 - Xcode installed.
 - An Apple Developer account.

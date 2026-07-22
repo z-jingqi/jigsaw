@@ -1,0 +1,15 @@
+interface:
+  display_name: "JIGCAT Godot Workflow"
+  short_description: "Inspect, edit, and validate JIGCAT through Godot"
+  default_prompt: "Use $jigsaw-godot-workflow to inspect and update this JIGCAT Godot feature, then run the focused visual validation."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "godot-ai"
+      description: "Live JIGCAT Godot editor, scene tree, runtime, logs, and screenshots"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8000/mcp"
+
+policy:
+  allow_implicit_invocation: true
