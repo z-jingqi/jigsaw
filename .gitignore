@@ -1,5 +1,6 @@
 .godot/
 .godot_user/
+.artifacts/
 *.tmp
 .env
 .env.*

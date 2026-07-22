@@ -1,30 +1,27 @@
 extends RefCounted
 class_name GameModalHost
 
+const MODAL_SHELL_SCENE := preload("res://scenes/ui/AnimatedModalShell.tscn")
+
+var shell
+
 
 func show(game: Node, shade_color := Color(0, 0, 0, 0.42), blur_background := false) -> void:
 	game._stop_complete_confetti()
-	for child in game.modal_root.get_children():
-		if not child.is_queued_for_deletion():
-			child.queue_free()
+	var active = _live_shell()
+	if active == null:
+		for child in game.modal_root.get_children():
+			if not child.is_queued_for_deletion():
+				child.queue_free()
+		active = MODAL_SHELL_SCENE.instantiate()
+		game.modal_root.add_child(active)
+		active.closed.connect(Callable(self, "_on_shell_closed").bind(game))
+		shell = active
+	else:
+		active.prepare_reuse()
 	game.modal_open = true
 	game.modal_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	var shade := ColorRect.new()
-	shade.name = "ModalShade"
-	shade.color = shade_color
-	if blur_background:
-		shade.color = Color.WHITE
-		shade.material = blur_material(shade_color)
-	shade.modulate.a = 0.0
-	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	game.modal_root.add_child(shade)
-	if game._ui_motion_reduced():
-		shade.modulate.a = 1.0
-		return
-	var tween: Tween = game.create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(shade, "modulate:a", 1.0, 0.14)
+	active.configure_shade(shade_color, blur_material(shade_color) if blur_background else null)
 
 
 func blur_material(tint: Color) -> ShaderMaterial:
@@ -53,16 +50,7 @@ func box(
 	padding := 52.0,
 	close_action := Callable(),
 ) -> VBoxContainer:
-	var panel := Panel.new()
-	panel.name = "ModalPanel"
-	panel.custom_minimum_size = size
-	panel.clip_contents = false
-	panel.z_index = 2
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -size.x * 0.5
-	panel.offset_top = -size.y * 0.5
-	panel.offset_right = size.x * 0.5
-	panel.offset_bottom = size.y * 0.5
+	var active = _ensure_shell(game)
 	var style := StyleBoxFlat.new()
 	style.bg_color = bg_color
 	style.border_color = Color("#E4B77F")
@@ -77,19 +65,11 @@ func box(
 	style.shadow_color = Color(0.28, 0.16, 0.07, 0.20)
 	style.shadow_size = 12
 	style.shadow_offset = Vector2(0, 6)
-	panel.add_theme_stylebox_override("panel", style)
-	game.modal_root.add_child(panel)
-	game._animate_modal_panel(panel)
-	var content := VBoxContainer.new()
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	content.offset_left = padding
-	content.offset_top = padding
-	content.offset_right = -padding
-	content.offset_bottom = -padding
+	var content: VBoxContainer = active.configure_panel(size, style, Vector4(padding, padding, padding, padding))
 	content.add_theme_constant_override("separation", 18)
-	panel.add_child(content)
 	if close_action.is_valid():
-		panel.add_child(close_button(game, close_action))
+		active.panel.add_child(close_button(game, close_action))
+	active.play_open(game._ui_motion_reduced())
 	return content
 
 
@@ -115,14 +95,7 @@ func close_button(game: Node, action: Callable) -> Button:
 
 
 func mode_box(game: Node, size: Vector2) -> VBoxContainer:
-	var panel := Panel.new()
-	panel.custom_minimum_size = size
-	panel.clip_contents = false
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -size.x * 0.5
-	panel.offset_top = -size.y * 0.5
-	panel.offset_right = size.x * 0.5
-	panel.offset_bottom = size.y * 0.5
+	var active = _ensure_shell(game)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("#FFF8EC")
 	style.border_color = Color("#E7B47E")
@@ -137,19 +110,11 @@ func mode_box(game: Node, size: Vector2) -> VBoxContainer:
 	style.shadow_color = Color(0.36, 0.20, 0.08, 0.16)
 	style.shadow_size = 8
 	style.shadow_offset = Vector2(0, 4)
-	panel.add_theme_stylebox_override("panel", style)
-	game.modal_root.add_child(panel)
-	game._animate_modal_panel(panel)
-	panel.add_child(mode_close_button(game))
-	var content := VBoxContainer.new()
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
 	var horizontal_padding: float = game.mode_select_modal._mode_dialog_horizontal_padding(size.x)
-	content.offset_left = horizontal_padding
-	content.offset_top = 66
-	content.offset_right = -horizontal_padding
-	content.offset_bottom = -52
+	var content: VBoxContainer = active.configure_panel(size, style, Vector4(horizontal_padding, 66.0, horizontal_padding, 52.0))
 	content.add_theme_constant_override("separation", 24)
-	panel.add_child(content)
+	active.panel.add_child(mode_close_button(game))
+	active.play_open(game._ui_motion_reduced())
 	return content
 
 
@@ -195,16 +160,52 @@ func close(game: Node) -> void:
 	game._stop_complete_confetti()
 	game.modal_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	game.modal_open = false
-	for child in game.modal_root.get_children():
-		if child.is_queued_for_deletion():
-			continue
-		if game._ui_motion_reduced() or not child is Control:
-			child.queue_free()
-			continue
-		var control := child as Control
-		var tween: Tween = game.create_tween().bind_node(control).set_parallel(true)
-		tween.tween_property(control, "modulate:a", 0.0, 0.14).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-		if control.name == "ModalPanel":
-			control.pivot_offset = control.size * 0.5
-			tween.tween_property(control, "scale", Vector2(0.98, 0.98), 0.14).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-		tween.chain().tween_callback(control.queue_free)
+	var active = _live_shell()
+	if active != null:
+		active.play_close(game._ui_motion_reduced())
+	else:
+		for child in game.modal_root.get_children():
+			if not child.is_queued_for_deletion():
+				child.queue_free()
+
+
+func reset() -> void:
+	var active = _live_shell()
+	if active != null:
+		active.dispose()
+	shell = null
+
+
+func active_motion_count() -> int:
+	var active = _live_shell()
+	return active.active_motion_count() if active != null else 0
+
+
+func debug_state() -> Dictionary:
+	var active = _live_shell()
+	return active.debug_state() if active != null else {
+		"phase": "none",
+		"active_motion_count": 0,
+	}
+
+
+func _ensure_shell(game: Node):
+	var active = _live_shell()
+	if active == null:
+		show(game)
+		active = _live_shell()
+	return active
+
+
+func _live_shell():
+	if shell == null or not is_instance_valid(shell) or shell.is_queued_for_deletion():
+		shell = null
+		return null
+	return shell
+
+
+func _on_shell_closed(closed_shell, game: Node) -> void:
+	if shell == closed_shell:
+		shell = null
+	if is_instance_valid(game) and game.modal_root != null:
+		game.modal_root.mouse_filter = Control.MOUSE_FILTER_IGNORE

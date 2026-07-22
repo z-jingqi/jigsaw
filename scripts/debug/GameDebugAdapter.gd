@@ -8,6 +8,106 @@ func _init(owner: Node) -> void:
 	game = owner
 
 
+func execute(command: String, args: Dictionary = {}) -> Dictionary:
+	if not OS.is_debug_build():
+		return _failure(command, "debug_only", "Debug commands are disabled in release exports.")
+	match command:
+		"state":
+			pass
+		"show_topics":
+			game._show_topics()
+		"show_levels":
+			var topic_result := _required_topic(command, args)
+			if not bool(topic_result.get("ok", false)):
+				return topic_result
+			game._show_levels(topic_result["topic"])
+		"show_mode_select":
+			var selection := _required_level(command, args)
+			if not bool(selection.get("ok", false)):
+				return selection
+			game._show_levels(selection["topic"])
+			game._show_mode_dialog(selection["level"])
+		"show_settings":
+			game._show_settings_modal()
+		"show_tutorial":
+			if game.current_screen != "game":
+				return _failure(command, "wrong_screen", "Tutorial preview requires an active game screen.")
+			game._show_tutorial_modal()
+		"enter_level":
+			var entry := _required_level(command, args)
+			if not bool(entry.get("ok", false)):
+				return entry
+			var play_mode_result := _required_mode(command, args, entry["level"])
+			if not bool(play_mode_result.get("ok", false)):
+				return play_mode_result
+			game._close_modal()
+			game._show_game(entry["topic"], entry["level"], play_mode_result["mode"])
+		"preview_complete":
+			preview_complete()
+		"close_modal":
+			if not game.modal_open:
+				return _failure(command, "wrong_screen", "No modal is currently open.")
+			game._close_modal()
+		"set_viewport":
+			var viewport_result := _viewport_args(command, args)
+			if not bool(viewport_result.get("ok", false)):
+				return viewport_result
+			apply_viewport_preset(Vector2i(viewport_result["width"], viewport_result["height"]))
+		"set_reduced_motion":
+			if not args.has("enabled") or typeof(args["enabled"]) != TYPE_BOOL:
+				return _failure(command, "invalid_argument", "enabled must be a boolean.")
+			var enabled := bool(args["enabled"])
+			game.progress_store.set_reduced_motion_enabled(enabled)
+			game.puzzle_board.set_feedback_preferences(
+				game.progress_store.haptics_enabled(),
+				enabled,
+				game.progress_store.edge_contrast_mode(),
+			)
+		_:
+			return _failure(command, "unknown_command", "Unknown debug command: %s" % command)
+	return {
+		"ok": true,
+		"command": command,
+		"state": state_snapshot(),
+	}
+
+
+func state_snapshot() -> Dictionary:
+	if not OS.is_debug_build():
+		return {
+			"ok": false,
+			"error": {"code": "debug_only", "message": "Debug state is disabled in release exports."},
+		}
+	var viewport_size: Vector2i = game.get_window().size
+	var content_viewport_size: Vector2 = game.get_viewport_rect().size
+	var active_motion_count: int = game.modal_host.active_motion_count()
+	if game.topic_pager_controller != null and bool(game.topic_pager_controller.transitioning):
+		active_motion_count += 1
+	if (
+		game.level_list_screen != null
+		and game.level_list_screen.pager != null
+		and game.level_list_screen.pager.tween != null
+		and game.level_list_screen.pager.tween.is_valid()
+	):
+		active_motion_count += 1
+	if game.ui_motion != null:
+		active_motion_count += game.ui_motion.button_tweens.size()
+	var state := {
+		"screen": game.current_screen,
+		"modal": game.current_modal if game.modal_open else "",
+		"topic_id": str(game.current_topic.get("id", "")),
+		"level_id": str(game.current_level.get("id", "")),
+		"mode": game.current_mode if game.current_screen == "game" else "",
+		"viewport": [viewport_size.x, viewport_size.y],
+		"content_viewport": [roundi(content_viewport_size.x), roundi(content_viewport_size.y)],
+		"reduced_motion": game.progress_store.reduced_motion_enabled(),
+		"active_motion_count": active_motion_count,
+	}
+	if game.modal_open:
+		state["modal_motion"] = game.modal_host.debug_state()
+	return state
+
+
 func level_options() -> Array:
 	var result: Array = []
 	for topic in game.topics:
@@ -150,3 +250,59 @@ func _level_by_id(topic: Dictionary, level_id: String) -> Dictionary:
 		if str(level.get("id", "")) == level_id:
 			return level
 	return {}
+
+
+func _required_topic(command: String, args: Dictionary) -> Dictionary:
+	var topic_id_value = args.get("topic_id", null)
+	if typeof(topic_id_value) != TYPE_STRING or str(topic_id_value).strip_edges().is_empty():
+		return _failure(command, "invalid_argument", "topic_id must be a non-empty string.")
+	var topic := _topic_by_id(str(topic_id_value))
+	if topic.is_empty():
+		return _failure(command, "not_found", "Topic not found: %s" % str(topic_id_value))
+	return {"ok": true, "topic": topic}
+
+
+func _required_level(command: String, args: Dictionary) -> Dictionary:
+	var topic_result := _required_topic(command, args)
+	if not bool(topic_result.get("ok", false)):
+		return topic_result
+	var level_id_value = args.get("level_id", null)
+	if typeof(level_id_value) != TYPE_STRING or str(level_id_value).strip_edges().is_empty():
+		return _failure(command, "invalid_argument", "level_id must be a non-empty string.")
+	var topic: Dictionary = topic_result["topic"]
+	var level := _level_by_id(topic, str(level_id_value))
+	if level.is_empty():
+		return _failure(command, "not_found", "Level not found in topic: %s" % str(level_id_value))
+	return {"ok": true, "topic": topic, "level": level}
+
+
+func _required_mode(command: String, args: Dictionary, level: Dictionary) -> Dictionary:
+	var mode_value = args.get("mode", null)
+	if typeof(mode_value) != TYPE_STRING or str(mode_value).strip_edges().is_empty():
+		return _failure(command, "invalid_argument", "mode must be a non-empty string.")
+	var mode := str(mode_value)
+	var available: Array[String] = game._available_modes_for_level(level)
+	if not available.has(mode):
+		return _failure(command, "invalid_argument", "Mode %s is unavailable; expected one of %s." % [mode, available])
+	return {"ok": true, "mode": mode}
+
+
+func _viewport_args(command: String, args: Dictionary) -> Dictionary:
+	if not args.has("width") or not args.has("height"):
+		return _failure(command, "invalid_argument", "width and height are required.")
+	if typeof(args["width"]) != TYPE_INT or typeof(args["height"]) != TYPE_INT:
+		return _failure(command, "invalid_argument", "width and height must be integers.")
+	var width := int(args["width"])
+	var height := int(args["height"])
+	if width <= 0 or height <= 0 or width > 8192 or height > 8192:
+		return _failure(command, "invalid_argument", "width and height must be between 1 and 8192.")
+	return {"ok": true, "width": width, "height": height}
+
+
+func _failure(command: String, code: String, message: String) -> Dictionary:
+	return {
+		"ok": false,
+		"command": command,
+		"error": {"code": code, "message": message},
+		"state": state_snapshot() if OS.is_debug_build() else {},
+	}

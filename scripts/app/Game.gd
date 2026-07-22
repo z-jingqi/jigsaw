@@ -86,6 +86,7 @@ var ui_motion
 var ui_factory = GameUiFactoryScript.new()
 var screen_root: Control
 var modal_root: Control
+var current_modal := ""
 
 var topics: Array[Dictionary] = []
 var progress_store = ProgressStoreScript.new()
@@ -214,6 +215,25 @@ func debug_level_options() -> Array:
 	return debug_adapter.level_options()
 
 
+func debug_execute(command: String, args: Dictionary = {}) -> Dictionary:
+	if debug_adapter == null:
+		return {
+			"ok": false,
+			"command": command,
+			"error": {"code": "debug_only", "message": "Debug adapter is not available."},
+		}
+	return debug_adapter.execute(command, args)
+
+
+func debug_state_snapshot() -> Dictionary:
+	if debug_adapter == null:
+		return {
+			"ok": false,
+			"error": {"code": "debug_only", "message": "Debug adapter is not available."},
+		}
+	return debug_adapter.state_snapshot()
+
+
 func debug_enter_level(option_index: int, play_mode: String) -> void:
 	debug_adapter.enter_level(option_index, play_mode)
 
@@ -292,6 +312,7 @@ func _t(key: String) -> String:
 
 func _clear_ui() -> void:
 	_stop_complete_confetti()
+	modal_host.reset()
 	if level_list_screen != null:
 		level_list_screen.cancel_motion()
 	_stop_topics_inertia()
@@ -314,6 +335,7 @@ func _clear_ui() -> void:
 	modal_root.z_index = 100
 	ui_layer.add_child(modal_root)
 	modal_open = false
+	current_modal = ""
 
 
 func _clear_board() -> void:
@@ -520,6 +542,7 @@ func _mode_label(mode: String) -> String:
 
 
 func _show_mode_dialog(level: Dictionary) -> void:
+	current_modal = "mode_select"
 	mode_select_modal._show_mode_dialog(level)
 
 
@@ -609,14 +632,17 @@ func _return_to_current_level_list() -> void:
 
 
 func _show_settings_modal() -> void:
+	current_modal = "settings"
 	game_dialogs.show_settings()
 
 
 func _show_tutorial_modal() -> void:
+	current_modal = "tutorial"
 	game_dialogs.show_tutorial()
 
 
 func _show_complete_modal() -> void:
+	current_modal = "complete"
 	game_dialogs.show_complete()
 
 
@@ -626,6 +652,8 @@ func _stop_complete_confetti() -> void:
 
 
 func _show_modal(shade_color := Color(0, 0, 0, 0.42), blur_background := false) -> void:
+	if current_modal.is_empty():
+		current_modal = "generic"
 	modal_host.show(self, shade_color, blur_background)
 
 
@@ -647,4 +675,5 @@ func _modal_title(text: String, font_size := 44) -> Label:
 
 
 func _close_modal() -> void:
+	current_modal = ""
 	modal_host.close(self)
