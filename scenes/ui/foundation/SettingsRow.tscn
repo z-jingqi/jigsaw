@@ -4,18 +4,23 @@
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
 
 [node name="SettingsRow" type="HBoxContainer"]
-custom_minimum_size = Vector2(0, 44)
+custom_minimum_size = Vector2(0, 112)
 theme = ExtResource("2_theme")
-theme_override_constants/separation = 12
+theme_override_constants/separation = 22
 script = ExtResource("1_row")
 
 [node name="Label" type="Label" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
 vertical_alignment = 1
+theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
+theme_override_font_sizes/font_size = 30
 
-[node name="Toggle" type="CheckButton" parent="."]
-custom_minimum_size = Vector2(44, 44)
+[node name="Toggle" type="Button" parent="."]
+custom_minimum_size = Vector2(112, 62)
 layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 4
+toggle_mode = true
 
 [connection signal="toggled" from="Toggle" to="." method="_on_toggle_toggled"]

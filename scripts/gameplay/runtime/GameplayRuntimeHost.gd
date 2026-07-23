@@ -24,7 +24,7 @@ func show_mode_select(level: Dictionary) -> void:
 		_on_mode_selected(level, mode, start_policy))
 	game.current_modal = "mode_select"
 	game.modal_open = true
-	mode_modal.call(&"navigation_enter", {"view_model": _mode_view_model(level)}, {"reduced_motion": game.progress_store.reduced_motion_enabled()})
+	mode_modal.call(&"navigation_enter", {"view_model": _mode_view_model(level)}, {"reduced_motion": game._reduced_motion_enabled()})
 
 
 func show_gameplay(level: Dictionary, mode: String) -> GameplayScreen:
@@ -36,7 +36,7 @@ func show_gameplay(level: Dictionary, mode: String) -> GameplayScreen:
 	gameplay_screen.hint_requested.connect(_on_hint_requested)
 	gameplay_screen.move_swap_up_requested.connect(_on_move_swap_up_requested)
 	gameplay_screen.move_swap_down_requested.connect(_on_move_swap_down_requested)
-	gameplay_screen.navigation_enter({"view_model": _gameplay_view_model(level, mode)}, {"reduced_motion": game.progress_store.reduced_motion_enabled()})
+	gameplay_screen.navigation_enter({"view_model": _gameplay_view_model(level, mode)}, {"reduced_motion": game._reduced_motion_enabled()})
 	return gameplay_screen
 
 
