@@ -49,7 +49,7 @@ class HomeThemeViewModel:
 		title = str(data["title"])
 		cover_texture = data["cover_texture"]
 		cover_focus = data.get("cover_focus", Vector2(0.5, 0.5))
-		home_ui_variant = StringName(data.get("home_ui_variant", "default"))
+		home_ui_variant = StringName(data.get("home_ui_variant", "on_dark"))
 		progress = data["progress"]
 
 

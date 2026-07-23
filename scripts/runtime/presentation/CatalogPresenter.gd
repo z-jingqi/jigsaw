@@ -30,6 +30,8 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 			"theme_id": topic["id"],
 			"title": topic["name"],
 			"cover_texture": _content.topic_cover(topic),
+			"cover_focus": Vector2(0.5, 0.5),
+			"home_ui_variant": "on_dark",
 			"progress": theme_progress(topic),
 		})
 		models.append(model)
