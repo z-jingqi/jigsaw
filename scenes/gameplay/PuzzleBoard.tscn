@@ -1,0 +1,16 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/board/PuzzleBoard.gd" id="1_board"]
+
+[node name="PuzzleBoard" type="Node2D"]
+script = ExtResource("1_board")
+
+[node name="WorldRoot" type="Node2D" parent="."]
+
+[node name="TrayRoot" type="Node2D" parent="."]
+z_index = 4090
+z_as_relative = false
+
+[node name="VisualHost" type="Node" parent="."]
+
+[node name="InputHost" type="Node" parent="."]

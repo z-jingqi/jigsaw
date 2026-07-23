@@ -265,3 +265,14 @@ func _notify_page_changed() -> void:
 func cancel_transition() -> void:
 	transition_motion.cancel()
 	transitioning = false
+
+
+func shutdown() -> void:
+	reset()
+	if transition_motion != null:
+		transition_motion.shutdown()
+	if gesture != null:
+		gesture.shutdown()
+	transition_motion = null
+	gesture = null
+	game = null

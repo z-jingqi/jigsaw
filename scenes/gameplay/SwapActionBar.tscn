@@ -1,0 +1,46 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/runtime/SwapActionBarView.gd" id="1_bar"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/PillButton.tscn" id="2_pill"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_bar"]
+bg_color = Color(0.0352941, 0.0823529, 0.105882, 0.9)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+border_width_top = 2
+border_color = Color(0.39, 0.43, 0.34, 0.46)
+
+[node name="SwapActionBar" type="Panel"]
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 3
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -88.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBox_bar")
+script = ExtResource("1_bar")
+
+[node name="Actions" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+theme_override_constants/separation = 12
+alignment = 1
+mouse_filter = 2
+
+[node name="MoveUp" parent="Actions" instance=ExtResource("2_pill")]
+layout_mode = 2
+text = "Move row up"
+accessibility_label = "Move selected row up"
+
+[node name="MoveDown" parent="Actions" instance=ExtResource("2_pill")]
+layout_mode = 2
+text = "Move row down"
+accessibility_label = "Move selected row down"

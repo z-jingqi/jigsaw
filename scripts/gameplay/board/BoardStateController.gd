@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardStateController
 
+const BoardSessionIdentityScript := preload("res://scripts/gameplay/runtime/BoardSessionIdentity.gd")
+
 var board: Node2D
 var generation := 0
 
@@ -63,6 +65,57 @@ func snapshot() -> Dictionary:
 	return snapshot
 
 
+func session_piece_ids() -> Array[String]:
+	var ids: Array[String] = []
+	if board.current_mode == "swap":
+		for tile in board.swap_tiles:
+			ids.append(str((tile["node"] as Node).name))
+	else:
+		for group in board.groups:
+			for member in group.members:
+				ids.append(str(member["id"]))
+	ids.sort()
+	return ids
+
+
+func session_snapshot(theme_id: String, level_id: String) -> Dictionary:
+	var ids := session_piece_ids()
+	var result := {
+		"state_version": 1,
+		"theme_id": theme_id,
+		"level_id": level_id,
+		"mode": board.current_mode,
+		"piece_set_fingerprint": BoardSessionIdentityScript.fingerprint(ids),
+		"hint_count": board.hint_count,
+	}
+	if board.current_mode == "swap":
+		var slots: Array[String] = []
+		var ordered: Array = board.swap_tiles.duplicate()
+		ordered.sort_custom(func(left, right) -> bool: return int(left["slot_index"]) < int(right["slot_index"]))
+		for tile in ordered:
+			slots.append(str((tile["node"] as Node).name))
+		result["kind"] = "swap"
+		result["columns"] = board._swap_cols()
+		result["rows"] = board._swap_rows()
+		result["slot_piece_ids"] = slots
+		return result
+	var connected_groups: Array = []
+	for group in board.locked_groups:
+		var ids_in_group: Array[String] = []
+		for member in group.members:
+			ids_in_group.append(str(member["id"]))
+		ids_in_group.sort()
+		connected_groups.append(ids_in_group)
+	var tray_order: Array[String] = []
+	for group in board.tray_groups:
+		for member in group.members:
+			tray_order.append(str(member["id"]))
+	result["kind"] = "assembly"
+	result["connected_groups"] = connected_groups
+	result["tray_order"] = tray_order
+	return result
+
+
 func should_persist() -> bool:
 	if board.completion_emitted:
 		return false
@@ -70,6 +123,9 @@ func should_persist() -> bool:
 
 
 func apply(snapshot: Dictionary) -> void:
+	if int(snapshot.get("state_version", -1)) == 1:
+		_apply_session_state(snapshot)
+		return
 	if str(snapshot.get("mode", board.current_mode)) != board.current_mode:
 		return
 	board.hint_count = maxi(0, int(snapshot.get("hint_count", 0)))
@@ -78,6 +134,30 @@ func apply(snapshot: Dictionary) -> void:
 	else:
 		board._restore_group_state(snapshot)
 	board._restore_view_state(snapshot)
+	board._check_complete()
+	board._check_swap_complete()
+
+
+func _apply_session_state(snapshot: Dictionary) -> void:
+	if str(snapshot.get("mode", "")) != board.current_mode:
+		return
+	board.hint_count = maxi(0, int(snapshot.get("hint_count", 0)))
+	if board.current_mode == "swap":
+		var tile_by_id := {}
+		for tile in board.swap_tiles:
+			tile_by_id[str((tile["node"] as Node).name)] = tile
+		var tiles: Array = []
+		var slot_ids: Array = snapshot.get("slot_piece_ids", [])
+		for slot in slot_ids.size():
+			var tile = tile_by_id.get(str(slot_ids[slot]), null)
+			if tile != null:
+				tiles.append({"correct_index": int(tile["correct_index"]), "slot_index": slot, "z": slot * board.GROUP_Z_STEP})
+		restore_swap_state({"tiles": tiles})
+	else:
+		var groups: Array = []
+		for ids in snapshot.get("connected_groups", []):
+			groups.append({"members": ids, "seed": false})
+		restore_group_state({"groups": groups, "tray_order": snapshot.get("tray_order", [])})
 	board._check_complete()
 	board._check_swap_complete()
 

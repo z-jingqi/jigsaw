@@ -101,3 +101,9 @@ func end(_screen_position: Vector2) -> void:
 func clear_momentum() -> void:
 	total = Vector2.ZERO
 	velocity_x = 0.0
+
+
+func shutdown() -> void:
+	reset()
+	controller = null
+	game = null

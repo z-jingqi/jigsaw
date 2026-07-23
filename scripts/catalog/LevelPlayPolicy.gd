@@ -2,23 +2,27 @@ extends RefCounted
 class_name LevelPlayPolicy
 
 const PLAY_MODES := ["polygon", "knob", "swap"]
+const BoardSessionIdentityScript := preload("res://scripts/gameplay/runtime/BoardSessionIdentity.gd")
 
 var repository
 var progress_store
+var session_repository
 
 
-func _init(level_repository, player_progress) -> void:
+func _init(level_repository, player_progress, player_session) -> void:
 	repository = level_repository
 	progress_store = player_progress
+	session_repository = player_session
 
 
 func level_list_focus_level_id(topic: Dictionary) -> String:
-	var current_level: Dictionary = progress_store.last_level_in_topic(topic)
+	var current: Dictionary = session_repository.current()
+	var current_level: Dictionary = progress_store.level_by_id(topic, str(current.get("level_id", ""))) if str(current.get("theme_id", "")) == str(topic.get("id", "")) else {}
 	if not current_level.is_empty():
 		var current_modes := available_modes_for_level(current_level)
 		if (
 			level_has_unfinished_available_mode(current_level, current_modes)
-			and progress_store.level_has_progress(topic, current_level, current_modes)
+			and _level_has_session_progress(topic, current_level, current_modes)
 		):
 			return str(current_level.get("id", ""))
 	for level in topic.get("levels", []):
@@ -59,9 +63,18 @@ func compute_level_locks(topic: Dictionary) -> Dictionary:
 func level_mode_state(topic: Dictionary, level: Dictionary, play_mode: String) -> String:
 	if progress_store.is_done(str(level.get("id", "")), play_mode):
 		return "done"
-	if not progress_store.play_state(topic, level, play_mode).is_empty():
+	var config: Dictionary = repository.load_level_config(level)
+	var piece_ids: Array[String] = BoardSessionIdentityScript.piece_ids(config, play_mode)
+	if not session_repository.play_state(str(topic.get("id", "")), str(level.get("id", "")), mode_key(play_mode), piece_ids).is_empty():
 		return "active"
 	return "todo"
+
+
+func _level_has_session_progress(topic: Dictionary, level: Dictionary, play_modes: Array[String]) -> bool:
+	for play_mode in play_modes:
+		if level_mode_state(topic, level, play_mode) != "todo":
+			return true
+	return false
 
 
 func available_modes_for_level(level: Dictionary) -> Array[String]:

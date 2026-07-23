@@ -21,6 +21,7 @@ const GameDebugAdapterScript := preload("res://scripts/debug/GameDebugAdapter.gd
 const GameHudScript := preload("res://scripts/gameplay/GameHud.gd")
 const GameDialogsScript := preload("res://scripts/gameplay/GameDialogs.gd")
 const GameSessionControllerScript := preload("res://scripts/gameplay/GameSessionController.gd")
+const GameplayRuntimeHostScript := preload("res://scripts/gameplay/runtime/GameplayRuntimeHost.gd")
 const GameStringsScript := preload("res://scripts/app/GameStrings.gd")
 const GameModalHostScript := preload("res://scripts/app/GameModalHost.gd")
 const GameTextureServiceScript := preload("res://scripts/catalog/GameTextureService.gd")
@@ -30,16 +31,15 @@ const LevelPlayPolicyScript := preload("res://scripts/catalog/LevelPlayPolicy.gd
 const LevelListScreenScript := preload("res://scripts/catalog/LevelListScreen.gd")
 const LevelCardFactoryScript := preload("res://scripts/catalog/LevelCardFactory.gd")
 const LevelUnlockAnimatorScript := preload("res://scripts/catalog/LevelUnlockAnimator.gd")
-const ModeSelectModalScript := preload("res://scripts/catalog/ModeSelectModal.gd")
 const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/progress/ProgressStore.gd")
-const PuzzleBoardScript := preload("res://scripts/gameplay/board/PuzzleBoard.gd")
+const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
+const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const UnlockRevealEffectScript := preload("res://scripts/effects/UnlockRevealEffect.gd")
 ## Compatibility alias used by the validation suite and debug tooling.
 const LEVEL_LIST_THUMBNAIL_SIZE := Vector2i(450, 600)
 const UI_ICON_BUTTON_SIZE := 64.0
 const UI_ICON_INSET := 8.0
-const HUD_BLOCKER_PADDING := 18.0
 const HUD_DEBUG_MEASUREMENTS := false
 const BUTTON_BOUNDS_DEBUG := false
 const BUTTON_BOUNDS_DEBUG_COLOR := Color(0.16, 0.56, 1.0, 0.20)
@@ -80,6 +80,7 @@ var dev_layer: CanvasLayer
 var dev_panel: Control
 var debug_adapter
 var game_hud
+var gameplay_runtime_host
 var game_dialogs
 var game_session = GameSessionControllerScript.new()
 var ui_motion
@@ -90,11 +91,11 @@ var current_modal := ""
 
 var topics: Array[Dictionary] = []
 var progress_store = ProgressStoreScript.new()
+var session_repository = SessionRepositoryScript.new()
 var level_play_policy
 var level_list_screen
 var level_card_factory
 var level_unlock_animator
-var mode_select_modal
 var current_topic: Dictionary = {}
 var current_level: Dictionary = {}
 var current_mode := "knob"
@@ -113,7 +114,6 @@ var level_virtual_items: Array[Dictionary] = []
 var level_virtual_nodes: Dictionary = {}
 var level_virtual_overscan := 0.0
 
-var hud_blocker_controls: Array[Control] = []
 var unlock_effect_style := "fire" # unlock reveal effect: "fire" or "shatter"
 var unlock_reveal_effect = UnlockRevealEffectScript.new()
 var active_locale := "en"
@@ -129,6 +129,7 @@ func _ready() -> void:
 	topic_home_motion = TopicHomeMotionScript.new(self)
 	debug_adapter = GameDebugAdapterScript.new(self)
 	game_hud = GameHudScript.new(self)
+	gameplay_runtime_host = GameplayRuntimeHostScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
 	ui_motion = GameUiMotionScript.new(self, progress_store)
 	texture_service = GameTextureServiceScript.new(repository)
@@ -145,15 +146,15 @@ func _ready() -> void:
 	modal_setting_music_texture = repository.cached_texture(MODAL_SETTING_MUSIC_PATH)
 	modal_setting_sfx_texture = repository.cached_texture(MODAL_SETTING_SFX_PATH)
 	progress_store.load_from_disk()
-	level_play_policy = LevelPlayPolicyScript.new(repository, progress_store)
+	session_repository.load()
+	level_play_policy = LevelPlayPolicyScript.new(repository, progress_store, session_repository)
 	level_list_screen = LevelListScreenScript.new(self)
 	level_card_factory = LevelCardFactoryScript.new(self)
 	level_unlock_animator = LevelUnlockAnimatorScript.new(self)
-	mode_select_modal = ModeSelectModalScript.new(self)
 	active_locale = _detect_locale()
 	game_strings.set_locale(active_locale)
 	repository.set_locale(active_locale)
-	puzzle_board = PuzzleBoardScript.new()
+	puzzle_board = PuzzleBoardScene.instantiate() as PuzzleBoard
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
 	puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
@@ -173,9 +174,11 @@ func _exit_tree() -> void:
 		ui_motion.host = null
 	if topic_home_motion != null:
 		topic_home_motion.shutdown()
-	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, mode_select_modal, game_hud, game_dialogs]:
+	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host]:
 		if helper == null:
 			continue
+		if helper.has_method("shutdown"):
+			helper.shutdown()
 		if "game" in helper:
 			helper.game = null
 
@@ -542,8 +545,7 @@ func _mode_label(mode: String) -> String:
 
 
 func _show_mode_dialog(level: Dictionary) -> void:
-	current_modal = "mode_select"
-	mode_select_modal._show_mode_dialog(level)
+	gameplay_runtime_host.show_mode_select(level)
 
 
 func _animate_new_unlock_card(card: Control, topic: Dictionary, card_width: float) -> void:
@@ -562,10 +564,6 @@ func _on_puzzle_state_changed(state: Dictionary) -> void:
 	game_session.on_puzzle_state_changed(self, state)
 
 
-func _build_game_hud(level_title: String) -> void:
-	game_hud.build(level_title)
-
-
 func _add_topic_title_decorations(
 	parent: Control,
 	title: Label,
@@ -577,14 +575,6 @@ func _add_topic_title_decorations(
 	topic_override: Dictionary = {},
 ) -> void:
 	game_hud.add_topic_title_decorations(parent, title, bar_height, requested_center_x, top_offset, requested_size, requested_gap, topic_override)
-
-
-func _game_top_bar_height() -> float:
-	return game_hud.top_bar_height()
-
-
-func _game_bottom_bar_height() -> float:
-	return game_hud.bottom_bar_height()
 
 
 func _hud_text_button_width(text: String) -> float:
@@ -616,11 +606,13 @@ func _topic_available_done_count(topic: Dictionary) -> int:
 
 
 func _queue_game_drag_blocker_refresh() -> void:
-	game_hud.queue_drag_blocker_refresh()
+	if gameplay_runtime_host != null:
+		gameplay_runtime_host.refresh_board_blockers()
 
 
 func _refresh_game_drag_blockers() -> void:
-	game_hud.refresh_drag_blockers()
+	if gameplay_runtime_host != null:
+		gameplay_runtime_host.refresh_board_blockers()
 
 
 func _apply_level_media(level_config: Dictionary) -> void:
@@ -664,10 +656,6 @@ func _modal_box(
 	close_action := Callable(),
 ) -> VBoxContainer:
 	return modal_host.box(self, size, bg_color, padding, close_action)
-
-
-func _mode_modal_box(size: Vector2) -> VBoxContainer:
-	return modal_host.mode_box(self, size)
 
 
 func _modal_title(text: String, font_size := 44) -> Label:
