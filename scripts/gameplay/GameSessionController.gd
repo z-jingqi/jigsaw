@@ -1,6 +1,10 @@
 extends RefCounted
 class_name GameSessionController
 
+const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
+
+var _completion_event_id := ""
+
 
 func persist_current_puzzle_state(game: Node) -> void:
 	if game.puzzle_board == null or game.current_topic.is_empty() or game.current_level.is_empty() or game.current_mode.is_empty():
@@ -14,6 +18,7 @@ func persist_current_puzzle_state(game: Node) -> void:
 
 
 func show_game(game: Node, topic: Dictionary, level: Dictionary, play_mode: String, discard_current_state := false) -> void:
+	_completion_event_id = ""
 	if not discard_current_state:
 		persist_current_puzzle_state(game)
 	game.current_screen = "game"
@@ -73,6 +78,9 @@ func level_config_with_topic_background(level_config: Dictionary, topic: Diction
 
 
 func on_puzzle_completed(game: Node) -> void:
+	if not _completion_event_id.is_empty():
+		return
+	_completion_event_id = _event_id(game)
 	var locks_before: Dictionary = game._compute_level_locks(game.current_topic)
 	game.progress_store.mark_completed(game.current_level["id"], game.current_mode)
 	var locks_after: Dictionary = game._compute_level_locks(game.current_topic)
@@ -83,7 +91,36 @@ func on_puzzle_completed(game: Node) -> void:
 			game.newly_unlocked_level_id = level_id
 			break
 	game.session_repository.clear_play_state(str(game.current_topic.get("id", "")), str(game.current_level.get("id", "")), game.current_mode)
-	game._show_complete_modal()
+	show_completion(game)
+
+
+func show_completion(game: Node) -> void:
+	if _completion_event_id.is_empty():
+		_completion_event_id = _event_id(game)
+	var level_config: Dictionary = game.repository.load_level_config(game.current_level)
+	var image_path: String = game.repository.level_image_path(level_config)
+	var view_model := ViewModels.CompletionViewModel.new({
+		"revision": 1,
+		"theme_id": str(game.current_topic.get("id", "")),
+		"level_id": str(game.current_level.get("id", "")),
+		"mode": game.current_mode,
+		"completion_event_id": _completion_event_id,
+		"title": game._t("complete"),
+		"level_title": game._level_display_title(game.current_level),
+		"description": level_description(game, level_config),
+		"completed_texture": game._rounded_complete_image_texture(image_path, Vector2i(480, 360), 28),
+		"primary_action_text": game._t("confirm"),
+	})
+	game.completion_runtime_host.show(view_model)
+
+
+func level_description(game: Node, level_config: Dictionary) -> String:
+	var description := str(game.current_level.get("description", "")).strip_edges()
+	return description if not description.is_empty() else str(level_config.get("description", "")).strip_edges()
+
+
+func _event_id(game: Node) -> String:
+	return "%s:%s:%s:%d" % [game.current_topic.get("id", ""), game.current_level.get("id", ""), game.current_mode, Time.get_ticks_msec()]
 
 
 func on_puzzle_state_changed(game: Node, _state: Dictionary) -> void:

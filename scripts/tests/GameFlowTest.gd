@@ -77,8 +77,15 @@ func _exercise_mode(game, topic: Dictionary, level: Dictionary, mode: String) ->
 	_check(game.progress_store.is_done(str(level.id), mode), "%s_marks_completion_once" % mode)
 	_check(game.session_repository.play_state(str(topic.id), str(level.id), mode, piece_ids).is_empty(), "%s_clears_completed_session" % mode)
 	_check(game.current_modal == "complete", "%s_opens_completion_flow" % mode)
-	game._close_modal()
-	await create_timer(0.16).timeout
+	var completion: Control = game.modal_root.get_node_or_null("CompletionModal") as Control
+	_check(completion != null and completion.get_node("ModalShell/Panel/Content/Confirm") is Button, "%s_uses_scene_completion_modal" % mode)
+	_check(completion != null and completion.get_node("CompletionConfetti").get_child_count() == 22, "%s_uses_bounded_confetti" % mode)
+	game.game_session.on_puzzle_completed(game)
+	_check(game.modal_root.get_child_count() == 1, "%s_completion_is_idempotent" % mode)
+	if completion != null:
+		(completion.get_node("ModalShell/Panel/Content/Confirm") as Button).pressed.emit()
+	await create_timer(0.20).timeout
+	_check(game.current_screen == "levels" and game.current_modal.is_empty() and game.modal_root.get_child_count() == 0, "%s_confirmation_returns_to_levels" % mode)
 
 
 func _remove_test_storage() -> void:
