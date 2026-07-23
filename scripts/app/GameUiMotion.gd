@@ -2,17 +2,17 @@ extends RefCounted
 class_name GameUiMotion
 
 var host: Node
-var progress_store
+var motion_preferences
 var button_tweens: Dictionary = {}
 
 
-func _init(owner: Node, player_progress) -> void:
+func _init(owner: Node, preferences) -> void:
 	host = owner
-	progress_store = player_progress
+	motion_preferences = preferences
 
 
 func reduced() -> bool:
-	return progress_store.reduced_motion_enabled()
+	return bool(motion_preferences.snapshot().get("reduced_motion", false))
 
 
 func fade_control_in(control: Control) -> void:

@@ -57,12 +57,10 @@ func execute(command: String, args: Dictionary = {}) -> Dictionary:
 			if not args.has("enabled") or typeof(args["enabled"]) != TYPE_BOOL:
 				return _failure(command, "invalid_argument", "enabled must be a boolean.")
 			var enabled := bool(args["enabled"])
-			game.progress_store.set_reduced_motion_enabled(enabled)
-			game.puzzle_board.set_feedback_preferences(
-				game.progress_store.haptics_enabled(),
-				enabled,
-				game.progress_store.edge_contrast_mode(),
-			)
+			var changed: Dictionary = game.settings_repository.set_value(&"reduced_motion_enabled", enabled)
+			if not bool(changed.get("ok", false)):
+				return _failure(command, str(changed.get("error", "invalid_argument")), "Unable to update Reduced Motion.")
+			game.apply_settings_snapshot()
 		_:
 			return _failure(command, "unknown_command", "Unknown debug command: %s" % command)
 	return {
@@ -92,6 +90,8 @@ func state_snapshot() -> Dictionary:
 		active_motion_count += 1
 	if game.ui_motion != null:
 		active_motion_count += game.ui_motion.button_tweens.size()
+	if game.settings_runtime_host != null:
+		active_motion_count += game.settings_runtime_host.active_motion_count()
 	var state := {
 		"screen": game.current_screen,
 		"modal": game.current_modal if game.modal_open else "",
@@ -100,11 +100,11 @@ func state_snapshot() -> Dictionary:
 		"mode": game.current_mode if game.current_screen == "game" else "",
 		"viewport": [viewport_size.x, viewport_size.y],
 		"content_viewport": [roundi(content_viewport_size.x), roundi(content_viewport_size.y)],
-		"reduced_motion": game.progress_store.reduced_motion_enabled(),
+		"reduced_motion": game._reduced_motion_enabled(),
 		"active_motion_count": active_motion_count,
 	}
 	if game.modal_open:
-		state["modal_motion"] = game.modal_host.debug_state()
+		state["modal_motion"] = {"active_motion_count": game.settings_runtime_host.active_motion_count()} if game.current_modal == "settings" and game.settings_runtime_host != null else game.modal_host.debug_state()
 	return state
 
 

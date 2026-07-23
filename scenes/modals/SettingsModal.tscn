@@ -1,0 +1,58 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/modals/SettingsModal.gd" id="1_modal"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/ModalShell.tscn" id="2_shell"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/SettingsRow.tscn" id="3_row"]
+
+[node name="SettingsModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_modal")
+
+[node name="ModalShell" parent="." instance=ExtResource("2_shell")]
+layout_mode = 1
+
+[node name="Header" type="HBoxContainer" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="ModalShell/Panel/Content/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
+theme_override_font_sizes/font_size = 44
+vertical_alignment = 1
+
+[node name="Close" type="Button" parent="ModalShell/Panel/Content/Header"]
+custom_minimum_size = Vector2(84, 84)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
+theme_override_font_sizes/font_size = 52
+text = "×"
+tooltip_text = "Close"
+accessibility_name = "Close"
+
+[node name="Rows" type="VBoxContainer" parent="ModalShell/Panel/Content"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Haptics" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
+layout_mode = 2
+
+[node name="Music" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
+layout_mode = 2
+
+[node name="SoundEffects" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
+layout_mode = 2
+
+[node name="Error" type="Label" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.74, 0.20, 0.18, 1)
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+visible = false

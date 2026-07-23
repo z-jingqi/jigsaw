@@ -21,7 +21,7 @@ func show(view_model: ViewModels.CompletionViewModel) -> void:
 	modal.connect(&"dismissed", _on_dismissed)
 	game.current_modal = "complete"
 	game.modal_open = true
-	modal.call(&"navigation_enter", {"view_model": view_model}, {"reduced_motion": game.progress_store.reduced_motion_enabled()})
+	modal.call(&"navigation_enter", {"view_model": view_model}, {"reduced_motion": game._reduced_motion_enabled()})
 
 
 func request_close() -> void:

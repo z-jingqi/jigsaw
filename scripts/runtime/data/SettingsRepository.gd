@@ -34,7 +34,7 @@ func revision() -> int:
 
 func set_value(key: StringName, value: bool) -> Dictionary:
 	if key not in [&"haptics_enabled", &"music_enabled", &"sound_effects_enabled", &"reduced_motion_enabled"]:
-		return {"ok": false, "error": "invalid_setting"}
+		return {"ok": false, "error": "invalid_argument"}
 	if bool(_data[key]) == value:
 		return {"ok": true, "changed": false}
 	var previous := _data.duplicate(true)

@@ -35,6 +35,10 @@ const LevelUnlockAnimatorScript := preload("res://scripts/catalog/LevelUnlockAni
 const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/progress/ProgressStore.gd")
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
+const SettingsRepositoryScript := preload("res://scripts/runtime/data/SettingsRepository.gd")
+const MotionPreferencesScript := preload("res://scripts/runtime/state/MotionPreferences.gd")
+const SystemPresenterScript := preload("res://scripts/runtime/presentation/SystemPresenter.gd")
+const SettingsRuntimeHostScript := preload("res://scripts/gameplay/runtime/SettingsRuntimeHost.gd")
 const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const UnlockRevealEffectScript := preload("res://scripts/effects/UnlockRevealEffect.gd")
 ## Compatibility alias used by the validation suite and debug tooling.
@@ -83,6 +87,7 @@ var debug_adapter
 var game_hud
 var gameplay_runtime_host
 var completion_runtime_host
+var settings_runtime_host
 var game_dialogs
 var game_session = GameSessionControllerScript.new()
 var ui_motion
@@ -94,6 +99,9 @@ var current_modal := ""
 var topics: Array[Dictionary] = []
 var progress_store = ProgressStoreScript.new()
 var session_repository = SessionRepositoryScript.new()
+var settings_repository = SettingsRepositoryScript.new()
+var motion_preferences
+var system_presenter
 var level_play_policy
 var level_list_screen
 var level_card_factory
@@ -133,8 +141,8 @@ func _ready() -> void:
 	game_hud = GameHudScript.new(self)
 	gameplay_runtime_host = GameplayRuntimeHostScript.new(self)
 	completion_runtime_host = CompletionRuntimeHostScript.new(self)
+	settings_runtime_host = SettingsRuntimeHostScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
-	ui_motion = GameUiMotionScript.new(self, progress_store)
 	texture_service = GameTextureServiceScript.new(repository)
 	mode_title_side_decoration_texture = repository.cached_texture(MODE_TITLE_SIDE_DECORATION_PATH)
 	icon_mode_knob_done = repository.cached_texture(ICON_MODE_KNOB_DONE_PATH)
@@ -150,6 +158,10 @@ func _ready() -> void:
 	modal_setting_sfx_texture = repository.cached_texture(MODAL_SETTING_SFX_PATH)
 	progress_store.load_from_disk()
 	session_repository.load()
+	settings_repository.load()
+	motion_preferences = MotionPreferencesScript.new(settings_repository)
+	system_presenter = SystemPresenterScript.new(settings_repository, motion_preferences, game_strings)
+	ui_motion = GameUiMotionScript.new(self, motion_preferences)
 	level_play_policy = LevelPlayPolicyScript.new(repository, progress_store, session_repository)
 	level_list_screen = LevelListScreenScript.new(self)
 	level_card_factory = LevelCardFactoryScript.new(self)
@@ -160,7 +172,7 @@ func _ready() -> void:
 	puzzle_board = PuzzleBoardScene.instantiate() as PuzzleBoard
 	puzzle_board.completed.connect(_on_puzzle_completed)
 	puzzle_board.state_changed.connect(_on_puzzle_state_changed)
-	puzzle_board.set_feedback_preferences(progress_store.haptics_enabled(), progress_store.reduced_motion_enabled(), progress_store.edge_contrast_mode())
+	apply_settings_snapshot()
 	add_child(puzzle_board)
 	get_viewport().size_changed.connect(_queue_game_drag_blocker_refresh)
 	ui_layer = CanvasLayer.new()
@@ -177,7 +189,7 @@ func _exit_tree() -> void:
 		ui_motion.host = null
 	if topic_home_motion != null:
 		topic_home_motion.shutdown()
-	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host, completion_runtime_host]:
+	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host, completion_runtime_host, settings_runtime_host]:
 		if helper == null:
 			continue
 		if helper.has_method("shutdown"):
@@ -319,6 +331,8 @@ func _t(key: String) -> String:
 func _clear_ui() -> void:
 	if completion_runtime_host != null:
 		completion_runtime_host.clear()
+	if settings_runtime_host != null:
+		settings_runtime_host.clear()
 	modal_host.reset()
 	if level_list_screen != null:
 		level_list_screen.cancel_motion()
@@ -356,6 +370,23 @@ func _persist_current_puzzle_state() -> void:
 
 func _ui_motion_reduced() -> bool:
 	return ui_motion.reduced()
+
+
+func _reduced_motion_enabled() -> bool:
+	return bool(motion_preferences.snapshot().get("reduced_motion", false)) if motion_preferences != null else false
+
+
+func apply_settings_snapshot() -> Dictionary:
+	if settings_repository == null:
+		return {"ok": false, "error": "settings_unavailable"}
+	var snapshot: Dictionary = settings_repository.snapshot()
+	if puzzle_board != null:
+		puzzle_board.set_feedback_preferences(
+			bool(snapshot.get("haptics_enabled", true)),
+			bool(snapshot.get("reduced_motion_enabled", false)),
+			progress_store.edge_contrast_mode(),
+		)
+	return {"ok": true}
 
 
 func _fade_control_in(control: Control) -> void:
@@ -628,8 +659,8 @@ func _return_to_current_level_list() -> void:
 
 
 func _show_settings_modal() -> void:
-	current_modal = "settings"
-	game_dialogs.show_settings()
+	if settings_runtime_host != null:
+		settings_runtime_host.show()
 
 
 func _show_tutorial_modal() -> void:
@@ -668,6 +699,9 @@ func _modal_title(text: String, font_size := 44) -> Label:
 func _close_modal() -> void:
 	if current_modal == "complete" and completion_runtime_host != null:
 		completion_runtime_host.request_close()
+		return
+	if current_modal == "settings" and settings_runtime_host != null:
+		settings_runtime_host.request_close()
 		return
 	current_modal = ""
 	modal_host.close(self)
