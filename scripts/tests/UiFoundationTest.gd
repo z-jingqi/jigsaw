@@ -105,7 +105,7 @@ func _test_component_scenes() -> void:
 	await create_timer(0.16).timeout
 	_check(icon_button.scale.is_equal_approx(Vector2.ONE), "icon_release_feedback")
 	theme_card.set_view_model({"theme_id": "shanhai", "title": "The Classic of Mountains and Seas", "progress": _progress(2, 5, 0.4, 2, false)})
-	_check(theme_card.theme_id == "shanhai" and theme_card.get_node("Margin/Content/Progress").text == "2 / 5", "theme_card_view_model")
+	_check(theme_card.theme_id == "shanhai" and theme_card.get_node("Margin/Content/Progress/Numeric").text == "2 / 5", "theme_card_view_model")
 	_check(not theme_card.accessibility_name.is_empty(), "theme_card_accessibility")
 	level_card.set_view_model({"level_id": "shanhai_08", "title": "Nine-tailed Fox", "locked": false, "modes": [{"status": "complete"}, {"status": "available"}]})
 	_check(level_card.level_id == "shanhai_08" and level_card.get_node("Margin/Content/Status").text == "complete · available", "level_card_view_model")

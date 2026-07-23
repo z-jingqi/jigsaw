@@ -1,13 +1,15 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/foundation/ThemeCard.gd" id="1_card"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/ThemeProgress.tscn" id="3_progress"]
 
 [node name="ThemeCard" type="Button"]
 custom_minimum_size = Vector2(160, 180)
 theme = ExtResource("2_theme")
 script = ExtResource("1_card")
 kind = 3
+clip_contents = true
 
 [node name="Margin" type="MarginContainer" parent="."]
 layout_mode = 1
@@ -26,11 +28,19 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_constants/separation = 8
 
+[node name="Cover" type="TextureRect" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 104)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
+
 [node name="Title" type="Label" parent="Margin/Content"]
 layout_mode = 2
 autowrap_mode = 2
 theme_override_font_sizes/font_size = 20
 
-[node name="Progress" type="Label" parent="Margin/Content"]
+[node name="Progress" parent="Margin/Content" instance=ExtResource("3_progress")]
+custom_minimum_size = Vector2(0, 32)
 layout_mode = 2
-theme_override_font_sizes/font_size = 16
+display_variant = 1
