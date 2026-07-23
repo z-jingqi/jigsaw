@@ -1,0 +1,48 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/navigation/AppNavigator.gd" id="1_navigator"]
+[ext_resource type="Script" path="res://scripts/navigation/TransitionHost.gd" id="2_transition"]
+
+[node name="Game" type="Node"]
+
+[node name="AppNavigator" type="Node" parent="."]
+script = ExtResource("1_navigator")
+screen_host_path = NodePath("../UiLayer/ScreenHost")
+modal_host_path = NodePath("../UiLayer/ModalHost")
+transition_host_path = NodePath("../UiLayer/TransitionHost")
+
+[node name="WorldHost" type="Node2D" parent="."]
+
+[node name="UiLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="ScreenHost" type="Control" parent="UiLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TransitionHost" type="Control" parent="UiLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_transition")
+
+[node name="ModalHost" type="Control" parent="UiLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DebugLayer" type="CanvasLayer" parent="."]
+layer = 20
