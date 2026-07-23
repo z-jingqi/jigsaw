@@ -22,6 +22,7 @@ const GameHudScript := preload("res://scripts/gameplay/GameHud.gd")
 const GameDialogsScript := preload("res://scripts/gameplay/GameDialogs.gd")
 const GameSessionControllerScript := preload("res://scripts/gameplay/GameSessionController.gd")
 const GameplayRuntimeHostScript := preload("res://scripts/gameplay/runtime/GameplayRuntimeHost.gd")
+const CompletionRuntimeHostScript := preload("res://scripts/gameplay/runtime/CompletionRuntimeHost.gd")
 const GameStringsScript := preload("res://scripts/app/GameStrings.gd")
 const GameModalHostScript := preload("res://scripts/app/GameModalHost.gd")
 const GameTextureServiceScript := preload("res://scripts/catalog/GameTextureService.gd")
@@ -81,6 +82,7 @@ var dev_panel: Control
 var debug_adapter
 var game_hud
 var gameplay_runtime_host
+var completion_runtime_host
 var game_dialogs
 var game_session = GameSessionControllerScript.new()
 var ui_motion
@@ -130,6 +132,7 @@ func _ready() -> void:
 	debug_adapter = GameDebugAdapterScript.new(self)
 	game_hud = GameHudScript.new(self)
 	gameplay_runtime_host = GameplayRuntimeHostScript.new(self)
+	completion_runtime_host = CompletionRuntimeHostScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
 	ui_motion = GameUiMotionScript.new(self, progress_store)
 	texture_service = GameTextureServiceScript.new(repository)
@@ -174,7 +177,7 @@ func _exit_tree() -> void:
 		ui_motion.host = null
 	if topic_home_motion != null:
 		topic_home_motion.shutdown()
-	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host]:
+	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host, completion_runtime_host]:
 		if helper == null:
 			continue
 		if helper.has_method("shutdown"):
@@ -314,7 +317,8 @@ func _t(key: String) -> String:
 
 
 func _clear_ui() -> void:
-	_stop_complete_confetti()
+	if completion_runtime_host != null:
+		completion_runtime_host.clear()
 	modal_host.reset()
 	if level_list_screen != null:
 		level_list_screen.cancel_motion()
@@ -634,13 +638,12 @@ func _show_tutorial_modal() -> void:
 
 
 func _show_complete_modal() -> void:
-	current_modal = "complete"
-	game_dialogs.show_complete()
+	game_session.show_completion(self)
 
 
 func _stop_complete_confetti() -> void:
-	if game_dialogs != null:
-		game_dialogs.stop_complete_confetti()
+	if completion_runtime_host != null:
+		completion_runtime_host.clear()
 
 
 func _show_modal(shade_color := Color(0, 0, 0, 0.42), blur_background := false) -> void:
@@ -663,5 +666,8 @@ func _modal_title(text: String, font_size := 44) -> Label:
 
 
 func _close_modal() -> void:
+	if current_modal == "complete" and completion_runtime_host != null:
+		completion_runtime_host.request_close()
+		return
 	current_modal = ""
 	modal_host.close(self)
