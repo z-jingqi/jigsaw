@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/ui/AnimatedModalShell.tscn" id="1_shell"]
+
+[node name="ModalShell" instance=ExtResource("1_shell")]

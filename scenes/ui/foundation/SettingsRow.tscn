@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/foundation/SettingsRow.gd" id="1_row"]
+[ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
+
+[node name="SettingsRow" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 44)
+theme = ExtResource("2_theme")
+theme_override_constants/separation = 12
+script = ExtResource("1_row")
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+vertical_alignment = 1
+
+[node name="Toggle" type="CheckButton" parent="."]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+
+[connection signal="toggled" from="Toggle" to="." method="_on_toggle_toggled"]

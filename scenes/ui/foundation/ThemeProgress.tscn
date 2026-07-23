@@ -1,0 +1,110 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/foundation/ThemeProgress.gd" id="1_progress"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat.svg" id="2_cat"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_fish.svg" id="3_fish"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_paw.svg" id="4_paw"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat_fish.svg" id="5_complete"]
+
+[node name="ThemeProgress" type="Control"]
+custom_minimum_size = Vector2(208, 48)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_progress")
+
+[node name="Journey" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Paws" type="Control" parent="Journey"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Paw1" type="TextureRect" parent="Journey/Paws"]
+texture = ExtResource("4_paw")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Paw2" type="TextureRect" parent="Journey/Paws"]
+texture = ExtResource("4_paw")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Paw3" type="TextureRect" parent="Journey/Paws"]
+texture = ExtResource("4_paw")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Paw4" type="TextureRect" parent="Journey/Paws"]
+texture = ExtResource("4_paw")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Paw5" type="TextureRect" parent="Journey/Paws"]
+texture = ExtResource("4_paw")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Cat" type="TextureRect" parent="Journey"]
+texture = ExtResource("2_cat")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Fish" type="TextureRect" parent="Journey"]
+texture = ExtResource("3_fish")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Completion" type="TextureRect" parent="Journey"]
+texture = ExtResource("5_complete")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Numeric" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 18
+
+[node name="NumericCompletion" type="TextureRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -42.0
+offset_bottom = 42.0
+grow_horizontal = 0
+grow_vertical = 0
+texture = ExtResource("5_complete")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
