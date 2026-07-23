@@ -7,11 +7,9 @@ func persist_current_puzzle_state(game: Node) -> void:
 		return
 	if not game.puzzle_board.should_persist_state():
 		return
-	game.progress_store.save_play_state(
-		game.current_topic,
-		game.current_level,
-		game.current_mode,
-		game.puzzle_board.state_snapshot(),
+	game.session_repository.save_play_state(
+		game.puzzle_board.session_snapshot(str(game.current_topic.get("id", "")), str(game.current_level.get("id", ""))),
+		game.puzzle_board.session_piece_ids(),
 	)
 
 
@@ -29,11 +27,13 @@ func show_game(game: Node, topic: Dictionary, level: Dictionary, play_mode: Stri
 	if game.current_mode.is_empty():
 		game._show_levels(topic, str(level.get("id", "")))
 		return
-	game.progress_store.mark_last_played(topic, level, game.current_mode)
-	var restore_state: Dictionary = game.progress_store.play_state(topic, level, game.current_mode)
+	if discard_current_state:
+		game.session_repository.clear_play_state(str(topic.get("id", "")), str(level.get("id", "")), game.current_mode)
+	game.session_repository.set_current(str(topic.get("id", "")), str(level.get("id", "")), game.current_mode)
 	apply_level_media(game, game.active_level_config)
 	game._clear_ui()
 	game._clear_board()
+	game.gameplay_runtime_host.show_gameplay(level, game.current_mode)
 	var random_rotation: bool = game.progress_store.random_rotation_enabled() and game.current_mode != "swap"
 	var loaded: bool = game.puzzle_board.start(
 		game.active_level_config,
@@ -41,12 +41,17 @@ func show_game(game: Node, topic: Dictionary, level: Dictionary, play_mode: Stri
 		game.texture,
 		game.source_image,
 		game.source_size,
-		game._game_top_bar_height(),
+		game.gameplay_runtime_host.gameplay_top_reserved_height(),
 		random_rotation,
-		restore_state,
-		game._game_bottom_bar_height(),
+		{},
+		game.gameplay_runtime_host.gameplay_bottom_reserved_height(),
+		game.gameplay_runtime_host.gameplay_tray_rect(),
 	)
-	game._build_game_hud(game._level_display_title(level))
+	if loaded:
+		var restore_state: Dictionary = game.session_repository.play_state(str(topic.get("id", "")), str(level.get("id", "")), game.current_mode, game.puzzle_board.session_piece_ids())
+		if not restore_state.is_empty():
+			game.puzzle_board.apply_state_snapshot(restore_state)
+		game.gameplay_runtime_host.mark_board_live()
 	if loaded and not game.progress_store.tutorial_seen(game.current_mode):
 		game._show_tutorial_modal()
 
@@ -77,14 +82,17 @@ func on_puzzle_completed(game: Node) -> void:
 			game.newly_unlocked_topic_id = str(game.current_topic.get("id", ""))
 			game.newly_unlocked_level_id = level_id
 			break
-	game.progress_store.clear_play_state(game.current_topic, game.current_level, game.current_mode)
+	game.session_repository.clear_play_state(str(game.current_topic.get("id", "")), str(game.current_level.get("id", "")), game.current_mode)
 	game._show_complete_modal()
 
 
-func on_puzzle_state_changed(game: Node, state: Dictionary) -> void:
+func on_puzzle_state_changed(game: Node, _state: Dictionary) -> void:
 	if game.current_screen != "game" or game.current_topic.is_empty() or game.current_level.is_empty() or game.current_mode.is_empty():
 		return
-	game.progress_store.save_play_state(game.current_topic, game.current_level, game.current_mode, state)
+	game.session_repository.save_play_state(
+		game.puzzle_board.session_snapshot(str(game.current_topic.get("id", "")), str(game.current_level.get("id", ""))),
+		game.puzzle_board.session_piece_ids(),
+	)
 
 
 func apply_level_media(game: Node, level_config: Dictionary) -> void:

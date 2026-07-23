@@ -77,7 +77,8 @@ func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool:
 	if str(state.get("theme_id", "")).is_empty() or str(state.get("level_id", "")).is_empty():
 		return false
 	var mode := str(state.get("mode", ""))
-	if not PLAY_MODES.has(mode) or str(state.get("piece_set_fingerprint", "")).is_empty():
+	var expected_fingerprint := _expected_fingerprint(piece_ids)
+	if not PLAY_MODES.has(mode) or expected_fingerprint.is_empty() or str(state.get("piece_set_fingerprint", "")) != expected_fingerprint:
 		return false
 	if mode == "swap":
 		var slots: Array = state.get("slot_piece_ids", [])
@@ -114,6 +115,20 @@ func _is_valid_assembly(groups: Array, tray: Array, piece_ids: Array[String]) ->
 			return false
 		seen[piece_id] = true
 	return seen.size() == piece_ids.size()
+
+
+func _expected_fingerprint(piece_ids: Array[String]) -> String:
+	if piece_ids.is_empty():
+		return ""
+	var seen := {}
+	var ordered: Array[String] = []
+	for piece_id in piece_ids:
+		if piece_id.is_empty() or seen.has(piece_id):
+			return ""
+		seen[piece_id] = true
+		ordered.append(piece_id)
+	ordered.sort()
+	return "|".join(ordered)
 
 
 func _commit(next_data: Dictionary) -> Dictionary:

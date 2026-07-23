@@ -94,56 +94,6 @@ func close_button(game: Node, action: Callable) -> Button:
 	return button
 
 
-func mode_box(game: Node, size: Vector2) -> VBoxContainer:
-	var active = _ensure_shell(game)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#FFF8EC")
-	style.border_color = Color("#E7B47E")
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.corner_radius_top_left = 36
-	style.corner_radius_top_right = 36
-	style.corner_radius_bottom_left = 36
-	style.corner_radius_bottom_right = 36
-	style.shadow_color = Color(0.36, 0.20, 0.08, 0.16)
-	style.shadow_size = 8
-	style.shadow_offset = Vector2(0, 4)
-	var horizontal_padding: float = game.mode_select_modal._mode_dialog_horizontal_padding(size.x)
-	var content: VBoxContainer = active.configure_panel(size, style, Vector4(horizontal_padding, 66.0, horizontal_padding, 52.0))
-	content.add_theme_constant_override("separation", 24)
-	active.panel.add_child(mode_close_button(game))
-	active.play_open(game._ui_motion_reduced())
-	return content
-
-
-func mode_close_button(game: Node) -> Button:
-	var button := Button.new()
-	button.text = "×"
-	button.custom_minimum_size = Vector2(104, 104)
-	button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	button.offset_left = -126
-	button.offset_top = 14
-	button.offset_right = -22
-	button.offset_bottom = 118
-	button.add_theme_font_size_override("font_size", 68)
-	button.add_theme_color_override("font_color", game.brown)
-	button.add_theme_color_override("font_hover_color", game.deep_orange)
-	button.add_theme_color_override("font_pressed_color", game.deep_orange)
-	var normal: StyleBoxFlat = game._rounded_panel_style(Color(1.0, 0.98, 0.93, 0.0), 52)
-	button.add_theme_stylebox_override("normal", normal)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(1.0, 0.93, 0.82, 0.78)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover.duplicate())
-	button.add_theme_stylebox_override("focus", normal.duplicate())
-	button.add_theme_stylebox_override("disabled", normal.duplicate())
-	button.pressed.connect(Callable(game, "_close_modal"))
-	game._wire_button_animation(button)
-	return button
-
-
 func title(game: Node, text: String, font_size := 44) -> Label:
 	var label := Label.new()
 	label.text = text

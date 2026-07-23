@@ -105,10 +105,13 @@ func animate_enter_theme(fixed_ui: Control, current_page: Control) -> void:
 	tween.tween_property(fixed_ui, "modulate:a", 0.0, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	tween.tween_property(current_page, "scale", Vector2(1.08, 1.08), 0.42).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(current_page, "modulate:a", 0.72, 0.34).set_delay(0.08).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_track(tween)
 	await tween.finished
+	screen_tweens.erase(tween)
 
 
 func debug_state() -> Dictionary:
+	_prune_finished_tweens()
 	return {"active_tweens": screen_tweens.size()}
 
 
@@ -120,8 +123,8 @@ func shutdown() -> void:
 func _track(tween: Tween) -> void:
 	if tween == null:
 		return
+	_prune_finished_tweens()
 	screen_tweens.append(tween)
-	tween.finished.connect(func() -> void: screen_tweens.erase(tween))
 
 
 func _cancel_motion() -> void:
@@ -129,6 +132,14 @@ func _cancel_motion() -> void:
 		if tween != null and tween.is_valid():
 			tween.kill()
 	screen_tweens.clear()
+
+
+func _prune_finished_tweens() -> void:
+	var active: Array[Tween] = []
+	for tween in screen_tweens:
+		if tween != null and tween.is_valid() and tween.is_running():
+			active.append(tween)
+	screen_tweens = active
 
 
 func _reduced() -> bool:

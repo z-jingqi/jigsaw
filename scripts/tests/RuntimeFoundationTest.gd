@@ -55,7 +55,7 @@ func _run() -> void:
 		"theme_id": "topic_01",
 		"level_id": "level_01",
 		"mode": "polygon",
-		"piece_set_fingerprint": "sha256:test",
+		"piece_set_fingerprint": "piece_00|piece_01|piece_02",
 		"kind": "assembly",
 		"connected_groups": [["piece_00", "piece_01"]],
 		"tray_order": ["piece_02"],
@@ -63,6 +63,9 @@ func _run() -> void:
 	}
 	_check(session.save_play_state(assembly, pieces).get("ok", false), "assembly_saved")
 	_check(not session.play_state("topic_01", "level_01", "polygon", pieces).is_empty(), "assembly_restored")
+	var invalid_fingerprint := assembly.duplicate(true)
+	invalid_fingerprint["piece_set_fingerprint"] = "outdated-piece-set"
+	_check(not bool(session.save_play_state(invalid_fingerprint, pieces).get("ok", true)), "invalid_fingerprint_rejected")
 	var invalid_swap := assembly.duplicate(true)
 	invalid_swap["mode"] = "swap"
 	invalid_swap["kind"] = "swap"

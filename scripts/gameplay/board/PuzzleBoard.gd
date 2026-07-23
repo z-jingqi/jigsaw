@@ -92,7 +92,9 @@ var current_mode := "knob"
 var rng := RandomNumberGenerator.new()
 var world_root: Node2D
 var tray_root: Node2D
+var tray_background: Panel
 var tray_top_border: ColorRect
+var tray_bounds_override := Rect2()
 var view_scale := 1.0
 var view_target_scale := 1.0
 var view_target_ratio := 1.0
@@ -285,6 +287,14 @@ func state_snapshot() -> Dictionary:
 	return state_controller.snapshot()
 
 
+func session_piece_ids() -> Array[String]:
+	return state_controller.session_piece_ids()
+
+
+func session_snapshot(theme_id: String, level_id: String) -> Dictionary:
+	return state_controller.session_snapshot(theme_id, level_id)
+
+
 func should_persist_state() -> bool:
 	return state_controller.should_persist()
 
@@ -317,7 +327,7 @@ func _json_vector(value, fallback := Vector2.ZERO) -> Vector2:
 	return state_controller.json_vector(value, fallback)
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}, bottom_reserved_height := 0.0) -> bool:
+func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}, bottom_reserved_height := 0.0, tray_bounds := Rect2()) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -327,17 +337,17 @@ func start(level_config: Dictionary, play_mode: String, source_texture: Texture2
 	piece_visual_style = _piece_visual_style()
 	hud_top_reserved_height = top_reserved_height
 	hud_bottom_reserved_height = maxf(0.0, bottom_reserved_height)
+	tray_bounds_override = tray_bounds
 	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
-	world_root = Node2D.new()
-	world_root.name = "world_root"
-	add_child(world_root)
-	tray_root = Node2D.new()
-	tray_root.name = "tray_root"
+	world_root = get_node_or_null("WorldRoot") as Node2D
+	tray_root = get_node_or_null("TrayRoot") as Node2D
+	if world_root == null or tray_root == null:
+		push_error("PuzzleBoard requires WorldRoot and TrayRoot scene hosts.")
+		return false
 	tray_root.z_index = TRAY_Z_INDEX
 	tray_root.z_as_relative = false
-	add_child(tray_root)
 	_reset_view_transform()
 	var loaded := _start_play_session(current_mode)
 	if loaded and typeof(restore_state) == TYPE_DICTIONARY and not restore_state.is_empty():
@@ -351,6 +361,10 @@ func clear() -> void:
 	_clear_swap_target_preview()
 	_cancel_runtime_animations()
 	for child in get_children():
+		if child.name in [&"WorldRoot", &"TrayRoot", &"VisualHost", &"InputHost"]:
+			for runtime_child in child.get_children():
+				runtime_child.queue_free()
+			continue
 		child.queue_free()
 	groups.clear()
 	tray_groups.clear()
@@ -403,7 +417,9 @@ func clear() -> void:
 	pinch_active = false
 	world_root = null
 	tray_root = null
+	tray_background = null
 	tray_top_border = null
+	tray_bounds_override = Rect2()
 	view_scale = 1.0
 	view_target_scale = 1.0
 	view_target_ratio = 1.0

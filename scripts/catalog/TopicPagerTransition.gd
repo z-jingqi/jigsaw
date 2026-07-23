@@ -50,3 +50,8 @@ func cancel() -> void:
 	if tween != null and tween.is_valid():
 		tween.kill()
 	tween = null
+
+
+func shutdown() -> void:
+	cancel()
+	game = null

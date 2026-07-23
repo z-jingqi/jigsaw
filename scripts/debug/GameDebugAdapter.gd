@@ -143,7 +143,6 @@ func restart_current_level() -> void:
 	if game.current_topic.is_empty() or game.current_level.is_empty() or game.current_mode.is_empty():
 		return
 	game._close_modal()
-	game.progress_store.clear_play_state(game.current_topic, game.current_level, game.current_mode)
 	game._show_game(game.current_topic, game.current_level, game.current_mode, true)
 
 

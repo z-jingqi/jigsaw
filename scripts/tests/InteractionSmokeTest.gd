@@ -1,7 +1,7 @@
 extends SceneTree
 
 const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
-const PuzzleBoardScript := preload("res://scripts/gameplay/board/PuzzleBoard.gd")
+const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const LEVEL_PATH := "res://levels/topic_01/shanhai_01/level.json"
 
 
@@ -16,7 +16,7 @@ func _run() -> void:
 	var media := repository.apply_level_media(level_config)
 	var all_ok := true
 	for play_mode in ["polygon", "knob", "swap"]:
-		var board = PuzzleBoardScript.new()
+		var board := PuzzleBoardScene.instantiate() as PuzzleBoard
 		root.add_child(board)
 		board.set_feedback_preferences(false, true)
 		var loaded: bool = board.start(

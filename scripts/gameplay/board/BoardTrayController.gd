@@ -11,6 +11,8 @@ func _init(owner: Node2D) -> void:
 
 
 func _tray_area() -> Rect2:
+	if host.tray_bounds_override.size.x > 0.0 and host.tray_bounds_override.size.y > 0.0:
+		return host.tray_bounds_override
 	var viewport: Vector2 = host.get_viewport_rect().size
 	var height: float = maxf(host.TRAY_MIN_HEIGHT, viewport.y * host.TRAY_HEIGHT_RATIO)
 	var bottom: float = maxf(0.0, viewport.y - host.hud_bottom_reserved_height)
@@ -20,6 +22,15 @@ func _tray_area() -> Rect2:
 func _ensure_tray_top_border() -> void:
 	if host.tray_root == null or not is_instance_valid(host.tray_root):
 		return
+	if host.tray_background == null or not is_instance_valid(host.tray_background):
+		host.tray_background = Panel.new()
+		host.tray_background.name = "tray_background"
+		host.tray_background.z_index = -20
+		host.tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var background_style := StyleBoxFlat.new()
+		background_style.bg_color = Color(0.035, 0.082, 0.106, 0.90)
+		host.tray_background.add_theme_stylebox_override("panel", background_style)
+		host.tray_root.add_child(host.tray_background)
 	if host.tray_top_border == null or not is_instance_valid(host.tray_top_border):
 		host.tray_top_border = ColorRect.new()
 		host.tray_top_border.name = "tray_top_border"
@@ -28,8 +39,16 @@ func _ensure_tray_top_border() -> void:
 		host.tray_top_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		host.tray_root.add_child(host.tray_top_border)
 	var area: Rect2 = _tray_area()
+	var layout_scale := maxf(1.0, area.size.y / 112.0) if host.tray_bounds_override.size.y > 0.0 else 1.0
+	var background_style := host.tray_background.get_theme_stylebox("panel") as StyleBoxFlat
+	background_style.corner_radius_top_left = roundi(24.0 * layout_scale)
+	background_style.corner_radius_top_right = roundi(24.0 * layout_scale)
+	background_style.border_width_top = roundi(2.0 * layout_scale)
+	background_style.border_color = host.TRAY_TOP_BORDER_COLOR
+	host.tray_background.position = area.position
+	host.tray_background.size = area.size
 	host.tray_top_border.position = area.position
-	host.tray_top_border.size = Vector2(area.size.x, host.TRAY_TOP_BORDER_HEIGHT)
+	host.tray_top_border.size = Vector2(area.size.x, host.TRAY_TOP_BORDER_HEIGHT * layout_scale)
 
 
 func _layout_tray(instant := false) -> void:
