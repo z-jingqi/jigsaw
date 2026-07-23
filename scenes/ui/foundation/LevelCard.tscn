@@ -26,6 +26,13 @@ mouse_filter = 2
 layout_mode = 2
 theme_override_constants/separation = 8
 
+[node name="Thumbnail" type="TextureRect" parent="Margin/Content"]
+custom_minimum_size = Vector2(0, 92)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
+
 [node name="Title" type="Label" parent="Margin/Content"]
 layout_mode = 2
 autowrap_mode = 2
@@ -33,3 +40,5 @@ theme_override_font_sizes/font_size = 19
 
 [node name="Status" type="Label" parent="Margin/Content"]
 layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 14
