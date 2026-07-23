@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="1_button"]
+[ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
+
+[node name="IconButton" type="Button"]
+custom_minimum_size = Vector2(44, 44)
+theme = ExtResource("2_theme")
+script = ExtResource("1_button")
+kind = 2
+flat = true

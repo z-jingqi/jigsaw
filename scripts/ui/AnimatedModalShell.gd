@@ -7,6 +7,7 @@ const CAPTURED_OPEN := &"_captured_open"
 const CAPTURED_CLOSE := &"_captured_close"
 const OPEN_DURATION := 0.24
 const CLOSE_DURATION := 0.14
+const FocusNavigationScript := preload("res://scripts/ui/foundation/FocusNavigation.gd")
 
 @onready var shade: ColorRect = $Shade
 @onready var panel: Panel = $Panel
@@ -15,10 +16,13 @@ const CLOSE_DURATION := 0.14
 
 var phase := "idle"
 var _has_opened := false
+var _focus_trigger: Control
+var _previous_focus: Control
 
 
 func _ready() -> void:
 	animation_player.animation_finished.connect(_on_animation_finished)
+	_previous_focus = get_viewport().gui_get_focus_owner()
 	animation_player.play(&"RESET")
 	animation_player.advance(0.0)
 
@@ -33,6 +37,10 @@ func prepare_reuse() -> void:
 func configure_shade(color: Color, material_override: Material = null) -> void:
 	shade.material = material_override
 	shade.color = Color.WHITE if material_override != null else color
+
+
+func set_focus_trigger(trigger: Control) -> void:
+	_focus_trigger = trigger
 
 
 func configure_panel(size: Vector2, style: StyleBox, padding: Vector4) -> VBoxContainer:
@@ -61,6 +69,7 @@ func play_open(reduced_motion: bool) -> void:
 		_apply_open_state()
 		phase = "open"
 		_has_opened = true
+		_focus_modal_content()
 		return
 	if not _has_opened and _is_reset_state():
 		animation_player.play(&"open")
@@ -169,6 +178,7 @@ func _on_animation_finished(_animation_name: StringName) -> void:
 	if phase == "opening":
 		_apply_open_state()
 		phase = "open"
+		_focus_modal_content()
 	elif phase == "closing":
 		_finish_close()
 
@@ -184,5 +194,19 @@ func _finish_close() -> void:
 	panel.modulate.a = 0.0
 	panel.scale = Vector2(0.98, 0.98)
 	phase = "closed"
+	_restore_focus()
 	closed.emit(self)
 	queue_free()
+
+
+func _focus_modal_content() -> void:
+	var first: Control = FocusNavigationScript.focus_first(content)
+	if first != null:
+		first.grab_focus()
+
+
+func _restore_focus() -> void:
+	if is_instance_valid(_focus_trigger):
+		_focus_trigger.grab_focus()
+	elif is_instance_valid(_previous_focus):
+		_previous_focus.grab_focus()
