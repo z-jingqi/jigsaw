@@ -13,10 +13,10 @@ fi
 candidates=()
 while IFS= read -r candidate; do
 	candidates+=("$candidate")
-done < <(rg --files scripts/tests -g '*Test.gd' | sort)
+done < <(find scripts/tests -type f -name '*Test.gd' -print | sort)
 selected_tests=()
 for candidate in "${candidates[@]}"; do
-	if rg -q 'RUNTIME_ARCHITECTURE_VALIDATION|OFFLINE_CONTENT_VALIDATION' "$candidate"; then
+	if grep -Eq 'RUNTIME_ARCHITECTURE_VALIDATION|OFFLINE_CONTENT_VALIDATION' "$candidate"; then
 		selected_tests+=("$candidate")
 	fi
 done
@@ -43,7 +43,7 @@ for test_path in "${selected_tests[@]}"; do
 	log_path="$artifact_dir/${name}.godot.log"
 	"${runner[@]}" --log-file "$log_path" --path . --script "res://$test_path" 2>&1 | tee "$output_path"
 	grep -q '"ok":true' "$output_path"
-	if rg -n 'SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call function' "$output_path" "$log_path"; then
+	if grep -En 'SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call function' "$output_path" "$log_path"; then
 		echo "Runtime diagnostics failed for $test_path" >&2
 		exit 1
 	fi
