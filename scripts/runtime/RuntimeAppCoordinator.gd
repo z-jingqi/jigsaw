@@ -36,6 +36,7 @@ var _current_theme_id := ""
 var _current_level_id := ""
 var _current_mode := ""
 var _completion_event_id := ""
+var _debug_viewport := Vector2i.ZERO
 var _pending_after_modal: Callable
 var _home_guide_timer: SceneTreeTimer
 var _dev_panel: Control
@@ -237,7 +238,8 @@ func set_reduced_motion(enabled: bool) -> Dictionary:
 
 
 func set_viewport(width: int, height: int) -> void:
-	_game.get_window().size = Vector2i(width, height)
+	_debug_viewport = Vector2i(width, height)
+	_game.get_window().size = _debug_viewport
 
 
 func state_snapshot() -> Dictionary:
@@ -247,7 +249,7 @@ func state_snapshot() -> Dictionary:
 	return {
 		"screen": _screen_name(), "modal": navigation.get("modal", ""), "topic_id": _current_theme_id,
 		"level_id": _current_level_id, "mode": _current_mode if _screen_name() == "gameplay" else "",
-		"viewport": [_game.get_window().size.x, _game.get_window().size.y], "reduced_motion": _reduced_motion(),
+		"viewport": [_reported_viewport().x, _reported_viewport().y], "reduced_motion": _reduced_motion(),
 		"active_motion_count": _active_motion_count(), "motion_phase": navigation.get("motion_phase", "idle"),
 		"transition_kind": navigation.get("transition_kind", ""), "gesture_progress": navigation.get("gesture_progress", 0.0),
 		"completed_modes": progress.completed_modes if progress != null else 0, "total_modes": progress.total_modes if progress != null else 0,
@@ -528,6 +530,10 @@ func _active_motion_count() -> int:
 
 func _reduced_motion() -> bool:
 	return bool(_services.motion_preferences.snapshot().get("reduced_motion", false))
+
+
+func _reported_viewport() -> Vector2i:
+	return _debug_viewport if _debug_viewport.x > 0 and _debug_viewport.y > 0 else _game.get_window().size
 
 
 func _valid_theme_id(requested: String) -> String:
