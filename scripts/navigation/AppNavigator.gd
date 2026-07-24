@@ -170,7 +170,7 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	if definition.presentation != RouteDefinitionScript.Presentation.MODAL and definition.presentation != RouteDefinitionScript.Presentation.OVERLAY:
 		return _failure(&"invalid_payload", {"reason": "route_is_not_modal"})
 	var entry: Dictionary = built.entry
-	_set_entry_active(current_screen_entry(), false)
+	_set_entry_modal_background(current_screen_entry())
 	_add_modal_entry(entry)
 	_modal_entry = entry
 	var transaction: Variant = NavigationTransactionScript.new(
@@ -217,6 +217,13 @@ func cancel_active_transition() -> Dictionary:
 	return {"ok": true, "cancelled": true, "state": debug_state_snapshot()}
 
 
+func finish_active_transition() -> Dictionary:
+	if _transition_host.active_count() == 0:
+		return {"ok": true, "finished": false, "state": debug_state_snapshot()}
+	_transition_host.finish_active_to_target()
+	return {"ok": true, "finished": true, "state": debug_state_snapshot()}
+
+
 func current_route() -> StringName:
 	if not _modal_entry.is_empty():
 		return _modal_entry.route
@@ -231,6 +238,12 @@ func current_screen_entry() -> Dictionary:
 func current_screen_view() -> Control:
 	var entry := current_screen_entry()
 	return entry.get("view") as Control
+
+
+func current_route_view() -> Control:
+	if not _modal_entry.is_empty():
+		return _modal_entry.get("view") as Control
+	return current_screen_view()
 
 
 func debug_state_snapshot() -> Dictionary:
@@ -299,6 +312,16 @@ func _set_entry_active(entry: Dictionary, is_active: bool) -> void:
 		view.set_process(is_active)
 		view.set_process_input(is_active)
 		view.set_process_unhandled_input(is_active)
+
+
+func _set_entry_modal_background(entry: Dictionary) -> void:
+	if entry.is_empty():
+		return
+	var view := entry.get("view") as Control
+	if not is_instance_valid(view):
+		return
+	view.visible = true
+	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
 func _deactivate_all(entries: Array) -> void:
