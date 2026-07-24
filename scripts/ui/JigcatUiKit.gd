@@ -17,7 +17,9 @@ func _init(owner: Node) -> void:
 	game = owner
 
 
-func surface_style(color: Color, radius: int, border_color := Color.TRANSPARENT, border_width := 0) -> StyleBoxFlat:
+func surface_style(
+	color: Color, radius: int, border_color := Color.TRANSPARENT, border_width := 0
+) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
 	style.corner_radius_top_left = radius
@@ -76,7 +78,9 @@ func primary_button(text: String, size: Vector2, action: Callable) -> Button:
 	return button
 
 
-func fit_label(label: Label, text: String, preferred_size: int, minimum_size: int, allow_two_lines := false) -> void:
+func fit_label(
+	label: Label, text: String, preferred_size: int, minimum_size: int, allow_two_lines := false
+) -> void:
 	label.text = text
 	label.clip_text = true
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -84,10 +88,15 @@ func fit_label(label: Label, text: String, preferred_size: int, minimum_size: in
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	var font := label.get_theme_font("font")
 	var font_size := preferred_size
-	while font_size > minimum_size and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x:
+	while (
+		font_size > minimum_size
+		and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x
+	):
 		font_size -= 1
 	label.add_theme_font_size_override("font_size", font_size)
-	var still_overflows := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x
+	var still_overflows := (
+		font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x
+	)
 	if still_overflows and allow_two_lines:
 		label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 		label.max_lines_visible = 2

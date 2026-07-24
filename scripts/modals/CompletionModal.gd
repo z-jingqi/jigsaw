@@ -56,7 +56,10 @@ func request_dismiss() -> void:
 
 
 func active_motion_count() -> int:
-	return (1 if _content_tween != null else 0) + (shell.active_motion_count() if is_instance_valid(shell) else 0)
+	return (
+		(1 if _content_tween != null else 0)
+		+ (shell.active_motion_count() if is_instance_valid(shell) else 0)
+	)
 
 
 func _request_confirm() -> void:
@@ -95,7 +98,9 @@ func _open() -> void:
 
 func _play_content_entry() -> void:
 	_stop_content_motion()
-	var controls: Array[Control] = [title_label, image_rect, level_label, description_label, confirm_button]
+	var controls: Array[Control] = [
+		title_label, image_rect, level_label, description_label, confirm_button
+	]
 	if _reduced_motion:
 		for control in controls:
 			control.modulate.a = 1.0
@@ -108,8 +113,16 @@ func _play_content_entry() -> void:
 	_content_tween = create_tween().set_parallel(true)
 	for index in controls.size():
 		var control := controls[index]
-		_content_tween.tween_property(control, "modulate:a", 1.0, 0.22).set_delay(0.12 + float(index) * 0.05)
-	_content_tween.tween_property(image_rect, "scale", Vector2.ONE, 0.36).set_delay(0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		_content_tween.tween_property(control, "modulate:a", 1.0, 0.22).set_delay(
+			0.12 + float(index) * 0.05
+		)
+	(
+		_content_tween
+		. tween_property(image_rect, "scale", Vector2.ONE, 0.36)
+		. set_delay(0.12)
+		. set_trans(Tween.TRANS_CUBIC)
+		. set_ease(Tween.EASE_OUT)
+	)
 	_content_tween.finished.connect(_stop_content_motion, CONNECT_ONE_SHOT)
 
 
@@ -122,7 +135,9 @@ func _stop_content_motion() -> void:
 func _configure_panel() -> void:
 	if not is_instance_valid(shell):
 		return
-	var panel_size := Vector2(minf(520.0, maxf(300.0, size.x - 40.0)), minf(720.0, maxf(420.0, size.y - 40.0)))
+	var panel_size := Vector2(
+		minf(520.0, maxf(300.0, size.x - 40.0)), minf(720.0, maxf(420.0, size.y - 40.0))
+	)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color("FFF8EC")
 	style.corner_radius_top_left = 28

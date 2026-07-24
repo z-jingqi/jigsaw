@@ -41,8 +41,12 @@ func set_current(theme_id: String, level_id: String = "", mode: String = "") -> 
 	return _commit(next_data)
 
 
-func play_state(theme_id: String, level_id: String, mode: String, piece_ids: Array[String] = []) -> Dictionary:
-	var state: Dictionary = (_data["play_states"] as Dictionary).get(_state_key(theme_id, level_id, mode), {})
+func play_state(
+	theme_id: String, level_id: String, mode: String, piece_ids: Array[String] = []
+) -> Dictionary:
+	var state: Dictionary = (_data["play_states"] as Dictionary).get(
+		_state_key(theme_id, level_id, mode), {}
+	)
 	if _is_valid_state(state, piece_ids):
 		return state.duplicate(true)
 	if not state.is_empty():
@@ -55,9 +59,13 @@ func save_play_state(state: Dictionary, piece_ids: Array[String]) -> Dictionary:
 		return {"ok": false, "error": "invalid_play_state"}
 	var next_data := _data.duplicate(true)
 	var states: Dictionary = next_data["play_states"]
-	states[_state_key(str(state["theme_id"]), str(state["level_id"]), str(state["mode"]))] = state.duplicate(true)
+	states[_state_key(str(state["theme_id"]), str(state["level_id"]), str(state["mode"]))] = (
+		state.duplicate(true)
+	)
 	next_data["play_states"] = states
-	next_data["current"] = {"theme_id": state["theme_id"], "level_id": state["level_id"], "mode": state["mode"]}
+	next_data["current"] = {
+		"theme_id": state["theme_id"], "level_id": state["level_id"], "mode": state["mode"]
+	}
 	return _commit(next_data)
 
 
@@ -78,11 +86,17 @@ func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool:
 		return false
 	var mode := str(state.get("mode", ""))
 	var expected_fingerprint := _expected_fingerprint(piece_ids)
-	if not PLAY_MODES.has(mode) or expected_fingerprint.is_empty() or str(state.get("piece_set_fingerprint", "")) != expected_fingerprint:
+	if (
+		not PLAY_MODES.has(mode)
+		or expected_fingerprint.is_empty()
+		or str(state.get("piece_set_fingerprint", "")) != expected_fingerprint
+	):
 		return false
 	if mode == "swap":
 		var slots: Array = state.get("slot_piece_ids", [])
-		return str(state.get("kind", "")) == "swap" and _is_exact_piece_permutation(slots, piece_ids)
+		return (
+			str(state.get("kind", "")) == "swap" and _is_exact_piece_permutation(slots, piece_ids)
+		)
 	var groups: Array = state.get("connected_groups", [])
 	var tray: Array = state.get("tray_order", [])
 	return str(state.get("kind", "")) == "assembly" and _is_valid_assembly(groups, tray, piece_ids)
@@ -150,20 +164,36 @@ func _validated(value: Dictionary) -> Dictionary:
 		var theme_id: Variant = source_current.get("theme_id", "")
 		var level_id: Variant = source_current.get("level_id", "")
 		var mode: Variant = source_current.get("mode", "")
-		if typeof(theme_id) == TYPE_STRING and typeof(level_id) == TYPE_STRING and typeof(mode) == TYPE_STRING and (mode.is_empty() or PLAY_MODES.has(mode)):
+		if (
+			typeof(theme_id) == TYPE_STRING
+			and typeof(level_id) == TYPE_STRING
+			and typeof(mode) == TYPE_STRING
+			and (mode.is_empty() or PLAY_MODES.has(mode))
+		):
 			result["current"] = {"theme_id": theme_id, "level_id": level_id, "mode": mode}
 	if typeof(value.get("play_states")) == TYPE_DICTIONARY:
 		var states: Dictionary = {}
-		for key in (value["play_states"] as Dictionary):
+		for key in value["play_states"] as Dictionary:
 			var state: Variant = value["play_states"][key]
-			if typeof(key) == TYPE_STRING and typeof(state) == TYPE_DICTIONARY and _has_required_state_shape(state):
+			if (
+				typeof(key) == TYPE_STRING
+				and typeof(state) == TYPE_DICTIONARY
+				and _has_required_state_shape(state)
+			):
 				states[key] = state
 		result["play_states"] = states
 	return result
 
 
 func _has_required_state_shape(state: Dictionary) -> bool:
-	return int(state.get("state_version", -1)) == STATE_VERSION and typeof(state.get("theme_id")) == TYPE_STRING and typeof(state.get("level_id")) == TYPE_STRING and typeof(state.get("mode")) == TYPE_STRING and PLAY_MODES.has(str(state.get("mode", ""))) and typeof(state.get("piece_set_fingerprint")) == TYPE_STRING
+	return (
+		int(state.get("state_version", -1)) == STATE_VERSION
+		and typeof(state.get("theme_id")) == TYPE_STRING
+		and typeof(state.get("level_id")) == TYPE_STRING
+		and typeof(state.get("mode")) == TYPE_STRING
+		and PLAY_MODES.has(str(state.get("mode", "")))
+		and typeof(state.get("piece_set_fingerprint")) == TYPE_STRING
+	)
 
 
 func _state_key(theme_id: String, level_id: String, mode: String) -> String:

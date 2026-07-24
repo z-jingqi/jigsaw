@@ -57,7 +57,9 @@ func register_card(card: Control, topic: Dictionary, page_index: int, row_index:
 	_animate_decoration_fade(card, row_index)
 	if pending_progress_changes.has(topic_id):
 		var change: Dictionary = pending_progress_changes[topic_id]
-		_animate_progress_change(card, topic_id, int(change.get("from", 0)), int(change.get("to", 0)))
+		_animate_progress_change(
+			card, topic_id, int(change.get("from", 0)), int(change.get("to", 0))
+		)
 		pending_progress_changes.erase(topic_id)
 
 
@@ -92,7 +94,12 @@ func animate_entries(first_page: Control, ui_scale: float) -> void:
 		tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		tween.tween_property(card, "position:y", final_y, CARD_ENTRY_DURATION).set_delay(delay)
 		tween.tween_property(card, "modulate:a", 1.0, 0.24).set_delay(delay)
-		tween.tween_property(card, "scale", Vector2.ONE, CARD_ENTRY_DURATION).set_delay(delay).set_trans(Tween.TRANS_BACK)
+		(
+			tween
+			. tween_property(card, "scale", Vector2.ONE, CARD_ENTRY_DURATION)
+			. set_delay(delay)
+			. set_trans(Tween.TRANS_BACK)
+		)
 		_track_tween(tween)
 
 
@@ -129,10 +136,11 @@ func release_card(topic_id: String, action: Callable) -> void:
 	_restore_card(topic_id, true)
 	var action_tween := game.create_tween()
 	action_tween.tween_interval(ACTIVATION_DELAY)
-	action_tween.tween_callback(func() -> void:
-		activation_pending = false
-		if action.is_valid():
-			action.call()
+	action_tween.tween_callback(
+		func() -> void:
+			activation_pending = false
+			if action.is_valid():
+				action.call()
 	)
 	_track_tween(action_tween)
 
@@ -171,11 +179,19 @@ func _animate_decoration_fade(card: Control, row_index: int) -> void:
 		return
 	decoration.modulate.a = 0.0
 	var tween := game.create_tween()
-	tween.tween_property(decoration, "modulate:a", 1.0, 0.24).set_delay(0.18 + float(row_index) * 0.04).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	(
+		tween
+		. tween_property(decoration, "modulate:a", 1.0, 0.24)
+		. set_delay(0.18 + float(row_index) * 0.04)
+		. set_ease(Tween.EASE_OUT)
+		. set_trans(Tween.TRANS_CUBIC)
+	)
 	_track_tween(tween)
 
 
-func _animate_progress_change(card: Control, topic_id: String, from_done: int, to_done: int) -> void:
+func _animate_progress_change(
+	card: Control, topic_id: String, from_done: int, to_done: int
+) -> void:
 	var total := int(card.get_meta("topic_progress_total", 0))
 	var bar: Panel = card.get_node_or_null("theme_card_progress")
 	var fill: Panel = bar.get_node_or_null("progress_fill") if bar != null else null
@@ -190,12 +206,23 @@ func _animate_progress_change(card: Control, topic_id: String, from_done: int, t
 	var to_width := _progress_width(bar, to_done, total)
 	var tween := game.create_tween()
 	tween.tween_interval(PROGRESS_DELAY)
-	tween.tween_method(func(value: float) -> void:
-		if not is_instance_valid(card):
-			return
-		var display_done := lerpf(float(from_done), float(to_done), value)
-		_set_progress_visual(card, roundi(display_done), total, lerpf(from_width, to_width, value))
-	, 0.0, 1.0, PROGRESS_DURATION).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	(
+		tween
+		. tween_method(
+			func(value: float) -> void:
+				if not is_instance_valid(card):
+					return
+				var display_done := lerpf(float(from_done), float(to_done), value)
+				_set_progress_visual(
+					card, roundi(display_done), total, lerpf(from_width, to_width, value)
+				),
+			0.0,
+			1.0,
+			PROGRESS_DURATION
+		)
+		. set_ease(Tween.EASE_OUT)
+		. set_trans(Tween.TRANS_CUBIC)
+	)
 	tween.tween_property(fill, "modulate", Color(1.18, 1.08, 0.76, 1.0), 0.10)
 	tween.tween_property(fill, "modulate", Color.WHITE, 0.18).set_ease(Tween.EASE_OUT)
 	_track_tween(tween)
@@ -251,12 +278,13 @@ func _track_tween(tween: Tween) -> void:
 	if tween == null:
 		return
 	active_tweens.append(tween)
-	tween.finished.connect(func() -> void:
-		active_tweens.erase(tween)
-		for topic_id in card_tweens.keys():
-			if card_tweens[topic_id] == tween:
-				card_tweens.erase(topic_id)
-				break
+	tween.finished.connect(
+		func() -> void:
+			active_tweens.erase(tween)
+			for topic_id in card_tweens.keys():
+				if card_tweens[topic_id] == tween:
+					card_tweens.erase(topic_id)
+					break
 	)
 
 

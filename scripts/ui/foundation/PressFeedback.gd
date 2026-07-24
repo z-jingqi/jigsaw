@@ -6,6 +6,7 @@ var _tokens: MotionTokens
 var _press_scale: float
 var _tween: Tween
 
+
 func _init(target: Control, tokens: MotionTokens, press_scale: float) -> void:
 	_target = target
 	_tokens = tokens
@@ -50,7 +51,12 @@ func _release() -> void:
 	dispose()
 	_tween = _target.create_tween()
 	_tween.set_trans(_tokens.press_transition).set_ease(_tokens.press_ease)
-	_tween.tween_property(_target, "scale", Vector2(_tokens.release_scale, _tokens.release_scale), _tokens.release_duration * 0.45)
+	_tween.tween_property(
+		_target,
+		"scale",
+		Vector2(_tokens.release_scale, _tokens.release_scale),
+		_tokens.release_duration * 0.45
+	)
 	_tween.tween_property(_target, "scale", Vector2.ONE, _tokens.release_duration * 0.55)
 
 

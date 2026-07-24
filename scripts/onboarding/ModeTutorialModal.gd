@@ -1,9 +1,9 @@
 class_name ModeTutorialModal
 extends Control
 
-signal completed()
-signal skipped()
-signal dismissed()
+signal completed
+signal skipped
+signal dismissed
 
 @onready var shell: AnimatedModalShell = $ModalShell
 @onready var title_label: Label = $ModalShell/Panel/Content/Title
@@ -48,7 +48,10 @@ func request_dismiss() -> void:
 
 
 func active_motion_count() -> int:
-	return (shell.active_motion_count() if is_instance_valid(shell) else 0) + (1 if _demo_motion != null and _demo_motion.is_valid() else 0)
+	return (
+		(shell.active_motion_count() if is_instance_valid(shell) else 0)
+		+ (1 if _demo_motion != null and _demo_motion.is_valid() else 0)
+	)
 
 
 func _complete() -> void:
@@ -71,9 +74,12 @@ func _close(outcome: StringName) -> void:
 
 func _on_shell_closed(_closed_shell: AnimatedModalShell) -> void:
 	match _outcome:
-		&"completed": completed.emit()
-		&"skipped": skipped.emit()
-		_: dismissed.emit()
+		&"completed":
+			completed.emit()
+		&"skipped":
+			skipped.emit()
+		_:
+			dismissed.emit()
 
 
 func _play_demo() -> void:

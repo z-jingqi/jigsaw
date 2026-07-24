@@ -32,13 +32,22 @@ func _test_available_selection_closes_before_signal() -> void:
 	var knob := options.get_child(1) as Control
 	var swap := options.get_child(2) as Control
 	_check(not polygon.disabled and not knob.disabled and swap.disabled, "availability_applied")
-	_check(polygon.get_node("Margin/Content/Action").text == "Start" and knob.get_node("Margin/Content/Action").text == "Continue", "start_resume_actions")
+	_check(
+		(
+			polygon.get_node("Margin/Content/Action").text == "Start"
+			and knob.get_node("Margin/Content/Action").text == "Continue"
+		),
+		"start_resume_actions"
+	)
 	await create_timer(0.30).timeout
 	_check(int(modal.call(&"active_motion_count")) == 0, "open_motion_released")
 	(polygon as Button).pressed.emit()
 	_check(_selection_count == 0, "selection_waits_for_close")
 	await create_timer(0.20).timeout
-	_check(_selection_count == 1 and _selected_mode == &"polygon" and _selected_policy == &"start", "selection_emitted_once_after_close")
+	_check(
+		_selection_count == 1 and _selected_mode == &"polygon" and _selected_policy == &"start",
+		"selection_emitted_once_after_close"
+	)
 	_check(int(modal.call(&"active_motion_count")) == 0, "close_motion_released")
 	modal.queue_free()
 	await process_frame
@@ -78,27 +87,44 @@ func _create_modal(reduced_motion: bool) -> Control:
 	modal.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	modal.size = Vector2(393, 852)
 	await process_frame
-	modal.mode_selected.connect(func(mode: StringName, policy: StringName) -> void:
-		_selection_count += 1
-		_selected_mode = mode
-		_selected_policy = policy)
+	modal.mode_selected.connect(
+		func(mode: StringName, policy: StringName) -> void:
+			_selection_count += 1
+			_selected_mode = mode
+			_selected_policy = policy
+	)
 	modal.close_requested.connect(func() -> void: _close_count += 1)
-	modal.call(&"navigation_enter", {"view_model": _view_model()}, {"reduced_motion": reduced_motion})
+	modal.call(
+		&"navigation_enter", {"view_model": _view_model()}, {"reduced_motion": reduced_motion}
+	)
 	return modal
 
 
 func _view_model() -> Variant:
-	return ViewModels.ModeSelectViewModel.new({
-		"revision": 1,
-		"theme_id": "topic_01",
-		"level_id": "shanhai_08",
-		"level_title": "Nine-tailed Fox",
-		"options": [
-			ViewModels.ModeStatusViewModel.new(&"polygon", "Polygon", &"not_started", &"start", true),
-			ViewModels.ModeStatusViewModel.new(&"knob", "Classic Knob", &"in_progress", &"resume", true),
-			ViewModels.ModeStatusViewModel.new(&"swap", "Swap", &"unavailable", &"start", false),
-		],
-	})
+	return (
+		ViewModels
+		. ModeSelectViewModel
+		. new(
+			{
+				"revision": 1,
+				"theme_id": "topic_01",
+				"level_id": "shanhai_08",
+				"level_title": "Nine-tailed Fox",
+				"options":
+				[
+					ViewModels.ModeStatusViewModel.new(
+						&"polygon", "Polygon", &"not_started", &"start", true
+					),
+					ViewModels.ModeStatusViewModel.new(
+						&"knob", "Classic Knob", &"in_progress", &"resume", true
+					),
+					ViewModels.ModeStatusViewModel.new(
+						&"swap", "Swap", &"unavailable", &"start", false
+					),
+				],
+			}
+		)
+	)
 
 
 func _check(condition: bool, name: String) -> void:

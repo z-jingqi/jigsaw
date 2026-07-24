@@ -15,20 +15,26 @@ func debug_runtime_metrics() -> Dictionary:
 		if group == null or not is_instance_valid(group.node):
 			continue
 		var bounds: Rect2 = host._group_local_bounds(group)
-		pieces.append({
-			"id": _debug_group_id(group),
-			"in_tray": group.in_tray,
-			"screen_height": bounds.size.y * host._tray_original_screen_scale(),
-			"scale": group.tray_scale,
-			"slot_x": group.tray_slot.position.x,
-			"slot_w": group.tray_slot.size.x,
-		})
+		(
+			pieces
+			. append(
+				{
+					"id": _debug_group_id(group),
+					"in_tray": group.in_tray,
+					"screen_height": bounds.size.y * host._tray_original_screen_scale(),
+					"scale": group.tray_scale,
+					"slot_x": group.tray_slot.position.x,
+					"slot_w": group.tray_slot.size.x,
+				}
+			)
+		)
 	return {
 		"mode": host.current_mode,
 		"groups": host.groups.size(),
 		"locked_groups": host.locked_groups.size(),
 		"tray_groups": host.tray_groups.size(),
-		"tray": {
+		"tray":
+		{
 			"height": area.size.y,
 			"usable_height": maxf(24.0, area.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0),
 			"vertical_gap": host.TRAY_VERTICAL_SAFE_GAP,
@@ -38,7 +44,8 @@ func debug_runtime_metrics() -> Dictionary:
 			"count": host.tray_groups.size(),
 			"pieces": pieces,
 		},
-		"hint": {
+		"hint":
+		{
 			"nodes": host.hint_highlighted_nodes.size(),
 			"lines": host.hint_highlighted_lines.size(),
 			"key": host.active_hint_key,
@@ -63,7 +70,9 @@ func debug_scroll_tray_left() -> void:
 
 
 func debug_scroll_tray_right() -> void:
-	host.tray_scroll_offset = maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING)
+	host.tray_scroll_offset = maxf(
+		0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING
+	)
 	host.tray_scroll_velocity = 0.0
 	host._layout_tray(true)
 
@@ -97,7 +106,20 @@ func debug_run_interaction_smoke() -> Dictionary:
 	else:
 		await _debug_smoke_piece_mode(result)
 	var ok := true
-	for key in ["tray_scroll", "pickup_drop", "tray_drag_scale", "hint", "hint_timeout", "hint_stops_on_drag", "snap_preview", "snap_shimmer_only", "swap_preview", "snap", "row_shift", "complete"]:
+	for key in [
+		"tray_scroll",
+		"pickup_drop",
+		"tray_drag_scale",
+		"hint",
+		"hint_timeout",
+		"hint_stops_on_drag",
+		"snap_preview",
+		"snap_shimmer_only",
+		"swap_preview",
+		"snap",
+		"row_shift",
+		"complete"
+	]:
 		ok = ok and bool(result.get(key, false))
 	result["ok"] = ok
 	return result
@@ -107,7 +129,9 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 	var tray_wait_started := Time.get_ticks_msec()
 	while _debug_tray_animation_active() and Time.get_ticks_msec() - tray_wait_started < 1200:
 		await host.get_tree().create_timer(0.02).timeout
-	var max_scroll := maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING)
+	var max_scroll := maxf(
+		0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING
+	)
 	debug_scroll_tray_left()
 	if max_scroll > 1.0 and not host.tray_groups.is_empty():
 		var scroll_start: Vector2 = host.tray_groups[0].tray_slot.get_center()
@@ -132,9 +156,17 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		var reentered_position := Vector2(center.x, host._tray_area().position.y + 48.0)
 		host.handle_input(_debug_mouse_button(center, true), false)
 		host.handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
-		var lifted_at_original_scale: bool = host.dragging == picked and not picked.in_tray and picked.node.scale.is_equal_approx(Vector2.ONE)
-		host.handle_input(_debug_mouse_motion(reentered_position, reentered_position - lift_position), false)
-		var reentered_at_original_scale: bool = host.dragging == picked and picked.node.scale.is_equal_approx(Vector2.ONE)
+		var lifted_at_original_scale: bool = (
+			host.dragging == picked
+			and not picked.in_tray
+			and picked.node.scale.is_equal_approx(Vector2.ONE)
+		)
+		host.handle_input(
+			_debug_mouse_motion(reentered_position, reentered_position - lift_position), false
+		)
+		var reentered_at_original_scale: bool = (
+			host.dragging == picked and picked.node.scale.is_equal_approx(Vector2.ONE)
+		)
 		host.handle_input(_debug_mouse_button(reentered_position, false), false)
 		if picked.tray_tween != null and picked.tray_tween.is_valid():
 			await picked.tray_tween.finished
@@ -144,7 +176,9 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 			and picked.node.get_parent() == host.tray_root
 			and is_equal_approx(picked.node.scale.x, picked.tray_scale)
 		)
-		result["tray_drag_scale"] = lifted_at_original_scale and reentered_at_original_scale and returned_scaled_down
+		result["tray_drag_scale"] = (
+			lifted_at_original_scale and reentered_at_original_scale and returned_scaled_down
+		)
 		result["tray_drag_scale_details"] = {
 			"started_scaled_down": started_scaled_down,
 			"lifted_at_original_scale": lifted_at_original_scale,
@@ -156,7 +190,9 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 			"parent": picked.node.get_parent().name if picked.node.get_parent() != null else "",
 			"original_screen_scale": original_screen_scale,
 		}
-		result["pickup_drop"] = lifted_at_original_scale and picked.in_tray and host.dragging == null
+		result["pickup_drop"] = (
+			lifted_at_original_scale and picked.in_tray and host.dragging == null
+		)
 	host.show_hint()
 	var hint_wait_started := Time.get_ticks_msec()
 	while host.hint_pending and Time.get_ticks_msec() - hint_wait_started < 1200:
@@ -170,7 +206,9 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		result["snap"] = false
 	else:
 		var active = pair[0]
-		host._send_group_to_world(active, active.anchor_home + Vector2(host._snap_tolerance() * 1.05, 0.0))
+		host._send_group_to_world(
+			active, active.anchor_home + Vector2(host._snap_tolerance() * 1.05, 0.0)
+		)
 		active.node.scale = Vector2.ONE
 		host._update_snap_preview(active)
 		var outside_hidden: bool = host.snap_preview_lines.is_empty()
@@ -191,7 +229,9 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 			scale_reset = scale_reset and visual.scale.is_equal_approx(Vector2.ONE)
 			shimmer_visible = shimmer_visible or visual.get_node_or_null("snap_shimmer") != null
 		result["snap_shimmer_only"] = scale_reset and (host.reduced_motion or shimmer_visible)
-		result["snap"] = host.groups.size() < group_count_before and active.locked and host.dragging == null
+		result["snap"] = (
+			host.groups.size() < group_count_before and active.locked and host.dragging == null
+		)
 		host._clear_snap_preview()
 	debug_force_complete()
 	result["complete"] = host.completion_emitted
@@ -228,7 +268,9 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 	await host.get_tree().process_frame
 	result["hint"] = host._has_active_hint_highlights() and _debug_swap_hint_visuals_valid()
 	var hint_remaining_msec: int = host.hint_expires_at_msec - Time.get_ticks_msec()
-	result["hint_timeout"] = hint_remaining_msec > 4500 and hint_remaining_msec <= int(host.SWAP_HINT_DURATION * 1000.0)
+	result["hint_timeout"] = (
+		hint_remaining_msec > 4500 and hint_remaining_msec <= int(host.SWAP_HINT_DURATION * 1000.0)
+	)
 	host.reduced_motion = reduced_motion_before
 	var pair: Array = host._find_swap_hint_pair()
 	if pair.size() < 2:
@@ -243,13 +285,26 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 		var second_slot := int(second["slot_index"])
 		var first_center: Vector2 = first["node"].position + first["size"] * 0.5
 		host._begin_swap_drag(host._world_to_screen(first_center))
-		result["hint_stops_on_drag"] = not host._has_active_hint_highlights() and host.hint_blink_tweens.is_empty()
+		result["hint_stops_on_drag"] = (
+			not host._has_active_hint_highlights() and host.hint_blink_tweens.is_empty()
+		)
 		var lifted: bool = host.swap_dragging == first
 		host._move_swap_tile_to(first, second["node"].position)
-		result["swap_preview"] = host.swap_target_preview == second and host.swap_target_preview_root != null and is_instance_valid(host.swap_target_preview_root)
+		result["swap_preview"] = (
+			host.swap_target_preview == second
+			and host.swap_target_preview_root != null
+			and is_instance_valid(host.swap_target_preview_root)
+		)
 		host._end_swap_drag()
-		await host.get_tree().create_timer(host._motion_duration(host.SWAP_ANIMATION_TIME) + 0.03).timeout
-		var swapped := int(first["slot_index"]) == second_slot and int(second["slot_index"]) == first_slot
+		await (
+			host
+			. get_tree()
+			. create_timer(host._motion_duration(host.SWAP_ANIMATION_TIME) + 0.03)
+			. timeout
+		)
+		var swapped := (
+			int(first["slot_index"]) == second_slot and int(second["slot_index"]) == first_slot
+		)
 		result["pickup_drop"] = lifted and swapped and host.swap_dragging == null
 	result["row_shift"] = await _debug_check_row_shift()
 	debug_force_complete()
@@ -268,7 +323,10 @@ func _debug_swap_hint_visuals_valid() -> bool:
 				continue
 			var line := child as Line2D
 			var width := float(line.get_meta("screen_width", 0.0))
-			if width >= host.SWAP_HINT_SCREEN_WIDTH and line.default_color.is_equal_approx(host.HINT_TARGET_COLOR):
+			if (
+				width >= host.SWAP_HINT_SCREEN_WIDTH
+				and line.default_color.is_equal_approx(host.HINT_TARGET_COLOR)
+			):
 				found_thick_blue_line = true
 				break
 	return found_thick_blue_line
@@ -283,14 +341,24 @@ func _debug_check_row_shift() -> bool:
 	for tile in host.swap_tiles:
 		before[int(tile["correct_index"])] = int(tile["slot_index"])
 	host.shift_swap_rows_down()
-	await host.get_tree().create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04).timeout
+	await (
+		host
+		. get_tree()
+		. create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04)
+		. timeout
+	)
 	var shifted_down := true
 	for tile in host.swap_tiles:
 		var old_slot := int(before[int(tile["correct_index"])])
 		var expected: int = posmod(int(old_slot / cols) + 1, rows) * cols + old_slot % cols
 		shifted_down = shifted_down and int(tile["slot_index"]) == expected
 	host.shift_swap_rows_up()
-	await host.get_tree().create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04).timeout
+	await (
+		host
+		. get_tree()
+		. create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04)
+		. timeout
+	)
 	var restored := true
 	for tile in host.swap_tiles:
 		restored = restored and int(tile["slot_index"]) == int(before[int(tile["correct_index"])])
@@ -303,7 +371,9 @@ func debug_force_complete() -> void:
 	if host.current_mode == "swap":
 		for tile in host.swap_tiles:
 			tile["slot_index"] = int(tile["correct_index"])
-			tile["node"].position = host._swap_slot_position(int(tile["correct_index"]), host._swap_cols(), host._swap_rows())
+			tile["node"].position = host._swap_slot_position(
+				int(tile["correct_index"]), host._swap_cols(), host._swap_rows()
+			)
 		host._check_swap_complete()
 		return
 	for group in host.groups.duplicate():
@@ -335,8 +405,12 @@ func debug_prepare_restore_snapshot() -> Dictionary:
 			var second_slot := int(second["slot_index"])
 			first["slot_index"] = second_slot
 			second["slot_index"] = first_slot
-			first["node"].position = host._swap_slot_position(second_slot, host._swap_cols(), host._swap_rows())
-			second["node"].position = host._swap_slot_position(first_slot, host._swap_cols(), host._swap_rows())
+			first["node"].position = host._swap_slot_position(
+				second_slot, host._swap_cols(), host._swap_rows()
+			)
+			second["node"].position = host._swap_slot_position(
+				first_slot, host._swap_cols(), host._swap_rows()
+			)
 	else:
 		var pair: Array = host._find_hint_pair()
 		if not pair.is_empty():
@@ -354,12 +428,25 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 		"mode": str(actual.get("mode", "")) == str(expected.get("mode", "")),
 		"hint_count": int(actual.get("hint_count", -1)) == int(expected.get("hint_count", -2)),
 		"view": _debug_view_state_matches(actual.get("view", {}), expected.get("view", {})),
-		"tray_scroll": absf(float(actual.get("tray", {}).get("scroll_ratio", 0.0)) - float(expected.get("tray", {}).get("scroll_ratio", 0.0))) <= 0.01,
+		"tray_scroll":
+		(
+			absf(
+				(
+					float(actual.get("tray", {}).get("scroll_ratio", 0.0))
+					- float(expected.get("tray", {}).get("scroll_ratio", 0.0))
+				)
+			)
+			<= 0.01
+		),
 	}
 	if host.current_mode == "swap":
-		checks["pieces"] = _debug_swap_state_matches(actual.get("tiles", []), expected.get("tiles", []))
+		checks["pieces"] = _debug_swap_state_matches(
+			actual.get("tiles", []), expected.get("tiles", [])
+		)
 	else:
-		checks["pieces"] = _debug_group_state_matches(actual.get("groups", []), expected.get("groups", []))
+		checks["pieces"] = _debug_group_state_matches(
+			actual.get("groups", []), expected.get("groups", [])
+		)
 		checks["tray_order"] = actual.get("tray_order", []) == expected.get("tray_order", [])
 	var ok := true
 	for value in checks.values():
@@ -368,7 +455,8 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 		"mode": host.current_mode,
 		"ok": ok,
 		"checks": checks,
-		"tray_scroll": {
+		"tray_scroll":
+		{
 			"actual": float(actual.get("tray", {}).get("scroll", 0.0)),
 			"expected": float(expected.get("tray", {}).get("scroll", 0.0)),
 			"actual_ratio": float(actual.get("tray", {}).get("scroll_ratio", 0.0)),
@@ -380,8 +468,15 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 func _debug_view_state_matches(actual, expected) -> bool:
 	if typeof(actual) != TYPE_DICTIONARY or typeof(expected) != TYPE_DICTIONARY:
 		return false
-	return absf(float(actual.get("ratio", 1.0)) - float(expected.get("ratio", 1.0))) <= 0.01 \
-		and host._json_vector(actual.get("offset", [])).distance_to(host._json_vector(expected.get("offset", []))) <= 1.0
+	return (
+		absf(float(actual.get("ratio", 1.0)) - float(expected.get("ratio", 1.0))) <= 0.01
+		and (
+			host._json_vector(actual.get("offset", [])).distance_to(
+				host._json_vector(expected.get("offset", []))
+			)
+			<= 1.0
+		)
+	)
 
 
 func _debug_swap_state_matches(actual: Array, expected: Array) -> bool:
@@ -391,7 +486,10 @@ func _debug_swap_state_matches(actual: Array, expected: Array) -> bool:
 	for item in actual:
 		actual_slots[int(item.get("correct_index", -1))] = int(item.get("slot_index", -1))
 	for item in expected:
-		if int(actual_slots.get(int(item.get("correct_index", -1)), -2)) != int(item.get("slot_index", -1)):
+		if (
+			int(actual_slots.get(int(item.get("correct_index", -1)), -2))
+			!= int(item.get("slot_index", -1))
+		):
 			return false
 	return true
 
@@ -442,11 +540,17 @@ func _refresh_debug_bounds_overlay() -> void:
 	for group in host.groups:
 		if group == null or not is_instance_valid(group.node):
 			continue
-		var rect: Rect2 = group.tray_slot if group.in_tray else host._world_rect_to_screen(host._group_bounds_at(group, group.node.position))
+		var rect: Rect2 = (
+			group.tray_slot
+			if group.in_tray
+			else host._world_rect_to_screen(host._group_bounds_at(group, group.node.position))
+		)
 		var color := Color(0.38, 1.0, 0.45, 0.72) if group.locked else Color(0.28, 0.72, 1.0, 0.68)
 		_debug_add_rect_outline(host.debug_bounds_overlay, rect, color, 2.0)
 	for blocker in host.drag_blockers:
-		_debug_add_rect_outline(host.debug_bounds_overlay, blocker, Color(1.0, 0.15, 0.15, 0.72), 3.0)
+		_debug_add_rect_outline(
+			host.debug_bounds_overlay, blocker, Color(1.0, 0.15, 0.15, 0.72), 3.0
+		)
 
 
 func _clear_debug_bounds_overlay() -> void:

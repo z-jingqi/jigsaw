@@ -65,7 +65,9 @@ func _json_rects(value) -> Array[Rect2]:
 	return rects
 
 
-func _local_rect_points(source_rect: Rect2, home: Vector2, scale: float, origin: Vector2) -> PackedVector2Array:
+func _local_rect_points(
+	source_rect: Rect2, home: Vector2, scale: float, origin: Vector2
+) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	var source_points := [
 		source_rect.position,

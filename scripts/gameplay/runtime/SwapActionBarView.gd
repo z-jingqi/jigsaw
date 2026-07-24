@@ -1,8 +1,8 @@
 class_name SwapActionBarView
 extends Panel
 
-signal move_up_requested()
-signal move_down_requested()
+signal move_up_requested
+signal move_down_requested
 
 @onready var move_up: Button = $Actions/MoveUp
 @onready var move_down: Button = $Actions/MoveDown

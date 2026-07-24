@@ -21,13 +21,15 @@ func show_hint() -> void:
 		_clear_hint_highlights()
 		return
 	host.hint_pending = true
-	_animate_tray_scroll_to_group(pair[0], func() -> void:
-		if not host.hint_pending:
-			return
-		host.hint_pending = false
-		_set_hint_highlights(pair)
-		_bring_hint_group_to_front(pair[0])
-		host._focus_hint_pair(pair)
+	_animate_tray_scroll_to_group(
+		pair[0],
+		func() -> void:
+			if not host.hint_pending:
+				return
+			host.hint_pending = false
+			_set_hint_highlights(pair)
+			_bring_hint_group_to_front(pair[0])
+			host._focus_hint_pair(pair)
 	)
 
 
@@ -47,7 +49,11 @@ func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
 		target_offset -= area.position.x - group.tray_slot.position.x
 	elif group.tray_slot.end.x > area.end.x:
 		target_offset += group.tray_slot.end.x - area.end.x
-	target_offset = clampf(target_offset, 0.0, maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING))
+	target_offset = clampf(
+		target_offset,
+		0.0,
+		maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING)
+	)
 	if absf(target_offset - host.tray_scroll_offset) < 1.0:
 		on_done.call()
 		return
@@ -57,10 +63,14 @@ func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
 	host.hint_tray_scroll_tween = host.create_tween()
 	host.hint_tray_scroll_tween.set_ease(Tween.EASE_OUT)
 	host.hint_tray_scroll_tween.set_trans(Tween.TRANS_CUBIC)
-	host.hint_tray_scroll_tween.tween_method(func(value: float) -> void:
-		host.tray_scroll_offset = value
-		host._layout_tray(true)
-	, host.tray_scroll_offset, target_offset, host.HINT_TRAY_SCROLL_TIME)
+	host.hint_tray_scroll_tween.tween_method(
+		func(value: float) -> void:
+			host.tray_scroll_offset = value
+			host._layout_tray(true),
+		host.tray_scroll_offset,
+		target_offset,
+		host.HINT_TRAY_SCROLL_TIME
+	)
 	host.hint_tray_scroll_tween.finished.connect(on_done)
 
 
@@ -119,7 +129,9 @@ func _add_hint_outline_to_group(group) -> void:
 		var outline := PackedVector2Array()
 		for point in polygon:
 			outline.append(visual.position + point - center)
-		_add_hint_outline_line(outline_root, outline, host.HINT_OUTLINE_SCREEN_WIDTH, host.HINT_OUTLINE_COLOR, 0, false)
+		_add_hint_outline_line(
+			outline_root, outline, host.HINT_OUTLINE_SCREEN_WIDTH, host.HINT_OUTLINE_COLOR, 0, false
+		)
 	_hint_breathe_group(group)
 
 
@@ -144,8 +156,18 @@ func _add_hint_target_outline(group) -> void:
 	_spawn_dashed_outline(host.world_root, polygons, group.anchor_home, host.HINT_TARGET_Z_INDEX)
 
 
-func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int, screen_width := 0.0, color := Color.TRANSPARENT, breathe := false) -> Node2D:
-	var outline_width: float = host.HINT_TARGET_SCREEN_WIDTH if screen_width <= 0.0 else screen_width
+func _spawn_dashed_outline(
+	parent: Node2D,
+	polygons: Array,
+	local_position: Vector2,
+	z_index_value: int,
+	screen_width := 0.0,
+	color := Color.TRANSPARENT,
+	breathe := false
+) -> Node2D:
+	var outline_width: float = (
+		host.HINT_TARGET_SCREEN_WIDTH if screen_width <= 0.0 else screen_width
+	)
 	var outline_color: Color = host.HINT_TARGET_COLOR if color.a <= 0.0 else color
 	var root := Node2D.new()
 	root.name = "hint_dashed_outline"
@@ -161,9 +183,13 @@ func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vect
 	dash_tween.set_loops()
 	dash_tween.set_trans(Tween.TRANS_LINEAR)
 	var dash_cycle: float = host.HINT_TARGET_DASH_LENGTH + host.HINT_TARGET_DASH_GAP
-	dash_tween.tween_method(func(phase: float) -> void:
-		_redraw_dashed_outline(root, polygons, phase, outline_width, outline_color)
-	, 0.0, dash_cycle, 0.64)
+	dash_tween.tween_method(
+		func(phase: float) -> void:
+			_redraw_dashed_outline(root, polygons, phase, outline_width, outline_color),
+		0.0,
+		dash_cycle,
+		0.64
+	)
 	if breathe:
 		root.modulate.a = host.SWAP_HINT_BREATHE_ALPHA
 		var breathe_tween := host.create_tween()
@@ -172,22 +198,30 @@ func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vect
 		breathe_tween.set_ease(Tween.EASE_IN_OUT)
 		breathe_tween.set_trans(Tween.TRANS_SINE)
 		breathe_tween.tween_property(root, "modulate:a", 1.0, host.SWAP_HINT_BREATHE_CYCLE * 0.5)
-		breathe_tween.tween_property(root, "modulate:a", host.SWAP_HINT_BREATHE_ALPHA, host.SWAP_HINT_BREATHE_CYCLE * 0.5)
+		breathe_tween.tween_property(
+			root, "modulate:a", host.SWAP_HINT_BREATHE_ALPHA, host.SWAP_HINT_BREATHE_CYCLE * 0.5
+		)
 		host.hint_blink_tweens.append(breathe_tween)
 	return root
 
 
-func _redraw_dashed_outline(root: Node2D, polygons: Array, phase: float, screen_width: float, color: Color) -> void:
+func _redraw_dashed_outline(
+	root: Node2D, polygons: Array, phase: float, screen_width: float, color: Color
+) -> void:
 	if not is_instance_valid(root):
 		return
 	for child in root.get_children():
 		child.free()
 	for polygon in polygons:
-		for dash in _dashed_polygon_segments(polygon, host.HINT_TARGET_DASH_LENGTH, host.HINT_TARGET_DASH_GAP, phase):
+		for dash in _dashed_polygon_segments(
+			polygon, host.HINT_TARGET_DASH_LENGTH, host.HINT_TARGET_DASH_GAP, phase
+		):
 			_add_hint_outline_line(root, dash, screen_width, color, 0, false, false)
 
 
-func _dashed_polygon_segments(points: PackedVector2Array, dash_length: float, gap_length: float, phase: float) -> Array[PackedVector2Array]:
+func _dashed_polygon_segments(
+	points: PackedVector2Array, dash_length: float, gap_length: float, phase: float
+) -> Array[PackedVector2Array]:
 	var segments: Array[PackedVector2Array] = []
 	if points.size() < 2:
 		return segments
@@ -242,13 +276,19 @@ func _hint_breathe_group(group) -> void:
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.tween_method(apply_factor, 1.0, host.HINT_BREATHE_SCALE, host.HINT_BREATHE_CYCLE * 0.5)
 	tween.tween_method(apply_factor, host.HINT_BREATHE_SCALE, 1.0, host.HINT_BREATHE_CYCLE * 0.5)
-	tween.finished.connect(func() -> void:
-		apply_factor.call(1.0)
-	)
+	tween.finished.connect(func() -> void: apply_factor.call(1.0))
 	host.hint_blink_tweens.append(tween)
 
 
-func _add_hint_outline_line(visual: Node2D, polygon: PackedVector2Array, width: float, color: Color, z_index: int, animate := true, track := true) -> Line2D:
+func _add_hint_outline_line(
+	visual: Node2D,
+	polygon: PackedVector2Array,
+	width: float,
+	color: Color,
+	z_index: int,
+	animate := true,
+	track := true
+) -> Line2D:
 	var line := Line2D.new()
 	line.name = "hint_highlight"
 	line.width = width
@@ -307,9 +347,10 @@ func _auto_clear_hint_highlights(token: int) -> void:
 	host.hint_clear_timer.one_shot = true
 	host.hint_clear_timer.wait_time = maxf(0.01, float(remaining_msec) / 1000.0)
 	host.add_child(host.hint_clear_timer)
-	host.hint_clear_timer.timeout.connect(func() -> void:
-		if token == host.hint_highlight_token:
-			_auto_clear_hint_highlights(token)
+	host.hint_clear_timer.timeout.connect(
+		func() -> void:
+			if token == host.hint_highlight_token:
+				_auto_clear_hint_highlights(token)
 	)
 	host.hint_clear_timer.start()
 
@@ -390,9 +431,7 @@ func _sorted_locked_hint_groups() -> Array:
 
 func _sorted_hint_groups(source_groups: Array) -> Array:
 	var result := source_groups.duplicate()
-	result.sort_custom(func(a, b) -> bool:
-		return _hint_group_sort_key(a) < _hint_group_sort_key(b)
-	)
+	result.sort_custom(func(a, b) -> bool: return _hint_group_sort_key(a) < _hint_group_sort_key(b))
 	return result
 
 
@@ -426,11 +465,11 @@ func _groups_are_neighbors(a, b) -> bool:
 func _neighbor_member_pair(a, b) -> Array:
 	var a_members: Array = a.members.duplicate()
 	var b_members: Array = b.members.duplicate()
-	a_members.sort_custom(func(first, second) -> bool:
-		return str(first.get("id", "")) < str(second.get("id", ""))
+	a_members.sort_custom(
+		func(first, second) -> bool: return str(first.get("id", "")) < str(second.get("id", ""))
 	)
-	b_members.sort_custom(func(first, second) -> bool:
-		return str(first.get("id", "")) < str(second.get("id", ""))
+	b_members.sort_custom(
+		func(first, second) -> bool: return str(first.get("id", "")) < str(second.get("id", ""))
 	)
 	for am in a_members:
 		for bm in b_members:

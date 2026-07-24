@@ -16,7 +16,14 @@ func _init(owner: Node, control_factory: TopicHomeControls) -> void:
 	controls = control_factory
 
 
-func build(viewport_size: Vector2, scale: float, anchor_bottom: float, topics: Array[Dictionary], current_index: int, action: Callable) -> Panel:
+func build(
+	viewport_size: Vector2,
+	scale: float,
+	anchor_bottom: float,
+	topics: Array[Dictionary],
+	current_index: int,
+	action: Callable
+) -> Panel:
 	ui_scale = scale
 	select_action = action
 	panel = Panel.new()
@@ -24,14 +31,18 @@ func build(viewport_size: Vector2, scale: float, anchor_bottom: float, topics: A
 	var width := minf(viewport_size.x - 32.0 * scale, 330.0 * scale)
 	var max_height := minf(viewport_size.y * 0.43, 350.0 * scale)
 	var row_count := ceili(float(topics.size()) / 2.0)
-	var content_height := 24.0 * scale + float(row_count) * 46.0 * scale + float(maxi(0, row_count - 1)) * 5.0 * scale
+	var content_height := (
+		24.0 * scale + float(row_count) * 46.0 * scale + float(maxi(0, row_count - 1)) * 5.0 * scale
+	)
 	var height := minf(max_height, content_height)
 	panel.position = Vector2((viewport_size.x - width) * 0.5, anchor_bottom - height)
 	panel.size = Vector2(width, height)
 	panel.visible = false
 	panel.modulate.a = 0.0
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.add_theme_stylebox_override("panel", controls.style_box(Color("#FBFAF7"), int(22.0 * scale)))
+	panel.add_theme_stylebox_override(
+		"panel", controls.style_box(Color("#FBFAF7"), int(22.0 * scale))
+	)
 	var scroll := ScrollContainer.new()
 	scroll.name = "topic_selector_scroll"
 	scroll.position = Vector2(10.0 * scale, 12.0 * scale)
@@ -96,9 +107,15 @@ func open() -> void:
 	panel.position.y += 8.0 * ui_scale
 	var final_y := panel.position.y - 8.0 * ui_scale
 	var tween := game.create_tween().set_parallel(true)
-	tween.tween_property(panel, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(panel, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(panel, "position:y", final_y, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(panel, "modulate:a", 1.0, 0.16).set_trans(Tween.TRANS_CUBIC).set_ease(
+		Tween.EASE_OUT
+	)
+	tween.tween_property(panel, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(
+		Tween.EASE_OUT
+	)
+	tween.tween_property(panel, "position:y", final_y, 0.18).set_trans(Tween.TRANS_CUBIC).set_ease(
+		Tween.EASE_OUT
+	)
 
 
 func close() -> void:
@@ -111,12 +128,20 @@ func close() -> void:
 		panel.modulate.a = 0.0
 		return
 	var tween := game.create_tween().set_parallel(true)
-	tween.tween_property(panel, "modulate:a", 0.0, 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tween.tween_property(panel, "scale", Vector2(0.98, 0.98), 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tween.finished.connect(func() -> void:
-		if panel != null and is_instance_valid(panel):
-			panel.visible = false
-			panel.scale = Vector2.ONE
+	tween.tween_property(panel, "modulate:a", 0.0, 0.12).set_trans(Tween.TRANS_CUBIC).set_ease(
+		Tween.EASE_IN
+	)
+	(
+		tween
+		. tween_property(panel, "scale", Vector2(0.98, 0.98), 0.12)
+		. set_trans(Tween.TRANS_CUBIC)
+		. set_ease(Tween.EASE_IN)
+	)
+	tween.finished.connect(
+		func() -> void:
+			if panel != null and is_instance_valid(panel):
+				panel.visible = false
+				panel.scale = Vector2.ONE
 	)
 
 

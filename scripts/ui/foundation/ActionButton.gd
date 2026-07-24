@@ -10,6 +10,7 @@ enum Kind { PRIMARY, PILL, ICON, CARD }
 
 var _feedback: PressFeedback
 
+
 func _ready() -> void:
 	custom_minimum_size = custom_minimum_size.max(Vector2(44.0, 44.0))
 	accessibility_name = accessibility_label if not accessibility_label.is_empty() else text

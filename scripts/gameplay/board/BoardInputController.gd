@@ -15,7 +15,9 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		var magnify := event as InputEventMagnifyGesture
 		if _screen_in_drag_blockers(magnify.position):
 			return false
-		var factor: float = clampf(magnify.factor, host.TRACKPAD_MAGNIFY_MIN, host.TRACKPAD_MAGNIFY_MAX)
+		var factor: float = clampf(
+			magnify.factor, host.TRACKPAD_MAGNIFY_MIN, host.TRACKPAD_MAGNIFY_MAX
+		)
 		host._zoom_view_at(magnify.position, host.view_target_scale * factor)
 		return true
 	if event is InputEventPanGesture:
@@ -24,11 +26,19 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		var mouse_event := event as InputEventMouseButton
 		if _screen_in_drag_blockers(mouse_event.position):
 			return false
-		if host._tray_area().has_point(mouse_event.position) and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP and mouse_event.pressed:
+		if (
+			host._tray_area().has_point(mouse_event.position)
+			and mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP
+			and mouse_event.pressed
+		):
 			host._stop_tray_inertia()
 			host._pan_tray(48.0, false)
 			return true
-		if host._tray_area().has_point(mouse_event.position) and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
+		if (
+			host._tray_area().has_point(mouse_event.position)
+			and mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN
+			and mouse_event.pressed
+		):
 			host._stop_tray_inertia()
 			host._pan_tray(-48.0, false)
 			return true
@@ -36,7 +46,11 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			return false
 		if mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN and mouse_event.pressed:
 			return false
-		if mouse_event.pressed and mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.double_click:
+		if (
+			mouse_event.pressed
+			and mouse_event.button_index == MOUSE_BUTTON_LEFT
+			and mouse_event.double_click
+		):
 			var double_group = host._group_at_world(host._screen_to_world(mouse_event.position))
 			if double_group != null and host.randomize_piece_rotation:
 				host._rotate_group(double_group)
@@ -59,7 +73,9 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			host._pan_tray(motion.relative.x)
 			return true
 		if host.swap_dragging != null:
-			host._move_swap_tile_to(host.swap_dragging, host._screen_to_world(motion.position) + host.swap_drag_offset)
+			host._move_swap_tile_to(
+				host.swap_dragging, host._screen_to_world(motion.position) + host.swap_drag_offset
+			)
 			return true
 		if host.dragging != null:
 			host._update_drag_position(motion.position)
@@ -111,7 +127,10 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			host._update_pinch()
 			return true
 		if host.swap_dragging != null and drag_event.index == host.active_touch_index:
-			host._move_swap_tile_to(host.swap_dragging, host._screen_to_world(drag_event.position) + host.swap_drag_offset)
+			host._move_swap_tile_to(
+				host.swap_dragging,
+				host._screen_to_world(drag_event.position) + host.swap_drag_offset
+			)
 			return true
 		if host.dragging != null and drag_event.index == host.active_touch_index:
 			host._update_drag_position(drag_event.position)
@@ -186,7 +205,9 @@ func _end_drag() -> void:
 	else:
 		host._trigger_haptic("drop")
 	host._check_complete()
-	host.PieceVisualFactoryScript.set_group_lifted(released_group, false, host, not host.reduced_motion and not snapped)
+	host.PieceVisualFactoryScript.set_group_lifted(
+		released_group, false, host, not host.reduced_motion and not snapped
+	)
 	host.dragging = null
 	host.dragging_from_tray = false
 	host.dragging_tray_index = -1

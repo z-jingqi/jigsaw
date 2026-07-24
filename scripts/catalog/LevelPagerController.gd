@@ -29,7 +29,16 @@ func _init(owner: Node) -> void:
 	game = owner
 
 
-func configure(next_viewport: Control, next_track: Control, count: int, initial_page: int, builder: Callable, thumb: Control, changed := Callable(), tapped := Callable()) -> void:
+func configure(
+	next_viewport: Control,
+	next_track: Control,
+	count: int,
+	initial_page: int,
+	builder: Callable,
+	thumb: Control,
+	changed := Callable(),
+	tapped := Callable()
+) -> void:
 	reset()
 	viewport = next_viewport
 	track = next_track
@@ -82,7 +91,11 @@ func handle_input(event: InputEvent) -> void:
 		else:
 			_end_drag(event.position)
 		return
-	if event is InputEventMouseMotion and drag_active and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+	if (
+		event is InputEventMouseMotion
+		and drag_active
+		and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
+	):
 		_drag_by(event.relative.x)
 
 
@@ -153,7 +166,10 @@ func _end_drag(position: Vector2) -> void:
 		_snap_back(false)
 		return
 	var direction := 0
-	if absf(drag_distance) >= page_width * DISTANCE_THRESHOLD or absf(drag_velocity) >= VELOCITY_THRESHOLD:
+	if (
+		absf(drag_distance) >= page_width * DISTANCE_THRESHOLD
+		or absf(drag_velocity) >= VELOCITY_THRESHOLD
+	):
 		direction = 1 if drag_distance < 0.0 else -1
 	if direction > 0 and current_page >= page_count - 1:
 		direction = 0
@@ -199,9 +215,10 @@ func _snap_back(animated: bool) -> void:
 	tween = game.create_tween()
 	tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	tween.tween_method(_set_track_x, track.position.x, -page_width, RETURN_DURATION)
-	tween.finished.connect(func() -> void:
-		tween = null
-		input_locked = false
+	tween.finished.connect(
+		func() -> void:
+			tween = null
+			input_locked = false
 	)
 
 
@@ -241,7 +258,9 @@ func _update_indicator() -> void:
 	if parent == null:
 		return
 	var travel := maxf(0.0, parent.size.x - indicator_thumb.size.x)
-	var progress := 0.0 if page_count <= 1 else clampf(_visual_page() / float(page_count - 1), 0.0, 1.0)
+	var progress := (
+		0.0 if page_count <= 1 else clampf(_visual_page() / float(page_count - 1), 0.0, 1.0)
+	)
 	indicator_thumb.position.x = travel * progress
 
 

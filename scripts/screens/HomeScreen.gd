@@ -3,8 +3,8 @@ extends Control
 
 signal selected_theme_changed(theme_id: String)
 signal theme_activated(theme_id: String)
-signal all_themes_requested()
-signal menu_requested()
+signal all_themes_requested
+signal menu_requested
 
 const PagerControllerScript := preload("res://scripts/screens/HomePagerController.gd")
 const MotionTokenResource := preload("res://themes/motion_tokens.tres")
@@ -92,12 +92,18 @@ func play_cold_entry() -> void:
 		return
 	animation_player.play(&"enter")
 	_entry_interaction_ready = false
-	get_tree().create_timer(0.65).timeout.connect(func() -> void: _entry_interaction_ready = true, CONNECT_ONE_SHOT)
+	get_tree().create_timer(0.65).timeout.connect(
+		func() -> void: _entry_interaction_ready = true, CONNECT_ONE_SHOT
+	)
 
 
 func active_motion_count() -> int:
 	var animation_active := 1 if animation_player.is_playing() else 0
-	return animation_active + (_pager.active_motion_count() if _pager != null else 0) + progress.active_motion_count()
+	return (
+		animation_active
+		+ (_pager.active_motion_count() if _pager != null else 0)
+		+ progress.active_motion_count()
+	)
 
 
 func debug_state_snapshot() -> Dictionary:
@@ -136,7 +142,13 @@ func _apply_selected_theme(animate_information: bool) -> void:
 	var selected = _themes[_selected_index]
 	_set_information(info_panel, theme_name, progress, selected)
 	incoming_info.visible = false
-	theme = ThemeTokenResource.theme_for_variant(ThemeTokenResource.TextVariant.ON_DARK if selected.home_ui_variant == &"on_dark" else ThemeTokenResource.TextVariant.ON_LIGHT)
+	theme = ThemeTokenResource.theme_for_variant(
+		(
+			ThemeTokenResource.TextVariant.ON_DARK
+			if selected.home_ui_variant == &"on_dark"
+			else ThemeTokenResource.TextVariant.ON_LIGHT
+		)
+	)
 	page_label.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
 	_set_cover(previous_cover, _theme_at(_selected_index - 1))
 	_set_cover(current_cover, selected)
@@ -204,7 +216,9 @@ func _on_pager_activation_requested() -> void:
 	_transitioning_to_levels = true
 	if not bool(get_meta("reduced_motion", false)):
 		var tween := create_tween().set_parallel(true)
-		tween.tween_property(current_cover, "scale", Vector2(1.03, 1.03), MotionTokenResource.home_to_levels_duration)
+		tween.tween_property(
+			current_cover, "scale", Vector2(1.03, 1.03), MotionTokenResource.home_to_levels_duration
+		)
 		tween.tween_property(current_cover, "modulate:a", 0.82, MotionTokenResource.press_duration)
 		await tween.finished
 	theme_activated.emit(str(_themes[_selected_index].theme_id))
@@ -220,10 +234,16 @@ func _animate_information_in() -> void:
 	page_label.modulate.a = 0.0
 	var tween := create_tween().set_parallel(true)
 	tween.tween_property(info_panel, "modulate:a", 1.0, MotionTokenResource.content_duration)
-	tween.tween_property(page_label, "modulate:a", 1.0, MotionTokenResource.content_duration).set_delay(0.04)
+	(
+		tween
+		. tween_property(page_label, "modulate:a", 1.0, MotionTokenResource.content_duration)
+		. set_delay(0.04)
+	)
 
 
-func _set_information(panel: Control, name_label: Label, theme_progress: ThemeProgress, theme_model: Variant) -> void:
+func _set_information(
+	panel: Control, name_label: Label, theme_progress: ThemeProgress, theme_model: Variant
+) -> void:
 	panel.position.x = 0.0
 	name_label.text = str(theme_model.title)
 	theme_progress.set_view_model(theme_model.progress)

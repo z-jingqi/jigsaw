@@ -136,10 +136,11 @@ func _viewport_row() -> Control:
 	viewport_select.add_theme_font_size_override("font_size", 18)
 	for preset in viewport_presets:
 		viewport_select.add_item(str(preset["label"]))
-	viewport_select.item_selected.connect(func(index: int) -> void:
-		var preset: Dictionary = viewport_presets[index]
-		_call_host("debug_apply_viewport_preset", [preset.get("size", Vector2i.ZERO)])
-		_set_status("视图: %s" % str(preset.get("label", "")))
+	viewport_select.item_selected.connect(
+		func(index: int) -> void:
+			var preset: Dictionary = viewport_presets[index]
+			_call_host("debug_apply_viewport_preset", [preset.get("size", Vector2i.ZERO)])
+			_set_status("视图: %s" % str(preset.get("label", "")))
 	)
 	row.add_child(viewport_select)
 	return row
@@ -153,19 +154,21 @@ func _tab_levels() -> Control:
 	level_select = OptionButton.new()
 	level_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	level_select.add_theme_font_size_override("font_size", 18)
-	level_select.item_selected.connect(func(_index: int) -> void:
-		_refresh_mode_select()
-	)
+	level_select.item_selected.connect(func(_index: int) -> void: _refresh_mode_select())
 	row.add_child(level_select)
 	mode_select = OptionButton.new()
 	mode_select.custom_minimum_size.x = 180
 	mode_select.add_theme_font_size_override("font_size", 18)
 	row.add_child(mode_select)
-	box.add_child(_button_grid([
-		{"text": "进入关卡", "action": _enter_selected_level},
-		{"text": "重进当前", "action": _restart_current_level},
-		{"text": "完成预览", "action": func() -> void: _call_host("debug_preview_complete")},
-	]))
+	box.add_child(
+		_button_grid(
+			[
+				{"text": "进入关卡", "action": _enter_selected_level},
+				{"text": "重进当前", "action": _restart_current_level},
+				{"text": "完成预览", "action": func() -> void: _call_host("debug_preview_complete")},
+			]
+		)
+	)
 	return box
 
 
@@ -173,12 +176,19 @@ func _tab_tray() -> Control:
 	var box := _tab_box("托盘")
 	metrics_label = _metric_label()
 	box.add_child(metrics_label)
-	box.add_child(_button_grid([
-		{"text": "重排托盘", "action": func() -> void: _call_host("debug_reset_tray")},
-		{"text": "滚到最左", "action": func() -> void: _call_host("debug_scroll_tray_left")},
-		{"text": "滚到最右", "action": func() -> void: _call_host("debug_scroll_tray_right")},
-		{"text": "显示 Bounds", "action": func() -> void: _call_host("debug_toggle_bounds_overlay")},
-	]))
+	box.add_child(
+		_button_grid(
+			[
+				{"text": "重排托盘", "action": func() -> void: _call_host("debug_reset_tray")},
+				{"text": "滚到最左", "action": func() -> void: _call_host("debug_scroll_tray_left")},
+				{"text": "滚到最右", "action": func() -> void: _call_host("debug_scroll_tray_right")},
+				{
+					"text": "显示 Bounds",
+					"action": func() -> void: _call_host("debug_toggle_bounds_overlay")
+				},
+			]
+		)
+	)
 	return box
 
 
@@ -186,10 +196,14 @@ func _tab_hint() -> Control:
 	var box := _tab_box("提示")
 	hint_label = _metric_label()
 	box.add_child(hint_label)
-	box.add_child(_button_grid([
-		{"text": "触发提示", "action": func() -> void: _call_host("debug_trigger_hint")},
-		{"text": "清除提示", "action": func() -> void: _call_host("debug_clear_hint")},
-	]))
+	box.add_child(
+		_button_grid(
+			[
+				{"text": "触发提示", "action": func() -> void: _call_host("debug_trigger_hint")},
+				{"text": "清除提示", "action": func() -> void: _call_host("debug_clear_hint")},
+			]
+		)
+	)
 	return box
 
 
@@ -197,12 +211,19 @@ func _tab_state() -> Control:
 	var box := _tab_box("状态")
 	state_label = _metric_label()
 	box.add_child(state_label)
-	box.add_child(_button_grid([
-		{"text": "运行交互巡检", "action": _run_interaction_smoke},
-		{"text": "清当前进度", "action": func() -> void: _call_host("debug_clear_current_progress")},
-		{"text": "清全部进度", "action": func() -> void: _call_host("debug_clear_all_progress")},
-		{"text": "打印状态", "action": func() -> void: _call_host("debug_dump_state")},
-	]))
+	box.add_child(
+		_button_grid(
+			[
+				{"text": "运行交互巡检", "action": _run_interaction_smoke},
+				{
+					"text": "清当前进度",
+					"action": func() -> void: _call_host("debug_clear_current_progress")
+				},
+				{"text": "清全部进度", "action": func() -> void: _call_host("debug_clear_all_progress")},
+				{"text": "打印状态", "action": func() -> void: _call_host("debug_dump_state")},
+			]
+		)
+	)
 	return box
 
 
@@ -321,12 +342,24 @@ func _format_tray_metrics(metrics: Dictionary) -> String:
 		"托盘高度: %.1f" % float(tray.get("height", 0.0)),
 		"可用高度: %.1f" % float(tray.get("usable_height", 0.0)),
 		"上下间隙: %.1f" % float(tray.get("vertical_gap", 0.0)),
-		"滚动: %.1f / 内容 %.1f" % [float(tray.get("scroll", 0.0)), float(tray.get("content_width", 0.0))],
+		(
+			"滚动: %.1f / 内容 %.1f"
+			% [float(tray.get("scroll", 0.0)), float(tray.get("content_width", 0.0))]
+		),
 		"速度: %.1f" % float(tray.get("velocity", 0.0)),
 		"托盘碎片: %d" % int(tray.get("count", 0)),
 	]
 	for piece in sample.slice(0, mini(sample.size(), 5)):
-		lines.append("%s  h %.1f  scale %.3f" % [str(piece.get("id", "")), float(piece.get("screen_height", 0.0)), float(piece.get("scale", 0.0))])
+		lines.append(
+			(
+				"%s  h %.1f  scale %.3f"
+				% [
+					str(piece.get("id", "")),
+					float(piece.get("screen_height", 0.0)),
+					float(piece.get("scale", 0.0))
+				]
+			)
+		)
 	return "\n".join(lines)
 
 
@@ -334,27 +367,37 @@ func _format_hint_metrics(metrics: Dictionary) -> String:
 	if metrics.is_empty():
 		return "当前没有运行中的拼图。"
 	var hint: Dictionary = metrics.get("hint", {})
-	return "\n".join([
-		"当前模式: %s" % str(metrics.get("mode", "")),
-		"高亮节点: %d" % int(hint.get("nodes", 0)),
-		"高亮线条: %d" % int(hint.get("lines", 0)),
-		"active key: %s" % str(hint.get("key", "")),
-		"点击“触发提示”可直接调用现有 hint 流程。",
-	])
+	return (
+		"\n"
+		. join(
+			[
+				"当前模式: %s" % str(metrics.get("mode", "")),
+				"高亮节点: %d" % int(hint.get("nodes", 0)),
+				"高亮线条: %d" % int(hint.get("lines", 0)),
+				"active key: %s" % str(hint.get("key", "")),
+				"点击“触发提示”可直接调用现有 hint 流程。",
+			]
+		)
+	)
 
 
 func _format_state_metrics(metrics: Dictionary) -> String:
 	if metrics.is_empty():
 		return "当前没有运行中的拼图。"
-	return "\n".join([
-		"屏幕: %s" % str(metrics.get("screen", "")),
-		"主题: %s" % str(metrics.get("topic", "")),
-		"关卡: %s" % str(metrics.get("level", "")),
-		"模式: %s" % str(metrics.get("mode", "")),
-		"碎片组: %d" % int(metrics.get("groups", 0)),
-		"锁定组: %d" % int(metrics.get("locked_groups", 0)),
-		"托盘组: %d" % int(metrics.get("tray_groups", 0)),
-	])
+	return (
+		"\n"
+		. join(
+			[
+				"屏幕: %s" % str(metrics.get("screen", "")),
+				"主题: %s" % str(metrics.get("topic", "")),
+				"关卡: %s" % str(metrics.get("level", "")),
+				"模式: %s" % str(metrics.get("mode", "")),
+				"碎片组: %d" % int(metrics.get("groups", 0)),
+				"锁定组: %d" % int(metrics.get("locked_groups", 0)),
+				"托盘组: %d" % int(metrics.get("tray_groups", 0)),
+			]
+		)
+	)
 
 
 func _enter_selected_level() -> void:
@@ -378,8 +421,16 @@ func _restart_current_level() -> void:
 
 func _run_interaction_smoke() -> void:
 	_set_status("正在运行当前模式巡检...")
-	var result: Dictionary = await _call_host("debug_run_current_interaction_smoke", [], {"ok": false})
-	_set_status("巡检通过: %s" % str(result.get("mode", "")) if bool(result.get("ok", false)) else "巡检失败: %s" % JSON.stringify(result))
+	var result: Dictionary = await _call_host(
+		"debug_run_current_interaction_smoke", [], {"ok": false}
+	)
+	_set_status(
+		(
+			"巡检通过: %s" % str(result.get("mode", ""))
+			if bool(result.get("ok", false))
+			else "巡检失败: %s" % JSON.stringify(result)
+		)
+	)
 	_refresh_runtime_labels()
 
 

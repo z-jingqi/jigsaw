@@ -28,7 +28,12 @@ func reset() -> void:
 
 
 func handle_gui_input(event: InputEvent) -> void:
-	if game.current_screen != "topics" or controller.track == null or controller.page_count <= 1 or controller.transitioning:
+	if (
+		game.current_screen != "topics"
+		or controller.track == null
+		or controller.page_count <= 1
+		or controller.transitioning
+	):
 		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton

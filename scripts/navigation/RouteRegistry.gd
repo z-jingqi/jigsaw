@@ -50,30 +50,75 @@ func contracts() -> Array[StringName]:
 
 
 func _register_runtime_contracts() -> void:
-	register_definition(RouteDefinitionScript.new(&"home", RouteDefinitionScript.Presentation.ROOT, {}, {"theme_id": ""}))
-	register_definition(RouteDefinitionScript.new(&"all_themes", RouteDefinitionScript.Presentation.SCREEN, {"current_theme_id": TYPE_STRING}))
-	register_definition(RouteDefinitionScript.new(&"levels", RouteDefinitionScript.Presentation.SCREEN, {"theme_id": TYPE_STRING}, {"focus_level_id": ""}))
-	register_definition(RouteDefinitionScript.new(
-		&"gameplay",
-		RouteDefinitionScript.Presentation.SCREEN,
-		{"theme_id": TYPE_STRING, "level_id": TYPE_STRING, "mode": TYPE_STRING, "start_policy": TYPE_STRING},
-		{},
-		{"mode": ["polygon", "knob", "swap"], "start_policy": ["start", "resume", "replay"]}
-	))
-	register_definition(RouteDefinitionScript.new(&"mode_select", RouteDefinitionScript.Presentation.MODAL, {"theme_id": TYPE_STRING, "level_id": TYPE_STRING}))
-	register_definition(RouteDefinitionScript.new(&"settings", RouteDefinitionScript.Presentation.MODAL))
-	register_definition(RouteDefinitionScript.new(&"home_guide", RouteDefinitionScript.Presentation.OVERLAY, {}, {"initial_step": "swipe"}))
-	register_definition(RouteDefinitionScript.new(
-		&"mode_tutorial",
-		RouteDefinitionScript.Presentation.OVERLAY,
-		{"mode": TYPE_STRING},
-		{},
-		{"mode": ["polygon", "knob", "swap"]}
-	))
-	register_definition(RouteDefinitionScript.new(
-		&"completion",
-		RouteDefinitionScript.Presentation.MODAL,
-		{"theme_id": TYPE_STRING, "level_id": TYPE_STRING, "mode": TYPE_STRING, "completion_event_id": TYPE_STRING},
-		{},
-		{"mode": ["polygon", "knob", "swap"]}
-	))
+	register_definition(
+		RouteDefinitionScript.new(
+			&"home", RouteDefinitionScript.Presentation.ROOT, {}, {"theme_id": ""}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"all_themes",
+			RouteDefinitionScript.Presentation.SCREEN,
+			{"current_theme_id": TYPE_STRING}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"levels",
+			RouteDefinitionScript.Presentation.SCREEN,
+			{"theme_id": TYPE_STRING},
+			{"focus_level_id": ""}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"gameplay",
+			RouteDefinitionScript.Presentation.SCREEN,
+			{
+				"theme_id": TYPE_STRING,
+				"level_id": TYPE_STRING,
+				"mode": TYPE_STRING,
+				"start_policy": TYPE_STRING
+			},
+			{},
+			{"mode": ["polygon", "knob", "swap"], "start_policy": ["start", "resume", "replay"]}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"mode_select",
+			RouteDefinitionScript.Presentation.MODAL,
+			{"theme_id": TYPE_STRING, "level_id": TYPE_STRING}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(&"settings", RouteDefinitionScript.Presentation.MODAL)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"home_guide", RouteDefinitionScript.Presentation.OVERLAY, {}, {"initial_step": "swipe"}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"mode_tutorial",
+			RouteDefinitionScript.Presentation.OVERLAY,
+			{"mode": TYPE_STRING},
+			{},
+			{"mode": ["polygon", "knob", "swap"]}
+		)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"completion",
+			RouteDefinitionScript.Presentation.MODAL,
+			{
+				"theme_id": TYPE_STRING,
+				"level_id": TYPE_STRING,
+				"mode": TYPE_STRING,
+				"completion_event_id": TYPE_STRING
+			},
+			{},
+			{"mode": ["polygon", "knob", "swap"]}
+		)
+	)

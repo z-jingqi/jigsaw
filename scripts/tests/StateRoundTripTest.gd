@@ -19,9 +19,13 @@ func _run() -> void:
 		var source_board := PuzzleBoardScene.instantiate() as PuzzleBoard
 		root.add_child(source_board)
 		source_board.set_feedback_preferences(false, true)
-		var source_loaded: bool = source_board.start(level_config, play_mode, media["texture"], media["image"], media["source_size"], 64.0)
+		var source_loaded: bool = source_board.start(
+			level_config, play_mode, media["texture"], media["image"], media["source_size"], 64.0
+		)
 		await process_frame
-		var expected: Dictionary = source_board.debug_prepare_restore_snapshot() if source_loaded else {}
+		var expected: Dictionary = (
+			source_board.debug_prepare_restore_snapshot() if source_loaded else {}
+		)
 		var persisted_snapshot = JSON.parse_string(JSON.stringify(expected))
 		if typeof(persisted_snapshot) == TYPE_DICTIONARY:
 			expected = persisted_snapshot
@@ -32,7 +36,16 @@ func _run() -> void:
 		var restored_board := PuzzleBoardScene.instantiate() as PuzzleBoard
 		root.add_child(restored_board)
 		restored_board.set_feedback_preferences(false, true)
-		var restored_loaded: bool = restored_board.start(level_config, play_mode, media["texture"], media["image"], media["source_size"], 64.0, false, expected)
+		var restored_loaded: bool = restored_board.start(
+			level_config,
+			play_mode,
+			media["texture"],
+			media["image"],
+			media["source_size"],
+			64.0,
+			false,
+			expected
+		)
 		await process_frame
 		var result := {"mode": play_mode, "ok": false, "reason": "load_failed"}
 		if source_loaded and restored_loaded:

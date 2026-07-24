@@ -19,14 +19,17 @@ func _run() -> void:
 		var board := PuzzleBoardScene.instantiate() as PuzzleBoard
 		root.add_child(board)
 		board.set_feedback_preferences(false, true)
-		var loaded: bool = board.start(
-			level_config,
-			play_mode,
-			media["texture"],
-			media["image"],
-			media["source_size"],
-			64.0,
-			false,
+		var loaded: bool = (
+			board
+			. start(
+				level_config,
+				play_mode,
+				media["texture"],
+				media["image"],
+				media["source_size"],
+				64.0,
+				false,
+			)
 		)
 		await process_frame
 		var result := {"mode": play_mode, "loaded": loaded, "ok": false}

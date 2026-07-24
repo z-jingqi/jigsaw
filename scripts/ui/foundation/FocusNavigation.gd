@@ -1,6 +1,7 @@
 class_name FocusNavigation
 extends RefCounted
 
+
 ## Sets deterministic keyboard focus order without coupling components to pages.
 static func configure_linear(controls: Array[Control]) -> void:
 	if controls.is_empty():

@@ -93,8 +93,7 @@ func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	_add_screen_entry(entry)
 	_screen_stack.append(entry)
 	var transaction: Variant = NavigationTransactionScript.new(
-		func() -> void:
-			_emit_route_changed(),
+		func() -> void: _emit_route_changed(),
 		func() -> void:
 			_screen_stack.pop_back()
 			_free_entry(entry)
@@ -167,15 +166,17 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	if not bool(built.get("ok", false)):
 		return built
 	var definition: Variant = built.definition
-	if definition.presentation != RouteDefinitionScript.Presentation.MODAL and definition.presentation != RouteDefinitionScript.Presentation.OVERLAY:
+	if (
+		definition.presentation != RouteDefinitionScript.Presentation.MODAL
+		and definition.presentation != RouteDefinitionScript.Presentation.OVERLAY
+	):
 		return _failure(&"invalid_payload", {"reason": "route_is_not_modal"})
 	var entry: Dictionary = built.entry
 	_set_entry_modal_background(current_screen_entry())
 	_add_modal_entry(entry)
 	_modal_entry = entry
 	var transaction: Variant = NavigationTransactionScript.new(
-		func() -> void:
-			_emit_route_changed(),
+		func() -> void: _emit_route_changed(),
 		func() -> void:
 			_modal_entry = {}
 			_free_entry(entry)
@@ -247,12 +248,16 @@ func current_route_view() -> Control:
 
 
 func debug_state_snapshot() -> Dictionary:
-	var motion: Dictionary = _transition_host.snapshot() if is_instance_valid(_transition_host) else {}
+	var motion: Dictionary = (
+		_transition_host.snapshot() if is_instance_valid(_transition_host) else {}
+	)
 	return {
 		"route": String(current_route()),
-		"screen_stack": _screen_stack.map(func(entry: Dictionary) -> String: return String(entry.route)),
+		"screen_stack":
+		_screen_stack.map(func(entry: Dictionary) -> String: return String(entry.route)),
 		"modal": String(_modal_entry.get("route", StringName())),
-		"input_locked": _transition_host.active_count() > 0 if is_instance_valid(_transition_host) else false,
+		"input_locked":
+		_transition_host.active_count() > 0 if is_instance_valid(_transition_host) else false,
 		"reduced_motion": _reduced_motion,
 		"active_motion_count": motion.get("active_motion_count", 0),
 		"motion_phase": motion.get("motion_phase", "idle"),
@@ -277,7 +282,9 @@ func _build_entry(route: StringName, payload: Dictionary) -> Dictionary:
 	var definition: Variant = validation.definition
 	var view := definition.scene.instantiate() as Control
 	if view == null:
-		return _failure(&"not_found", {"route": String(route), "reason": "scene_root_is_not_control"})
+		return _failure(
+			&"not_found", {"route": String(route), "reason": "scene_root_is_not_control"}
+		)
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return {
 		"ok": true,
@@ -407,7 +414,9 @@ func _success(route: StringName) -> Dictionary:
 
 func _failure(error: StringName, details: Dictionary) -> Dictionary:
 	navigation_failed.emit(error, details)
-	return {"ok": false, "error": String(error), "details": details, "state": debug_state_snapshot()}
+	return {
+		"ok": false, "error": String(error), "details": details, "state": debug_state_snapshot()
+	}
 
 
 func _emit_route_changed() -> void:

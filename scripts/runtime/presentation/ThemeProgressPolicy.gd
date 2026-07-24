@@ -1,6 +1,7 @@
 class_name ThemeProgressPolicy
 extends RefCounted
 
+
 static func build(completed_modes: int, total_modes: int) -> Dictionary:
 	var safe_total := maxi(0, total_modes)
 	var safe_completed := clampi(completed_modes, 0, safe_total)

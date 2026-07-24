@@ -107,7 +107,9 @@ func _piece_drag_area(use_visible_area := false) -> Rect2:
 	var table := _virtual_table_area().grow(-host.PIECE_DRAG_PADDING)
 	if not use_visible_area:
 		return table
-	var visible := _visible_world_area().grow(-host.PIECE_DRAG_PADDING / maxf(0.001, host.view_scale))
+	var visible := _visible_world_area().grow(
+		-host.PIECE_DRAG_PADDING / maxf(0.001, host.view_scale)
+	)
 	if visible.size.x >= 48.0 and visible.size.y >= 48.0:
 		return visible
 	return table
@@ -142,7 +144,9 @@ func _group_bounds_at(group, target_position: Vector2) -> Rect2:
 		var visual_position: Vector2 = member["visual"].position
 		for bounds_points in _member_bounds_points_list(member):
 			for point in bounds_points:
-				var global_point: Vector2 = target_position + (visual_position + point).rotated(group.node.rotation)
+				var global_point: Vector2 = (
+					target_position + (visual_position + point).rotated(group.node.rotation)
+				)
 				min_point = min_point.min(global_point)
 				max_point = max_point.max(global_point)
 				has_point = true
@@ -152,7 +156,11 @@ func _group_bounds_at(group, target_position: Vector2) -> Rect2:
 
 
 func _member_bounds_points_list(member: Dictionary) -> Array[PackedVector2Array]:
-	if member.has("bounds_points_list") and typeof(member["bounds_points_list"]) == TYPE_ARRAY and not member["bounds_points_list"].is_empty():
+	if (
+		member.has("bounds_points_list")
+		and typeof(member["bounds_points_list"]) == TYPE_ARRAY
+		and not member["bounds_points_list"].is_empty()
+	):
 		return member["bounds_points_list"]
 	return [member.get("bounds_points", member["polygon"])]
 
@@ -165,13 +173,18 @@ func _group_at_world(world_pos: Vector2):
 		var local_to_group: Vector2 = group.node.transform.affine_inverse() * world_pos
 		for member in group.members:
 			var local_to_piece: Vector2 = local_to_group - member["visual"].position
-			if Geometry2D.is_point_in_polygon(local_to_piece, member["polygon"]) and _local_point_has_alpha(member, local_to_piece):
+			if (
+				Geometry2D.is_point_in_polygon(local_to_piece, member["polygon"])
+				and _local_point_has_alpha(member, local_to_piece)
+			):
 				return group
 	return null
 
 
 func _local_point_has_alpha(member: Dictionary, local_point: Vector2) -> bool:
-	var source_point: Vector2 = (local_point + member["home"] - host.board_origin) / host.source_scale
+	var source_point: Vector2 = (
+		(local_point + member["home"] - host.board_origin) / host.source_scale
+	)
 	return _source_point_has_alpha(source_point, host.HIT_ALPHA_RADIUS)
 
 
@@ -189,7 +202,9 @@ func _source_point_has_alpha(source_point: Vector2, radius := 2) -> bool:
 	return false
 
 
-func _visible_cut_line_segments(source_line: PackedVector2Array, home: Vector2, scale: float, origin: Vector2) -> Array[PackedVector2Array]:
+func _visible_cut_line_segments(
+	source_line: PackedVector2Array, home: Vector2, scale: float, origin: Vector2
+) -> Array[PackedVector2Array]:
 	var segments: Array[PackedVector2Array] = []
 	var current := PackedVector2Array()
 	for index in range(source_line.size() - 1):

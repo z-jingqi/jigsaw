@@ -155,11 +155,20 @@ func _install_captured_close() -> void:
 	animation.length = CLOSE_DURATION
 	_add_track(animation, NodePath("Shade:modulate:a"), shade.modulate.a, 0.0, CLOSE_DURATION, 2.5)
 	_add_track(animation, NodePath("Panel:modulate:a"), panel.modulate.a, 0.0, CLOSE_DURATION, 2.5)
-	_add_track(animation, NodePath("Panel:scale"), panel.scale, Vector2(0.98, 0.98), CLOSE_DURATION, 2.5)
+	_add_track(
+		animation, NodePath("Panel:scale"), panel.scale, Vector2(0.98, 0.98), CLOSE_DURATION, 2.5
+	)
 	_replace_runtime_animation(CAPTURED_CLOSE, animation)
 
 
-func _add_track(animation: Animation, path: NodePath, start_value: Variant, end_value: Variant, duration: float, transition: float) -> void:
+func _add_track(
+	animation: Animation,
+	path: NodePath,
+	start_value: Variant,
+	end_value: Variant,
+	duration: float,
+	transition: float
+) -> void:
 	var track := animation.add_track(Animation.TYPE_VALUE)
 	animation.track_set_path(track, path)
 	animation.track_set_interpolation_type(track, Animation.INTERPOLATION_LINEAR)

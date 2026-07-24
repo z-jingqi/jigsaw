@@ -10,6 +10,7 @@ signal value_changed(key: StringName, enabled: bool)
 var _toggle_tween: Tween
 var _thumb: Panel
 
+
 func configure(key: StringName, label_text: String, enabled: bool, animate := false) -> void:
 	setting_key = key
 	label.text = label_text

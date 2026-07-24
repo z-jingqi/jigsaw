@@ -1,6 +1,7 @@
 class_name AppViewModels
 extends RefCounted
 
+
 class ThemeProgressViewModel:
 	extends RefCounted
 	var completed_modes: int
@@ -27,7 +28,13 @@ class ModeStatusViewModel:
 	var action: StringName
 	var enabled: bool
 
-	func _init(p_mode: StringName, p_label: String, p_status: StringName, p_action: StringName, p_enabled: bool) -> void:
+	func _init(
+		p_mode: StringName,
+		p_label: String,
+		p_status: StringName,
+		p_action: StringName,
+		p_enabled: bool
+	) -> void:
 		mode = p_mode
 		label = p_label
 		status = p_status

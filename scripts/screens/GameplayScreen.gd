@@ -1,10 +1,10 @@
 class_name GameplayScreen
 extends Control
 
-signal back_requested()
-signal hint_requested()
-signal move_swap_up_requested()
-signal move_swap_down_requested()
+signal back_requested
+signal hint_requested
+signal move_swap_up_requested
+signal move_swap_down_requested
 
 @onready var back_button: Button = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title

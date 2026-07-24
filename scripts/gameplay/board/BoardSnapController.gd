@@ -20,14 +20,15 @@ func _rotate_group(group) -> void:
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(group.node, "rotation_degrees", target, host._motion_duration(0.16))
-	tween.finished.connect(func() -> void:
-		if not host.groups.has(group) or not is_instance_valid(group.node):
-			return
-		group.is_animating = false
-		if _try_snap_chain(group):
-			_lock_group(group)
-		_check_complete()
-		host._notify_state_changed(true)
+	tween.finished.connect(
+		func() -> void:
+			if not host.groups.has(group) or not is_instance_valid(group.node):
+				return
+			group.is_animating = false
+			if _try_snap_chain(group):
+				_lock_group(group)
+			_check_complete()
+			host._notify_state_changed(true)
 	)
 
 
@@ -44,7 +45,12 @@ func _refresh_group_z_indices() -> void:
 
 
 func _update_snap_preview(active) -> void:
-	if active == null or active.locked or not is_instance_valid(active.node) or absf(active.node.scale.x - 1.0) > 0.04:
+	if (
+		active == null
+		or active.locked
+		or not is_instance_valid(active.node)
+		or absf(active.node.scale.x - 1.0) > 0.04
+	):
 		_clear_snap_preview()
 		return
 	var match := _snap_match_data(active)
@@ -135,11 +141,16 @@ func _try_snap_chain(active) -> bool:
 
 
 func _snap_match_data(active) -> Dictionary:
-	return host.SnapSolverScript.find_match_data(active, _locked_snap_targets(active), _snap_tolerance(), host.ROTATION_TOLERANCE)
+	return host.SnapSolverScript.find_match_data(
+		active, _locked_snap_targets(active), _snap_tolerance(), host.ROTATION_TOLERANCE
+	)
 
 
 func _seam_line_width() -> float:
-	return host.SEAM_SCREEN_WIDTH / maxf(0.001, host.base_view_scale if host.base_view_scale > 0.0 else host.view_scale)
+	return (
+		host.SEAM_SCREEN_WIDTH
+		/ maxf(0.001, host.base_view_scale if host.base_view_scale > 0.0 else host.view_scale)
+	)
 
 
 func _play_snap_shimmer(members: Array) -> void:
@@ -176,13 +187,17 @@ func _play_snap_shimmer(members: Array) -> void:
 	var tween := host.create_tween()
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_method(func(t: float) -> void:
-		material.set_shader_parameter("progress", t)
-	, 0.0, 1.0, host.SHIMMER_DURATION)
-	tween.finished.connect(func() -> void:
-		for overlay in overlays:
-			if is_instance_valid(overlay):
-				overlay.queue_free()
+	tween.tween_method(
+		func(t: float) -> void: material.set_shader_parameter("progress", t),
+		0.0,
+		1.0,
+		host.SHIMMER_DURATION
+	)
+	tween.finished.connect(
+		func() -> void:
+			for overlay in overlays:
+				if is_instance_valid(overlay):
+					overlay.queue_free()
 	)
 
 

@@ -77,7 +77,9 @@ const BoardInputControllerScript := preload("res://scripts/gameplay/board/BoardI
 const BoardHintControllerScript := preload("res://scripts/gameplay/board/BoardHintController.gd")
 const BoardSwapControllerScript := preload("res://scripts/gameplay/board/BoardSwapController.gd")
 const BoardSnapControllerScript := preload("res://scripts/gameplay/board/BoardSnapController.gd")
-const BoardPlacementControllerScript := preload("res://scripts/gameplay/board/BoardPlacementController.gd")
+const BoardPlacementControllerScript := preload(
+	"res://scripts/gameplay/board/BoardPlacementController.gd"
+)
 const PieceGroupScript := preload("res://scripts/gameplay/board/PieceGroup.gd")
 const PieceVisualFactoryScript := preload("res://scripts/gameplay/board/PieceVisualFactory.gd")
 const SnapSolverScript := preload("res://scripts/gameplay/board/SnapSolver.gd")
@@ -206,7 +208,19 @@ func _exit_tree() -> void:
 	if state_controller != null:
 		state_controller.cancel_pending()
 		state_controller.board = null
-	for controller in [view_controller, debug_adapter, geometry, appearance, session_builder, tray_controller, input_controller, hint_controller, swap_controller, snap_controller, placement_controller]:
+	for controller in [
+		view_controller,
+		debug_adapter,
+		geometry,
+		appearance,
+		session_builder,
+		tray_controller,
+		input_controller,
+		hint_controller,
+		swap_controller,
+		snap_controller,
+		placement_controller
+	]:
 		if controller != null:
 			controller.host = null
 
@@ -218,7 +232,9 @@ func _cancel_runtime_animations() -> void:
 		if group.tray_tween != null and group.tray_tween.is_valid():
 			group.tray_tween.kill()
 		group.tray_tween = null
-	for tween in [view_tween, tray_drag_offset_tween, swap_target_preview_tween, hint_tray_scroll_tween]:
+	for tween in [
+		view_tween, tray_drag_offset_tween, swap_target_preview_tween, hint_tray_scroll_tween
+	]:
 		if tween != null and tween.is_valid():
 			tween.kill()
 	for tween in hint_blink_tweens:
@@ -256,10 +272,16 @@ func _process(delta: float) -> void:
 	_notify_state_changed()
 
 
-func set_feedback_preferences(next_haptics_enabled: bool, next_reduced_motion: bool, next_edge_contrast_mode := "auto") -> void:
+func set_feedback_preferences(
+	next_haptics_enabled: bool, next_reduced_motion: bool, next_edge_contrast_mode := "auto"
+) -> void:
 	haptics_enabled = next_haptics_enabled
 	reduced_motion = next_reduced_motion
-	edge_contrast_mode = next_edge_contrast_mode if ["auto", "dark", "light"].has(next_edge_contrast_mode) else "auto"
+	edge_contrast_mode = (
+		next_edge_contrast_mode
+		if ["auto", "dark", "light"].has(next_edge_contrast_mode)
+		else "auto"
+	)
 
 
 func _motion_duration(duration: float) -> float:
@@ -327,7 +349,18 @@ func _json_vector(value, fallback := Vector2.ZERO) -> Vector2:
 	return state_controller.json_vector(value, fallback)
 
 
-func start(level_config: Dictionary, play_mode: String, source_texture: Texture2D, image: Image, image_size: Vector2, top_reserved_height: float, random_rotation_enabled := false, restore_state := {}, bottom_reserved_height := 0.0, tray_bounds := Rect2()) -> bool:
+func start(
+	level_config: Dictionary,
+	play_mode: String,
+	source_texture: Texture2D,
+	image: Image,
+	image_size: Vector2,
+	top_reserved_height: float,
+	random_rotation_enabled := false,
+	restore_state := {},
+	bottom_reserved_height := 0.0,
+	tray_bounds := Rect2()
+) -> bool:
 	clear()
 	active_level_config = level_config
 	current_mode = _mode_key(play_mode)
@@ -561,7 +594,9 @@ func _start_play_session(play_mode: String) -> bool:
 	return session_builder._start_play_session(play_mode)
 
 
-func _swap_slot_position(slot_index: int, cols := SWAP_FALLBACK_COLS, rows := SWAP_FALLBACK_ROWS) -> Vector2:
+func _swap_slot_position(
+	slot_index: int, cols := SWAP_FALLBACK_COLS, rows := SWAP_FALLBACK_ROWS
+) -> Vector2:
 	return session_builder._swap_slot_position(slot_index, cols, rows)
 
 
@@ -605,7 +640,9 @@ func _json_rects(value) -> Array[Rect2]:
 	return geometry._json_rects(value)
 
 
-func _local_rect_points(source_rect: Rect2, home: Vector2, scale: float, origin: Vector2) -> PackedVector2Array:
+func _local_rect_points(
+	source_rect: Rect2, home: Vector2, scale: float, origin: Vector2
+) -> PackedVector2Array:
 	return geometry._local_rect_points(source_rect, home, scale, origin)
 
 
@@ -741,7 +778,9 @@ func _source_point_has_alpha(source_point: Vector2, radius := HIT_ALPHA_RADIUS) 
 	return placement_controller._source_point_has_alpha(source_point, radius)
 
 
-func _visible_cut_line_segments(source_line: PackedVector2Array, home: Vector2, scale: float, origin: Vector2) -> Array[PackedVector2Array]:
+func _visible_cut_line_segments(
+	source_line: PackedVector2Array, home: Vector2, scale: float, origin: Vector2
+) -> Array[PackedVector2Array]:
 	return placement_controller._visible_cut_line_segments(source_line, home, scale, origin)
 
 
@@ -853,8 +892,18 @@ func _has_active_hint_highlights() -> bool:
 	return hint_controller._has_active_hint_highlights()
 
 
-func _spawn_dashed_outline(parent: Node2D, polygons: Array, local_position: Vector2, z_index_value: int, screen_width := 0.0, color := Color.TRANSPARENT, breathe := false) -> Node2D:
-	return hint_controller._spawn_dashed_outline(parent, polygons, local_position, z_index_value, screen_width, color, breathe)
+func _spawn_dashed_outline(
+	parent: Node2D,
+	polygons: Array,
+	local_position: Vector2,
+	z_index_value: int,
+	screen_width := 0.0,
+	color := Color.TRANSPARENT,
+	breathe := false
+) -> Node2D:
+	return hint_controller._spawn_dashed_outline(
+		parent, polygons, local_position, z_index_value, screen_width, color, breathe
+	)
 
 
 func _refresh_hint_line_widths() -> void:
