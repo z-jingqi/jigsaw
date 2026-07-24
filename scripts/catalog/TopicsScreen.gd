@@ -86,6 +86,7 @@ func show() -> void:
 	game.topics_content_height = viewport_size.y
 	var current_page: Control = game.topic_pager_controller.rendered_pages.get(0, null)
 	game.topic_home_motion.animate_entrance(fixed_ui, current_page, pager_indicator, scale)
+	game._schedule_home_guide()
 
 
 func ui_scale() -> float:
@@ -243,6 +244,7 @@ func _enter_current_topic() -> void:
 	if entering_topic or game.topics.is_empty():
 		return
 	entering_topic = true
+	game._record_home_enter()
 	selector.close()
 	var topic: Dictionary = game.topics[current_topic_index]
 	var current_page: Control = game.topic_pager_controller.rendered_pages.get(0, null)

@@ -2,10 +2,12 @@ extends SceneTree
 
 const MainScene := preload("res://scenes/Main.tscn")
 const AtomicJsonStoreScript := preload("res://scripts/runtime/data/AtomicJsonStore.gd")
+const ProgressRepositoryScript := preload("res://scripts/runtime/data/ProgressRepository.gd")
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
 
 const TEST_PROGRESS_PATH := "user://jigcat-test-game-flow-progress.json"
 const TEST_SESSION_PATH := "user://jigcat-test-game-flow/session_v1.json"
+const TEST_ONBOARDING_PATH := "user://jigcat-test-game-flow/onboarding_progress_v1.json"
 
 var _all_ok := true
 var _failures: Array[String] = []
@@ -20,9 +22,11 @@ func _run() -> void:
 	var game := MainScene.instantiate()
 	game.progress_store.save_path = TEST_PROGRESS_PATH
 	game.session_repository = SessionRepositoryScript.new(AtomicJsonStoreScript.new(), TEST_SESSION_PATH)
+	game.onboarding_progress_repository = ProgressRepositoryScript.new(AtomicJsonStoreScript.new(), TEST_ONBOARDING_PATH)
 	root.add_child(game)
 	await process_frame
-	game.progress_store.progress["tutorial_seen_modes"] = {"polygon": true, "knob": true, "swap": true}
+	for mode in ["polygon", "knob", "swap"]:
+		game.onboarding_progress_repository.mark_tutorial_seen(&"mode", mode)
 	_check(game.current_screen == "topics" and not game.topics.is_empty(), "launches_catalog_flow")
 	var topic: Dictionary = game.topics[0]
 	var level: Dictionary = topic.levels[0]
@@ -89,7 +93,7 @@ func _exercise_mode(game, topic: Dictionary, level: Dictionary, mode: String) ->
 
 
 func _remove_test_storage() -> void:
-	for path in [TEST_PROGRESS_PATH, TEST_SESSION_PATH]:
+	for path in [TEST_PROGRESS_PATH, TEST_SESSION_PATH, TEST_ONBOARDING_PATH]:
 		var absolute_path := ProjectSettings.globalize_path(path)
 		DirAccess.remove_absolute(absolute_path)
 		DirAccess.remove_absolute("%s.tmp" % absolute_path)
