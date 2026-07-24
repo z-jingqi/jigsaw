@@ -101,4 +101,7 @@ func _has_mode_data(config: Dictionary, mode: String) -> bool:
 	var mode_data: Dictionary = _repository.mode_config(config, mode)
 	if mode == "knob":
 		return not mode_data.is_empty() and not _repository.level_image_path(config).is_empty()
-	return typeof(mode_data.get("pieces", [])) == TYPE_ARRAY and not (mode_data.get("pieces", []) as Array).is_empty()
+	return (
+		typeof(mode_data.get("pieces", [])) == TYPE_ARRAY
+		and not (mode_data.get("pieces", []) as Array).is_empty()
+	)

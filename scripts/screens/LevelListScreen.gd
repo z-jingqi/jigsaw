@@ -1,7 +1,7 @@
 class_name RuntimeLevelListScreen
 extends Control
 
-signal back_requested()
+signal back_requested
 signal level_selected(level_id: String)
 
 const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
@@ -77,7 +77,11 @@ func refresh_view_model(view_model: Variant) -> void:
 
 
 func active_motion_count() -> int:
-	return (1 if animation_player.is_playing() else 0) + theme_progress.active_motion_count() + _unlock_sequence.active_count()
+	return (
+		(1 if animation_player.is_playing() else 0)
+		+ theme_progress.active_motion_count()
+		+ _unlock_sequence.active_count()
+	)
 
 
 func debug_grid_column_count() -> int:

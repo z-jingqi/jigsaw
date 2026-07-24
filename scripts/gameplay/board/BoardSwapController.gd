@@ -34,13 +34,20 @@ func _end_swap_drag() -> void:
 	var target = _swap_target_for_drag(released)
 	_clear_swap_target_preview()
 	if target == null:
-		_animate_swap_tile_to(released, host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows()))
+		_animate_swap_tile_to(
+			released,
+			host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows())
+		)
 	else:
 		var target_slot := int(target["slot_index"])
 		released["slot_index"] = target_slot
 		target["slot_index"] = host.swap_drag_start_slot
-		_animate_swap_tile_to(released, host._swap_slot_position(target_slot, _swap_cols(), _swap_rows()))
-		_animate_swap_tile_to(target, host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows()))
+		_animate_swap_tile_to(
+			released, host._swap_slot_position(target_slot, _swap_cols(), _swap_rows())
+		)
+		_animate_swap_tile_to(
+			target, host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows())
+		)
 		host._trigger_haptic("swap")
 	_set_swap_tile_lifted(released, false)
 	host.swap_dragging = null
@@ -83,7 +90,9 @@ func _update_swap_target_preview(tile) -> void:
 		return
 	host.swap_target_preview = target
 	var size: Vector2 = target.get("size", Vector2.ZERO)
-	var polygon := PackedVector2Array([Vector2.ZERO, Vector2(size.x, 0.0), size, Vector2(0.0, size.y)])
+	var polygon := PackedVector2Array(
+		[Vector2.ZERO, Vector2(size.x, 0.0), size, Vector2(0.0, size.y)]
+	)
 	var root := Node2D.new()
 	root.name = "swap_target_preview"
 	root.z_index = 48
@@ -181,17 +190,26 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	var tween := host.create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(tile["node"], "position", target_position, host._motion_duration(host.SWAP_ANIMATION_TIME))
-	tween.finished.connect(func(t = tile) -> void:
-		if is_instance_valid(t["node"]):
-			t["is_animating"] = false
-		_check_swap_complete()
-		host._notify_state_changed(true)
+	tween.tween_property(
+		tile["node"], "position", target_position, host._motion_duration(host.SWAP_ANIMATION_TIME)
+	)
+	tween.finished.connect(
+		func(t = tile) -> void:
+			if is_instance_valid(t["node"]):
+				t["is_animating"] = false
+			_check_swap_complete()
+			host._notify_state_changed(true)
 	)
 
 
 func can_shift_rows() -> bool:
-	if host.current_mode != "swap" or host.swap_tiles.is_empty() or host.swap_dragging != null or host.panning or host.pinch_active:
+	if (
+		host.current_mode != "swap"
+		or host.swap_tiles.is_empty()
+		or host.swap_dragging != null
+		or host.panning
+		or host.pinch_active
+	):
 		return false
 	if _swap_rows() <= 1:
 		return false
@@ -219,10 +237,14 @@ func shift_rows(direction: int) -> void:
 		var wraps := (step > 0 and old_row == rows - 1) or (step < 0 and old_row == 0)
 		tile["slot_index"] = new_slot
 		tile["is_animating"] = true
-		_animate_row_shift_tile(tile, host._swap_slot_position(new_slot, cols, rows), step, wraps, pending)
+		_animate_row_shift_tile(
+			tile, host._swap_slot_position(new_slot, cols, rows), step, wraps, pending
+		)
 
 
-func _animate_row_shift_tile(tile, target_position: Vector2, direction: int, wraps: bool, pending: Dictionary) -> void:
+func _animate_row_shift_tile(
+	tile, target_position: Vector2, direction: int, wraps: bool, pending: Dictionary
+) -> void:
 	var node: Node2D = tile["node"]
 	if not is_instance_valid(node):
 		_finish_row_shift_tile(tile, pending)
@@ -240,16 +262,15 @@ func _animate_row_shift_tile(tile, target_position: Vector2, direction: int, wra
 		var tile_height: float = float(tile.get("size", Vector2.ZERO).y)
 		var travel := Vector2(0.0, tile_height * float(direction))
 		tween.tween_property(node, "position", node.position + travel, duration * 0.5)
-		tween.tween_callback(func() -> void:
-			if is_instance_valid(node):
-				node.position = target_position - travel
+		tween.tween_callback(
+			func() -> void:
+				if is_instance_valid(node):
+					node.position = target_position - travel
 		)
 		tween.tween_property(node, "position", target_position, duration * 0.5)
 	else:
 		tween.tween_property(node, "position", target_position, duration)
-	tween.finished.connect(func() -> void:
-		_finish_row_shift_tile(tile, pending)
-	)
+	tween.finished.connect(func() -> void: _finish_row_shift_tile(tile, pending))
 
 
 func _finish_row_shift_tile(tile, pending: Dictionary) -> void:
@@ -304,20 +325,25 @@ func _add_swap_hint_outline(tile) -> void:
 	if not is_instance_valid(node):
 		return
 	var size: Vector2 = tile["size"]
-	var rect_polygon := PackedVector2Array([
-		Vector2.ZERO,
-		Vector2(size.x, 0.0),
-		size,
-		Vector2(0.0, size.y),
-	])
-	host._spawn_dashed_outline(
-		node,
-		[rect_polygon],
-		Vector2.ZERO,
-		30,
-		host.SWAP_HINT_SCREEN_WIDTH,
-		host.HINT_TARGET_COLOR,
-		true,
+	var rect_polygon := PackedVector2Array(
+		[
+			Vector2.ZERO,
+			Vector2(size.x, 0.0),
+			size,
+			Vector2(0.0, size.y),
+		]
+	)
+	(
+		host
+		. _spawn_dashed_outline(
+			node,
+			[rect_polygon],
+			Vector2.ZERO,
+			30,
+			host.SWAP_HINT_SCREEN_WIDTH,
+			host.HINT_TARGET_COLOR,
+			true,
+		)
 	)
 
 

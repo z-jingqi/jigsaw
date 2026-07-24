@@ -21,7 +21,17 @@ func _run() -> void:
 	transition_host.finish_active_to_target()
 	await process_frame
 	var registry = RouteRegistryScript.new()
-	for route in [&"home", &"all_themes", &"levels", &"gameplay", &"mode_select", &"settings", &"home_guide", &"mode_tutorial", &"completion"]:
+	for route in [
+		&"home",
+		&"all_themes",
+		&"levels",
+		&"gameplay",
+		&"mode_select",
+		&"settings",
+		&"home_guide",
+		&"mode_tutorial",
+		&"completion"
+	]:
 		var bound: Dictionary = registry.bind_scene(route, ProbeScene)
 		_check(bool(bound.get("ok", false)), "bind_%s" % route)
 	navigator.set_route_registry(registry)
@@ -37,7 +47,10 @@ func _run() -> void:
 	var levels: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
 	_check(bool(levels.get("ok", false)), "push_levels")
 	var duplicate: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
-	_check(not bool(duplicate.get("ok", false)) and duplicate.get("error") == "transition_busy", "ignore_duplicate_navigation")
+	_check(
+		not bool(duplicate.get("ok", false)) and duplicate.get("error") == "transition_busy",
+		"ignore_duplicate_navigation"
+	)
 	navigator.cancel_active_transition()
 	await process_frame
 	_check(navigator.current_route() == &"home", "cancel_restores_source")
@@ -46,17 +59,23 @@ func _run() -> void:
 	levels = navigator.push(&"levels", {"theme_id": "topic_01", "focus_level_id": "shanhai_08"})
 	_check(bool(levels.get("ok", false)), "push_levels_after_cancel")
 	var motion_before_finish: Dictionary = navigator.debug_state_snapshot()
-	_check(motion_before_finish.get("transition_kind") == "home_to_levels", "home_levels_transition")
+	_check(
+		motion_before_finish.get("transition_kind") == "home_to_levels", "home_levels_transition"
+	)
 	transition_host.finish_active_to_target()
 	await process_frame
 	_check(navigator.current_route() == &"levels", "levels_route")
 	var levels_view = navigator.current_screen_view()
-	var modal: Dictionary = navigator.show_modal(&"mode_select", {"theme_id": "topic_01", "level_id": "shanhai_08"})
+	var modal: Dictionary = navigator.show_modal(
+		&"mode_select", {"theme_id": "topic_01", "level_id": "shanhai_08"}
+	)
 	_check(bool(modal.get("ok", false)), "show_modal")
 	transition_host.finish_active_to_target()
 	await process_frame
 	_check(navigator.current_route() == &"mode_select", "modal_route")
-	var close_result: Dictionary = navigator.close_modal({"action": &"select_mode", "payload": {"mode": "polygon"}})
+	var close_result: Dictionary = navigator.close_modal(
+		{"action": &"select_mode", "payload": {"mode": "polygon"}}
+	)
 	_check(bool(close_result.get("ok", false)), "close_modal")
 	transition_host.finish_active_to_target()
 	await process_frame
@@ -71,14 +90,18 @@ func _run() -> void:
 	var all_themes: Dictionary = navigator.push(&"all_themes", {"current_theme_id": "topic_01"})
 	_check(bool(all_themes.get("ok", false)), "open_all_themes")
 	motion_before_finish = navigator.debug_state_snapshot()
-	_check(motion_before_finish.get("transition_kind") == "screen", "all_themes_uses_screen_transition")
+	_check(
+		motion_before_finish.get("transition_kind") == "screen", "all_themes_uses_screen_transition"
+	)
 	transition_host.finish_active_to_target()
 	await process_frame
 	_check(navigator.current_route() == &"all_themes", "all_themes_route")
 	var card_to_levels: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
 	_check(bool(card_to_levels.get("ok", false)), "all_themes_selects_topic")
 	motion_before_finish = navigator.debug_state_snapshot()
-	_check(motion_before_finish.get("transition_kind") == "card_to_levels", "card_levels_transition")
+	_check(
+		motion_before_finish.get("transition_kind") == "card_to_levels", "card_levels_transition"
+	)
 	navigator.cancel_active_transition()
 	await process_frame
 	_check(navigator.current_route() == &"all_themes", "cancel_card_transition_restores_gallery")

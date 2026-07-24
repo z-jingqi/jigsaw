@@ -55,7 +55,9 @@ func initial_home_theme_id() -> String:
 	if topics.is_empty():
 		return ""
 	var requested := str(session.current().get("theme_id", ""))
-	return requested if not content.topic_by_id(requested).is_empty() else str(topics[0].get("id", ""))
+	return (
+		requested if not content.topic_by_id(requested).is_empty() else str(topics[0].get("id", ""))
+	)
 
 
 func initial_level_focus_id(theme_id: String) -> String:

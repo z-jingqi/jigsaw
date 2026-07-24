@@ -1,7 +1,7 @@
 class_name RuntimeModeSelectModal
 extends Control
 
-signal close_requested()
+signal close_requested
 signal mode_selected(mode: StringName, start_policy: StringName)
 
 const ModeOptionScene := preload("res://scenes/ui/foundation/ModeOption.tscn")
@@ -132,8 +132,12 @@ func _play_content_entry() -> void:
 	_content_tween.tween_property(title_label, "position:y", 0.0, 0.22)
 	for index in options.get_child_count():
 		var option := options.get_child(index) as Control
-		_content_tween.tween_property(option, "modulate:a", 1.0, 0.20).set_delay(float(index) * 0.035)
-		_content_tween.tween_property(option, "position:y", 0.0, 0.20).set_delay(float(index) * 0.035)
+		_content_tween.tween_property(option, "modulate:a", 1.0, 0.20).set_delay(
+			float(index) * 0.035
+		)
+		_content_tween.tween_property(option, "position:y", 0.0, 0.20).set_delay(
+			float(index) * 0.035
+		)
 	_content_tween.finished.connect(_stop_content_motion, CONNECT_ONE_SHOT)
 
 

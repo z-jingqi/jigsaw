@@ -1,7 +1,7 @@
 class_name AllThemesScreen
 extends Control
 
-signal close_requested()
+signal close_requested
 signal theme_activated(theme_id: String, source_rect: Rect2)
 
 const ThemeCardScene := preload("res://scenes/ui/foundation/ThemeCard.tscn")
@@ -105,7 +105,9 @@ func play_enter() -> void:
 		_animation_active = false
 		_apply_enter_final_state()
 		return
-	get_tree().create_timer(animation_player.get_animation(&"enter").length).timeout.connect(_finish_animation.bind(token), CONNECT_ONE_SHOT)
+	get_tree().create_timer(animation_player.get_animation(&"enter").length).timeout.connect(
+		_finish_animation.bind(token), CONNECT_ONE_SHOT
+	)
 	var cards := _ordered_cards()
 	for index in cards.size():
 		var card: Control = cards[index]
@@ -116,7 +118,9 @@ func play_enter() -> void:
 		var card: Control = cards[index]
 		var delay := minf(0.07, float(index / 2) * 0.035)
 		_entry_tween.tween_property(card, "modulate:a", 1.0, 0.20).set_delay(delay)
-		_entry_tween.tween_property(card, "position:y", _card_position(index).y, 0.20).set_delay(delay)
+		_entry_tween.tween_property(card, "position:y", _card_position(index).y, 0.20).set_delay(
+			delay
+		)
 	_entry_tween.finished.connect(_finish_entry_motion, CONNECT_ONE_SHOT)
 
 
@@ -162,10 +166,14 @@ func _apply_layout() -> void:
 		card.custom_minimum_size = card_size
 		card.position = _card_position(index, columns, gap_x, gap_y, card_size)
 	var rows := ceili(float(cards.size()) / float(columns))
-	grid_content.custom_minimum_size = Vector2(width, maxf(0.0, float(rows) * card_size.y + maxf(0.0, float(rows - 1)) * gap_y))
+	grid_content.custom_minimum_size = Vector2(
+		width, maxf(0.0, float(rows) * card_size.y + maxf(0.0, float(rows - 1)) * gap_y)
+	)
 
 
-func _card_position(index: int, columns := -1, gap_x := 0.0, gap_y := 0.0, card_size := Vector2.ZERO) -> Vector2:
+func _card_position(
+	index: int, columns := -1, gap_x := 0.0, gap_y := 0.0, card_size := Vector2.ZERO
+) -> Vector2:
 	if columns < 0:
 		columns = grid_column_count_for_width(scroll.size.x)
 		var regular := columns == 3

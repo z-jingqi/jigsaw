@@ -1,7 +1,7 @@
 class_name UnlockSequence
 extends Panel
 
-signal finished()
+signal finished
 
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 

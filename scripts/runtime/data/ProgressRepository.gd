@@ -106,7 +106,7 @@ func _validated(value: Dictionary) -> Dictionary:
 	var result := _defaults()
 	if typeof(value.get("completed_modes")) == TYPE_DICTIONARY:
 		var completed: Dictionary = {}
-		for theme_id in (value["completed_modes"] as Dictionary):
+		for theme_id in value["completed_modes"] as Dictionary:
 			var source_levels: Variant = value["completed_modes"][theme_id]
 			if typeof(theme_id) != TYPE_STRING or typeof(source_levels) != TYPE_DICTIONARY:
 				continue

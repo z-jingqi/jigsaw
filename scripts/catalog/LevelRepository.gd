@@ -21,8 +21,8 @@ func build_catalog() -> Array[Dictionary]:
 	if catalog.has("topics") and typeof(catalog["topics"]) == TYPE_ARRAY:
 		var next_topics: Array[Dictionary] = []
 		var catalog_topics: Array = catalog["topics"]
-		catalog_topics.sort_custom(func(a, b) -> bool:
-			return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
+		catalog_topics.sort_custom(
+			func(a, b) -> bool: return int(a.get("sort_order", 0)) < int(b.get("sort_order", 0))
 		)
 		for topic_data in catalog_topics:
 			if typeof(topic_data) != TYPE_DICTIONARY:
@@ -34,35 +34,60 @@ func build_catalog() -> Array[Dictionary]:
 				for group_data in topic.get("groups", []):
 					if typeof(group_data) == TYPE_DICTIONARY:
 						catalog_levels.append_array(group_data.get("levels", []))
-			catalog_levels.sort_custom(func(a, b) -> bool:
-				return _catalog_level_sort_order(a) < _catalog_level_sort_order(b)
+			catalog_levels.sort_custom(
+				func(a, b) -> bool:
+					return _catalog_level_sort_order(a) < _catalog_level_sort_order(b)
 			)
 			for level_data in catalog_levels:
 				var level_entry := _catalog_level_entry(level_data)
 				if level_entry.is_empty():
 					continue
-				var config_path := str(level_entry.get("path", levelResPath(str(topic.get("id", "")), str(level_entry.get("id", "")))))
+				var config_path := str(
+					level_entry.get(
+						"path",
+						level_res_path(str(topic.get("id", "")), str(level_entry.get("id", "")))
+					)
+				)
 				var level_config := load_config_path(config_path)
 				var level := {
 					"id": str(level_entry.get("id", level_config.get("id", ""))),
-					"title": localized_config_string(level_config, "title", str(level_entry.get("title", "")), level_entry),
-					"description": localized_config_string(level_config, "description", "", level_entry),
+					"title":
+					localized_config_string(
+						level_config, "title", str(level_entry.get("title", "")), level_entry
+					),
+					"description":
+					localized_config_string(level_config, "description", "", level_entry),
 					"config_path": config_path,
 					"unlock_grant": maxi(1, int(level_entry.get("unlock_grant", 1))),
 				}
 				levels.append(level)
-			next_topics.append({
-				"id": str(topic.get("id", "")),
-				"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
-				"cover": str(topic.get("cover", "")),
-				"color": str(topic.get("color", "#D9933F")),
-				"ui_palette": topic.get("ui_palette", {}) if typeof(topic.get("ui_palette", {})) == TYPE_DICTIONARY else {},
-				"ui_assets": topic.get("ui_assets", {}) if typeof(topic.get("ui_assets", {})) == TYPE_DICTIONARY else {},
-				"icon": str(topic.get("icon", "")),
-				"level_background": str(topic.get("level_background", "")),
-				"card_back": str(topic.get("card_back", "")),
-				"levels": levels,
-			})
+			(
+				next_topics
+				. append(
+					{
+						"id": str(topic.get("id", "")),
+						"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
+						"cover": str(topic.get("cover", "")),
+						"color": str(topic.get("color", "#D9933F")),
+						"ui_palette":
+						(
+							topic.get("ui_palette", {})
+							if typeof(topic.get("ui_palette", {})) == TYPE_DICTIONARY
+							else {}
+						),
+						"ui_assets":
+						(
+							topic.get("ui_assets", {})
+							if typeof(topic.get("ui_assets", {})) == TYPE_DICTIONARY
+							else {}
+						),
+						"icon": str(topic.get("icon", "")),
+						"level_background": str(topic.get("level_background", "")),
+						"card_back": str(topic.get("card_back", "")),
+						"levels": levels,
+					}
+				)
+			)
 		return next_topics
 	return []
 
@@ -86,7 +111,7 @@ func _catalog_level_sort_order(level_data) -> int:
 	return 0
 
 
-func levelResPath(topic_id: String, level_id: String) -> String:
+func level_res_path(topic_id: String, level_id: String) -> String:
 	return "res://levels/%s/%s/level.json" % [topic_id, level_id]
 
 
@@ -210,11 +235,17 @@ func config_string(config: Dictionary, key: String, fallback: String) -> String:
 	return fallback
 
 
-func localized_config_string(config: Dictionary, key: String, fallback: String, entry := {}) -> String:
+func localized_config_string(
+	config: Dictionary, key: String, fallback: String, entry := {}
+) -> String:
 	var i18n_key := "%s_i18n" % key
 	if config.has(i18n_key) and typeof(config[i18n_key]) == TYPE_DICTIONARY:
 		return localized_value(config[i18n_key], config_string(config, key, fallback))
-	if typeof(entry) == TYPE_DICTIONARY and entry.has(i18n_key) and typeof(entry[i18n_key]) == TYPE_DICTIONARY:
+	if (
+		typeof(entry) == TYPE_DICTIONARY
+		and entry.has(i18n_key)
+		and typeof(entry[i18n_key]) == TYPE_DICTIONARY
+	):
 		return localized_value(entry[i18n_key], str(entry.get(key, fallback)))
 	return config_string(config, key, fallback)
 
@@ -227,7 +258,9 @@ func localized_named(data: Dictionary, fallback: String) -> String:
 
 func localized_value(values: Dictionary, fallback: String) -> String:
 	var key := normalize_locale(locale)
-	for candidate in [key, "en", "en-US", "en_US", "zh", "zh-Hans", "zh-cn", "zh_CN", "ja", "ja-JP", "_"]:
+	for candidate in [
+		key, "en", "en-US", "en_US", "zh", "zh-Hans", "zh-cn", "zh_CN", "ja", "ja-JP", "_"
+	]:
 		if values.has(candidate) and not str(values[candidate]).is_empty():
 			return str(values[candidate])
 	return fallback

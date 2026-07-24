@@ -3,6 +3,7 @@ extends RefCounted
 
 ## Owns only safe JSON file I/O. Repositories own defaults and validation.
 
+
 func load_dictionary(path: String) -> Dictionary:
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return {}

@@ -50,7 +50,10 @@ func render_visible() -> void:
 		return
 	var row_height := _card_size.y + _gap.y
 	var first_row := maxi(0, int(floor(_scroll.scroll_vertical / maxf(1.0, row_height))) - 1)
-	var last_row := mini(_row_count() - 1, int(ceil((_scroll.scroll_vertical + _scroll.size.y) / maxf(1.0, row_height))) + 1)
+	var last_row := mini(
+		_row_count() - 1,
+		int(ceil((_scroll.scroll_vertical + _scroll.size.y) / maxf(1.0, row_height))) + 1
+	)
 	var wanted: Dictionary = {}
 	for row in range(first_row, last_row + 1):
 		for column in _columns:
@@ -94,7 +97,10 @@ func active_card_count() -> int:
 func _relayout() -> void:
 	var row_count := _row_count()
 	var content_width := float(_columns) * _card_size.x + float(_columns - 1) * _gap.x
-	_content.custom_minimum_size = Vector2(content_width, maxf(0.0, float(row_count) * _card_size.y + maxf(0.0, float(row_count - 1)) * _gap.y))
+	_content.custom_minimum_size = Vector2(
+		content_width,
+		maxf(0.0, float(row_count) * _card_size.y + maxf(0.0, float(row_count - 1)) * _gap.y)
+	)
 
 
 func _row_count() -> int:
@@ -102,7 +108,9 @@ func _row_count() -> int:
 
 
 func _acquire_index(index: int) -> void:
-	var card: Control = _pool.pop_back() if not _pool.is_empty() else _card_scene.instantiate() as Control
+	var card: Control = (
+		_pool.pop_back() if not _pool.is_empty() else _card_scene.instantiate() as Control
+	)
 	if card == null:
 		return
 	card.visible = true

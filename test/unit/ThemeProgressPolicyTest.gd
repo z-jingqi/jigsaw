@@ -1,7 +1,9 @@
 class_name ThemeProgressPolicyTest
 extends GdUnitTestSuite
 
-const ThemeProgressPolicyScript := preload("res://scripts/runtime/presentation/ThemeProgressPolicy.gd")
+const ThemeProgressPolicyScript := preload(
+	"res://scripts/runtime/presentation/ThemeProgressPolicy.gd"
+)
 
 
 func test_progress_boundaries() -> void:

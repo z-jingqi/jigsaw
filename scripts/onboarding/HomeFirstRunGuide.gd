@@ -1,7 +1,7 @@
 class_name HomeFirstRunGuide
 extends Control
 
-signal skip_requested()
+signal skip_requested
 
 @onready var prompt: Label = $GuidePanel/Prompt
 @onready var gesture_hint: Label = $GuidePanel/GestureHint

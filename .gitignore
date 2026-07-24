@@ -19,5 +19,4 @@ level-editor/data/
 level-editor/apps/*/dist/
 level-editor/apps/*/.turbo/
 levels/_pending/
-.godot/
 reports/

@@ -2,7 +2,7 @@ class_name SettingsModal
 extends Control
 
 signal setting_changed(key: StringName, enabled: bool)
-signal close_requested()
+signal close_requested
 
 @onready var shell: AnimatedModalShell = $ModalShell
 @onready var title_label: Label = $ModalShell/Panel/Content/Header/Title
@@ -36,9 +36,17 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 		return
 	var labels: Dictionary = payload.get("labels", {})
 	title_label.text = str(labels.get("title", "Settings"))
-	haptics_row.configure(&"haptics_enabled", str(labels.get("haptics", "Haptics")), _view_model.haptics_enabled)
-	music_row.configure(&"music_enabled", str(labels.get("music", "Music")), _view_model.music_enabled)
-	sound_effects_row.configure(&"sound_effects_enabled", str(labels.get("sound_effects", "Sound effects")), _view_model.sound_effects_enabled)
+	haptics_row.configure(
+		&"haptics_enabled", str(labels.get("haptics", "Haptics")), _view_model.haptics_enabled
+	)
+	music_row.configure(
+		&"music_enabled", str(labels.get("music", "Music")), _view_model.music_enabled
+	)
+	sound_effects_row.configure(
+		&"sound_effects_enabled",
+		str(labels.get("sound_effects", "Sound effects")),
+		_view_model.sound_effects_enabled
+	)
 	render_view_model(_view_model, false)
 	_configure_panel()
 	_open()
@@ -54,9 +62,16 @@ func render_view_model(view_model: AppViewModels.SettingsViewModel, animate := t
 	_view_model = view_model
 	if _view_model == null:
 		return
-	haptics_row.configure(&"haptics_enabled", haptics_row.label.text, _view_model.haptics_enabled, animate)
+	haptics_row.configure(
+		&"haptics_enabled", haptics_row.label.text, _view_model.haptics_enabled, animate
+	)
 	music_row.configure(&"music_enabled", music_row.label.text, _view_model.music_enabled, animate)
-	sound_effects_row.configure(&"sound_effects_enabled", sound_effects_row.label.text, _view_model.sound_effects_enabled, animate)
+	sound_effects_row.configure(
+		&"sound_effects_enabled",
+		sound_effects_row.label.text,
+		_view_model.sound_effects_enabled,
+		animate
+	)
 	for row in [haptics_row, music_row, sound_effects_row]:
 		row.set_interaction_enabled(not bool(_view_model.pending.get(row.setting_key, false)))
 	_render_errors()
@@ -72,7 +87,10 @@ func request_close() -> void:
 
 
 func active_motion_count() -> int:
-	return (1 if _error_tween != null else 0) + (shell.active_motion_count() if is_instance_valid(shell) else 0)
+	return (
+		(1 if _error_tween != null else 0)
+		+ (shell.active_motion_count() if is_instance_valid(shell) else 0)
+	)
 
 
 func _open() -> void:

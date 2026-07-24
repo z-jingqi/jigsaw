@@ -2,13 +2,18 @@ extends RefCounted
 class_name SnapSolver
 
 
-static func find_match_data(active, others: Array, snap_tolerance: float, rotation_tolerance: float) -> Dictionary:
+static func find_match_data(
+	active, others: Array, snap_tolerance: float, rotation_tolerance: float
+) -> Dictionary:
 	var best := {}
 	var best_distance := INF
 	for other in others:
 		if other == active:
 			continue
-		if _rotation_delta_abs(active.node.rotation_degrees, other.node.rotation_degrees) > rotation_tolerance:
+		if (
+			_rotation_delta_abs(active.node.rotation_degrees, other.node.rotation_degrees)
+			> rotation_tolerance
+		):
 			continue
 		var candidate := _closest_neighbor_match(active, other)
 		if candidate.is_empty():

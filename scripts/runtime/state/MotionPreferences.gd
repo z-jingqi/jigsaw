@@ -15,7 +15,12 @@ func _init(settings: SettingsRepository) -> void:
 
 func snapshot() -> Dictionary:
 	return {
-		"reduced_motion": bool(_debug_override) if _debug_override != null else bool(_settings.snapshot().get("reduced_motion_enabled", false)),
+		"reduced_motion":
+		(
+			bool(_debug_override)
+			if _debug_override != null
+			else bool(_settings.snapshot().get("reduced_motion_enabled", false))
+		),
 		"revision": _revision,
 	}
 

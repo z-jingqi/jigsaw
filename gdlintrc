@@ -1,0 +1,8 @@
+disable:
+  # Godot's canonical `extends` then `class_name` order conflicts with this
+  # gdtoolkit rule, so rely on the engine parser for declaration validity.
+  - class-definitions-order
+  # Facades and repositories intentionally expose coordination APIs.
+  - max-public-methods
+  # Debug command dispatch uses early, explicit result returns.
+  - max-returns

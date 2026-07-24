@@ -7,6 +7,7 @@ extends Control
 ## navigator also applies a safe default when a scene does not extend this
 ## class, so a screen never has to reach into navigation internals.
 
+
 func navigation_enter(_payload: Dictionary, _context: Dictionary) -> void:
 	pass
 

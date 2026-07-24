@@ -2,7 +2,8 @@ extends RefCounted
 class_name GameStrings
 
 const TEXT := {
-	"en": {
+	"en":
+	{
 		"no_topics": "No topics yet",
 		"enter_topic": "Enter theme",
 		"all_topics": "All themes",
@@ -51,7 +52,8 @@ const TEXT := {
 		"next": "Next",
 		"switch_mode": "Other mode"
 	},
-	"zh": {
+	"zh":
+	{
 		"no_topics": "暂无主题",
 		"enter_topic": "进入主题",
 		"all_topics": "全部主题",
@@ -100,7 +102,8 @@ const TEXT := {
 		"next": "下一关",
 		"switch_mode": "换个模式"
 	},
-	"ja": {
+	"ja":
+	{
 		"no_topics": "テーマはまだありません",
 		"enter_topic": "テーマへ",
 		"all_topics": "すべて",

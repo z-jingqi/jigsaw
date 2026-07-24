@@ -23,7 +23,12 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE):
+	if (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and (event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE)
+	):
 		if _runtime != null:
 			_runtime.close_modal()
 		get_viewport().set_input_as_handled()
@@ -34,13 +39,20 @@ func _input(event: InputEvent) -> void:
 
 func debug_execute(command: String, args: Dictionary = {}) -> Dictionary:
 	if _debug_router == null:
-		return {"ok": false, "command": command, "error": {"code": "debug_only", "message": "Debug adapter is not available."}}
+		return {
+			"ok": false,
+			"command": command,
+			"error": {"code": "debug_only", "message": "Debug adapter is not available."}
+		}
 	return _debug_router.execute(command, args)
 
 
 func debug_state_snapshot() -> Dictionary:
 	if _debug_router == null:
-		return {"ok": false, "error": {"code": "debug_only", "message": "Debug adapter is not available."}}
+		return {
+			"ok": false,
+			"error": {"code": "debug_only", "message": "Debug adapter is not available."}
+		}
 	return _debug_router.state_snapshot()
 
 

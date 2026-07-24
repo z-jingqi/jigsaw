@@ -5,7 +5,9 @@ const ProgressRepositoryScript := preload("res://scripts/runtime/data/ProgressRe
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
 const SettingsRepositoryScript := preload("res://scripts/runtime/data/SettingsRepository.gd")
 const MotionPreferencesScript := preload("res://scripts/runtime/state/MotionPreferences.gd")
-const ThemeProgressPolicyScript := preload("res://scripts/runtime/presentation/ThemeProgressPolicy.gd")
+const ThemeProgressPolicyScript := preload(
+	"res://scripts/runtime/presentation/ThemeProgressPolicy.gd"
+)
 const ContentRepositoryScript := preload("res://scripts/runtime/data/ContentRepository.gd")
 const CatalogPresenterScript := preload("res://scripts/runtime/presentation/CatalogPresenter.gd")
 const SystemPresenterScript := preload("res://scripts/runtime/presentation/SystemPresenter.gd")
@@ -32,9 +34,20 @@ func _run() -> void:
 	session.load()
 	settings.load()
 
-	_check(progress.mark_mode_completed("topic_01", "level_01", "polygon").get("ok", false), "progress_first_completion")
-	_check(progress.mark_mode_completed("topic_01", "level_01", "polygon").get("changed", true) == false, "progress_idempotent")
-	_check(progress.is_mode_completed("topic_01", "level_01", "polygon"), "progress_completion_read")
+	_check(
+		progress.mark_mode_completed("topic_01", "level_01", "polygon").get("ok", false),
+		"progress_first_completion"
+	)
+	_check(
+		(
+			progress.mark_mode_completed("topic_01", "level_01", "polygon").get("changed", true)
+			== false
+		),
+		"progress_idempotent"
+	)
+	_check(
+		progress.is_mode_completed("topic_01", "level_01", "polygon"), "progress_completion_read"
+	)
 	_check(progress.mark_tutorial_seen(&"home_swipe").get("ok", false), "home_tutorial_saved")
 	_check(progress.tutorial_seen(&"home_swipe"), "home_tutorial_read")
 	_check(progress.mark_tutorial_seen(&"mode", "swap").get("ok", false), "mode_tutorial_saved")
@@ -62,19 +75,43 @@ func _run() -> void:
 		"hint_count": 1,
 	}
 	_check(session.save_play_state(assembly, pieces).get("ok", false), "assembly_saved")
-	_check(not session.play_state("topic_01", "level_01", "polygon", pieces).is_empty(), "assembly_restored")
+	_check(
+		not session.play_state("topic_01", "level_01", "polygon", pieces).is_empty(),
+		"assembly_restored"
+	)
 	var invalid_fingerprint := assembly.duplicate(true)
 	invalid_fingerprint["piece_set_fingerprint"] = "outdated-piece-set"
-	_check(not bool(session.save_play_state(invalid_fingerprint, pieces).get("ok", true)), "invalid_fingerprint_rejected")
+	_check(
+		not bool(session.save_play_state(invalid_fingerprint, pieces).get("ok", true)),
+		"invalid_fingerprint_rejected"
+	)
 	var invalid_swap := assembly.duplicate(true)
 	invalid_swap["mode"] = "swap"
 	invalid_swap["kind"] = "swap"
 	invalid_swap["slot_piece_ids"] = ["piece_00", "piece_00", "piece_02"]
-	_check(not bool(session.save_play_state(invalid_swap, pieces).get("ok", true)), "invalid_swap_rejected")
-	var services = AppServicesScript.new(ContentRepositoryScript.new(), progress, session, settings, MotionPreferencesScript.new(settings))
-	_check(services.complete_mode("topic_01", "level_01", "polygon").get("ok", false), "complete_mode_commit")
-	_check(session.play_state("topic_01", "level_01", "polygon", pieces).is_empty(), "complete_clears_session")
-	_check(session.set_current("topic_01", "shanhai_01", "swap").get("ok", false), "current_session_saved")
+	_check(
+		not bool(session.save_play_state(invalid_swap, pieces).get("ok", true)),
+		"invalid_swap_rejected"
+	)
+	var services = AppServicesScript.new(
+		ContentRepositoryScript.new(),
+		progress,
+		session,
+		settings,
+		MotionPreferencesScript.new(settings)
+	)
+	_check(
+		services.complete_mode("topic_01", "level_01", "polygon").get("ok", false),
+		"complete_mode_commit"
+	)
+	_check(
+		session.play_state("topic_01", "level_01", "polygon", pieces).is_empty(),
+		"complete_clears_session"
+	)
+	_check(
+		session.set_current("topic_01", "shanhai_01", "swap").get("ok", false),
+		"current_session_saved"
+	)
 	_check(services.initial_home_theme_id() == "topic_01", "initial_home_theme")
 	_check(services.initial_level_focus_id("topic_01") == "shanhai_01", "initial_level_focus")
 
@@ -90,16 +127,24 @@ func _run() -> void:
 	var content = ContentRepositoryScript.new()
 	var presenter = CatalogPresenterScript.new(content, progress, session, strings)
 	var catalog_home = presenter.home("topic_01")
-	_check(catalog_home.total_themes > 0 and catalog_home.selected_theme_id == "topic_01", "home_view_model")
+	_check(
+		catalog_home.total_themes > 0 and catalog_home.selected_theme_id == "topic_01",
+		"home_view_model"
+	)
 	var catalog_all_themes = presenter.all_themes("topic_01")
 	_check(catalog_all_themes.cards.size() == catalog_home.total_themes, "all_themes_view_model")
 	var catalog_levels = presenter.level_list("topic_01")
-	_check(not catalog_levels.levels.is_empty() and catalog_levels.theme_progress.total_modes > 0, "level_list_view_model")
+	_check(
+		not catalog_levels.levels.is_empty() and catalog_levels.theme_progress.total_modes > 0,
+		"level_list_view_model"
+	)
 	var mode_select = presenter.mode_select("topic_01", catalog_levels.levels[0].level_id)
 	_check(not mode_select.options.is_empty(), "mode_select_view_model")
 	var system_presenter = SystemPresenterScript.new(settings, motion, strings)
 	var settings_model = system_presenter.settings()
-	_check(settings_model.music_enabled and settings_model.error_text.is_empty(), "settings_view_model")
+	_check(
+		settings_model.music_enabled and settings_model.error_text.is_empty(), "settings_view_model"
+	)
 	var guide_model = system_presenter.guide(&"swipe", "Swipe between themes")
 	_check(guide_model.reduced_motion and guide_model.can_skip, "guide_view_model")
 

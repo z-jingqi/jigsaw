@@ -17,26 +17,42 @@ func _init(settings: Variant, motion: Variant, strings: Variant) -> void:
 	_motion.changed.connect(_on_motion_changed)
 
 
-func settings(pending: Dictionary = {}, error_text: Dictionary = {}) -> AppViewModels.SettingsViewModel:
+func settings(
+	pending: Dictionary = {}, error_text: Dictionary = {}
+) -> AppViewModels.SettingsViewModel:
 	var value: Dictionary = _settings.snapshot()
-	return ViewModelsScript.SettingsViewModel.new({
-		"revision": _revision,
-		"haptics_enabled": value["haptics_enabled"],
-		"music_enabled": value["music_enabled"],
-		"sound_effects_enabled": value["sound_effects_enabled"],
-		"pending": pending,
-		"error_text": error_text,
-	})
+	return (
+		ViewModelsScript
+		. SettingsViewModel
+		. new(
+			{
+				"revision": _revision,
+				"haptics_enabled": value["haptics_enabled"],
+				"music_enabled": value["music_enabled"],
+				"sound_effects_enabled": value["sound_effects_enabled"],
+				"pending": pending,
+				"error_text": error_text,
+			}
+		)
+	)
 
 
-func guide(step: StringName, description: String, can_skip: bool = true) -> AppViewModels.GuideViewModel:
-	return ViewModelsScript.GuideViewModel.new({
-		"revision": _revision,
-		"step": step,
-		"description": description,
-		"can_skip": can_skip,
-		"reduced_motion": _motion.snapshot()["reduced_motion"],
-	})
+func guide(
+	step: StringName, description: String, can_skip: bool = true
+) -> AppViewModels.GuideViewModel:
+	return (
+		ViewModelsScript
+		. GuideViewModel
+		. new(
+			{
+				"revision": _revision,
+				"step": step,
+				"description": description,
+				"can_skip": can_skip,
+				"reduced_motion": _motion.snapshot()["reduced_motion"],
+			}
+		)
+	)
 
 
 func completion(data: Dictionary) -> AppViewModels.CompletionViewModel:

@@ -48,14 +48,21 @@ func _piece_visual_style() -> Dictionary:
 	if host.edge_contrast_mode == "auto" and typeof(configured) == TYPE_DICTIONARY:
 		var line_value := str(configured.get("line_color", ""))
 		if not line_value.is_empty():
-			var line_color := Color.from_string(line_value, host.PieceVisualFactoryScript.CUT_LINE_COLOR)
-			var seam_color := Color.from_string(str(configured.get("seam_color", line_value)), line_color)
+			var line_color := Color.from_string(
+				line_value, host.PieceVisualFactoryScript.CUT_LINE_COLOR
+			)
+			var seam_color := Color.from_string(
+				str(configured.get("seam_color", line_value)), line_color
+			)
 			return {
 				"cut_line_color": line_color,
 				"cut_line_lift_color": Color("#D98A43"),
 				"seam_line_color": seam_color,
 			}
-	var use_light: bool = host.edge_contrast_mode == "light" or (host.edge_contrast_mode == "auto" and _source_average_luminance() < 0.46)
+	var use_light: bool = (
+		host.edge_contrast_mode == "light"
+		or (host.edge_contrast_mode == "auto" and _source_average_luminance() < 0.46)
+	)
 	if use_light:
 		return {
 			"cut_line_color": Color(1.0, 0.98, 0.91, 0.90),
@@ -85,7 +92,11 @@ func _source_average_luminance() -> float:
 				continue
 			total += color.get_luminance()
 			count += 1
-	return total / float(count) if count > 0 else _level_background_color(host.active_level_config).get_luminance()
+	return (
+		total / float(count)
+		if count > 0
+		else _level_background_color(host.active_level_config).get_luminance()
+	)
 
 
 func _add_board_outline_shadow() -> void:

@@ -35,7 +35,10 @@ func _run() -> void:
 				continue
 			var ratio := minf(
 				1.0,
-				minf(float(TARGET_SIZE.x) / float(image.get_width()), float(TARGET_SIZE.y) / float(image.get_height()))
+				minf(
+					float(TARGET_SIZE.x) / float(image.get_width()),
+					float(TARGET_SIZE.y) / float(image.get_height())
+				)
 			)
 			if ratio < 1.0:
 				image.resize(
@@ -43,12 +46,19 @@ func _run() -> void:
 					maxi(1, roundi(float(image.get_height()) * ratio)),
 					Image.INTERPOLATE_LANCZOS
 				)
-			var error := image.save_webp(repository.image_file_path(output_path), true, WEBP_QUALITY)
+			var error := image.save_webp(
+				repository.image_file_path(output_path), true, WEBP_QUALITY
+			)
 			if error != OK:
 				failed += 1
 				print("THUMBNAIL_SKIP %s save_failed:%d" % [str(level.get("id", "")), error])
 				continue
 			generated += 1
-			print("THUMBNAIL_OK %s %dx%d %s" % [str(level.get("id", "")), image.get_width(), image.get_height(), output_path])
+			print(
+				(
+					"THUMBNAIL_OK %s %dx%d %s"
+					% [str(level.get("id", "")), image.get_width(), image.get_height(), output_path]
+				)
+			)
 	print("THUMBNAIL_SUMMARY generated=%d skipped=%d failed=%d" % [generated, skipped, failed])
 	quit(0 if failed == 0 else 1)

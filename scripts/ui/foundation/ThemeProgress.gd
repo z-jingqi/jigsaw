@@ -21,6 +21,7 @@ var _has_rendered := false
 var _last_paw_count := 0
 var _last_is_complete := false
 
+
 func _ready() -> void:
 	if motion_tokens == null:
 		motion_tokens = preload("res://themes/motion_tokens.tres")
@@ -63,12 +64,19 @@ func _render() -> void:
 			numeric.modulate.a = 0.0
 			_motion = create_tween()
 			_motion.set_trans(motion_tokens.enter_transition).set_ease(motion_tokens.enter_ease)
-			_motion.tween_property(numeric, "modulate:a", 1.0, motion_tokens.numeric_progress_duration)
+			_motion.tween_property(
+				numeric, "modulate:a", 1.0, motion_tokens.numeric_progress_duration
+			)
 			if is_complete and not _last_is_complete:
 				numeric_completion.scale = Vector2(0.8, 0.8)
 				numeric_completion.pivot_offset = numeric_completion.size * 0.5
 				numeric_completion.visible = true
-				_motion.parallel().tween_property(numeric_completion, "scale", Vector2.ONE, motion_tokens.numeric_completion_duration)
+				_motion.parallel().tween_property(
+					numeric_completion,
+					"scale",
+					Vector2.ONE,
+					motion_tokens.numeric_completion_duration
+				)
 		else:
 			numeric.modulate.a = 1.0
 			numeric_completion.scale = Vector2.ONE
@@ -81,7 +89,9 @@ func _render() -> void:
 	var width := maxf(1.0, journey.size.x)
 	var icon_size := minf(42.0, journey.size.y)
 	cat.size = Vector2(icon_size, icon_size)
-	var cat_target := Vector2((width - icon_size) * ratio, maxf(0.0, (journey.size.y - icon_size) * 0.5))
+	var cat_target := Vector2(
+		(width - icon_size) * ratio, maxf(0.0, (journey.size.y - icon_size) * 0.5)
+	)
 	if reduced_motion or not _has_rendered:
 		cat.position = cat_target
 	fish.size = Vector2(icon_size, icon_size)
@@ -95,7 +105,9 @@ func _render() -> void:
 		paw.visible = index < paw_count
 		paw.size = Vector2(18.0, 18.0)
 		var progress := float(index + 1) / 6.0
-		paw.position = Vector2((width - icon_size) * progress, journey.size.y * (0.20 if index % 2 == 0 else 0.56))
+		paw.position = Vector2(
+			(width - icon_size) * progress, journey.size.y * (0.20 if index % 2 == 0 else 0.56)
+		)
 		if reduced_motion or not _has_rendered:
 			paw.scale = Vector2.ONE
 	if not reduced_motion and _has_rendered:
@@ -107,11 +119,15 @@ func _render() -> void:
 			if index >= _last_paw_count:
 				paw.scale = Vector2(0.8, 0.8)
 				paw.pivot_offset = paw.size * 0.5
-				_motion.parallel().tween_property(paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration)
+				_motion.parallel().tween_property(
+					paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration
+				)
 		if is_complete and not _last_is_complete:
 			completion.scale = Vector2(0.94, 0.94)
 			completion.pivot_offset = completion.size * 0.5
-			_motion.parallel().tween_property(completion, "scale", Vector2.ONE, motion_tokens.progress_completion_duration)
+			_motion.parallel().tween_property(
+				completion, "scale", Vector2.ONE, motion_tokens.progress_completion_duration
+			)
 	else:
 		completion.scale = Vector2.ONE
 	if _motion != null:
@@ -138,7 +154,9 @@ func play_cold_start() -> void:
 		paw.pivot_offset = paw.size * 0.5
 		_motion.tween_interval(0.05 if index > 0 else 0.0)
 		_motion.tween_property(paw, "modulate:a", 1.0, motion_tokens.progress_paw_duration)
-		_motion.parallel().tween_property(paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration)
+		_motion.parallel().tween_property(
+			paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration
+		)
 
 
 func _commit_state(paw_count: int, is_complete: bool) -> void:
@@ -155,6 +173,8 @@ func _stop_motion() -> void:
 
 func _exit_tree() -> void:
 	_stop_motion()
+
+
 func _read(field: String) -> Variant:
 	if _view_model is Dictionary:
 		return _view_model.get(field, 0)

@@ -39,9 +39,16 @@ func text_icon_button(
 	button.custom_minimum_size = size
 	button.size = size
 	button.focus_mode = Control.FOCUS_NONE
-	button.add_theme_stylebox_override("normal", style_box(PRIMARY_CORAL if primary else SURFACE, int(size.y * 0.5)))
-	button.add_theme_stylebox_override("hover", style_box(PRIMARY_CORAL if primary else SURFACE, int(size.y * 0.5)))
-	button.add_theme_stylebox_override("pressed", style_box(PRIMARY_CORAL_PRESSED if primary else SURFACE_PRESSED, int(size.y * 0.5)))
+	button.add_theme_stylebox_override(
+		"normal", style_box(PRIMARY_CORAL if primary else SURFACE, int(size.y * 0.5))
+	)
+	button.add_theme_stylebox_override(
+		"hover", style_box(PRIMARY_CORAL if primary else SURFACE, int(size.y * 0.5))
+	)
+	button.add_theme_stylebox_override(
+		"pressed",
+		style_box(PRIMARY_CORAL_PRESSED if primary else SURFACE_PRESSED, int(size.y * 0.5))
+	)
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var icon_size := minf(size.y * (0.36 if primary else 0.25), 36.0 * scale)
 	var icon := TextureRect.new()
@@ -50,7 +57,11 @@ func text_icon_button(
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.size = Vector2(icon_size, icon_size)
-	icon.position = Vector2(size.x - icon_size - size.y * 0.22, (size.y - icon_size) * 0.5) if icon_after else Vector2(size.y * 0.22, (size.y - icon_size) * 0.5)
+	icon.position = (
+		Vector2(size.x - icon_size - size.y * 0.22, (size.y - icon_size) * 0.5)
+		if icon_after
+		else Vector2(size.y * 0.22, (size.y - icon_size) * 0.5)
+	)
 	icon.pivot_offset = icon.size * 0.5
 	if mirrored:
 		icon.scale.x = -1.0
@@ -106,7 +117,9 @@ func apply_selector_style(button: Button, selected: bool, scale: float) -> void:
 	var radius := int(12.0 * scale)
 	var normal_color := SELECTOR_CURRENT if selected else Color(1, 1, 1, 0)
 	button.add_theme_stylebox_override("normal", style_box(normal_color, radius))
-	button.add_theme_stylebox_override("hover", style_box(SELECTOR_CURRENT.lerp(Color.WHITE, 0.25), radius))
+	button.add_theme_stylebox_override(
+		"hover", style_box(SELECTOR_CURRENT.lerp(Color.WHITE, 0.25), radius)
+	)
 	button.add_theme_stylebox_override("pressed", style_box(SURFACE_PRESSED, radius))
 	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	button.add_theme_color_override("font_color", SELECTOR_CURRENT_TEXT if selected else DEEP_TEAL)
@@ -114,7 +127,9 @@ func apply_selector_style(button: Button, selected: bool, scale: float) -> void:
 	button.add_theme_color_override("font_pressed_color", DEEP_TEAL)
 
 
-func set_fitted_label_text(label: Label, text: String, preferred_size: int, minimum_size: int) -> void:
+func set_fitted_label_text(
+	label: Label, text: String, preferred_size: int, minimum_size: int
+) -> void:
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	label.max_lines_visible = -1
@@ -122,13 +137,22 @@ func set_fitted_label_text(label: Label, text: String, preferred_size: int, mini
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	var font := label.get_theme_font("font")
 	var font_size := preferred_size
-	while font_size > minimum_size and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x:
+	while (
+		font_size > minimum_size
+		and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x
+	):
 		font_size -= 1
 	label.add_theme_font_size_override("font_size", font_size)
-	label.tooltip_text = text if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x else ""
+	label.tooltip_text = (
+		text
+		if font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > label.size.x
+		else ""
+	)
 
 
-func set_responsive_nav_label_text(label: Label, text: String, preferred_size: int, minimum_size: int) -> void:
+func set_responsive_nav_label_text(
+	label: Label, text: String, preferred_size: int, minimum_size: int
+) -> void:
 	set_fitted_label_text(label, text, preferred_size, minimum_size)
 	var font := label.get_theme_font("font")
 	var font_size := label.get_theme_font_size("font_size")

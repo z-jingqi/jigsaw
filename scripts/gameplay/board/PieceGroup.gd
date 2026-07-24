@@ -17,16 +17,18 @@ var tray_tween: Tween
 func _init(group_node: Node2D, piece: Dictionary) -> void:
 	node = group_node
 	anchor_home = piece["home"]
-	members = [{
-		"id": piece["id"],
-		"cell": piece["cell"],
-		"home": piece["home"],
-		"polygon": piece["polygon"],
-		"bounds_points": piece["bounds_points"],
-		"bounds_points_list": piece["bounds_points_list"],
-		"visual": piece["visual"],
-		"neighbors": piece["neighbors"],
-	}]
+	members = [
+		{
+			"id": piece["id"],
+			"cell": piece["cell"],
+			"home": piece["home"],
+			"polygon": piece["polygon"],
+			"bounds_points": piece["bounds_points"],
+			"bounds_points_list": piece["bounds_points_list"],
+			"visual": piece["visual"],
+			"neighbors": piece["neighbors"],
+		}
+	]
 
 
 func absorb(other: PieceGroup, visual_gap := 0.0) -> void:

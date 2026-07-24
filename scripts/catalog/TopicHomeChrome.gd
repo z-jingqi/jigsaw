@@ -12,7 +12,9 @@ func _init(owner: Node, control_factory: TopicHomeControls) -> void:
 	controls = control_factory
 
 
-func build(viewport_size: Vector2, scale: float, layout: Dictionary, actions: Dictionary) -> Dictionary:
+func build(
+	viewport_size: Vector2, scale: float, layout: Dictionary, actions: Dictionary
+) -> Dictionary:
 	var root := Control.new()
 	root.name = "topic_home_fixed_ui"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -24,7 +26,9 @@ func build(viewport_size: Vector2, scale: float, layout: Dictionary, actions: Di
 	logo.position = Vector2(side_margin, top_margin)
 	root.add_child(logo)
 	var settings_size := 54.0 * scale
-	var settings := controls.icon_surface_button(TopicHomeControls.SETTINGS_PATH, settings_size, actions.settings)
+	var settings := controls.icon_surface_button(
+		TopicHomeControls.SETTINGS_PATH, settings_size, actions.settings
+	)
 	settings.name = "theme_settings_button"
 	settings.position = Vector2(viewport_size.x - side_margin - settings_size, top_margin)
 	settings.set_meta("button_motion_kind", "settings")
@@ -47,7 +51,14 @@ func build(viewport_size: Vector2, scale: float, layout: Dictionary, actions: Di
 	progress.position = Vector2(info_right - info_width, 142.0 * scale)
 	root.add_child(progress)
 	var enter_width := minf(viewport_size.x - 72.0 * scale, 184.0 * scale)
-	var enter := controls.text_icon_button(game._t("enter_topic"), TopicHomeControls.PAW_PATH, Vector2(enter_width, float(layout.enter_height)), scale, actions.enter, true)
+	var enter := controls.text_icon_button(
+		game._t("enter_topic"),
+		TopicHomeControls.PAW_PATH,
+		Vector2(enter_width, float(layout.enter_height)),
+		scale,
+		actions.enter,
+		true
+	)
 	enter.name = "topic_enter_button"
 	enter.position = Vector2((viewport_size.x - enter_width) * 0.5, float(layout.enter_top))
 	enter.set_meta("button_motion_kind", "primary")
@@ -66,12 +77,16 @@ func build(viewport_size: Vector2, scale: float, layout: Dictionary, actions: Di
 	}
 
 
-func build_indicator(page_count: int, viewport_size: Vector2, scale: float, layout: Dictionary) -> Panel:
+func build_indicator(
+	page_count: int, viewport_size: Vector2, scale: float, layout: Dictionary
+) -> Panel:
 	var indicator := Panel.new()
 	indicator.name = "topic_pager_indicator"
 	var width := minf(viewport_size.x * 0.28, 112.0 * scale)
 	var height := maxf(3.0, 3.0 * scale)
-	indicator.position = Vector2((viewport_size.x - width) * 0.5, float(layout.nav_top) - 22.0 * scale)
+	indicator.position = Vector2(
+		(viewport_size.x - width) * 0.5, float(layout.nav_top) - 22.0 * scale
+	)
 	indicator.size = Vector2(width, height)
 	indicator.visible = page_count > 1
 	indicator.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -80,7 +95,9 @@ func build_indicator(page_count: int, viewport_size: Vector2, scale: float, layo
 	thumb.name = "topic_pager_thumb"
 	thumb.size = Vector2(maxf(16.0 * scale, width / float(maxi(1, page_count))), height)
 	thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	thumb.add_theme_stylebox_override("panel", game._capsule_panel_style(TopicHomeControls.DEEP_TEAL, height))
+	thumb.add_theme_stylebox_override(
+		"panel", game._capsule_panel_style(TopicHomeControls.DEEP_TEAL, height)
+	)
 	indicator.add_child(thumb)
 	return indicator
 
@@ -107,7 +124,9 @@ func _build_progress(info_width: float, scale: float) -> Dictionary:
 	return {"root": row, "label": label}
 
 
-func _build_navigation(viewport_size: Vector2, scale: float, layout: Dictionary, actions: Dictionary) -> Dictionary:
+func _build_navigation(
+	viewport_size: Vector2, scale: float, layout: Dictionary, actions: Dictionary
+) -> Dictionary:
 	var height := float(layout.nav_height)
 	var top := float(layout.nav_top)
 	var gap := 6.0 * scale
@@ -116,15 +135,39 @@ func _build_navigation(viewport_size: Vector2, scale: float, layout: Dictionary,
 	var center_width := clampf(usable_width * 0.27, 96.0 * scale, 140.0 * scale)
 	var side_width := (usable_width - center_width) * 0.5
 	var left := (viewport_size.x - total_width) * 0.5
-	var previous := controls.text_icon_button("", TopicHomeControls.CHEVRON_LEFT_PATH, Vector2(side_width, height), scale, actions.previous, false)
+	var previous := controls.text_icon_button(
+		"",
+		TopicHomeControls.CHEVRON_LEFT_PATH,
+		Vector2(side_width, height),
+		scale,
+		actions.previous,
+		false
+	)
 	previous.name = "topic_previous_button"
 	previous.position = Vector2(left, top)
 	previous.set_meta("button_motion_kind", "direction")
 	previous.set_meta("direction_sign", -1.0)
-	var all_topics := controls.text_icon_button(game._t("all_topics"), TopicHomeControls.CHEVRON_DOWN_PATH, Vector2(center_width, height), scale, actions.all, false, true)
+	var all_topics := controls.text_icon_button(
+		game._t("all_topics"),
+		TopicHomeControls.CHEVRON_DOWN_PATH,
+		Vector2(center_width, height),
+		scale,
+		actions.all,
+		false,
+		true
+	)
 	all_topics.name = "topic_all_button"
 	all_topics.position = Vector2(left + side_width + gap, top)
-	var next := controls.text_icon_button("", TopicHomeControls.CHEVRON_LEFT_PATH, Vector2(side_width, height), scale, actions.next, false, true, true)
+	var next := controls.text_icon_button(
+		"",
+		TopicHomeControls.CHEVRON_LEFT_PATH,
+		Vector2(side_width, height),
+		scale,
+		actions.next,
+		false,
+		true,
+		true
+	)
 	next.name = "topic_next_button"
 	next.position = Vector2(left + side_width + gap + center_width + gap, top)
 	next.set_meta("button_motion_kind", "direction")

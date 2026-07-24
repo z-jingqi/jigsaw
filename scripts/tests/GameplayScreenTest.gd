@@ -37,9 +37,15 @@ func _test_mode(mode: StringName, expects_tray: bool, expects_swap: bool) -> voi
 	screen.navigation_enter({"view_model": _view_model(mode)}, {"reduced_motion": false})
 	_check(screen.get_node("Hud/Title").text == "Nine-tailed Fox", "%s_title" % mode)
 	_check(screen.get_node("BottomHost/TrayView").visible == expects_tray, "%s_tray_variant" % mode)
-	_check(screen.get_node("BottomHost/SwapActionBar").visible == expects_swap, "%s_swap_variant" % mode)
+	_check(
+		screen.get_node("BottomHost/SwapActionBar").visible == expects_swap,
+		"%s_swap_variant" % mode
+	)
 	var expected_blockers := 3 if expects_swap else 2
-	_check(screen.board_reserved_rects().size() == expected_blockers, "%s_reserved_input_regions" % mode)
+	_check(
+		screen.board_reserved_rects().size() == expected_blockers,
+		"%s_reserved_input_regions" % mode
+	)
 	if expects_tray:
 		_check(screen.tray_rect().size.y > 0.0, "%s_tray_rect_available" % mode)
 	screen.mark_board_live()
@@ -58,14 +64,20 @@ func _test_mode(mode: StringName, expects_tray: bool, expects_swap: bool) -> voi
 
 
 func _view_model(mode: StringName) -> Variant:
-	return ViewModels.GameplayViewModel.new({
-		"revision": 1,
-		"theme_id": "topic_01",
-		"level_id": "shanhai_08",
-		"level_title": "Nine-tailed Fox",
-		"mode": mode,
-		"hint_enabled": true,
-	})
+	return (
+		ViewModels
+		. GameplayViewModel
+		. new(
+			{
+				"revision": 1,
+				"theme_id": "topic_01",
+				"level_id": "shanhai_08",
+				"level_title": "Nine-tailed Fox",
+				"mode": mode,
+				"hint_enabled": true,
+			}
+		)
+	)
 
 
 func _check(condition: bool, name: String) -> void:

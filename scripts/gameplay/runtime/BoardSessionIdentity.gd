@@ -1,6 +1,7 @@
 class_name BoardSessionIdentity
 extends RefCounted
 
+
 static func piece_ids(level_config: Dictionary, mode: String) -> Array[String]:
 	var mode_key := "knob" if mode == "classic" else mode
 	var modes: Dictionary = level_config.get("modes", {})

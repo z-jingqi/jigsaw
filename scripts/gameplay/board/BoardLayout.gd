@@ -11,7 +11,9 @@ static func mobile_board_layout(
 	bottom_reserved_height: float,
 ) -> Dictionary:
 	var content_top := clampf(top_reserved_height, 0.0, viewport_size.y)
-	var content_bottom := clampf(viewport_size.y - bottom_reserved_height, content_top, viewport_size.y)
+	var content_bottom := clampf(
+		viewport_size.y - bottom_reserved_height, content_top, viewport_size.y
+	)
 	var play_area := Rect2(
 		Vector2(BOARD_HORIZONTAL_GAP, content_top),
 		Vector2(

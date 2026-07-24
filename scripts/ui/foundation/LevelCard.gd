@@ -8,11 +8,13 @@ extends ActionButton
 var level_id := ""
 var _view_model: Variant
 
+
 func _ready() -> void:
 	kind = Kind.CARD
 	super._ready()
 	if _view_model != null:
 		_apply_view_model()
+
 
 func set_view_model(view_model: Variant) -> void:
 	_view_model = view_model
@@ -30,7 +32,9 @@ func _apply_view_model() -> void:
 	for mode in states:
 		var mode_name := str(_read_from(mode, "mode", ""))
 		var state_name := str(_read_from(mode, "status", ""))
-		status_parts.append(state_name if mode_name.is_empty() else "%s: %s" % [mode_name, state_name])
+		status_parts.append(
+			state_name if mode_name.is_empty() else "%s: %s" % [mode_name, state_name]
+		)
 	status_label.text = " · ".join(status_parts)
 	tooltip_text = title_label.text
 	accessibility_name = tooltip_text

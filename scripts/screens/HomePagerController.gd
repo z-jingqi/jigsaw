@@ -3,7 +3,7 @@ extends RefCounted
 
 signal drag_updated(direction: int, progress: float, offset: float)
 signal page_settled(index: int, committed: bool)
-signal activation_requested()
+signal activation_requested
 
 const CLICK_THRESHOLD := 8.0
 const COMMIT_RATIO := 0.25
@@ -64,7 +64,10 @@ func drag_by(delta_x: float, elapsed_override := -1.0) -> void:
 		return
 	var raw_offset := _drag_total
 	var direction := _direction_from_offset(raw_offset)
-	if (direction < 0 and _current_index == 0) or (direction > 0 and _current_index == _page_count - 1):
+	if (
+		(direction < 0 and _current_index == 0)
+		or (direction > 0 and _current_index == _page_count - 1)
+	):
 		raw_offset *= EDGE_DAMPING
 	var progress := clampf(absf(raw_offset) / _page_width, 0.0, 1.0)
 	drag_updated.emit(direction, progress, raw_offset)
@@ -114,7 +117,11 @@ func _settle(direction: int) -> void:
 	cancel_motion()
 	var committed := direction != 0 and _can_move(direction)
 	var target_progress := 1.0 if committed else 0.0
-	var duration := _tokens.reduced_motion_duration if _tokens == null or _is_reduced() else (_tokens.page_duration if committed else 0.22)
+	var duration := (
+		_tokens.reduced_motion_duration
+		if _tokens == null or _is_reduced()
+		else (_tokens.page_duration if committed else 0.22)
+	)
 	var start_progress := clampf(absf(_drag_total) / _page_width, 0.0, 1.0)
 	var visual_direction := direction if direction != 0 else _direction_from_offset(_drag_total)
 	if duration <= 0.0:
@@ -122,8 +129,15 @@ func _settle(direction: int) -> void:
 		return
 	_tween = _host.create_tween()
 	_tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
-	_tween.tween_method(func(value: float) -> void:
-			drag_updated.emit(visual_direction, value, -float(visual_direction) * value * _page_width), start_progress, target_progress, duration)
+	_tween.tween_method(
+		func(value: float) -> void:
+			drag_updated.emit(
+				visual_direction, value, -float(visual_direction) * value * _page_width
+			),
+		start_progress,
+		target_progress,
+		duration
+	)
 	_tween.finished.connect(func() -> void: _complete_settle(direction, committed))
 
 

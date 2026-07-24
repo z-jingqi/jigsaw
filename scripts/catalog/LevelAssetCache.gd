@@ -35,14 +35,25 @@ func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 	var source_texture: Texture2D = null
 	if path.begins_with("res://") and ResourceLoader.exists(path):
 		source_texture = load(path) as Texture2D
-	if source_texture != null and source_texture.get_width() <= target_size.x and source_texture.get_height() <= target_size.y:
+	if (
+		source_texture != null
+		and source_texture.get_width() <= target_size.x
+		and source_texture.get_height() <= target_size.y
+	):
 		return source_texture
-	var image: Image = source_texture.get_image() if source_texture != null else Image.load_from_file(image_file_path(path))
+	var image: Image = (
+		source_texture.get_image()
+		if source_texture != null
+		else Image.load_from_file(image_file_path(path))
+	)
 	if image == null or image.is_empty():
 		return null
 	var ratio: float = minf(
 		1.0,
-		minf(float(target_size.x) / float(image.get_width()), float(target_size.y) / float(image.get_height()))
+		minf(
+			float(target_size.x) / float(image.get_width()),
+			float(target_size.y) / float(image.get_height())
+		)
 	)
 	var width: int = max(1, int(round(float(image.get_width()) * ratio)))
 	var height: int = max(1, int(round(float(image.get_height()) * ratio)))
@@ -52,7 +63,11 @@ func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 
 
 func image_file_path(path: String) -> String:
-	return ProjectSettings.globalize_path(path) if path.begins_with("res://") or path.begins_with("user://") else path
+	return (
+		ProjectSettings.globalize_path(path)
+		if path.begins_with("res://") or path.begins_with("user://")
+		else path
+	)
 
 
 func placeholder_texture() -> Texture2D:

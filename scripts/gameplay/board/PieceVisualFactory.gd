@@ -74,7 +74,11 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node, animate := 
 			for child in visual.get_children():
 				if child is Line2D and child.name == "piece_cut_line":
 					var line := child as Line2D
-					line.default_color = line.get_meta("lift_color", CUT_LINE_LIFT_COLOR) if lifted else line.get_meta("base_color", CUT_LINE_COLOR)
+					line.default_color = (
+						line.get_meta("lift_color", CUT_LINE_LIFT_COLOR)
+						if lifted
+						else line.get_meta("base_color", CUT_LINE_COLOR)
+					)
 			continue
 		var tween := tween_owner.create_tween()
 		tween.set_ease(Tween.EASE_OUT)
@@ -85,7 +89,11 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node, animate := 
 		for child in visual.get_children():
 			if child is Line2D and child.name == "piece_cut_line":
 				var line := child as Line2D
-				var target_color: Color = line.get_meta("lift_color", CUT_LINE_LIFT_COLOR) if lifted else line.get_meta("base_color", CUT_LINE_COLOR)
+				var target_color: Color = (
+					line.get_meta("lift_color", CUT_LINE_LIFT_COLOR)
+					if lifted
+					else line.get_meta("base_color", CUT_LINE_COLOR)
+				)
 				tween.parallel().tween_property(line, "default_color", target_color, 0.12)
 
 
@@ -96,15 +104,20 @@ static func _piece_lift_shadow(points: PackedVector2Array) -> Node2D:
 	shadow.modulate.a = 0.0
 	shadow.z_index = -2
 	var layers := [
-		{ "scale": Vector2(1.010, 1.010), "offset": Vector2.ZERO, "alpha": 0.45 },
-		{ "scale": Vector2(1.024, 1.024), "offset": Vector2(3.0, 3.0), "alpha": 0.23 },
-		{ "scale": Vector2(1.044, 1.044), "offset": Vector2(7.0, 7.0), "alpha": 0.10 },
+		{"scale": Vector2(1.010, 1.010), "offset": Vector2.ZERO, "alpha": 0.45},
+		{"scale": Vector2(1.024, 1.024), "offset": Vector2(3.0, 3.0), "alpha": 0.23},
+		{"scale": Vector2(1.044, 1.044), "offset": Vector2(7.0, 7.0), "alpha": 0.10},
 	]
 	for i in layers.size():
 		var layer := Polygon2D.new()
 		layer.name = "lift_shadow_%02d" % i
 		layer.polygon = points
-		layer.color = Color(SHADOW_COLOR.r, SHADOW_COLOR.g, SHADOW_COLOR.b, SHADOW_COLOR.a * float(layers[i]["alpha"]))
+		layer.color = Color(
+			SHADOW_COLOR.r,
+			SHADOW_COLOR.g,
+			SHADOW_COLOR.b,
+			SHADOW_COLOR.a * float(layers[i]["alpha"])
+		)
 		layer.scale = layers[i]["scale"]
 		layer.position = layers[i]["offset"]
 		layer.z_index = -2 + i
@@ -112,7 +125,9 @@ static func _piece_lift_shadow(points: PackedVector2Array) -> Node2D:
 	return shadow
 
 
-static func _piece_cut_line(points: PackedVector2Array, width: float, color: Color, lift_color: Color, z_index: int) -> Line2D:
+static func _piece_cut_line(
+	points: PackedVector2Array, width: float, color: Color, lift_color: Color, z_index: int
+) -> Line2D:
 	var line := Line2D.new()
 	line.name = "piece_cut_line"
 	line.width = width
