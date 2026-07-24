@@ -2,11 +2,13 @@ extends SceneTree
 
 const MainScene := preload("res://scenes/Main.tscn")
 const AtomicJsonStoreScript := preload("res://scripts/runtime/data/AtomicJsonStore.gd")
+const ProgressRepositoryScript := preload("res://scripts/runtime/data/ProgressRepository.gd")
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
 const LevelPlayPolicyScript := preload("res://scripts/catalog/LevelPlayPolicy.gd")
 const BoardSessionIdentityScript := preload("res://scripts/gameplay/runtime/BoardSessionIdentity.gd")
 
 const TEST_SESSION_PATH := "user://jigcat-test-runtime-gameplay/session_v1.json"
+const TEST_ONBOARDING_PATH := "user://jigcat-test-runtime-gameplay/onboarding_progress_v1.json"
 
 var _all_ok := true
 var _failures: Array[String] = []
@@ -18,6 +20,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var game := MainScene.instantiate()
+	game.onboarding_progress_repository = ProgressRepositoryScript.new(AtomicJsonStoreScript.new(), TEST_ONBOARDING_PATH)
 	root.add_child(game)
 	await process_frame
 	var topic: Dictionary = game.topics[0]
@@ -84,7 +87,8 @@ func _configure_isolated_runtime_state(game, topic: Dictionary, level: Dictionar
 	completed.erase("%s:swap" % str(level.id))
 	game.progress_store.progress["completed"] = completed
 	game.progress_store.progress.erase(str(level.id))
-	game.progress_store.progress["tutorial_seen_modes"] = {"polygon": true, "knob": true, "swap": true}
+	for mode in ["polygon", "knob", "swap"]:
+		game.onboarding_progress_repository.mark_tutorial_seen(&"mode", mode)
 
 
 func _verify_continue_flow(game, topic: Dictionary, level: Dictionary, active_mode: String) -> void:
@@ -146,6 +150,9 @@ func _remove_test_session() -> void:
 	var path := ProjectSettings.globalize_path(TEST_SESSION_PATH)
 	DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute("%s.tmp" % path)
+	var onboarding_path := ProjectSettings.globalize_path(TEST_ONBOARDING_PATH)
+	DirAccess.remove_absolute(onboarding_path)
+	DirAccess.remove_absolute("%s.tmp" % onboarding_path)
 	DirAccess.remove_absolute(path.get_base_dir())
 
 

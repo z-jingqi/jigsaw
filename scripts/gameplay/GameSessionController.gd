@@ -57,7 +57,7 @@ func show_game(game: Node, topic: Dictionary, level: Dictionary, play_mode: Stri
 		if not restore_state.is_empty():
 			game.puzzle_board.apply_state_snapshot(restore_state)
 		game.gameplay_runtime_host.mark_board_live()
-	if loaded and not game.progress_store.tutorial_seen(game.current_mode):
+	if loaded and not game.onboarding_progress_repository.tutorial_seen(&"mode", game.current_mode):
 		game._show_tutorial_modal()
 
 
@@ -81,6 +81,7 @@ func on_puzzle_completed(game: Node) -> void:
 	if not _completion_event_id.is_empty():
 		return
 	_completion_event_id = _event_id(game)
+	game._dismiss_onboarding_tutorial()
 	var locks_before: Dictionary = game._compute_level_locks(game.current_topic)
 	game.progress_store.mark_completed(game.current_level["id"], game.current_mode)
 	var locks_after: Dictionary = game._compute_level_locks(game.current_topic)

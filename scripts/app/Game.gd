@@ -34,11 +34,13 @@ const LevelCardFactoryScript := preload("res://scripts/catalog/LevelCardFactory.
 const LevelUnlockAnimatorScript := preload("res://scripts/catalog/LevelUnlockAnimator.gd")
 const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
 const ProgressStoreScript := preload("res://scripts/progress/ProgressStore.gd")
+const ProgressRepositoryScript := preload("res://scripts/runtime/data/ProgressRepository.gd")
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
 const SettingsRepositoryScript := preload("res://scripts/runtime/data/SettingsRepository.gd")
 const MotionPreferencesScript := preload("res://scripts/runtime/state/MotionPreferences.gd")
 const SystemPresenterScript := preload("res://scripts/runtime/presentation/SystemPresenter.gd")
 const SettingsRuntimeHostScript := preload("res://scripts/gameplay/runtime/SettingsRuntimeHost.gd")
+const OnboardingRuntimeHostScript := preload("res://scripts/onboarding/OnboardingRuntimeHost.gd")
 const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const UnlockRevealEffectScript := preload("res://scripts/effects/UnlockRevealEffect.gd")
 ## Compatibility alias used by the validation suite and debug tooling.
@@ -88,6 +90,7 @@ var game_hud
 var gameplay_runtime_host
 var completion_runtime_host
 var settings_runtime_host
+var onboarding_runtime_host
 var game_dialogs
 var game_session = GameSessionControllerScript.new()
 var ui_motion
@@ -98,6 +101,7 @@ var current_modal := ""
 
 var topics: Array[Dictionary] = []
 var progress_store = ProgressStoreScript.new()
+var onboarding_progress_repository = ProgressRepositoryScript.new()
 var session_repository = SessionRepositoryScript.new()
 var settings_repository = SettingsRepositoryScript.new()
 var motion_preferences
@@ -142,6 +146,7 @@ func _ready() -> void:
 	gameplay_runtime_host = GameplayRuntimeHostScript.new(self)
 	completion_runtime_host = CompletionRuntimeHostScript.new(self)
 	settings_runtime_host = SettingsRuntimeHostScript.new(self)
+	onboarding_runtime_host = OnboardingRuntimeHostScript.new(self)
 	game_dialogs = GameDialogsScript.new(self)
 	texture_service = GameTextureServiceScript.new(repository)
 	mode_title_side_decoration_texture = repository.cached_texture(MODE_TITLE_SIDE_DECORATION_PATH)
@@ -157,6 +162,7 @@ func _ready() -> void:
 	modal_setting_music_texture = repository.cached_texture(MODAL_SETTING_MUSIC_PATH)
 	modal_setting_sfx_texture = repository.cached_texture(MODAL_SETTING_SFX_PATH)
 	progress_store.load_from_disk()
+	onboarding_progress_repository.load()
 	session_repository.load()
 	settings_repository.load()
 	motion_preferences = MotionPreferencesScript.new(settings_repository)
@@ -189,7 +195,7 @@ func _exit_tree() -> void:
 		ui_motion.host = null
 	if topic_home_motion != null:
 		topic_home_motion.shutdown()
-	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host, completion_runtime_host, settings_runtime_host]:
+	for helper in [topics_screen, topic_pager_controller, catalog_scroll_controller, debug_adapter, level_list_screen, level_card_factory, level_unlock_animator, game_hud, game_dialogs, gameplay_runtime_host, completion_runtime_host, settings_runtime_host, onboarding_runtime_host]:
 		if helper == null:
 			continue
 		if helper.has_method("shutdown"):
@@ -333,6 +339,8 @@ func _clear_ui() -> void:
 		completion_runtime_host.clear()
 	if settings_runtime_host != null:
 		settings_runtime_host.clear()
+	if onboarding_runtime_host != null:
+		onboarding_runtime_host.clear()
 	modal_host.reset()
 	if level_list_screen != null:
 		level_list_screen.cancel_motion()
@@ -479,6 +487,10 @@ func _theme_card(topic: Dictionary, card_width: float, ui_scale: float) -> Contr
 
 func _on_topics_gui_input(event: InputEvent) -> void:
 	if current_screen == "topics":
+		if event is InputEventMouseMotion and absf((event as InputEventMouseMotion).relative.x) >= 8.0:
+			_record_home_swipe()
+		elif event is InputEventScreenDrag and absf((event as InputEventScreenDrag).relative.x) >= 8.0:
+			_record_home_swipe()
 		topic_pager_controller.handle_gui_input(event)
 	else:
 		catalog_scroll_controller.handle_gui_input(event)
@@ -664,8 +676,31 @@ func _show_settings_modal() -> void:
 
 
 func _show_tutorial_modal() -> void:
-	current_modal = "tutorial"
-	game_dialogs.show_tutorial()
+	if onboarding_runtime_host != null:
+		onboarding_runtime_host.show_mode_tutorial(current_mode)
+
+
+func _schedule_home_guide() -> void:
+	if onboarding_runtime_host != null:
+		onboarding_runtime_host.schedule_home_guide()
+
+
+func _record_home_swipe() -> void:
+	if onboarding_runtime_host != null:
+		onboarding_runtime_host.record_home_swipe()
+
+
+func _record_home_enter() -> void:
+	if onboarding_runtime_host != null:
+		onboarding_runtime_host.record_home_enter()
+
+
+func _dismiss_onboarding_tutorial() -> void:
+	if current_modal != "tutorial" or onboarding_runtime_host == null:
+		return
+	onboarding_runtime_host.clear_mode_tutorial()
+	current_modal = ""
+	modal_open = false
 
 
 func _show_complete_modal() -> void:
@@ -702,6 +737,9 @@ func _close_modal() -> void:
 		return
 	if current_modal == "settings" and settings_runtime_host != null:
 		settings_runtime_host.request_close()
+		return
+	if current_modal == "tutorial" and onboarding_runtime_host != null:
+		onboarding_runtime_host.request_close_mode_tutorial()
 		return
 	current_modal = ""
 	modal_host.close(self)
