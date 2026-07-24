@@ -41,7 +41,7 @@ for test_path in "${selected_tests[@]}"; do
 	name="$(basename "${test_path%.gd}")"
 	output_path="$artifact_dir/${name}.out"
 	log_path="$artifact_dir/${name}.godot.log"
-	"${runner[@]}" --log-file "$log_path" --path . --script "res://$test_path" 2>&1 | tee "$output_path"
+	"${runner[@]}" --audio-driver Dummy --log-file "$log_path" --path . --script "res://$test_path" 2>&1 | tee "$output_path"
 	grep -q '"ok":true' "$output_path"
 	if grep -En 'SCRIPT ERROR|Parse Error|Invalid call|Invalid get index|Attempt to call function' "$output_path" "$log_path"; then
 		echo "Runtime diagnostics failed for $test_path" >&2

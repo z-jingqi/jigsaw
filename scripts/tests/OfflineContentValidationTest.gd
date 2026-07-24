@@ -1,6 +1,7 @@
 extends SceneTree
 
 const FONT_ROOT := "res://assets/fonts/noto"
+const ContentRepositoryScript := preload("res://scripts/runtime/data/ContentRepository.gd")
 const FONT_DIGESTS := {
 	"NotoSansSC[wght].ttf": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
 	"NotoSerifSC[wght].ttf": "32f10fdf815f8d3f45bf69340d804c53bfcc79c5a256b5dfea5f19c7cd48c17e",
@@ -84,7 +85,7 @@ func _validate_fonts() -> void:
 
 
 func _validate_content_repository() -> void:
-	var repository := ContentRepository.new()
+	var repository = ContentRepositoryScript.new()
 	var topics := repository.topics()
 	if topics.is_empty():
 		_fail("ContentRepository returned no themes")
