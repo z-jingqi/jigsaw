@@ -80,13 +80,13 @@ Godot AI/MCP 是可选的编辑器观察与控制层。插件关闭时，项目�
 提交前安装并运行质量检查：
 
 ```bash
-pipx install pre-commit==4.6.0
-pre-commit install
-pre-commit run --all-files
+uv sync --locked --group dev
+uv run pre-commit install
+uv run pre-commit run --all-files
 GODOT_BIN=/Applications/Godot.app/Contents/MacOS/Godot ./tools/run_gdunit4.sh -a ./test/unit
 ```
 
-GDScript 仅检查本项目的 `scripts/` 与 `test/`，不检查固定的第三方编辑器插件。`gdlintrc` 保留 Godot 的声明顺序，并对刻意暴露协调 API 的 facade/repository 关闭了两条不适用的数量型规则。
+`pyproject.toml` 与 `uv.lock` 固定本地和 CI 使用的 Python 开发工具版本。GDScript 仅检查本项目的 `scripts/` 与 `test/`，不检查固定的第三方编辑器插件。`gdlintrc` 保留 Godot 的声明顺序，并对刻意暴露协调 API 的 facade/repository 关闭了两条不适用的数量型规则。
 
 ## iOS
 
