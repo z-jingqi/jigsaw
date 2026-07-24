@@ -103,6 +103,10 @@ jobs:
           unzip -q /tmp/godot.zip -d /tmp/godot
           install -m 0755 "/tmp/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
           godot --version
+      - name: Import project resources
+        run: |
+          mkdir -p .artifacts/ci/runtime-validation
+          godot --headless --editor --quit --path . 2>&1 | tee .artifacts/ci/runtime-validation/editor.log
       - name: Run runtime validation
         run: GODOT_BIN=godot CI_ARTIFACT_DIR=.artifacts/ci/runtime-validation ./tools/run_runtime_validation.sh
       - name: Upload runtime diagnostics
