@@ -18,6 +18,8 @@ func _run() -> void:
 	await process_frame
 	var navigator = game.get_node("AppNavigator")
 	var transition_host = game.get_node("UiLayer/TransitionHost")
+	transition_host.finish_active_to_target()
+	await process_frame
 	var registry = RouteRegistryScript.new()
 	for route in [&"home", &"all_themes", &"levels", &"gameplay", &"mode_select", &"settings", &"home_guide", &"mode_tutorial", &"completion"]:
 		var bound: Dictionary = registry.bind_scene(route, ProbeScene)

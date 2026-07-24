@@ -73,6 +73,8 @@ func _render() -> void:
 			numeric.modulate.a = 1.0
 			numeric_completion.scale = Vector2.ONE
 		journey.visible = false
+		if _motion != null:
+			_motion.finished.connect(_stop_motion, CONNECT_ONE_SHOT)
 		_commit_state(paw_count, is_complete)
 		return
 	numeric_completion.visible = false
@@ -112,6 +114,8 @@ func _render() -> void:
 			_motion.parallel().tween_property(completion, "scale", Vector2.ONE, motion_tokens.progress_completion_duration)
 	else:
 		completion.scale = Vector2.ONE
+	if _motion != null:
+		_motion.finished.connect(_stop_motion, CONNECT_ONE_SHOT)
 	_commit_state(paw_count, is_complete)
 
 

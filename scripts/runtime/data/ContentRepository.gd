@@ -67,6 +67,34 @@ func stable_piece_ids(level: Dictionary, mode: String) -> Array[String]:
 	return result
 
 
+func level_config(level: Dictionary) -> Dictionary:
+	return _repository.load_level_config(level)
+
+
+func level_media(level_config: Dictionary) -> Dictionary:
+	return _repository.apply_level_media(level_config)
+
+
+func level_image_path(level_config: Dictionary) -> String:
+	return _repository.level_image_path(level_config)
+
+
+func config_with_theme_background(level_config: Dictionary, topic: Dictionary) -> Dictionary:
+	var result := level_config.duplicate(true)
+	var background_path := str(topic.get("level_background", ""))
+	if background_path.is_empty():
+		return result
+	var palette_value: Variant = topic.get("ui_palette", {})
+	var palette: Dictionary = palette_value if typeof(palette_value) == TYPE_DICTIONARY else {}
+	result["_topic_ui_palette"] = palette.duplicate(true)
+	result["background"] = {
+		"type": "image",
+		"path": background_path,
+		"color": str(palette.get("surface", "#F5F0E3")),
+	}
+	return result
+
+
 func _has_mode_data(config: Dictionary, mode: String) -> bool:
 	if mode == "swap":
 		return not _repository.level_image_path(config).is_empty()
