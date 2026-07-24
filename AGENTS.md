@@ -36,6 +36,15 @@ Godot.exe --path <resolved-repository-root>
 
 For interactive inspection, wait briefly for the scene to render, then inspect the displayed game window. Press `D` while the game window is focused to toggle the in-game Dev Test panel when needed. For a quick smoke run, start the window, wait about 2 seconds, then terminate the process. On macOS desktop runs, the warning `Orientation not supported by this display server` is expected and does not block launch.
 
+## Git and pull request integration
+
+- `main` is the always-runnable integration baseline. It must never contain an incomplete feature, an unreachable intermediate architecture, or code that has not passed its required validation.
+- Start each substantial feature by creating one integration branch from `main`, named `feat/<scope>` (for example, `feat/refactor-runtime-ui`).
+- All implementation branches and their pull requests must target the active feature integration branch, never `main`. A vertical slice is merged only after it is connected to the real runtime path, replaces its old path, and passes its focused validation.
+- Open a pull request from `feat/<scope>` to `main` only when the feature is complete: its Definition of Done is met, no intermediate or parallel implementation remains, the complete feature flow is runnable, and the required regression checks pass.
+- The feature-to-`main` pull request is the only path for that feature into `main`. Its title, branch name, or at least one commit must include the relevant Linear identifier; its body must list all related Linear issues and the validation results.
+- Do not push directly to `main`, and do not merge a partial feature into `main` merely to continue work there. Keep unfinished integration work on its `feat/<scope>` branch until it is ready for the final merge.
+
 ## Code organization
 
 - Do not concentrate new UI, input, animation, persistence, or gameplay behavior in `Game.gd` or `PuzzleBoard.gd`. These files should coordinate lifecycle and delegate work to focused collaborators.
