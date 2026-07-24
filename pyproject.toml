@@ -1,0 +1,12 @@
+[project]
+name = "jigcat-dev-tools"
+version = "0.0.0"
+description = "Pinned local quality tools for JIGCAT"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "gdtoolkit==4.5.0",
+  "pre-commit==4.6.0",
+]
