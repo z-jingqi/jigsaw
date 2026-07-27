@@ -5,6 +5,7 @@ signal selected_theme_changed(theme_id: String)
 signal theme_activated(theme_id: String)
 signal all_themes_requested
 signal menu_requested
+signal album_requested
 
 const PagerControllerScript := preload("res://scripts/screens/HomePagerController.gd")
 const MotionTokenResource := preload("res://themes/motion_tokens.tres")
@@ -15,7 +16,8 @@ const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
 @onready var current_cover: TextureRect = $CoverSlots/Current
 @onready var next_cover: TextureRect = $CoverSlots/Next
 @onready var gesture_catcher: Control = $GestureCatcher
-@onready var logo: Label = $SafeArea/SafeContent/Header/Logo
+@onready var logo: TextureRect = $SafeArea/SafeContent/Header/Logo
+@onready var album_button: Button = $SafeArea/SafeContent/Header/AlbumButton
 @onready var menu_button: Button = $SafeArea/SafeContent/Header/MenuButton
 @onready var info_panel: Control = $SafeArea/SafeContent/InfoPanel
 @onready var theme_name: Label = $SafeArea/SafeContent/InfoPanel/ThemeName
@@ -42,6 +44,7 @@ func _ready() -> void:
 	_pager.page_settled.connect(_on_pager_settled)
 	_pager.activation_requested.connect(_on_pager_activation_requested)
 	gesture_catcher.gui_input.connect(_on_gesture_input)
+	album_button.pressed.connect(album_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	all_themes_button.pressed.connect(all_themes_requested.emit)
 	resized.connect(_on_resized)

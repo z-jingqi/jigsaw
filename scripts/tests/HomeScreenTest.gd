@@ -2,11 +2,13 @@ extends SceneTree
 
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
+const GlassButtonScript := preload("res://scripts/ui/foundation/GlassButton.gd")
 
 var _all_ok := true
 var _failures: Array[String] = []
 var _changed_theme := ""
 var _activated_theme := ""
+var _album_requested := false
 
 
 func _initialize() -> void:
@@ -14,13 +16,78 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	root.size = Vector2i(393, 852)
+	root.size = Vector2i(1206, 2622)
 	var home = HomeScene.instantiate()
 	root.add_child(home)
 	await process_frame
 	home.selected_theme_changed.connect(func(theme_id: String) -> void: _changed_theme = theme_id)
 	home.theme_activated.connect(func(theme_id: String) -> void: _activated_theme = theme_id)
+	home.album_requested.connect(func() -> void: _album_requested = true)
 	home.set_view_model(_home_view_model())
+	var logo: TextureRect = home.get_node("SafeArea/SafeContent/Header/Logo")
+	var safe_area: SafeAreaContainer = home.get_node("SafeArea")
+	var album_button: Button = home.get_node("SafeArea/SafeContent/Header/AlbumButton")
+	var menu_button: Button = home.get_node("SafeArea/SafeContent/Header/MenuButton")
+	var all_themes_button: Button = home.get_node("SafeArea/SafeContent/AllThemesButton")
+	_check(logo.texture != null, "home_logo_texture")
+	_check(is_equal_approx(safe_area.compact_breakpoint, 9999.0), "home_phone_safe_area_width")
+	_check(album_button.get_script() == GlassButtonScript, "home_album_glass_button")
+	_check(menu_button.get_script() == GlassButtonScript, "home_settings_glass_button")
+	_check(all_themes_button.get_script() == GlassButtonScript, "home_all_themes_glass_button")
+	_check(
+		(
+			album_button.custom_minimum_size == Vector2(144.0, 144.0)
+			and menu_button.custom_minimum_size == Vector2(144.0, 144.0)
+			and all_themes_button.custom_minimum_size == Vector2(420.0, 120.0)
+		),
+		"home_glass_button_touch_targets"
+	)
+	_check(
+		(
+			album_button.get_theme_font_size(&"font_size") == 18
+			and all_themes_button.get_theme_font_size(&"font_size") == 42
+		),
+		"home_glass_button_text_scale"
+	)
+	_check(
+		(
+			menu_button.get_theme_stylebox(&"normal").shadow_size >= 8
+			and all_themes_button.get_theme_stylebox(&"normal").border_width_top == 1
+		),
+		"home_glass_button_surface"
+	)
+	_check(
+		(
+			album_button.icon_texture != null
+			and menu_button.icon_texture != null
+			and album_button.icon_texture != menu_button.icon_texture
+			and all_themes_button.icon_texture == null
+		),
+		"home_header_icon_assets"
+	)
+	_check(
+		(
+			logo.get_global_rect().end.x <= album_button.get_global_rect().position.x
+			and album_button.get_global_rect().end.x <= menu_button.get_global_rect().position.x
+		),
+		"home_header_actions_do_not_overlap_logo"
+	)
+	_check(
+		(
+			album_button.get_global_rect().position.y >= 64.0
+			and menu_button.get_global_rect().end.x <= home.size.x - 20.0
+		),
+		"home_header_actions_use_safe_inset"
+	)
+	_check(
+		(
+			not home.get_node("SafeArea/SafeContent/InfoPanel/ThemeProgress").visible
+			and not home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeProgress").visible
+		),
+		"home_progress_deferred"
+	)
+	album_button.pressed.emit()
+	_check(_album_requested, "home_album_action_exposed")
 	_check(home.get_node("SafeArea/SafeContent/PageLabel").text == "01 / 02", "home_initial_page")
 	_check(home.get_node("CoverSlots/Current").texture != null, "home_current_cover")
 	home.play_cold_entry()

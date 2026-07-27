@@ -341,6 +341,21 @@ def command_doctor(_: argparse.Namespace) -> int:
     recognized = bool(status.get("ok")) and str(status_data.get("name", "")).lower().replace("_", "-") == "godot-ai"
     sessions = _mcp_session_probe(port) if recognized else {"ok": False, "current_project_connected": False, "error": "server_offline"}
     codex_config = _codex_config_check(port)
+    matching_sessions = sessions.get("matching_sessions", []) if isinstance(sessions, dict) else []
+    active_session_versions = [
+        {
+            "session_id": str(session.get("session_id", "")),
+            "plugin_version": str(session.get("plugin_version", "")),
+            "server_version": str(session.get("server_version", "")),
+        }
+        for session in matching_sessions
+        if isinstance(session, dict)
+    ]
+    session_version_ok = bool(active_session_versions) and all(
+        session["plugin_version"] == EXPECTED_PLUGIN_VERSION
+        and session["server_version"] == EXPECTED_PLUGIN_VERSION
+        for session in active_session_versions
+    )
     checks = {
         "godot": {
             "ok": bool(godot) and bool(godot_version.get("ok")) and _version_at_least(str(godot_version.get("value", "")), (4, 6, 0)),
@@ -362,11 +377,23 @@ def command_doctor(_: argparse.Namespace) -> int:
             "tcp_listening": tcp_listening,
             "foreign_listener": tcp_listening and not recognized,
         },
-        "mcp": {"ok": recognized, "status": status, "sessions": sessions},
+        "mcp": {
+            "ok": recognized,
+            "status": status,
+            "sessions": sessions,
+            "expected_version": EXPECTED_PLUGIN_VERSION,
+            "active_session_versions": active_session_versions,
+            "session_version_ok": session_version_ok,
+        },
         "codex_config": codex_config,
     }
     core_ok = all(bool(checks[name]["ok"]) for name in ("godot", "uv", "plugin", "network"))
-    bridge_ok = recognized and bool(sessions.get("current_project_connected")) and bool(codex_config.get("ok"))
+    bridge_ok = (
+        recognized
+        and bool(sessions.get("current_project_connected"))
+        and bool(codex_config.get("ok"))
+        and session_version_ok
+    )
     actions: List[str] = []
     if not checks["godot"]["ok"]:
         actions.append("Install Godot 4.6+ or set GODOT_BIN to the editor executable.")
@@ -384,6 +411,11 @@ def command_doctor(_: argparse.Namespace) -> int:
         actions.append(f"Configure Codex MCP at {codex_config.get('path')} with URL http://127.0.0.1:{port}/mcp, then restart Codex.")
     elif recognized and not sessions.get("current_project_connected"):
         actions.append("Activate the jigsaw editor session after confirming its project path in session_list.")
+    elif recognized and not session_version_ok:
+        actions.append(
+            "Restart the Godot editor so its plugin and MCP server reload Godot AI v%s. "
+            "No process was terminated." % EXPECTED_PLUGIN_VERSION
+        )
     exit_code = 0 if core_ok and bridge_ok else (2 if not core_ok else 3)
     manifest = _base_manifest(run_dir, "doctor", started_at)
     manifest.update(

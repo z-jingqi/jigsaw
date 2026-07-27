@@ -13,8 +13,16 @@ func _ready() -> void:
 
 
 func _apply_safe_area() -> void:
-	var viewport_size := get_viewport_rect().size
+	var viewport_rect := get_viewport_rect()
+	var viewport_size := viewport_rect.size
 	var safe_rect := get_viewport().get_visible_rect()
+	if (
+		safe_rect.position.x < viewport_rect.position.x
+		or safe_rect.position.y < viewport_rect.position.y
+		or safe_rect.end.x > viewport_rect.end.x
+		or safe_rect.end.y > viewport_rect.end.y
+	):
+		safe_rect = viewport_rect
 	var safe_width := maxf(0.0, safe_rect.size.x)
 	var side_margin := compact_horizontal_margin
 	if safe_width >= compact_breakpoint:

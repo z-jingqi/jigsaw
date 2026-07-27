@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/foundation/GlassButton.gd" id="1_button"]
+[ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
+
+[node name="GlassPillButton" type="Button"]
+custom_minimum_size = Vector2(420, 120)
+theme = ExtResource("2_theme")
+script = ExtResource("1_button")
+kind = 1
+visual_kind = 1
+symbol = 0
+flat = false
+theme_override_font_sizes/font_size = 42
