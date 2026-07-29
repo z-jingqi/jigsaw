@@ -140,7 +140,13 @@ func show_all_themes() -> Dictionary:
 	return result
 
 
-func show_levels(theme_id: String, focus_level_id := "", replace := false) -> Dictionary:
+func show_levels(
+	theme_id: String,
+	focus_level_id := "",
+	replace := false,
+	transition_source_rect := Rect2(),
+	transition_source_texture: Texture2D = null
+) -> Dictionary:
 	var topic := _services.content.topic_by_id(theme_id)
 	if topic.is_empty():
 		return {"ok": false, "error": "not_found"}
@@ -152,7 +158,9 @@ func show_levels(theme_id: String, focus_level_id := "", replace := false) -> Di
 	var payload := {
 		"theme_id": theme_id,
 		"focus_level_id": focus_level_id,
-		"view_model": _catalog.level_list(theme_id, focus_level_id)
+		"view_model": _catalog.level_list(theme_id, focus_level_id),
+		"_transition_source_rect": transition_source_rect,
+		"_transition_source_texture": transition_source_texture,
 	}
 	var result := (
 		_navigator.replace(&"levels", payload) if replace else _navigator.push(&"levels", payload)
@@ -413,7 +421,8 @@ func _bind_all_themes(screen: AllThemesScreen) -> void:
 		return
 	screen.close_requested.connect(_navigator.pop)
 	screen.theme_activated.connect(
-		func(theme_id: String, _rect: Rect2) -> void: show_levels(theme_id, "", true)
+		func(theme_id: String, rect: Rect2, texture: Texture2D) -> void:
+			show_levels(theme_id, "", true, rect, texture)
 	)
 
 
@@ -465,7 +474,14 @@ func _on_home_theme_activated(theme_id: String) -> void:
 		_pending_after_modal = func() -> void: show_levels(theme_id)
 		close_modal()
 		return
-	show_levels(theme_id)
+	var home := _navigator.current_screen_view() as HomeScreen
+	show_levels(
+		theme_id,
+		"",
+		false,
+		home.transition_source_rect() if home != null else Rect2(),
+		home.transition_source_texture() if home != null else null
+	)
 
 
 func _on_mode_selected(mode: StringName, policy: StringName) -> void:

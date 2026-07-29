@@ -35,6 +35,7 @@ func _run() -> void:
 		var bound: Dictionary = registry.bind_scene(route, ProbeScene)
 		_check(bool(bound.get("ok", false)), "bind_%s" % route)
 	navigator.set_route_registry(registry)
+	navigator.set_reduced_motion(false)
 
 	var home: Dictionary = navigator.set_root(&"home", {"theme_id": "topic_01"})
 	_check(bool(home.get("ok", false)), "set_root")
@@ -46,6 +47,13 @@ func _run() -> void:
 
 	var levels: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
 	_check(bool(levels.get("ok", false)), "push_levels")
+	_check(
+		(
+			navigator.current_screen_view().modulate.a < 1.0
+			and game.get_node("UiLayer/ScreenHost").get_child(0).visible
+		),
+		"home_levels_transition_changes_real_views"
+	)
 	var duplicate: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
 	_check(
 		not bool(duplicate.get("ok", false)) and duplicate.get("error") == "transition_busy",
@@ -91,30 +99,64 @@ func _run() -> void:
 	_check(bool(all_themes.get("ok", false)), "open_all_themes")
 	motion_before_finish = navigator.debug_state_snapshot()
 	_check(
-		motion_before_finish.get("transition_kind") == "screen", "all_themes_uses_screen_transition"
+		motion_before_finish.get("transition_kind") == "home_to_all_themes",
+		"all_themes_uses_home_transition"
 	)
 	transition_host.finish_active_to_target()
 	await process_frame
 	_check(navigator.current_route() == &"all_themes", "all_themes_route")
-	var card_to_levels: Dictionary = navigator.push(&"levels", {"theme_id": "topic_01"})
+	var proxy_image := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	proxy_image.fill(Color("F28A70"))
+	var proxy_texture := ImageTexture.create_from_image(proxy_image)
+	var card_to_levels: Dictionary = (
+		navigator
+		. push(
+			&"levels",
+			{
+				"theme_id": "topic_01",
+				"_transition_source_rect": Rect2(24.0, 40.0, 160.0, 208.0),
+				"_transition_source_texture": proxy_texture,
+			}
+		)
+	)
 	_check(bool(card_to_levels.get("ok", false)), "all_themes_selects_topic")
 	motion_before_finish = navigator.debug_state_snapshot()
 	_check(
 		motion_before_finish.get("transition_kind") == "card_to_levels", "card_levels_transition"
 	)
+	_check(
+		(
+			bool(transition_host.snapshot().get("proxy_active", false))
+			and transition_host.get_child_count() == 1
+		),
+		"card_transition_creates_cover_proxy"
+	)
 	navigator.cancel_active_transition()
 	await process_frame
 	_check(navigator.current_route() == &"all_themes", "cancel_card_transition_restores_gallery")
+	_check(
+		transition_host.get_node_or_null("SharedCoverProxy") == null,
+		"cancel_card_transition_releases_proxy"
+	)
 	pop_result = navigator.pop()
 	_check(bool(pop_result.get("ok", false)), "close_all_themes")
 	transition_host.finish_active_to_target()
 	await process_frame
 	_check(navigator.current_route() == &"home", "all_themes_returns_home")
 	navigator.set_reduced_motion(true)
+	var reduced_source: Control = navigator.current_screen_view()
+	var reduced_source_scale: Vector2 = reduced_source.scale
 	all_themes = navigator.push(&"all_themes", {"current_theme_id": "topic_01"})
 	_check(bool(all_themes.get("ok", false)), "open_all_themes_reduced_motion")
 	motion_before_finish = navigator.debug_state_snapshot()
 	_check(bool(motion_before_finish.get("reduced_motion", false)), "reduced_motion_propagated")
+	_check(
+		(
+			reduced_source.scale.is_equal_approx(reduced_source_scale)
+			and navigator.current_screen_view().position.is_equal_approx(Vector2.ZERO)
+		),
+		"reduced_motion_uses_crossfade_without_transform"
+	)
 	transition_host.finish_active_to_target()
 	await process_frame
 	pop_result = navigator.pop()
@@ -122,6 +164,19 @@ func _run() -> void:
 	transition_host.finish_active_to_target()
 	await process_frame
 	navigator.set_reduced_motion(false)
+	for index in 5:
+		all_themes = navigator.push(&"all_themes", {"current_theme_id": "topic_01"})
+		_check(bool(all_themes.get("ok", false)), "rapid_open_%d" % index)
+		navigator.cancel_active_transition()
+		await process_frame
+	_check(
+		(
+			navigator.current_route() == &"home"
+			and game.get_node("UiLayer/ScreenHost").get_child_count() == 1
+			and transition_host.get_child_count() == 0
+		),
+		"rapid_navigation_cycles_release_views_and_proxies"
+	)
 	var snapshot: Dictionary = navigator.debug_state_snapshot()
 	_check(int(snapshot.get("active_motion_count", -1)) == 0, "no_active_motion")
 	_check(not bool(snapshot.get("input_locked", true)), "input_unlocked")

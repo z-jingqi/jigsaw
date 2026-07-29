@@ -3,6 +3,7 @@ extends SceneTree
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 const GlassButtonScript := preload("res://scripts/ui/foundation/GlassButton.gd")
+const MotionResource := preload("res://themes/motion_tokens.tres")
 
 var _all_ok := true
 var _failures: Array[String] = []
@@ -29,6 +30,7 @@ func _run() -> void:
 	var album_button: Button = home.get_node("SafeArea/SafeContent/Header/AlbumButton")
 	var menu_button: Button = home.get_node("SafeArea/SafeContent/Header/MenuButton")
 	var all_themes_button: Button = home.get_node("SafeArea/SafeContent/AllThemesButton")
+	var header := home.get_node("SafeArea/SafeContent/Header") as Control
 	var page_label := home.get_node("SafeArea/SafeContent/PageLabel") as Control
 	var incoming_theme_name := home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName") as Label
 	_check(logo.texture != null, "home_logo_texture")
@@ -283,18 +285,179 @@ func _run() -> void:
 	)
 	_check(home.get_node("CoverSlots/Current").texture != null, "home_current_cover")
 	home.play_cold_entry()
-	await create_timer(1.10).timeout
-	_check(home.active_motion_count() == 0, "home_cold_entry_settled")
+	await create_timer(0.30).timeout
+	var entry_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			home.cover_slots.modulate.a > 0.0
+			and home.cover_slots.modulate.a < 1.0
+			and header.offset_top > 40.0
+			and header.offset_top < 64.0
+			and home.info_panel.offset_top > -359.0
+			and home.info_panel.offset_top <= -319.0
+			and not bool(entry_state.entry_interaction_ready)
+			and menu_button.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		),
+		"home_cold_entry_midpoint"
+	)
+	await create_timer(0.80).timeout
+	_check(
+		(
+			home.active_motion_count() == 0
+			and is_equal_approx(header.offset_top, 64.0)
+			and is_equal_approx(home.info_panel.offset_top, -359.0)
+			and is_equal_approx(page_label.offset_top, -280.0)
+			and bool(home.debug_state_snapshot().entry_interaction_ready)
+			and menu_button.mouse_filter == Control.MOUSE_FILTER_STOP
+		),
+		"home_cold_entry_settled"
+	)
+	var pointer_down := InputEventMouseButton.new()
+	pointer_down.button_index = MOUSE_BUTTON_LEFT
+	pointer_down.pressed = true
+	menu_button.gui_input.emit(pointer_down)
+	await create_timer(0.04).timeout
+	_check(home.active_motion_count() >= 1, "home_settings_press_active")
+	await create_timer(0.06).timeout
+	_check(
+		is_equal_approx(menu_button.scale.x, MotionResource.icon_press_scale),
+		"home_settings_press_scale"
+	)
+	_check(
+		(menu_button as GlassButton).debug_icon_rotation_degrees() >= 7.9,
+		"home_settings_press_rotation"
+	)
+	var pointer_up := InputEventMouseButton.new()
+	pointer_up.button_index = MOUSE_BUTTON_LEFT
+	pointer_up.pressed = false
+	menu_button.gui_input.emit(pointer_up)
+	await create_timer(0.16).timeout
+	_check(
+		(
+			menu_button.scale.is_equal_approx(Vector2.ONE)
+			and absf((menu_button as GlassButton).debug_icon_rotation_degrees()) <= 0.1
+			and home.active_motion_count() == 0
+		),
+		"home_settings_release_motion"
+	)
+	all_themes_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(
+		is_equal_approx(all_themes_button.scale.x, MotionResource.primary_press_scale),
+		"home_all_themes_press_motion"
+	)
+	all_themes_button.gui_input.emit(pointer_up)
+	await create_timer(0.16).timeout
+	_check(all_themes_button.scale.is_equal_approx(Vector2.ONE), "home_all_themes_release_motion")
+	home.set_reduced_motion(true)
+	menu_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(
+		(
+			menu_button.scale.is_equal_approx(Vector2.ONE)
+			and absf((menu_button as GlassButton).debug_icon_rotation_degrees()) <= 0.1
+		),
+		"home_button_reduced_motion"
+	)
+	menu_button.gui_input.emit(pointer_up)
+	home.set_reduced_motion(false)
 	home.debug_begin_drag()
-	home.debug_drag(-home.size.x * 0.30, 0.12)
+	home.debug_drag(home.size.x * 0.30, 1.0)
+	var edge_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			float(edge_state.gesture_progress) >= 0.08
+			and float(edge_state.gesture_progress) <= 0.09
+			and not home.incoming_info.visible
+		),
+		"home_first_page_edge_damping"
+	)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 0 and home.active_motion_count() == 0,
+		"home_edge_returns_to_current"
+	)
+	var outgoing_name_start_x: float = home.theme_name.position.x
+	var incoming_name_start_x: float = incoming_theme_name.position.x
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.20, 1.0)
+	_check(
+		(
+			home.incoming_info.visible
+			and home.incoming_current_page_label.text == "02"
+			and home.theme_name.modulate.a < 1.0
+			and incoming_theme_name.modulate.a <= 0.01
+			and home.theme_name.position.x < outgoing_name_start_x
+			and incoming_theme_name.position.x > incoming_name_start_x
+		),
+		"home_information_leaves_before_incoming"
+	)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		(
+			home.debug_state_snapshot().selected_index == 0
+			and home.theme_name.modulate.a >= 0.99
+			and not home.incoming_info.visible
+		),
+		"home_drag_below_ratio_cancels"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.50, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.06).timeout
+	var settling_state: Dictionary = home.debug_state_snapshot()
+	home.debug_begin_drag()
+	var takeover_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			float(settling_state.gesture_progress) > 0.5
+			and is_equal_approx(
+				float(settling_state.gesture_offset), float(takeover_state.gesture_offset)
+			)
+		),
+		"home_reverse_gesture_takes_over_current_visual"
+	)
+	home.debug_drag(home.size.x * 0.80, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 0 and _changed_theme == "",
+		"home_reverse_gesture_returns_without_commit"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.25, 1.0)
+	_check(
+		(
+			is_equal_approx(float(home.debug_state_snapshot().gesture_progress), 0.25)
+			and home.theme_name.modulate.a > 0.0
+			and incoming_theme_name.modulate.a <= 0.01
+		),
+		"home_drag_quarter_state"
+	)
+	home.debug_drag(-home.size.x * 0.25, 1.0)
 	_check(
 		(
 			home.get_node("SafeArea/SafeContent/InfoIncoming").visible
 			and home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName").text.begins_with(
 				"A Second"
 			)
+			and home.theme_name.modulate.a <= 0.01
+			and incoming_theme_name.modulate.a > 0.1
+			and incoming_theme_name.modulate.a < 1.0
+			and home.incoming_current_page_label.text == "02"
 		),
-		"home_incoming_information"
+		"home_incoming_information_layers"
+	)
+	home.debug_drag(-home.size.x * 0.25, 1.0)
+	_check(
+		(
+			is_equal_approx(float(home.debug_state_snapshot().gesture_progress), 0.75)
+			and incoming_theme_name.modulate.a >= 0.99
+			and home.incoming_page_label.modulate.a > 0.0
+		),
+		"home_drag_three_quarter_state"
 	)
 	home.debug_end_drag()
 	await create_timer(0.35).timeout
@@ -303,13 +466,35 @@ func _run() -> void:
 		"home_drag_commits_once"
 	)
 	home.debug_begin_drag()
+	home.debug_drag(home.size.x * 0.10, 0.03)
+	home.debug_end_drag()
+	await create_timer(0.35).timeout
+	_check(
+		_changed_theme == "topic_01" and home.debug_state_snapshot().selected_index == 0,
+		"home_velocity_commits_below_ratio"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.30, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.35).timeout
+	_check(home.debug_state_snapshot().selected_index == 1, "home_restores_second_theme")
+	home.debug_begin_drag()
 	home.debug_drag(4.0, 0.05)
 	home.debug_end_drag()
 	await create_timer(0.40).timeout
 	_check(_activated_theme == "topic_02", "home_small_drag_activates")
 	home.set_reduced_motion(true)
+	var reduced_name_position: Vector2 = home.theme_name.position
+	var reduced_progress_position: Vector2 = home.progress.position
 	home.debug_begin_drag()
 	home.debug_drag(home.size.x * 0.30, 0.12)
+	_check(
+		(
+			home.theme_name.position.is_equal_approx(reduced_name_position)
+			and home.progress.position.is_equal_approx(reduced_progress_position)
+		),
+		"home_reduced_motion_disables_information_displacement"
+	)
 	home.debug_end_drag()
 	await create_timer(0.14).timeout
 	_check(

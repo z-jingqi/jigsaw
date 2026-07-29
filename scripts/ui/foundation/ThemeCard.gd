@@ -26,6 +26,10 @@ func source_rect() -> Rect2:
 	return get_global_rect()
 
 
+func source_texture() -> Texture2D:
+	return cover.texture
+
+
 func set_information_visible(is_visible: bool) -> void:
 	$Margin/Content.visible = is_visible
 
