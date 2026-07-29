@@ -63,10 +63,11 @@ func _run() -> void:
 	await create_timer(0.30).timeout
 	_check(progress.active_motion_count() == 0, "journey_motion_released")
 	progress.set_progress_data(_progress(5, 5, 1.0, 5, true))
-	_check(_visible_paws(progress) == 5, "journey_complete_paws")
+	_check(_visible_paws(progress) == 0, "journey_complete_hides_paws")
 	_check(
 		(
-			not progress.get_node("Journey/Fish").visible
+			not progress.get_node("Journey/Cat").visible
+			and not progress.get_node("Journey/Fish").visible
 			and progress.get_node("Journey/Completion").visible
 		),
 		"journey_complete_mark"

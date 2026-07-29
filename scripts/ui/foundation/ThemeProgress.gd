@@ -3,6 +3,8 @@ extends Control
 
 enum Variant { JOURNEY, NUMERIC_CARD }
 
+const COMPLETION_FISH_WIDTH_RATIO := 0.5
+
 @export var display_variant: Variant = Variant.JOURNEY
 @export var reduced_motion := false
 @export var motion_tokens: MotionTokens
@@ -48,7 +50,6 @@ func _render() -> void:
 	_stop_motion()
 	var completed := int(_read("completed_modes"))
 	var total := int(_read("total_modes"))
-	var ratio := clampf(float(_read("ratio")), 0.0, 1.0)
 	var paw_count := clampi(int(_read("paw_count")), 0, 5)
 	var is_complete := bool(_read("is_complete"))
 	journey.visible = display_variant == Variant.JOURNEY
@@ -87,26 +88,53 @@ func _render() -> void:
 		return
 	numeric_completion.visible = false
 	var width := maxf(1.0, journey.size.x)
-	var icon_size := minf(42.0, journey.size.y)
-	cat.size = Vector2(icon_size, icon_size)
+	var height := maxf(1.0, journey.size.y)
+	var cat_size := _fit_texture(cat.texture, height * 0.82)
+	var completion_size := _fit_texture(completion.texture, cat_size.y)
+	var fish_size := _fit_texture_width(
+		fish.texture, completion_size.x * COMPLETION_FISH_WIDTH_RATIO
+	)
+	cat.size = cat_size
+	fish.size = fish_size
+	completion.size = completion_size
+	var cat_y := maxf(0.0, (height - cat_size.y) * 0.5)
+	var ground_y := cat_y + cat_size.y
+	var fish_position := Vector2(
+		maxf(0.0, width - fish_size.x),
+		maxf(0.0, ground_y - fish_size.y),
+	)
+	var final_cat_x := maxf(0.0, fish_position.x - cat_size.x - height * 0.08)
+	var stage_progress := float(paw_count) / 5.0
 	var cat_target := Vector2(
-		(width - icon_size) * ratio, maxf(0.0, (journey.size.y - icon_size) * 0.5)
+		lerpf(0.0, final_cat_x, stage_progress),
+		cat_y,
 	)
 	if reduced_motion or not _has_rendered:
 		cat.position = cat_target
-	fish.size = Vector2(icon_size, icon_size)
-	fish.position = Vector2(width - icon_size, maxf(0.0, (journey.size.y - icon_size) * 0.5))
-	completion.size = Vector2(icon_size, icon_size)
-	completion.position = fish.position
+	fish.position = fish_position
+	completion.position = Vector2(
+		clampf(
+			final_cat_x + cat_size.x * 0.5 - completion_size.x * 0.5,
+			0.0,
+			maxf(0.0, width - completion_size.x),
+		),
+		maxf(0.0, ground_y - completion_size.y),
+	)
+	cat.visible = not is_complete
 	fish.visible = not is_complete
 	completion.visible = is_complete
 	for index in _paws.size():
 		var paw := _paws[index]
-		paw.visible = index < paw_count
-		paw.size = Vector2(18.0, 18.0)
-		var progress := float(index + 1) / 6.0
+		paw.visible = not is_complete and index < paw_count
+		var paw_size := height * 0.225
+		paw.size = Vector2(paw_size, paw_size)
+		paw.pivot_offset = paw.size * 0.5
+		paw.rotation = PI * 0.5
+		var trail_progress := float(index) / 5.0
+		var paw_stack_top := maxf(0.0, ground_y - paw_size * 2.0)
 		paw.position = Vector2(
-			(width - icon_size) * progress, journey.size.y * (0.20 if index % 2 == 0 else 0.56)
+			lerpf(0.0, final_cat_x, trail_progress),
+			paw_stack_top + (0.0 if index % 2 == 0 else paw_size),
 		)
 		if reduced_motion or not _has_rendered:
 			paw.scale = Vector2.ONE
@@ -179,3 +207,17 @@ func _read(field: String) -> Variant:
 	if _view_model is Dictionary:
 		return _view_model.get(field, 0)
 	return _view_model.get(field)
+
+
+func _fit_texture(texture: Texture2D, target_height: float) -> Vector2:
+	if texture == null or texture.get_height() <= 0:
+		return Vector2(target_height, target_height)
+	var aspect := float(texture.get_width()) / float(texture.get_height())
+	return Vector2(target_height * aspect, target_height)
+
+
+func _fit_texture_width(texture: Texture2D, target_width: float) -> Vector2:
+	if texture == null or texture.get_width() <= 0:
+		return Vector2(target_width, target_width)
+	var aspect := float(texture.get_width()) / float(texture.get_height())
+	return Vector2(target_width, target_width / aspect)

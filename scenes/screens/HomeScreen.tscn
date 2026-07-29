@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -7,6 +7,22 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/GlassPillButton.tscn" id="5_pill"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/jigcat-logo.webp" id="6_logo"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/icons/album.svg" id="7_album"]
+[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="8_title_font"]
+
+[sub_resource type="FontVariation" id="FontVariation_home_title"]
+base_font = ExtResource("8_title_font")
+variation_opentype = {&"wght": 900.0}
+variation_embolden = 0.85
+
+[sub_resource type="FontVariation" id="FontVariation_home_page"]
+base_font = ExtResource("8_title_font")
+variation_opentype = {&"wght": 900.0}
+variation_embolden = 1.05
+
+[sub_resource type="FontVariation" id="FontVariation_home_current_page"]
+base_font = ExtResource("8_title_font")
+variation_opentype = {&"wght": 900.0}
+variation_embolden = 1.4
 
 [sub_resource type="Animation" id="Animation_reset"]
 resource_name = "RESET"
@@ -175,6 +191,7 @@ mouse_filter = 0
 
 [node name="SafeArea" parent="." instance=ExtResource("2_safe")]
 layout_mode = 1
+compact_horizontal_margin = 32.0
 compact_breakpoint = 9999.0
 
 [node name="SafeContent" type="Control" parent="SafeArea"]
@@ -192,20 +209,21 @@ grow_horizontal = 2
 [node name="Logo" type="TextureRect" parent="SafeArea/SafeContent/Header"]
 layout_mode = 1
 anchors_preset = 0
-anchor_right = 0.52
-offset_bottom = 120.0
+offset_top = 8.0
+offset_right = 450.0
+offset_bottom = 136.0
 grow_horizontal = 2
 texture = ExtResource("6_logo")
 expand_mode = 1
-stretch_mode = 5
+stretch_mode = 4
 
 [node name="AlbumButton" parent="SafeArea/SafeContent/Header" instance=ExtResource("4_icon")]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -312.0
-offset_right = -168.0
+offset_left = -320.0
+offset_right = -176.0
 offset_bottom = 144.0
 grow_horizontal = 0
 icon_texture = ExtResource("7_album")
@@ -217,7 +235,8 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -144.0
+offset_left = -152.0
+offset_right = -8.0
 offset_bottom = 144.0
 grow_horizontal = 0
 text = ""
@@ -225,82 +244,115 @@ accessibility_label = "Settings"
 
 [node name="InfoPanel" type="Control" parent="SafeArea/SafeContent"]
 layout_mode = 1
-anchors_preset = 12
+anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_top = -420.0
-offset_right = 330.0
+offset_top = -359.0
+offset_right = 620.0
+offset_bottom = -59.0
 grow_vertical = 0
 
 [node name="ThemeName" type="Label" parent="SafeArea/SafeContent/InfoPanel"]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 82.0
-theme_override_colors/font_color = Color(1, 0.956863, 0.862745, 1)
-theme_override_colors/font_outline_color = Color(0.227451, 0.12549, 0.0588235, 0.65)
-theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 58
+offset_bottom = 150.0
+theme_override_colors/font_color = Color(0.419608, 0.207843, 0.121569, 1)
+theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
+theme_override_constants/outline_size = 5
+theme_override_fonts/font = SubResource("FontVariation_home_title")
+theme_override_font_sizes/font_size = 68
+vertical_alignment = 2
 autowrap_mode = 2
 
 [node name="ThemeProgress" parent="SafeArea/SafeContent/InfoPanel" instance=ExtResource("3_progress")]
-visible = false
 layout_mode = 1
-anchors_preset = 12
+anchors_preset = 2
 anchor_top = 1.0
+anchor_right = 0.0
 anchor_bottom = 1.0
-offset_top = -50.0
-offset_right = 208.0
+offset_top = -150.0
+offset_right = 427.0
 grow_vertical = 0
 
 [node name="InfoIncoming" type="Control" parent="SafeArea/SafeContent"]
 visible = false
 layout_mode = 1
-anchors_preset = 12
+anchors_preset = 2
 anchor_top = 1.0
+anchor_right = 0.0
 anchor_bottom = 1.0
-offset_top = -420.0
-offset_right = 330.0
+offset_top = -359.0
+offset_right = 620.0
+offset_bottom = -59.0
 grow_vertical = 0
 
 [node name="ThemeName" type="Label" parent="SafeArea/SafeContent/InfoIncoming"]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 82.0
-theme_override_colors/font_color = Color(1, 0.956863, 0.862745, 1)
-theme_override_colors/font_outline_color = Color(0.227451, 0.12549, 0.0588235, 0.65)
-theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 58
+offset_bottom = 150.0
+theme_override_colors/font_color = Color(0.419608, 0.207843, 0.121569, 1)
+theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
+theme_override_constants/outline_size = 5
+theme_override_fonts/font = SubResource("FontVariation_home_title")
+theme_override_font_sizes/font_size = 68
+vertical_alignment = 2
 autowrap_mode = 2
 
 [node name="ThemeProgress" parent="SafeArea/SafeContent/InfoIncoming" instance=ExtResource("3_progress")]
-visible = false
 layout_mode = 1
-anchors_preset = 12
+anchors_preset = 2
 anchor_top = 1.0
+anchor_right = 0.0
 anchor_bottom = 1.0
-offset_top = -50.0
-offset_right = 208.0
+offset_top = -150.0
+offset_right = 427.0
 grow_vertical = 0
 
-[node name="PageLabel" type="Label" parent="SafeArea/SafeContent"]
+[node name="PageLabel" type="Control" parent="SafeArea/SafeContent"]
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -240.0
-offset_top = -420.0
-offset_bottom = -340.0
+offset_left = -260.0
+offset_top = -280.0
+offset_bottom = -208.0
 grow_horizontal = 0
 grow_vertical = 0
-theme_override_colors/font_color = Color(1, 0.956863, 0.862745, 1)
-theme_override_colors/font_outline_color = Color(0.227451, 0.12549, 0.0588235, 0.65)
+mouse_filter = 2
+
+[node name="PageRow" type="HBoxContainer" parent="SafeArea/SafeContent/PageLabel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
+alignment = 2
+mouse_filter = 2
+
+[node name="CurrentPage" type="Label" parent="SafeArea/SafeContent/PageLabel/PageRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94902, 0.541176, 0.439216, 1)
+theme_override_colors/font_outline_color = Color(0.301961, 0.137255, 0.0627451, 0.82)
 theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 36
-horizontal_alignment = 2
+theme_override_fonts/font = SubResource("FontVariation_home_current_page")
+theme_override_font_sizes/font_size = 46
+text = "01"
+vertical_alignment = 1
+
+[node name="TotalPage" type="Label" parent="SafeArea/SafeContent/PageLabel/PageRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.419608, 0.207843, 0.121569, 1)
+theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = SubResource("FontVariation_home_page")
+theme_override_font_sizes/font_size = 44
+text = " / 04"
 vertical_alignment = 1
 
 [node name="AllThemesButton" parent="SafeArea/SafeContent" instance=ExtResource("5_pill")]
@@ -315,8 +367,10 @@ offset_top = -192.0
 offset_bottom = -72.0
 grow_horizontal = 0
 grow_vertical = 0
-text = "All themes"
-accessibility_label = "All themes"
+theme_override_fonts/font = SubResource("FontVariation_home_title")
+theme_override_font_sizes/font_size = 44
+text = "全部主题"
+accessibility_label = "全部主题"
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {&"": SubResource("AnimationLibrary_home")}
