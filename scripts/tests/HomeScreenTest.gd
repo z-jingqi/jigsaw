@@ -438,6 +438,7 @@ func _run() -> void:
 				home.previous_cover.position.x + home.previous_cover.size.x
 				> home.current_cover.position.x
 			)
+			and home.previous_cover.get_index() > home.current_cover.get_index()
 			and (
 				float(
 					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
@@ -457,6 +458,9 @@ func _run() -> void:
 	_check(
 		(
 			home.active_motion_count() == 0
+			and home.previous_cover.get_index() == 0
+			and home.current_cover.get_index() == 1
+			and home.next_cover.get_index() == 2
 			and is_equal_approx(
 				float(
 					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(

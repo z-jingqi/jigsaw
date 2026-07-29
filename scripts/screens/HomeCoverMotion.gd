@@ -31,6 +31,7 @@ func apply(direction: int, progress: float, reduced_motion := false) -> void:
 	var amount := clampf(progress, 0.0, 1.0)
 	var incoming := _next if direction > 0 else _previous
 	var incoming_material := _next_material if direction > 0 else _previous_material
+	incoming.get_parent().move_child(incoming, incoming.get_parent().get_child_count() - 1)
 	incoming_material.set_shader_parameter(&"edge_direction", float(direction))
 	incoming_material.set_shader_parameter(&"feather_width", overlap_ratio(amount))
 	if not reduced_motion:
@@ -43,6 +44,10 @@ func reset() -> void:
 	for cover in [_previous, _current, _next]:
 		cover.scale = Vector2.ONE
 		cover.modulate.a = 1.0
+	var cover_parent := _current.get_parent()
+	cover_parent.move_child(_previous, 0)
+	cover_parent.move_child(_current, 1)
+	cover_parent.move_child(_next, 2)
 	for crossfade_material in [_previous_material, _next_material]:
 		crossfade_material.set_shader_parameter(&"edge_direction", 0.0)
 		crossfade_material.set_shader_parameter(&"feather_width", 0.001)
