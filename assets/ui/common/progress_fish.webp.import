@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://m0vuj5gg4tn1"
-path="res://.godot/imported/progress_cat.svg-3bf3271b31e0ba84d82bb59ba10b5d77.ctex"
+uid="uid://cjxbu1f5p37qr"
+path="res://.godot/imported/progress_fish.webp-890ce6e600e8a39c1d42c1461e130d6b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/common/progress_cat.svg"
-dest_files=["res://.godot/imported/progress_cat.svg-3bf3271b31e0ba84d82bb59ba10b5d77.ctex"]
+source_file="res://assets/ui/common/progress_fish.webp"
+dest_files=["res://.godot/imported/progress_fish.webp-890ce6e600e8a39c1d42c1461e130d6b.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

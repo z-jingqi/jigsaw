@@ -1,10 +1,10 @@
 [gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/foundation/ThemeProgress.gd" id="1_progress"]
-[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat.svg" id="2_cat"]
-[ext_resource type="Texture2D" path="res://assets/ui/common/progress_fish.svg" id="3_fish"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat.webp" id="2_cat"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_fish.webp" id="3_fish"]
 [ext_resource type="Texture2D" path="res://assets/ui/common/progress_paw.svg" id="4_paw"]
-[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat_fish.svg" id="5_complete"]
+[ext_resource type="Texture2D" path="res://assets/ui/common/progress_cat_fish.webp" id="5_complete"]
 
 [node name="ThemeProgress" type="Control"]
 custom_minimum_size = Vector2(208, 48)

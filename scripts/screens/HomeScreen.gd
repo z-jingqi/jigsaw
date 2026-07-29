@@ -25,7 +25,9 @@ const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
 @onready var incoming_info: Control = $SafeArea/SafeContent/InfoIncoming
 @onready var incoming_name: Label = $SafeArea/SafeContent/InfoIncoming/ThemeName
 @onready var incoming_progress: ThemeProgress = $SafeArea/SafeContent/InfoIncoming/ThemeProgress
-@onready var page_label: Label = $SafeArea/SafeContent/PageLabel
+@onready var page_label: Control = $SafeArea/SafeContent/PageLabel
+@onready var current_page_label: Label = $SafeArea/SafeContent/PageLabel/PageRow/CurrentPage
+@onready var total_page_label: Label = $SafeArea/SafeContent/PageLabel/PageRow/TotalPage
 @onready var all_themes_button: Button = $SafeArea/SafeContent/AllThemesButton
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 
@@ -75,6 +77,7 @@ func navigation_set_active(is_active: bool) -> void:
 func set_reduced_motion(enabled: bool) -> void:
 	set_meta("reduced_motion", enabled)
 	progress.reduced_motion = enabled
+	incoming_progress.reduced_motion = enabled
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -140,7 +143,7 @@ func debug_end_drag() -> void:
 func _apply_selected_theme(animate_information: bool) -> void:
 	if _themes.is_empty():
 		theme_name.text = ""
-		page_label.text = "0 / 0"
+		_set_page_number(0, 0)
 		return
 	var selected = _themes[_selected_index]
 	_set_information(info_panel, theme_name, progress, selected)
@@ -152,7 +155,7 @@ func _apply_selected_theme(animate_information: bool) -> void:
 			else ThemeTokenResource.TextVariant.ON_LIGHT
 		)
 	)
-	page_label.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
+	_set_page_number(_selected_index + 1, _themes.size())
 	_set_cover(previous_cover, _theme_at(_selected_index - 1))
 	_set_cover(current_cover, selected)
 	_set_cover(next_cover, _theme_at(_selected_index + 1))
@@ -250,6 +253,14 @@ func _set_information(
 	panel.position.x = 0.0
 	name_label.text = str(theme_model.title)
 	theme_progress.set_view_model(theme_model.progress)
+
+
+func _set_page_number(current: int, total: int) -> void:
+	current_page_label.text = "%02d" % current
+	total_page_label.text = " / %02d" % total
+	var semantic_text := "%02d / %02d" % [current, total]
+	page_label.tooltip_text = semantic_text
+	page_label.set_meta("accessibility_name", semantic_text)
 
 
 func _on_gesture_input(event: InputEvent) -> void:

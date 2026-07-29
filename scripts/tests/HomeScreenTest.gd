@@ -29,6 +29,8 @@ func _run() -> void:
 	var album_button: Button = home.get_node("SafeArea/SafeContent/Header/AlbumButton")
 	var menu_button: Button = home.get_node("SafeArea/SafeContent/Header/MenuButton")
 	var all_themes_button: Button = home.get_node("SafeArea/SafeContent/AllThemesButton")
+	var page_label := home.get_node("SafeArea/SafeContent/PageLabel") as Control
+	var incoming_theme_name := home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName") as Label
 	_check(logo.texture != null, "home_logo_texture")
 	_check(is_equal_approx(safe_area.compact_breakpoint, 9999.0), "home_phone_safe_area_width")
 	_check(album_button.get_script() == GlassButtonScript, "home_album_glass_button")
@@ -45,7 +47,7 @@ func _run() -> void:
 	_check(
 		(
 			album_button.get_theme_font_size(&"font_size") == 18
-			and all_themes_button.get_theme_font_size(&"font_size") == 42
+			and all_themes_button.get_theme_font_size(&"font_size") == 44
 		),
 		"home_glass_button_text_scale"
 	)
@@ -81,14 +83,204 @@ func _run() -> void:
 	)
 	_check(
 		(
-			not home.get_node("SafeArea/SafeContent/InfoPanel/ThemeProgress").visible
-			and not home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeProgress").visible
+			home.get_node("SafeArea/SafeContent/InfoPanel/ThemeProgress").visible
+			and not home.get_node("SafeArea/SafeContent/InfoIncoming").visible
 		),
-		"home_progress_deferred"
+		"home_progress_visible"
 	)
+	var home_progress := (
+		home.get_node("SafeArea/SafeContent/InfoPanel/ThemeProgress") as ThemeProgress
+	)
+	var progress_cat := home_progress.get_node("Journey/Cat") as TextureRect
+	var progress_fish := home_progress.get_node("Journey/Fish") as TextureRect
+	var progress_completion := home_progress.get_node("Journey/Completion") as TextureRect
+	var first_paw := home_progress.get_node("Journey/Paws/Paw1") as TextureRect
+	var title_font: Font = home.theme_name.get_theme_font(&"font")
+	_check(
+		(
+			home_progress.size.x <= 440.0
+			and progress_fish.position.x + progress_fish.size.x <= home_progress.size.x + 0.5
+		),
+		"home_progress_stays_in_left_column"
+	)
+	_check(
+		(
+			absf(progress_fish.size.x - progress_completion.size.x * 0.5) <= 0.5
+			and absf(progress_completion.size.y - progress_cat.size.y) <= 0.5
+			and title_font is FontVariation
+			and float((title_font as FontVariation).variation_opentype.get(&"wght", 0.0)) >= 900.0
+			and (title_font as FontVariation).variation_embolden >= 0.8
+		),
+		"home_progress_fish_scale_and_title_weight"
+	)
+	_check(
+		(
+			absf(
+				(
+					(progress_fish.position.y + progress_fish.size.y)
+					- (progress_cat.position.y + progress_cat.size.y)
+				)
+			)
+			<= 0.5
+		),
+		"home_progress_cat_and_fish_share_ground"
+	)
+	_check(
+		(
+			absf(progress_cat.get_global_rect().end.y - all_themes_button.get_global_rect().end.y)
+			<= 1.0
+		),
+		"home_progress_ground_aligns_all_themes_bottom"
+	)
+	var page_button_gap := (
+		all_themes_button.get_global_rect().position.y - page_label.get_global_rect().end.y
+	)
+	_check(
+		(
+			home.theme_name.vertical_alignment == VERTICAL_ALIGNMENT_BOTTOM
+			and incoming_theme_name.vertical_alignment == VERTICAL_ALIGNMENT_BOTTOM
+			and page_button_gap >= 12.0
+			and page_button_gap <= 20.0
+		),
+		"home_bottom_information_grid"
+	)
+	_check(
+		(
+			first_paw.visible
+			and first_paw.position.x + first_paw.size.x <= progress_cat.position.x + 0.5
+		),
+		"home_progress_paw_trails_cat"
+	)
+	home_progress.reduced_motion = true
+	(
+		home_progress
+		. set_progress_data(
+			{
+				"completed_modes": 4,
+				"total_modes": 5,
+				"ratio": 0.8,
+				"paw_count": 4,
+				"is_complete": false,
+				"accessibility_text": "4 / 5",
+			}
+		)
+	)
+	var second_paw := home_progress.get_node("Journey/Paws/Paw2") as TextureRect
+	var column_gap := second_paw.position.x - (first_paw.position.x + first_paw.size.x)
+	_check(
+		(
+			absf(second_paw.position.y - (first_paw.position.y + first_paw.size.y)) <= 0.5
+			and (
+				absf(
+					(
+						(second_paw.position.y + second_paw.size.y)
+						- (progress_cat.position.y + progress_cat.size.y)
+					)
+				)
+				<= 0.5
+			)
+			and column_gap >= 9.0
+			and column_gap <= 12.0
+		),
+		"home_progress_paws_compact_grid"
+	)
+	var cat_center_80 := progress_cat.position.x + progress_cat.size.x * 0.5
+	(
+		home_progress
+		. set_progress_data(
+			{
+				"completed_modes": 90,
+				"total_modes": 100,
+				"ratio": 0.9,
+				"paw_count": 5,
+				"is_complete": false,
+				"accessibility_text": "90 / 100",
+			}
+		)
+	)
+	var fifth_paw := home_progress.get_node("Journey/Paws/Paw5") as TextureRect
+	var fifth_paw_gap := progress_cat.position.x - (fifth_paw.position.x + fifth_paw.size.x)
+	_check(
+		fifth_paw.visible and fifth_paw_gap >= 9.0 and fifth_paw_gap <= 12.0,
+		"home_progress_fifth_paw_slot"
+	)
+	(
+		home_progress
+		. set_progress_data(
+			{
+				"completed_modes": 3,
+				"total_modes": 5,
+				"ratio": 0.6,
+				"paw_count": 3,
+				"is_complete": false,
+				"accessibility_text": "3 / 5",
+			}
+		)
+	)
+	var cat_center_60 := progress_cat.position.x + progress_cat.size.x * 0.5
+	(
+		home_progress
+		. set_progress_data(
+			{
+				"completed_modes": 5,
+				"total_modes": 5,
+				"ratio": 1.0,
+				"paw_count": 5,
+				"is_complete": true,
+				"accessibility_text": "5 / 5",
+			}
+		)
+	)
+	var completion_center_100 := progress_completion.position.x + progress_completion.size.x * 0.5
+	_check(
+		(
+			absf((completion_center_100 - cat_center_80) - (cat_center_80 - cat_center_60)) <= 0.5
+			and (
+				absf(
+					(
+						(progress_completion.position.y + progress_completion.size.y)
+						- (progress_cat.position.y + progress_cat.size.y)
+					)
+				)
+				<= 0.5
+			)
+		),
+		"home_progress_completion_keeps_scale_ground_and_step"
+	)
+	(
+		home_progress
+		. set_progress_data(
+			{
+				"completed_modes": 1,
+				"total_modes": 5,
+				"ratio": 0.2,
+				"paw_count": 1,
+				"is_complete": false,
+				"accessibility_text": "1 / 5",
+			}
+		)
+	)
+	home_progress.reduced_motion = false
 	album_button.pressed.emit()
 	_check(_album_requested, "home_album_action_exposed")
-	_check(home.get_node("SafeArea/SafeContent/PageLabel").text == "01 / 02", "home_initial_page")
+	var current_page := home.get_node("SafeArea/SafeContent/PageLabel/PageRow/CurrentPage") as Label
+	var total_page := home.get_node("SafeArea/SafeContent/PageLabel/PageRow/TotalPage") as Label
+	var current_page_font := current_page.get_theme_font(&"font") as FontVariation
+	var total_page_font := total_page.get_theme_font(&"font") as FontVariation
+	_check(
+		(
+			current_page.text == "01"
+			and total_page.text == " / 02"
+			and current_page.get_theme_color(&"font_color").is_equal_approx(Color("F28A70"))
+			and all_themes_button.text == "全部主题"
+			and current_page.get_theme_font_size(&"font_size") == 46
+			and total_page.get_theme_font_size(&"font_size") == 44
+			and current_page_font.variation_embolden >= 1.3
+			and total_page_font.variation_embolden >= 1.0
+			and current_page_font.variation_embolden > total_page_font.variation_embolden
+		),
+		"home_initial_page"
+	)
 	_check(home.get_node("CoverSlots/Current").texture != null, "home_current_cover")
 	home.play_cold_entry()
 	await create_timer(1.10).timeout
@@ -107,10 +299,7 @@ func _run() -> void:
 	home.debug_end_drag()
 	await create_timer(0.35).timeout
 	_check(
-		(
-			_changed_theme == "topic_02"
-			and home.get_node("SafeArea/SafeContent/PageLabel").text == "02 / 02"
-		),
+		_changed_theme == "topic_02" and current_page.text == "02" and total_page.text == " / 02",
 		"home_drag_commits_once"
 	)
 	home.debug_begin_drag()
