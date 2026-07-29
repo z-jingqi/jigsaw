@@ -120,8 +120,9 @@ func _render() -> void:
 		),
 		maxf(0.0, ground_y - completion_size.y),
 	)
-	cat.visible = not is_complete
-	fish.visible = not is_complete
+	var completing_now := is_complete and not _last_is_complete and _has_rendered
+	cat.visible = not is_complete or completing_now
+	fish.visible = not is_complete or completing_now
 	completion.visible = is_complete
 	cat.modulate.a = 1.0
 	fish.modulate.a = 1.0
@@ -150,15 +151,32 @@ func _render() -> void:
 			var paw := _paws[index]
 			if index >= _last_paw_count:
 				paw.scale = Vector2(0.8, 0.8)
+				paw.modulate.a = 0.0
 				paw.pivot_offset = paw.size * 0.5
 				_motion.parallel().tween_property(
 					paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration
 				)
-		if is_complete and not _last_is_complete:
+				_motion.parallel().tween_property(
+					paw, "modulate:a", 1.0, motion_tokens.progress_paw_duration
+				)
+		if completing_now:
+			completion.modulate.a = 0.0
 			completion.scale = Vector2(0.94, 0.94)
 			completion.pivot_offset = completion.size * 0.5
 			_motion.parallel().tween_property(
 				completion, "scale", Vector2.ONE, motion_tokens.progress_completion_duration
+			)
+			_motion.parallel().tween_property(
+				completion, "modulate:a", 1.0, motion_tokens.progress_completion_duration
+			)
+			_motion.parallel().tween_property(
+				cat, "modulate:a", 0.0, motion_tokens.progress_completion_duration
+			)
+			_motion.parallel().tween_property(
+				fish, "modulate:a", 0.0, motion_tokens.progress_completion_duration
+			)
+			_motion.parallel().tween_callback(_finish_completion_transition).set_delay(
+				motion_tokens.progress_completion_duration
 			)
 	else:
 		completion.scale = Vector2.ONE
@@ -252,6 +270,13 @@ func _stop_motion() -> void:
 	if _motion != null and _motion.is_valid():
 		_motion.kill()
 	_motion = null
+
+
+func _finish_completion_transition() -> void:
+	cat.visible = false
+	fish.visible = false
+	cat.modulate.a = 1.0
+	fish.modulate.a = 1.0
 
 
 func _exit_tree() -> void:

@@ -21,6 +21,9 @@ var _dragging := false
 var _active := false
 var _last_usec := 0
 var _tween: Tween
+var _visual_direction := 0
+var _visual_progress := 0.0
+var _visual_offset := 0.0
 
 
 func _init(host: Control, tokens: MotionTokens) -> void:
@@ -39,13 +42,21 @@ func configure(page_count: int, selected_index: int, page_width: float) -> void:
 func begin() -> void:
 	if _page_count <= 0:
 		return
+	var takeover_offset := _visual_offset
 	cancel_motion()
-	drag_updated.emit(0, 0.0, 0.0)
 	_active = true
-	_dragging = false
-	_drag_total = 0.0
+	_drag_total = takeover_offset
+	_dragging = absf(takeover_offset) > CLICK_THRESHOLD
 	_velocity = 0.0
 	_last_usec = Time.get_ticks_usec()
+	if _dragging:
+		_emit_visual(
+			_direction_from_offset(takeover_offset),
+			clampf(absf(takeover_offset) / _page_width, 0.0, 1.0),
+			takeover_offset
+		)
+	else:
+		_emit_visual(0, 0.0, 0.0)
 
 
 func drag_by(delta_x: float, elapsed_override := -1.0) -> void:
@@ -70,7 +81,7 @@ func drag_by(delta_x: float, elapsed_override := -1.0) -> void:
 	):
 		raw_offset *= EDGE_DAMPING
 	var progress := clampf(absf(raw_offset) / _page_width, 0.0, 1.0)
-	drag_updated.emit(direction, progress, raw_offset)
+	_emit_visual(direction, progress, raw_offset)
 
 
 func end() -> void:
@@ -95,12 +106,31 @@ func cancel_to_current() -> void:
 	_settle(0)
 
 
+func finish_to_current() -> void:
+	var had_visual_state := (
+		_active or _tween != null or _visual_progress > 0.0 or not is_zero_approx(_visual_offset)
+	)
+	cancel_motion()
+	_reset_gesture()
+	_reset_visual()
+	if had_visual_state:
+		page_settled.emit(_current_index, false)
+
+
 func current_index() -> int:
 	return _current_index
 
 
 func is_dragging() -> bool:
 	return _dragging
+
+
+func gesture_progress() -> float:
+	return _visual_progress
+
+
+func gesture_offset() -> float:
+	return _visual_offset
 
 
 func active_motion_count() -> int:
@@ -122,8 +152,8 @@ func _settle(direction: int) -> void:
 		if _tokens == null or _is_reduced()
 		else (_tokens.page_duration if committed else 0.22)
 	)
-	var start_progress := clampf(absf(_drag_total) / _page_width, 0.0, 1.0)
-	var visual_direction := direction if direction != 0 else _direction_from_offset(_drag_total)
+	var start_progress := _visual_progress
+	var visual_direction := direction if direction != 0 else _visual_direction
 	if duration <= 0.0:
 		_complete_settle(direction, committed)
 		return
@@ -131,9 +161,7 @@ func _settle(direction: int) -> void:
 	_tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 	_tween.tween_method(
 		func(value: float) -> void:
-			drag_updated.emit(
-				visual_direction, value, -float(visual_direction) * value * _page_width
-			),
+			_emit_visual(visual_direction, value, -float(visual_direction) * value * _page_width),
 		start_progress,
 		target_progress,
 		duration
@@ -146,6 +174,7 @@ func _complete_settle(direction: int, committed: bool) -> void:
 	if committed:
 		_current_index += direction
 	_reset_gesture()
+	_reset_visual()
 	page_settled.emit(_current_index, committed)
 
 
@@ -164,6 +193,19 @@ func _reset_gesture() -> void:
 	_velocity = 0.0
 	_dragging = false
 	_active = false
+
+
+func _emit_visual(direction: int, progress: float, offset: float) -> void:
+	_visual_direction = direction
+	_visual_progress = progress
+	_visual_offset = offset
+	drag_updated.emit(direction, progress, offset)
+
+
+func _reset_visual() -> void:
+	_visual_direction = 0
+	_visual_progress = 0.0
+	_visual_offset = 0.0
 
 
 func _is_reduced() -> bool:

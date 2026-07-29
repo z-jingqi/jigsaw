@@ -66,6 +66,15 @@ func _run() -> void:
 	_check(_visible_paws(progress) == 0, "journey_complete_hides_paws")
 	_check(
 		(
+			progress.get_node("Journey/Cat").visible
+			and progress.get_node("Journey/Fish").visible
+			and progress.get_node("Journey/Completion").visible
+		),
+		"journey_completion_crossfade_starts"
+	)
+	await create_timer(0.18).timeout
+	_check(
+		(
 			not progress.get_node("Journey/Cat").visible
 			and not progress.get_node("Journey/Fish").visible
 			and progress.get_node("Journey/Completion").visible
