@@ -33,6 +33,7 @@ func _run() -> void:
 	var header := home.get_node("SafeArea/SafeContent/Header") as Control
 	var page_label := home.get_node("SafeArea/SafeContent/PageLabel") as Control
 	var incoming_theme_name := home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName") as Label
+	var gesture_catcher := home.get_node("GestureCatcher") as Control
 	_check(logo.texture != null, "home_logo_texture")
 	_check(is_equal_approx(safe_area.compact_breakpoint, 9999.0), "home_phone_safe_area_width")
 	_check(album_button.get_script() == GlassButtonScript, "home_album_glass_button")
@@ -52,6 +53,16 @@ func _run() -> void:
 			and all_themes_button.get_theme_font_size(&"font_size") == 44
 		),
 		"home_glass_button_text_scale"
+	)
+	_check(
+		(
+			gesture_catcher.mouse_filter == Control.MOUSE_FILTER_STOP
+			and safe_area.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and header.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and logo.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and home.info_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		),
+		"home_passive_layers_do_not_block_pointer_paging"
 	)
 	_check(
 		(
@@ -312,6 +323,45 @@ func _run() -> void:
 		),
 		"home_cold_entry_settled"
 	)
+	var drag_down := InputEventMouseButton.new()
+	drag_down.button_index = MOUSE_BUTTON_LEFT
+	drag_down.pressed = true
+	drag_down.position = home.size * Vector2(0.5, 0.4)
+	Input.parse_input_event(drag_down)
+	var drag_motion := InputEventMouseMotion.new()
+	drag_motion.position = drag_down.position - Vector2(home.size.x * 0.30, 0.0)
+	drag_motion.relative = Vector2(-home.size.x * 0.30, 0.0)
+	drag_motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	Input.parse_input_event(drag_motion)
+	await process_frame
+	_check(
+		float(home.debug_state_snapshot().gesture_progress) >= 0.29, "home_mouse_drag_reaches_pager"
+	)
+	var drag_up := InputEventMouseButton.new()
+	drag_up.button_index = MOUSE_BUTTON_LEFT
+	drag_up.pressed = false
+	drag_up.position = drag_motion.position
+	Input.parse_input_event(drag_up)
+	await create_timer(0.32).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 1 and _activated_theme.is_empty(),
+		"home_mouse_drag_commits_without_activation"
+	)
+	home.set_view_model(_home_view_model())
+	_changed_theme = ""
+	var click_down := InputEventMouseButton.new()
+	click_down.button_index = MOUSE_BUTTON_LEFT
+	click_down.pressed = true
+	click_down.position = home.size * Vector2(0.5, 0.4)
+	Input.parse_input_event(click_down)
+	var click_up := InputEventMouseButton.new()
+	click_up.button_index = MOUSE_BUTTON_LEFT
+	click_up.pressed = false
+	click_up.position = click_down.position
+	Input.parse_input_event(click_up)
+	await create_timer(0.14).timeout
+	_check(_activated_theme == "topic_01", "home_mouse_click_activates")
+	_activated_theme = ""
 	var pointer_down := InputEventMouseButton.new()
 	pointer_down.button_index = MOUSE_BUTTON_LEFT
 	pointer_down.pressed = true

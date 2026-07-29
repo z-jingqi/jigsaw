@@ -16,7 +16,6 @@ const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
 @onready var previous_cover: TextureRect = $CoverSlots/Previous
 @onready var current_cover: TextureRect = $CoverSlots/Current
 @onready var next_cover: TextureRect = $CoverSlots/Next
-@onready var gesture_catcher: Control = $GestureCatcher
 @onready var logo: TextureRect = $SafeArea/SafeContent/Header/Logo
 @onready var album_button: Button = $SafeArea/SafeContent/Header/AlbumButton
 @onready var menu_button: Button = $SafeArea/SafeContent/Header/MenuButton
@@ -45,6 +44,7 @@ var _incoming_index := -1
 var _first_entry_played := false
 var _entry_interaction_ready := true
 var _transitioning_to_levels := false
+var _pointer_gesture_active := false
 
 
 func _ready() -> void:
@@ -52,7 +52,6 @@ func _ready() -> void:
 	_pager.drag_updated.connect(_on_pager_drag_updated)
 	_pager.page_settled.connect(_on_pager_settled)
 	_pager.activation_requested.connect(_on_pager_activation_requested)
-	gesture_catcher.gui_input.connect(_on_gesture_input)
 	album_button.pressed.connect(album_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	all_themes_button.pressed.connect(all_themes_requested.emit)
@@ -81,6 +80,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	_pointer_gesture_active = false
 	if _pager != null:
 		_pager.finish_to_current()
 	_cancel_button_motion()
@@ -90,7 +90,9 @@ func navigation_exit(_context: Dictionary) -> void:
 func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
+	set_process_input(is_active)
 	if not is_active and _pager != null:
+		_pointer_gesture_active = false
 		_pager.finish_to_current()
 	if not is_active:
 		_cancel_button_motion()
@@ -314,30 +316,52 @@ func _set_incoming_page_number(current: int, total: int) -> void:
 	incoming_page_label.set_meta("accessibility_name", semantic_text)
 
 
-func _on_gesture_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if _transitioning_to_levels or _pager == null:
 		return
-	if not _entry_interaction_ready:
-		_finish_cold_entry()
-		return
-	if animation_player.is_playing() or progress.active_motion_count() > 0:
-		_finish_cold_entry()
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
-		if mouse.button_index == MOUSE_BUTTON_LEFT:
-			if mouse.pressed:
-				_pager.begin()
-			else:
-				_pager.end()
-	elif event is InputEventMouseMotion:
+		if mouse.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mouse.pressed:
+			if _is_fixed_action_at(mouse.position):
+				return
+			_begin_pointer_gesture()
+		elif _pointer_gesture_active:
+			_end_pointer_gesture()
+	elif event is InputEventMouseMotion and _pointer_gesture_active:
 		_pager.drag_by((event as InputEventMouseMotion).relative.x)
 	elif event is InputEventScreenTouch:
-		if (event as InputEventScreenTouch).pressed:
-			_pager.begin()
-		else:
-			_pager.end()
-	elif event is InputEventScreenDrag:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			if _is_fixed_action_at(touch.position):
+				return
+			_begin_pointer_gesture()
+		elif _pointer_gesture_active:
+			_end_pointer_gesture()
+	elif event is InputEventScreenDrag and _pointer_gesture_active:
 		_pager.drag_by((event as InputEventScreenDrag).relative.x)
+
+
+func _begin_pointer_gesture() -> void:
+	if not _entry_interaction_ready:
+		_finish_cold_entry()
+	elif animation_player.is_playing() or progress.active_motion_count() > 0:
+		_finish_cold_entry()
+	_pointer_gesture_active = true
+	_pager.begin()
+
+
+func _end_pointer_gesture() -> void:
+	_pointer_gesture_active = false
+	_pager.end()
+
+
+func _is_fixed_action_at(viewport_position: Vector2) -> bool:
+	for action in [album_button, menu_button, all_themes_button]:
+		if action.visible and action.get_global_rect().has_point(viewport_position):
+			return true
+	return false
 
 
 func _on_resized() -> void:
