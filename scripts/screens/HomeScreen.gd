@@ -273,12 +273,20 @@ func _on_pager_activation_requested() -> void:
 	if not bool(get_meta("reduced_motion", false)):
 		var tween := create_tween().set_parallel(true)
 		tween.tween_property(
-			current_cover, "scale", Vector2(1.03, 1.03), MotionTokenResource.home_to_levels_duration
+			current_cover, "scale", Vector2(1.01, 1.01), MotionTokenResource.press_duration
 		)
-		tween.tween_property(current_cover, "modulate:a", 0.82, MotionTokenResource.press_duration)
+		tween.tween_property(current_cover, "modulate:a", 0.92, MotionTokenResource.press_duration)
 		await tween.finished
 	theme_activated.emit(str(_themes[_selected_index].theme_id))
 	_transitioning_to_levels = false
+
+
+func transition_source_rect() -> Rect2:
+	return current_cover.get_global_rect()
+
+
+func transition_source_texture() -> Texture2D:
+	return current_cover.texture
 
 
 func _set_information(
@@ -360,6 +368,8 @@ func _cancel_button_motion() -> void:
 	album_button.cancel_motion()
 	menu_button.cancel_motion()
 	all_themes_button.cancel_motion()
+	current_cover.scale = Vector2.ONE
+	current_cover.modulate.a = 1.0
 
 
 func _on_fixed_action_started() -> void:

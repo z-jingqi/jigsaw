@@ -89,17 +89,21 @@ func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	var entry: Dictionary = built.entry
 	var previous: Dictionary = _screen_stack.back()
 	var transition_kind := _transition_kind(route)
-	_set_entry_active(previous, false)
+	_set_entry_transition_background(previous)
 	_add_screen_entry(entry)
 	_screen_stack.append(entry)
 	var transaction: Variant = NavigationTransactionScript.new(
-		func() -> void: _emit_route_changed(),
+		func() -> void:
+			_set_entry_active(previous, false)
+			_emit_route_changed(),
 		func() -> void:
 			_screen_stack.pop_back()
 			_free_entry(entry)
 			_set_entry_active(previous, true)
 	)
-	_begin_transition(transaction, transition_kind, "push")
+	_begin_transition(
+		transaction, transition_kind, "push", previous.get("view"), entry.get("view"), payload
+	)
 	return _success(route)
 
 
@@ -115,7 +119,7 @@ func replace(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	var entry: Dictionary = built.entry
 	var transition_kind := _transition_kind(route)
 	var previous: Dictionary = _screen_stack.pop_back()
-	_set_entry_active(previous, false)
+	_set_entry_transition_background(previous)
 	_add_screen_entry(entry)
 	_screen_stack.append(entry)
 	var transaction: Variant = NavigationTransactionScript.new(
@@ -128,7 +132,9 @@ func replace(route: StringName, payload: Dictionary = {}) -> Dictionary:
 			_screen_stack.append(previous)
 			_set_entry_active(previous, true)
 	)
-	_begin_transition(transaction, transition_kind, "replace")
+	_begin_transition(
+		transaction, transition_kind, "replace", previous.get("view"), entry.get("view"), payload
+	)
 	return _success(route)
 
 
@@ -141,18 +147,27 @@ func pop() -> Dictionary:
 		return _failure(&"invalid_payload", {"reason": "cannot_pop_root"})
 	var outgoing: Dictionary = _screen_stack.pop_back()
 	var previous: Dictionary = _screen_stack.back()
-	_set_entry_active(outgoing, false)
-	_set_entry_active(previous, true)
+	_set_entry_transition_background(outgoing)
+	_set_entry_transition_background(previous)
+	var transition_kind := _pop_transition_kind(outgoing.route, previous.route)
 	var transaction: Variant = NavigationTransactionScript.new(
 		func() -> void:
 			_free_entry(outgoing)
+			_set_entry_active(previous, true)
 			_emit_route_changed(),
 		func() -> void:
 			_set_entry_active(previous, false)
 			_screen_stack.append(outgoing)
 			_set_entry_active(outgoing, true)
 	)
-	_begin_transition(transaction, &"screen", "pop")
+	_begin_transition(
+		transaction,
+		transition_kind,
+		"pop",
+		outgoing.get("view"),
+		previous.get("view"),
+		outgoing.get("payload", {})
+	)
 	return _success(current_route())
 
 
@@ -331,6 +346,19 @@ func _set_entry_modal_background(entry: Dictionary) -> void:
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
+func _set_entry_transition_background(entry: Dictionary) -> void:
+	if entry.is_empty():
+		return
+	var view := entry.get("view") as Control
+	if not is_instance_valid(view):
+		return
+	view.visible = true
+	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	view.set_process(false)
+	view.set_process_input(false)
+	view.set_process_unhandled_input(false)
+
+
 func _deactivate_all(entries: Array) -> void:
 	for entry in entries:
 		_set_entry_active(entry, false)
@@ -364,9 +392,21 @@ func _invoke(target: Object, method: StringName, arguments: Array) -> void:
 		target.callv(method, arguments)
 
 
-func _begin_transition(transaction: Variant, kind: StringName, reason: String) -> void:
+func _begin_transition(
+	transaction: Variant,
+	kind: StringName,
+	reason: String,
+	source_view: Control = null,
+	target_view: Control = null,
+	payload: Dictionary = {}
+) -> void:
 	_active_transaction = transaction
-	_transition_host.play(kind, _navigation_context(reason))
+	var context := _navigation_context(reason)
+	context["source_view"] = source_view
+	context["target_view"] = target_view
+	context["source_rect"] = payload.get("_transition_source_rect", Rect2())
+	context["source_texture"] = payload.get("_transition_source_texture")
+	_transition_host.play(kind, context)
 	input_lock_changed.emit(true)
 
 
@@ -393,8 +433,18 @@ func _transition_kind(route: StringName) -> StringName:
 	var source := String(current_screen_entry().get("route", StringName()))
 	if source == "home" and route == &"levels":
 		return &"home_to_levels"
+	if source == "home" and route == &"all_themes":
+		return &"home_to_all_themes"
 	if source == "all_themes" and route == &"levels":
 		return &"card_to_levels"
+	return &"screen"
+
+
+func _pop_transition_kind(source: StringName, target: StringName) -> StringName:
+	if source == &"levels" and target == &"home":
+		return &"levels_to_home"
+	if source == &"all_themes" and target == &"home":
+		return &"all_themes_to_home"
 	return &"screen"
 
 
