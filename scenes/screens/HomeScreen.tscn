@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -23,6 +23,28 @@ variation_embolden = 1.05
 base_font = ExtResource("8_title_font")
 variation_opentype = {&"wght": 900.0}
 variation_embolden = 1.4
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_home_title_backdrop"]
+content_margin_left = 20.0
+content_margin_right = 20.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
+bg_color = Color(1, 0.956863, 0.862745, 0.3)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_home_current_page_backdrop"]
+content_margin_left = 14.0
+content_margin_right = 14.0
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(1, 0.956863, 0.862745, 0.3)
+corner_radius_top_left = 22
+corner_radius_top_right = 22
+corner_radius_bottom_right = 22
+corner_radius_bottom_left = 22
 
 [sub_resource type="Animation" id="Animation_reset"]
 resource_name = "RESET"
@@ -393,6 +415,7 @@ theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
 theme_override_constants/outline_size = 5
 theme_override_fonts/font = SubResource("FontVariation_home_title")
 theme_override_font_sizes/font_size = 68
+theme_override_styles/normal = SubResource("StyleBox_home_title_backdrop")
 vertical_alignment = 2
 autowrap_mode = 2
 mouse_filter = 2
@@ -404,7 +427,7 @@ anchor_top = 1.0
 anchor_right = 0.0
 anchor_bottom = 1.0
 offset_top = -150.0
-offset_right = 427.0
+offset_right = 452.0
 grow_vertical = 0
 mouse_filter = 2
 
@@ -431,6 +454,7 @@ theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
 theme_override_constants/outline_size = 5
 theme_override_fonts/font = SubResource("FontVariation_home_title")
 theme_override_font_sizes/font_size = 68
+theme_override_styles/normal = SubResource("StyleBox_home_title_backdrop")
 vertical_alignment = 2
 autowrap_mode = 2
 mouse_filter = 2
@@ -442,7 +466,7 @@ anchor_top = 1.0
 anchor_right = 0.0
 anchor_bottom = 1.0
 offset_top = -150.0
-offset_right = 427.0
+offset_right = 452.0
 grow_vertical = 0
 mouse_filter = 2
 
@@ -477,7 +501,8 @@ theme_override_colors/font_color = Color(0.94902, 0.541176, 0.439216, 1)
 theme_override_colors/font_outline_color = Color(0.301961, 0.137255, 0.0627451, 0.82)
 theme_override_constants/outline_size = 2
 theme_override_fonts/font = SubResource("FontVariation_home_current_page")
-theme_override_font_sizes/font_size = 46
+theme_override_font_sizes/font_size = 54
+theme_override_styles/normal = SubResource("StyleBox_home_current_page_backdrop")
 text = "01"
 vertical_alignment = 1
 
@@ -523,7 +548,8 @@ theme_override_colors/font_color = Color(0.94902, 0.541176, 0.439216, 1)
 theme_override_colors/font_outline_color = Color(0.301961, 0.137255, 0.0627451, 0.82)
 theme_override_constants/outline_size = 2
 theme_override_fonts/font = SubResource("FontVariation_home_current_page")
-theme_override_font_sizes/font_size = 46
+theme_override_font_sizes/font_size = 54
+theme_override_styles/normal = SubResource("StyleBox_home_current_page_backdrop")
 text = "02"
 vertical_alignment = 1
 

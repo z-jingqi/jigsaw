@@ -107,18 +107,20 @@ func _run() -> void:
 	var progress_cat := home_progress.get_node("Journey/Cat") as TextureRect
 	var progress_fish := home_progress.get_node("Journey/Fish") as TextureRect
 	var progress_completion := home_progress.get_node("Journey/Completion") as TextureRect
+	var completion_fish := home_progress.get_node("Journey/Completion/FishOverlay") as TextureRect
 	var first_paw := home_progress.get_node("Journey/Paws/Paw1") as TextureRect
 	var title_font: Font = home.theme_name.get_theme_font(&"font")
 	_check(
 		(
-			home_progress.size.x <= 440.0
+			home_progress.size.x <= 470.0
 			and progress_fish.position.x + progress_fish.size.x <= home_progress.size.x + 0.5
 		),
 		"home_progress_stays_in_left_column"
 	)
 	_check(
 		(
-			absf(progress_fish.size.x - progress_completion.size.x * 0.5) <= 0.5
+			absf(progress_fish.size.x - progress_completion.size.x * 0.75) <= 0.5
+			and completion_fish.size.is_equal_approx(progress_fish.size)
 			and absf(progress_completion.size.y - progress_cat.size.y) <= 0.5
 			and title_font is FontVariation
 			and float((title_font as FontVariation).variation_opentype.get(&"wght", 0.0)) >= 900.0
@@ -257,6 +259,10 @@ func _run() -> void:
 				)
 				<= 0.5
 			)
+			and not progress_cat.visible
+			and not progress_fish.visible
+			and progress_completion.visible
+			and completion_fish.visible
 		),
 		"home_progress_completion_keeps_scale_ground_and_step"
 	)
@@ -280,14 +286,20 @@ func _run() -> void:
 	var total_page := home.get_node("SafeArea/SafeContent/PageLabel/PageRow/TotalPage") as Label
 	var current_page_font := current_page.get_theme_font(&"font") as FontVariation
 	var total_page_font := total_page.get_theme_font(&"font") as FontVariation
+	var title_backdrop := home.theme_name.get_theme_stylebox(&"normal") as StyleBoxFlat
+	var current_page_backdrop := current_page.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
 		(
 			current_page.text == "01"
 			and total_page.text == " / 02"
 			and current_page.get_theme_color(&"font_color").is_equal_approx(Color("F28A70"))
 			and all_themes_button.text == "全部主题"
-			and current_page.get_theme_font_size(&"font_size") == 46
+			and current_page.get_theme_font_size(&"font_size") == 54
 			and total_page.get_theme_font_size(&"font_size") == 44
+			and title_backdrop.bg_color.a >= 0.25
+			and title_backdrop.bg_color.a <= 0.35
+			and current_page_backdrop.bg_color.is_equal_approx(title_backdrop.bg_color)
+			and total_page.get_theme_stylebox(&"normal") is StyleBoxEmpty
 			and current_page_font.variation_embolden >= 1.3
 			and total_page_font.variation_embolden >= 1.0
 			and current_page_font.variation_embolden > total_page_font.variation_embolden
@@ -423,6 +435,14 @@ func _run() -> void:
 			and home.previous_cover.scale.x > 1.0
 			and home.current_cover.modulate.a < 1.0
 			and home.previous_cover.modulate.a < 1.0
+			and (
+				float(
+					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
+						&"feather_strength"
+					)
+				)
+				> 0.7
+			)
 		),
 		"home_first_page_wraps_with_cover_depth_motion"
 	)
@@ -431,7 +451,19 @@ func _run() -> void:
 	_check(home.debug_state_snapshot().selected_index == 1, "home_first_page_wraps_to_last")
 	_check(_changed_theme == "topic_02", "home_first_page_wrap_emits_theme")
 	_check(_activated_theme.is_empty(), "home_first_page_wrap_does_not_activate")
-	_check(home.active_motion_count() == 0, "home_first_page_wrap_releases_motion")
+	_check(
+		(
+			home.active_motion_count() == 0
+			and is_zero_approx(
+				float(
+					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
+						&"feather_strength"
+					)
+				)
+			)
+		),
+		"home_first_page_wrap_releases_motion"
+	)
 	home.debug_begin_drag()
 	home.debug_drag(-home.size.x * 0.30, 1.0)
 	_check(
