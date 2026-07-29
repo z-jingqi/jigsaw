@@ -482,6 +482,52 @@ theme_override_font_sizes/font_size = 44
 text = " / 04"
 vertical_alignment = 1
 
+[node name="PageIncoming" type="Control" parent="SafeArea/SafeContent"]
+visible = false
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -280.0
+offset_bottom = -208.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="PageRow" type="HBoxContainer" parent="SafeArea/SafeContent/PageIncoming"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
+alignment = 2
+mouse_filter = 2
+
+[node name="CurrentPage" type="Label" parent="SafeArea/SafeContent/PageIncoming/PageRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94902, 0.541176, 0.439216, 1)
+theme_override_colors/font_outline_color = Color(0.301961, 0.137255, 0.0627451, 0.82)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = SubResource("FontVariation_home_current_page")
+theme_override_font_sizes/font_size = 46
+text = "02"
+vertical_alignment = 1
+
+[node name="TotalPage" type="Label" parent="SafeArea/SafeContent/PageIncoming/PageRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.419608, 0.207843, 0.121569, 1)
+theme_override_colors/font_outline_color = Color(1, 0.956863, 0.862745, 0.92)
+theme_override_constants/outline_size = 4
+theme_override_fonts/font = SubResource("FontVariation_home_page")
+theme_override_font_sizes/font_size = 44
+text = " / 04"
+vertical_alignment = 1
+
 [node name="AllThemesButton" parent="SafeArea/SafeContent" instance=ExtResource("5_pill")]
 layout_mode = 1
 anchors_preset = 3

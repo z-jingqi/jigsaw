@@ -362,15 +362,84 @@ func _run() -> void:
 	menu_button.gui_input.emit(pointer_up)
 	home.set_reduced_motion(false)
 	home.debug_begin_drag()
-	home.debug_drag(-home.size.x * 0.30, 0.12)
+	home.debug_drag(home.size.x * 0.30, 1.0)
+	var edge_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			float(edge_state.gesture_progress) >= 0.08
+			and float(edge_state.gesture_progress) <= 0.09
+			and not home.incoming_info.visible
+		),
+		"home_first_page_edge_damping"
+	)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 0 and home.active_motion_count() == 0,
+		"home_edge_returns_to_current"
+	)
+	var outgoing_name_start_x: float = home.theme_name.position.x
+	var incoming_name_start_x: float = incoming_theme_name.position.x
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.20, 1.0)
+	_check(
+		(
+			home.incoming_info.visible
+			and home.incoming_current_page_label.text == "02"
+			and home.theme_name.modulate.a < 1.0
+			and incoming_theme_name.modulate.a <= 0.01
+			and home.theme_name.position.x < outgoing_name_start_x
+			and incoming_theme_name.position.x > incoming_name_start_x
+		),
+		"home_information_leaves_before_incoming"
+	)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		(
+			home.debug_state_snapshot().selected_index == 0
+			and home.theme_name.modulate.a >= 0.99
+			and not home.incoming_info.visible
+		),
+		"home_drag_below_ratio_cancels"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.50, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.06).timeout
+	var settling_state: Dictionary = home.debug_state_snapshot()
+	home.debug_begin_drag()
+	var takeover_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			float(settling_state.gesture_progress) > 0.5
+			and is_equal_approx(
+				float(settling_state.gesture_offset), float(takeover_state.gesture_offset)
+			)
+		),
+		"home_reverse_gesture_takes_over_current_visual"
+	)
+	home.debug_drag(home.size.x * 0.80, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.28).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 0 and _changed_theme == "",
+		"home_reverse_gesture_returns_without_commit"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.50, 1.0)
 	_check(
 		(
 			home.get_node("SafeArea/SafeContent/InfoIncoming").visible
 			and home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName").text.begins_with(
 				"A Second"
 			)
+			and home.theme_name.modulate.a <= 0.01
+			and incoming_theme_name.modulate.a > 0.1
+			and incoming_theme_name.modulate.a < 1.0
+			and home.incoming_current_page_label.text == "02"
 		),
-		"home_incoming_information"
+		"home_incoming_information_layers"
 	)
 	home.debug_end_drag()
 	await create_timer(0.35).timeout

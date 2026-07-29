@@ -8,6 +8,7 @@ signal menu_requested
 signal album_requested
 
 const PagerControllerScript := preload("res://scripts/screens/HomePagerController.gd")
+const ThemeInfoMotionScript := preload("res://scripts/screens/HomeThemeInfoMotion.gd")
 const MotionTokenResource := preload("res://themes/motion_tokens.tres")
 const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
 
@@ -28,6 +29,10 @@ const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
 @onready var page_label: Control = $SafeArea/SafeContent/PageLabel
 @onready var current_page_label: Label = $SafeArea/SafeContent/PageLabel/PageRow/CurrentPage
 @onready var total_page_label: Label = $SafeArea/SafeContent/PageLabel/PageRow/TotalPage
+@onready var incoming_page_label: Control = $SafeArea/SafeContent/PageIncoming
+@onready
+var incoming_current_page_label: Label = $SafeArea/SafeContent/PageIncoming/PageRow/CurrentPage
+@onready var incoming_total_page_label: Label = $SafeArea/SafeContent/PageIncoming/PageRow/TotalPage
 @onready var all_themes_button: Button = $SafeArea/SafeContent/AllThemesButton
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 
@@ -35,6 +40,8 @@ var _view_model: Variant
 var _themes: Array = []
 var _selected_index := 0
 var _pager: Variant
+var _info_motion: Variant
+var _incoming_index := -1
 var _first_entry_played := false
 var _entry_interaction_ready := true
 var _transitioning_to_levels := false
@@ -54,6 +61,15 @@ func _ready() -> void:
 	all_themes_button.button_down.connect(_on_fixed_action_started)
 	resized.connect(_on_resized)
 	_apply_cold_entry_final()
+	_info_motion = ThemeInfoMotionScript.new(
+		theme_name,
+		progress,
+		page_label,
+		incoming_info,
+		incoming_name,
+		incoming_progress,
+		incoming_page_label
+	)
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
@@ -66,7 +82,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 func navigation_exit(_context: Dictionary) -> void:
 	if _pager != null:
-		_pager.cancel_motion()
+		_pager.finish_to_current()
 	_cancel_button_motion()
 	progress.finish_motion()
 
@@ -75,7 +91,7 @@ func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 	if not is_active and _pager != null:
-		_pager.cancel_to_current()
+		_pager.finish_to_current()
 	if not is_active:
 		_cancel_button_motion()
 
@@ -97,10 +113,18 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func set_view_model(view_model: Variant) -> void:
+	var previous_theme_id := (
+		str(_themes[_selected_index].theme_id)
+		if not _themes.is_empty() and _selected_index < _themes.size()
+		else ""
+	)
 	_view_model = view_model
 	_themes = view_model.themes
 	_selected_index = clampi(int(view_model.selected_index), 0, maxi(0, _themes.size() - 1))
-	_apply_selected_theme(false)
+	var selected_theme_id := (
+		str(_themes[_selected_index].theme_id) if not _themes.is_empty() else ""
+	)
+	_apply_selected_theme(previous_theme_id != "" and previous_theme_id == selected_theme_id)
 
 
 func play_cold_entry() -> void:
@@ -142,6 +166,8 @@ func debug_state_snapshot() -> Dictionary:
 		"animation_playing": animation_player.is_playing(),
 		"pager_motion": _pager.active_motion_count() if _pager != null else 0,
 		"progress_motion": progress.active_motion_count(),
+		"gesture_progress": _pager.gesture_progress() if _pager != null else 0.0,
+		"gesture_offset": _pager.gesture_offset() if _pager != null else 0.0,
 		"entry_interaction_ready": _entry_interaction_ready,
 		"reduced_motion": bool(get_meta("reduced_motion", false)),
 	}
@@ -163,14 +189,15 @@ func debug_end_drag() -> void:
 		_pager.end()
 
 
-func _apply_selected_theme(animate_information: bool) -> void:
+func _apply_selected_theme(animate_progress: bool) -> void:
 	if _themes.is_empty():
 		theme_name.text = ""
 		_set_page_number(0, 0)
 		return
 	var selected = _themes[_selected_index]
-	_set_information(info_panel, theme_name, progress, selected)
-	incoming_info.visible = false
+	_set_information(theme_name, progress, selected, animate_progress)
+	_incoming_index = -1
+	_info_motion.reset()
 	theme = ThemeTokenResource.theme_for_variant(
 		(
 			ThemeTokenResource.TextVariant.ON_DARK
@@ -184,8 +211,6 @@ func _apply_selected_theme(animate_information: bool) -> void:
 	_set_cover(next_cover, _theme_at(_selected_index + 1))
 	_layout_cover_slots(0.0)
 	_pager.configure(_themes.size(), _selected_index, maxf(1.0, size.x))
-	if animate_information:
-		_animate_information_in()
 
 
 func _theme_at(index: int) -> Variant:
@@ -211,34 +236,34 @@ func _layout_cover_slots(offset: float) -> void:
 
 func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
 	_layout_cover_slots(offset)
-	var outgoing_visibility := 1.0 - smoothstep(0.05, 0.55, pager_progress)
-	var incoming_visibility := smoothstep(0.35, 1.0, pager_progress)
+	if direction == 0:
+		_incoming_index = -1
+		_info_motion.reset()
+		return
 	var incoming_index := _selected_index + direction
 	if incoming_index >= 0 and incoming_index < _themes.size():
-		_set_information(incoming_info, incoming_name, incoming_progress, _themes[incoming_index])
-		incoming_info.visible = true
+		if incoming_index != _incoming_index:
+			_set_information(incoming_name, incoming_progress, _themes[incoming_index], false)
+			_set_incoming_page_number(incoming_index + 1, _themes.size())
+			_incoming_index = incoming_index
 	else:
-		incoming_info.visible = false
-	info_panel.modulate.a = outgoing_visibility
-	page_label.modulate.a = outgoing_visibility
-	incoming_info.modulate.a = incoming_visibility
-	info_panel.position.x = -float(direction) * size.x * pager_progress
-	incoming_info.position.x = float(direction) * size.x * (1.0 - pager_progress)
-	page_label.position.x = -float(direction) * size.x * pager_progress * 0.55
+		_incoming_index = -1
+	_info_motion.apply(
+		direction if _incoming_index >= 0 else 0,
+		pager_progress,
+		bool(get_meta("reduced_motion", false))
+	)
 
 
 func _on_pager_settled(next_index: int, committed: bool) -> void:
 	if committed:
 		_selected_index = next_index
-		_apply_selected_theme(true)
+		_apply_selected_theme(false)
 		selected_theme_changed.emit(str(_themes[_selected_index].theme_id))
 	else:
 		_layout_cover_slots(0.0)
-		info_panel.modulate.a = 1.0
-		page_label.modulate.a = 1.0
-		info_panel.position.x = 0.0
-		incoming_info.visible = false
-		page_label.position.x = 0.0
+		_incoming_index = -1
+		_info_motion.reset()
 
 
 func _on_pager_activation_requested() -> void:
@@ -256,28 +281,13 @@ func _on_pager_activation_requested() -> void:
 	_transitioning_to_levels = false
 
 
-func _animate_information_in() -> void:
-	if bool(get_meta("reduced_motion", false)):
-		info_panel.modulate.a = 1.0
-		page_label.modulate.a = 1.0
-		return
-	info_panel.modulate.a = 0.0
-	page_label.modulate.a = 0.0
-	var tween := create_tween().set_parallel(true)
-	tween.tween_property(info_panel, "modulate:a", 1.0, MotionTokenResource.content_duration)
-	(
-		tween
-		. tween_property(page_label, "modulate:a", 1.0, MotionTokenResource.content_duration)
-		. set_delay(0.04)
-	)
-
-
 func _set_information(
-	panel: Control, name_label: Label, theme_progress: ThemeProgress, theme_model: Variant
+	name_label: Label, theme_progress: ThemeProgress, theme_model: Variant, animate_progress: bool
 ) -> void:
-	panel.position.x = 0.0
 	name_label.text = str(theme_model.title)
 	theme_progress.set_view_model(theme_model.progress)
+	if not animate_progress:
+		theme_progress.finish_motion()
 
 
 func _set_page_number(current: int, total: int) -> void:
@@ -286,6 +296,14 @@ func _set_page_number(current: int, total: int) -> void:
 	var semantic_text := "%02d / %02d" % [current, total]
 	page_label.tooltip_text = semantic_text
 	page_label.set_meta("accessibility_name", semantic_text)
+
+
+func _set_incoming_page_number(current: int, total: int) -> void:
+	incoming_current_page_label.text = "%02d" % current
+	incoming_total_page_label.text = " / %02d" % total
+	var semantic_text := "%02d / %02d" % [current, total]
+	incoming_page_label.tooltip_text = semantic_text
+	incoming_page_label.set_meta("accessibility_name", semantic_text)
 
 
 func _on_gesture_input(event: InputEvent) -> void:
@@ -317,7 +335,13 @@ func _on_gesture_input(event: InputEvent) -> void:
 func _on_resized() -> void:
 	if _view_model == null:
 		return
+	if _pager != null:
+		_pager.cancel_to_current()
+	if _info_motion != null:
+		_info_motion.reset()
 	_apply_selected_theme(false)
+	if _info_motion != null:
+		_info_motion.capture_layout()
 
 
 func _apply_cold_entry_final() -> void:
