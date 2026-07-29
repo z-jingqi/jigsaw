@@ -123,6 +123,9 @@ func _render() -> void:
 	cat.visible = not is_complete
 	fish.visible = not is_complete
 	completion.visible = is_complete
+	cat.modulate.a = 1.0
+	fish.modulate.a = 1.0
+	completion.modulate.a = 1.0
 	for index in _paws.size():
 		var paw := _paws[index]
 		paw.visible = not is_complete and index < paw_count
@@ -138,6 +141,7 @@ func _render() -> void:
 		)
 		if reduced_motion or not _has_rendered:
 			paw.scale = Vector2.ONE
+			paw.modulate.a = 1.0
 	if not reduced_motion and _has_rendered:
 		_motion = create_tween()
 		_motion.set_trans(motion_tokens.settle_transition).set_ease(motion_tokens.settle_ease)
@@ -167,24 +171,75 @@ func active_motion_count() -> int:
 	return 1 if _motion != null and _motion.is_valid() and _motion.is_running() else 0
 
 
-func play_cold_start() -> void:
+func play_cold_start(delay := 0.0) -> void:
 	if reduced_motion or display_variant != Variant.JOURNEY:
 		return
 	_stop_motion()
-	_motion = create_tween()
+	_motion = create_tween().set_parallel(true)
 	_motion.set_trans(motion_tokens.enter_transition).set_ease(motion_tokens.enter_ease)
-	for index in _paws.size():
-		var paw := _paws[index]
-		if not paw.visible:
-			continue
-		paw.modulate.a = 0.0
-		paw.scale = Vector2(0.8, 0.8)
-		paw.pivot_offset = paw.size * 0.5
-		_motion.tween_interval(0.05 if index > 0 else 0.0)
-		_motion.tween_property(paw, "modulate:a", 1.0, motion_tokens.progress_paw_duration)
-		_motion.parallel().tween_property(
-			paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration
+	if completion.visible:
+		completion.modulate.a = 0.0
+		completion.scale = Vector2(0.96, 0.96)
+		completion.pivot_offset = completion.size * 0.5
+		(
+			_motion
+			. tween_property(
+				completion, "modulate:a", 1.0, motion_tokens.progress_completion_duration
+			)
+			. set_delay(delay)
 		)
+		(
+			_motion
+			. tween_property(
+				completion, "scale", Vector2.ONE, motion_tokens.progress_completion_duration
+			)
+			. set_delay(delay)
+		)
+	else:
+		var cat_target := cat.position
+		cat.position.x = 0.0
+		cat.modulate.a = 0.0
+		fish.modulate.a = 0.0
+		_motion.tween_property(fish, "modulate:a", 1.0, motion_tokens.state_duration).set_delay(
+			delay
+		)
+		_motion.tween_property(cat, "modulate:a", 1.0, motion_tokens.state_duration).set_delay(
+			delay + 0.04
+		)
+		(
+			_motion
+			. tween_property(cat, "position", cat_target, 0.42)
+			. set_delay(delay + 0.01)
+			. set_trans(motion_tokens.settle_transition)
+			. set_ease(motion_tokens.settle_ease)
+		)
+		for index in _paws.size():
+			var paw := _paws[index]
+			if not paw.visible:
+				continue
+			paw.modulate.a = 0.0
+			paw.scale = Vector2(0.8, 0.8)
+			paw.pivot_offset = paw.size * 0.5
+			var paw_delay := delay + 0.08 + float(index) * 0.05
+			(
+				_motion
+				. tween_property(paw, "modulate:a", 1.0, motion_tokens.progress_paw_duration)
+				. set_delay(paw_delay)
+			)
+			(
+				_motion
+				. tween_property(paw, "scale", Vector2.ONE, motion_tokens.progress_paw_duration)
+				. set_delay(paw_delay)
+			)
+	_motion.finished.connect(_stop_motion, CONNECT_ONE_SHOT)
+
+
+func finish_motion() -> void:
+	_stop_motion()
+	var was_reduced := reduced_motion
+	reduced_motion = true
+	_render()
+	reduced_motion = was_reduced
 
 
 func _commit_state(paw_count: int, is_complete: bool) -> void:

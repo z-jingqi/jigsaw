@@ -5,6 +5,7 @@ var _target: Control
 var _tokens: MotionTokens
 var _press_scale: float
 var _tween: Tween
+var _reduced_motion := false
 
 
 func _init(target: Control, tokens: MotionTokens, press_scale: float) -> void:
@@ -14,6 +15,7 @@ func _init(target: Control, tokens: MotionTokens, press_scale: float) -> void:
 	target.gui_input.connect(_on_gui_input)
 	target.tree_exiting.connect(dispose)
 	target.focus_exited.connect(_release)
+	target.mouse_exited.connect(_release)
 
 
 func dispose() -> void:
@@ -22,8 +24,27 @@ func dispose() -> void:
 	_tween = null
 
 
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	if enabled:
+		cancel()
+
+
+func cancel() -> void:
+	dispose()
+	if is_instance_valid(_target):
+		_target.scale = Vector2.ONE
+
+
+func active_motion_count() -> int:
+	return 1 if _tween != null and _tween.is_valid() and _tween.is_running() else 0
+
+
 func _on_gui_input(event: InputEvent) -> void:
 	if not is_instance_valid(_target) or _target.disabled:
+		return
+	if _reduced_motion:
+		cancel()
 		return
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
@@ -62,6 +83,7 @@ func _release() -> void:
 
 func _play_to(scale_value: Vector2, duration: float) -> void:
 	dispose()
+	_target.pivot_offset = _target.size * 0.5
 	_tween = _target.create_tween()
 	_tween.set_trans(_tokens.press_transition).set_ease(_tokens.press_ease)
 	_tween.tween_property(_target, "scale", scale_value, duration)
