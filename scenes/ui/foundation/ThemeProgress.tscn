@@ -83,6 +83,12 @@ expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
+[node name="FishOverlay" type="TextureRect" parent="Journey/Completion"]
+texture = ExtResource("3_fish")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
 [node name="Numeric" type="Label" parent="."]
 layout_mode = 1
 anchors_preset = 15

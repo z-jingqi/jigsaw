@@ -3,7 +3,8 @@ extends Control
 
 enum Variant { JOURNEY, NUMERIC_CARD }
 
-const COMPLETION_FISH_WIDTH_RATIO := 0.5
+const COMPLETION_FISH_WIDTH_RATIO := 0.75
+const COMPLETION_FISH_CENTER := Vector2(0.48, 0.436)
 
 @export var display_variant: Variant = Variant.JOURNEY
 @export var reduced_motion := false
@@ -13,6 +14,7 @@ const COMPLETION_FISH_WIDTH_RATIO := 0.5
 @onready var cat: TextureRect = $Journey/Cat
 @onready var fish: TextureRect = $Journey/Fish
 @onready var completion: TextureRect = $Journey/Completion
+@onready var completion_fish: TextureRect = $Journey/Completion/FishOverlay
 @onready var numeric: Label = $Numeric
 @onready var numeric_completion: TextureRect = $NumericCompletion
 
@@ -105,6 +107,11 @@ func _render() -> void:
 	cat.size = cat_size
 	fish.size = fish_size
 	completion.size = completion_size
+	completion_fish.size = fish_size
+	completion_fish.position = Vector2(
+		completion_size.x * COMPLETION_FISH_CENTER.x - fish_size.x * 0.5,
+		completion_size.y * COMPLETION_FISH_CENTER.y - fish_size.y * 0.5,
+	)
 	var cat_y := maxf(0.0, (height - cat_size.y) * 0.5)
 	var ground_y := cat_y + cat_size.y
 	var fish_position := Vector2(
@@ -128,7 +135,9 @@ func _render() -> void:
 		),
 		maxf(0.0, ground_y - completion_size.y),
 	)
-	var completing_now := is_complete and not _last_is_complete and _has_rendered
+	var completing_now := (
+		is_complete and not _last_is_complete and _has_rendered and not reduced_motion
+	)
 	cat.visible = not is_complete or completing_now
 	fish.visible = not is_complete or completing_now
 	completion.visible = is_complete
