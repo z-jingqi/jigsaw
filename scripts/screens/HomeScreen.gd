@@ -233,18 +233,22 @@ func _set_cover(slot: TextureRect, theme: Variant) -> void:
 	slot.texture = theme.cover_texture
 
 
-func _layout_cover_slots(offset: float) -> void:
+func _layout_cover_slots(offset: float, direction := 0, overlap_ratio := 0.0) -> void:
 	var width := maxf(1.0, size.x)
 	cover_slots.pivot_offset = size * 0.5
 	for pair in [[previous_cover, -1.0], [current_cover, 0.0], [next_cover, 1.0]]:
 		var slot: TextureRect = pair[0]
 		slot.position = Vector2((float(pair[1]) * width) + offset, 0.0)
+		if direction > 0 and slot == next_cover:
+			slot.position.x -= width * overlap_ratio
+		elif direction < 0 and slot == previous_cover:
+			slot.position.x += width * overlap_ratio
 		slot.size = size
 		slot.pivot_offset = slot.size * 0.5
 
 
 func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
-	_layout_cover_slots(offset)
+	_layout_cover_slots(offset, direction, _cover_motion.overlap_ratio(pager_progress))
 	_cover_motion.apply(direction, pager_progress, bool(get_meta("reduced_motion", false)))
 	if direction == 0:
 		_incoming_index = -1

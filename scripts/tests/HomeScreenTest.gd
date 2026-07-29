@@ -286,8 +286,6 @@ func _run() -> void:
 	var total_page := home.get_node("SafeArea/SafeContent/PageLabel/PageRow/TotalPage") as Label
 	var current_page_font := current_page.get_theme_font(&"font") as FontVariation
 	var total_page_font := total_page.get_theme_font(&"font") as FontVariation
-	var title_backdrop := home.theme_name.get_theme_stylebox(&"normal") as StyleBoxFlat
-	var current_page_backdrop := current_page.get_theme_stylebox(&"normal") as StyleBoxFlat
 	_check(
 		(
 			current_page.text == "01"
@@ -296,10 +294,13 @@ func _run() -> void:
 			and all_themes_button.text == "全部主题"
 			and current_page.get_theme_font_size(&"font_size") == 54
 			and total_page.get_theme_font_size(&"font_size") == 44
-			and title_backdrop.bg_color.a >= 0.25
-			and title_backdrop.bg_color.a <= 0.35
-			and current_page_backdrop.bg_color.is_equal_approx(title_backdrop.bg_color)
+			and home.theme_name.get_theme_stylebox(&"normal") is StyleBoxEmpty
+			and current_page.get_theme_stylebox(&"normal") is StyleBoxEmpty
 			and total_page.get_theme_stylebox(&"normal") is StyleBoxEmpty
+			and home.theme_name.get_theme_color(&"font_shadow_color").a >= 0.45
+			and home.theme_name.get_theme_constant(&"shadow_outline_size") >= 7
+			and current_page.get_theme_color(&"font_shadow_color").a >= 0.5
+			and current_page.get_theme_constant(&"shadow_outline_size") >= 4
 			and current_page_font.variation_embolden >= 1.3
 			and total_page_font.variation_embolden >= 1.0
 			and current_page_font.variation_embolden > total_page_font.variation_embolden
@@ -433,18 +434,20 @@ func _run() -> void:
 			and home.incoming_current_page_label.text == "02"
 			and home.current_cover.scale.x < 1.0
 			and home.previous_cover.scale.x > 1.0
-			and home.current_cover.modulate.a < 1.0
-			and home.previous_cover.modulate.a < 1.0
+			and (
+				home.previous_cover.position.x + home.previous_cover.size.x
+				> home.current_cover.position.x
+			)
 			and (
 				float(
 					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
-						&"feather_strength"
+						&"feather_width"
 					)
 				)
-				> 0.7
+				> 0.07
 			)
 		),
-		"home_first_page_wraps_with_cover_depth_motion"
+		"home_first_page_wraps_with_cover_crossfade"
 	)
 	home.debug_end_drag()
 	await create_timer(0.35).timeout
@@ -454,12 +457,13 @@ func _run() -> void:
 	_check(
 		(
 			home.active_motion_count() == 0
-			and is_zero_approx(
+			and is_equal_approx(
 				float(
 					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
-						&"feather_strength"
+						&"feather_width"
 					)
-				)
+				),
+				0.001
 			)
 		),
 		"home_first_page_wrap_releases_motion"
@@ -592,8 +596,18 @@ func _run() -> void:
 			and home.progress.position.is_equal_approx(reduced_progress_position)
 			and home.current_cover.scale.is_equal_approx(Vector2.ONE)
 			and home.previous_cover.scale.is_equal_approx(Vector2.ONE)
-			and home.current_cover.modulate.a < 1.0
-			and home.previous_cover.modulate.a < 1.0
+			and (
+				home.previous_cover.position.x + home.previous_cover.size.x
+				> home.current_cover.position.x
+			)
+			and (
+				float(
+					(home.previous_cover.material as ShaderMaterial).get_shader_parameter(
+						&"feather_width"
+					)
+				)
+				> 0.07
+			)
 		),
 		"home_reduced_motion_uses_crossfade_without_spatial_depth"
 	)
