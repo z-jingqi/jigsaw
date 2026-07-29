@@ -8,6 +8,7 @@ signal menu_requested
 signal album_requested
 
 const PagerControllerScript := preload("res://scripts/screens/HomePagerController.gd")
+const CoverMotionScript := preload("res://scripts/screens/HomeCoverMotion.gd")
 const ThemeInfoMotionScript := preload("res://scripts/screens/HomeThemeInfoMotion.gd")
 const MotionTokenResource := preload("res://themes/motion_tokens.tres")
 const ThemeTokenResource := preload("res://themes/jigcat_tokens.tres")
@@ -39,6 +40,7 @@ var _view_model: Variant
 var _themes: Array = []
 var _selected_index := 0
 var _pager: Variant
+var _cover_motion: Variant
 var _info_motion: Variant
 var _incoming_index := -1
 var _first_entry_played := false
@@ -52,6 +54,7 @@ func _ready() -> void:
 	_pager.drag_updated.connect(_on_pager_drag_updated)
 	_pager.page_settled.connect(_on_pager_settled)
 	_pager.activation_requested.connect(_on_pager_activation_requested)
+	_cover_motion = CoverMotionScript.new(previous_cover, current_cover, next_cover)
 	album_button.pressed.connect(album_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	all_themes_button.pressed.connect(all_themes_requested.emit)
@@ -83,6 +86,7 @@ func navigation_exit(_context: Dictionary) -> void:
 	_pointer_gesture_active = false
 	if _pager != null:
 		_pager.finish_to_current()
+	_cover_motion.reset()
 	_cancel_button_motion()
 	progress.finish_motion()
 
@@ -212,11 +216,14 @@ func _apply_selected_theme(animate_progress: bool) -> void:
 	_set_cover(current_cover, selected)
 	_set_cover(next_cover, _theme_at(_selected_index + 1))
 	_layout_cover_slots(0.0)
+	_cover_motion.reset()
 	_pager.configure(_themes.size(), _selected_index, maxf(1.0, size.x))
 
 
 func _theme_at(index: int) -> Variant:
-	return _themes[index] if index >= 0 and index < _themes.size() else null
+	if _themes.is_empty():
+		return null
+	return _themes[posmod(index, _themes.size())]
 
 
 func _set_cover(slot: TextureRect, theme: Variant) -> void:
@@ -238,18 +245,16 @@ func _layout_cover_slots(offset: float) -> void:
 
 func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
 	_layout_cover_slots(offset)
+	_cover_motion.apply(direction, pager_progress, bool(get_meta("reduced_motion", false)))
 	if direction == 0:
 		_incoming_index = -1
 		_info_motion.reset()
 		return
-	var incoming_index := _selected_index + direction
-	if incoming_index >= 0 and incoming_index < _themes.size():
-		if incoming_index != _incoming_index:
-			_set_information(incoming_name, incoming_progress, _themes[incoming_index], false)
-			_set_incoming_page_number(incoming_index + 1, _themes.size())
-			_incoming_index = incoming_index
-	else:
-		_incoming_index = -1
+	var incoming_index := posmod(_selected_index + direction, _themes.size())
+	if incoming_index != _incoming_index:
+		_set_information(incoming_name, incoming_progress, _themes[incoming_index], false)
+		_set_incoming_page_number(incoming_index + 1, _themes.size())
+		_incoming_index = incoming_index
 	_info_motion.apply(
 		direction if _incoming_index >= 0 else 0,
 		pager_progress,
@@ -264,6 +269,7 @@ func _on_pager_settled(next_index: int, committed: bool) -> void:
 		selected_theme_changed.emit(str(_themes[_selected_index].theme_id))
 	else:
 		_layout_cover_slots(0.0)
+		_cover_motion.reset()
 		_incoming_index = -1
 		_info_motion.reset()
 

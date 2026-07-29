@@ -20,6 +20,8 @@ var _view_model: Variant
 var _paws: Array[TextureRect] = []
 var _motion: Tween
 var _has_rendered := false
+var _last_completed := 0
+var _last_total := 0
 var _last_paw_count := 0
 var _last_is_complete := false
 
@@ -52,6 +54,12 @@ func _render() -> void:
 	var total := int(_read("total_modes"))
 	var paw_count := clampi(int(_read("paw_count")), 0, 5)
 	var is_complete := bool(_read("is_complete"))
+	var progress_changed := (
+		completed != _last_completed
+		or total != _last_total
+		or paw_count != _last_paw_count
+		or is_complete != _last_is_complete
+	)
 	journey.visible = display_variant == Variant.JOURNEY
 	numeric.visible = display_variant == Variant.NUMERIC_CARD
 	numeric.text = "%d / %d" % [completed, total]
@@ -61,7 +69,7 @@ func _render() -> void:
 	set_meta("accessibility_name", tooltip_text)
 	if display_variant == Variant.NUMERIC_CARD:
 		numeric_completion.visible = is_complete
-		if not reduced_motion and _has_rendered:
+		if not reduced_motion and _has_rendered and progress_changed:
 			numeric.modulate.a = 0.0
 			_motion = create_tween()
 			_motion.set_trans(motion_tokens.enter_transition).set_ease(motion_tokens.enter_ease)
@@ -84,7 +92,7 @@ func _render() -> void:
 		journey.visible = false
 		if _motion != null:
 			_motion.finished.connect(_stop_motion, CONNECT_ONE_SHOT)
-		_commit_state(paw_count, is_complete)
+		_commit_state(completed, total, paw_count, is_complete)
 		return
 	numeric_completion.visible = false
 	var width := maxf(1.0, journey.size.x)
@@ -143,7 +151,7 @@ func _render() -> void:
 		if reduced_motion or not _has_rendered:
 			paw.scale = Vector2.ONE
 			paw.modulate.a = 1.0
-	if not reduced_motion and _has_rendered:
+	if not reduced_motion and _has_rendered and progress_changed:
 		_motion = create_tween()
 		_motion.set_trans(motion_tokens.settle_transition).set_ease(motion_tokens.settle_ease)
 		_motion.tween_property(cat, "position", cat_target, motion_tokens.progress_cat_duration)
@@ -182,7 +190,7 @@ func _render() -> void:
 		completion.scale = Vector2.ONE
 	if _motion != null:
 		_motion.finished.connect(_stop_motion, CONNECT_ONE_SHOT)
-	_commit_state(paw_count, is_complete)
+	_commit_state(completed, total, paw_count, is_complete)
 
 
 func active_motion_count() -> int:
@@ -260,8 +268,10 @@ func finish_motion() -> void:
 	reduced_motion = was_reduced
 
 
-func _commit_state(paw_count: int, is_complete: bool) -> void:
+func _commit_state(completed: int, total: int, paw_count: int, is_complete: bool) -> void:
 	_has_rendered = true
+	_last_completed = completed
+	_last_total = total
 	_last_paw_count = paw_count
 	_last_is_complete = is_complete
 

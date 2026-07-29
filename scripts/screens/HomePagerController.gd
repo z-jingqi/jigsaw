@@ -75,10 +75,7 @@ func drag_by(delta_x: float, elapsed_override := -1.0) -> void:
 		return
 	var raw_offset := _drag_total
 	var direction := _direction_from_offset(raw_offset)
-	if (
-		(direction < 0 and _current_index == 0)
-		or (direction > 0 and _current_index == _page_count - 1)
-	):
+	if _page_count <= 1:
 		raw_offset *= EDGE_DAMPING
 	var progress := clampf(absf(raw_offset) / _page_width, 0.0, 1.0)
 	_emit_visual(direction, progress, raw_offset)
@@ -172,14 +169,14 @@ func _settle(direction: int) -> void:
 func _complete_settle(direction: int, committed: bool) -> void:
 	_tween = null
 	if committed:
-		_current_index += direction
+		_current_index = posmod(_current_index + direction, _page_count)
 	_reset_gesture()
 	_reset_visual()
 	page_settled.emit(_current_index, committed)
 
 
 func _can_move(direction: int) -> bool:
-	return _current_index + direction >= 0 and _current_index + direction < _page_count
+	return direction != 0 and _page_count > 1
 
 
 func _direction_from_offset(offset: float) -> int:

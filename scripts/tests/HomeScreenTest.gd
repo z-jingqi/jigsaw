@@ -413,21 +413,37 @@ func _run() -> void:
 	home.set_reduced_motion(false)
 	home.debug_begin_drag()
 	home.debug_drag(home.size.x * 0.30, 1.0)
-	var edge_state: Dictionary = home.debug_state_snapshot()
+	var loop_back_state: Dictionary = home.debug_state_snapshot()
 	_check(
 		(
-			float(edge_state.gesture_progress) >= 0.08
-			and float(edge_state.gesture_progress) <= 0.09
-			and not home.incoming_info.visible
+			float(loop_back_state.gesture_progress) >= 0.29
+			and home.incoming_info.visible
+			and home.incoming_current_page_label.text == "02"
+			and home.current_cover.scale.x < 1.0
+			and home.previous_cover.scale.x > 1.0
+			and home.current_cover.modulate.a < 1.0
+			and home.previous_cover.modulate.a < 1.0
 		),
-		"home_first_page_edge_damping"
+		"home_first_page_wraps_with_cover_depth_motion"
 	)
 	home.debug_end_drag()
-	await create_timer(0.28).timeout
+	await create_timer(0.35).timeout
+	_check(home.debug_state_snapshot().selected_index == 1, "home_first_page_wraps_to_last")
+	_check(_changed_theme == "topic_02", "home_first_page_wrap_emits_theme")
+	_check(_activated_theme.is_empty(), "home_first_page_wrap_does_not_activate")
+	_check(home.active_motion_count() == 0, "home_first_page_wrap_releases_motion")
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.30, 1.0)
 	_check(
-		home.debug_state_snapshot().selected_index == 0 and home.active_motion_count() == 0,
-		"home_edge_returns_to_current"
+		home.incoming_current_page_label.text == "01", "home_last_page_previews_wrapped_first_page"
 	)
+	home.debug_end_drag()
+	await create_timer(0.35).timeout
+	_check(
+		home.debug_state_snapshot().selected_index == 0 and _changed_theme == "topic_01",
+		"home_last_page_wraps_to_first"
+	)
+	_changed_theme = ""
 	var outgoing_name_start_x: float = home.theme_name.position.x
 	var incoming_name_start_x: float = incoming_theme_name.position.x
 	home.debug_begin_drag()
@@ -542,8 +558,12 @@ func _run() -> void:
 		(
 			home.theme_name.position.is_equal_approx(reduced_name_position)
 			and home.progress.position.is_equal_approx(reduced_progress_position)
+			and home.current_cover.scale.is_equal_approx(Vector2.ONE)
+			and home.previous_cover.scale.is_equal_approx(Vector2.ONE)
+			and home.current_cover.modulate.a < 1.0
+			and home.previous_cover.modulate.a < 1.0
 		),
-		"home_reduced_motion_disables_information_displacement"
+		"home_reduced_motion_uses_crossfade_without_spatial_depth"
 	)
 	home.debug_end_drag()
 	await create_timer(0.14).timeout
