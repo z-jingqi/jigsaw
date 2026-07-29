@@ -3,6 +3,7 @@ extends SceneTree
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 const GlassButtonScript := preload("res://scripts/ui/foundation/GlassButton.gd")
+const MotionResource := preload("res://themes/motion_tokens.tres")
 
 var _all_ok := true
 var _failures: Array[String] = []
@@ -29,6 +30,7 @@ func _run() -> void:
 	var album_button: Button = home.get_node("SafeArea/SafeContent/Header/AlbumButton")
 	var menu_button: Button = home.get_node("SafeArea/SafeContent/Header/MenuButton")
 	var all_themes_button: Button = home.get_node("SafeArea/SafeContent/AllThemesButton")
+	var header := home.get_node("SafeArea/SafeContent/Header") as Control
 	var page_label := home.get_node("SafeArea/SafeContent/PageLabel") as Control
 	var incoming_theme_name := home.get_node("SafeArea/SafeContent/InfoIncoming/ThemeName") as Label
 	_check(logo.texture != null, "home_logo_texture")
@@ -283,8 +285,82 @@ func _run() -> void:
 	)
 	_check(home.get_node("CoverSlots/Current").texture != null, "home_current_cover")
 	home.play_cold_entry()
-	await create_timer(1.10).timeout
-	_check(home.active_motion_count() == 0, "home_cold_entry_settled")
+	await create_timer(0.30).timeout
+	var entry_state: Dictionary = home.debug_state_snapshot()
+	_check(
+		(
+			home.cover_slots.modulate.a > 0.0
+			and home.cover_slots.modulate.a < 1.0
+			and header.offset_top > 40.0
+			and header.offset_top < 64.0
+			and home.info_panel.offset_top > -359.0
+			and home.info_panel.offset_top <= -319.0
+			and not bool(entry_state.entry_interaction_ready)
+			and menu_button.mouse_filter == Control.MOUSE_FILTER_IGNORE
+		),
+		"home_cold_entry_midpoint"
+	)
+	await create_timer(0.80).timeout
+	_check(
+		(
+			home.active_motion_count() == 0
+			and is_equal_approx(header.offset_top, 64.0)
+			and is_equal_approx(home.info_panel.offset_top, -359.0)
+			and is_equal_approx(page_label.offset_top, -280.0)
+			and bool(home.debug_state_snapshot().entry_interaction_ready)
+			and menu_button.mouse_filter == Control.MOUSE_FILTER_STOP
+		),
+		"home_cold_entry_settled"
+	)
+	var pointer_down := InputEventMouseButton.new()
+	pointer_down.button_index = MOUSE_BUTTON_LEFT
+	pointer_down.pressed = true
+	menu_button.gui_input.emit(pointer_down)
+	await create_timer(0.04).timeout
+	_check(home.active_motion_count() >= 1, "home_settings_press_active")
+	await create_timer(0.06).timeout
+	_check(
+		is_equal_approx(menu_button.scale.x, MotionResource.icon_press_scale),
+		"home_settings_press_scale"
+	)
+	_check(
+		(menu_button as GlassButton).debug_icon_rotation_degrees() >= 7.9,
+		"home_settings_press_rotation"
+	)
+	var pointer_up := InputEventMouseButton.new()
+	pointer_up.button_index = MOUSE_BUTTON_LEFT
+	pointer_up.pressed = false
+	menu_button.gui_input.emit(pointer_up)
+	await create_timer(0.16).timeout
+	_check(
+		(
+			menu_button.scale.is_equal_approx(Vector2.ONE)
+			and absf((menu_button as GlassButton).debug_icon_rotation_degrees()) <= 0.1
+			and home.active_motion_count() == 0
+		),
+		"home_settings_release_motion"
+	)
+	all_themes_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(
+		is_equal_approx(all_themes_button.scale.x, MotionResource.primary_press_scale),
+		"home_all_themes_press_motion"
+	)
+	all_themes_button.gui_input.emit(pointer_up)
+	await create_timer(0.16).timeout
+	_check(all_themes_button.scale.is_equal_approx(Vector2.ONE), "home_all_themes_release_motion")
+	home.set_reduced_motion(true)
+	menu_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(
+		(
+			menu_button.scale.is_equal_approx(Vector2.ONE)
+			and absf((menu_button as GlassButton).debug_icon_rotation_degrees()) <= 0.1
+		),
+		"home_button_reduced_motion"
+	)
+	menu_button.gui_input.emit(pointer_up)
+	home.set_reduced_motion(false)
 	home.debug_begin_drag()
 	home.debug_drag(-home.size.x * 0.30, 0.12)
 	_check(

@@ -9,6 +9,7 @@ enum Kind { PRIMARY, PILL, ICON, CARD }
 @export var motion_tokens: MotionTokens
 
 var _feedback: PressFeedback
+var _reduced_motion := false
 
 
 func _ready() -> void:
@@ -24,6 +25,21 @@ func _ready() -> void:
 	elif kind == Kind.ICON:
 		press_scale = motion_tokens.icon_press_scale
 	_feedback = PressFeedback.new(self, motion_tokens, press_scale)
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	if _feedback != null:
+		_feedback.set_reduced_motion(enabled)
+
+
+func cancel_motion() -> void:
+	if _feedback != null:
+		_feedback.cancel()
+
+
+func active_motion_count() -> int:
+	return _feedback.active_motion_count() if _feedback != null else 0
 
 
 func _exit_tree() -> void:

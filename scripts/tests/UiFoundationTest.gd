@@ -148,6 +148,21 @@ func _test_component_scenes() -> void:
 	icon_button.gui_input.emit(pointer_up)
 	await create_timer(0.16).timeout
 	_check(icon_button.scale.is_equal_approx(Vector2.ONE), "icon_release_feedback")
+	pill_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(
+		is_equal_approx(pill_button.scale.x, MotionResource.primary_press_scale),
+		"pill_press_feedback"
+	)
+	pill_button.gui_input.emit(pointer_up)
+	await create_timer(0.16).timeout
+	_check(pill_button.scale.is_equal_approx(Vector2.ONE), "pill_release_feedback")
+	icon_button.set_reduced_motion(true)
+	icon_button.gui_input.emit(pointer_down)
+	await create_timer(0.10).timeout
+	_check(icon_button.scale.is_equal_approx(Vector2.ONE), "button_reduced_motion")
+	icon_button.gui_input.emit(pointer_up)
+	icon_button.set_reduced_motion(false)
 	theme_card.set_view_model(
 		{
 			"theme_id": "shanhai",

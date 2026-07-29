@@ -49,9 +49,11 @@ func _ready() -> void:
 	album_button.pressed.connect(album_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	all_themes_button.pressed.connect(all_themes_requested.emit)
+	album_button.button_down.connect(_on_fixed_action_started)
+	menu_button.button_down.connect(_on_fixed_action_started)
+	all_themes_button.button_down.connect(_on_fixed_action_started)
 	resized.connect(_on_resized)
-	animation_player.play(&"RESET")
-	animation_player.advance(0.0)
+	_apply_cold_entry_final()
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
@@ -65,6 +67,8 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 func navigation_exit(_context: Dictionary) -> void:
 	if _pager != null:
 		_pager.cancel_motion()
+	_cancel_button_motion()
+	progress.finish_motion()
 
 
 func navigation_set_active(is_active: bool) -> void:
@@ -72,12 +76,24 @@ func navigation_set_active(is_active: bool) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 	if not is_active and _pager != null:
 		_pager.cancel_to_current()
+	if not is_active:
+		_cancel_button_motion()
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	set_meta("reduced_motion", enabled)
 	progress.reduced_motion = enabled
 	incoming_progress.reduced_motion = enabled
+	album_button.set_reduced_motion(enabled)
+	menu_button.set_reduced_motion(enabled)
+	all_themes_button.set_reduced_motion(enabled)
+	if enabled:
+		if _pager != null:
+			_pager.cancel_to_current()
+		if animation_player.is_playing() or progress.active_motion_count() > 0:
+			_finish_cold_entry()
+		incoming_progress.finish_motion()
+		_cancel_button_motion()
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -92,14 +108,16 @@ func play_cold_entry() -> void:
 		return
 	_first_entry_played = true
 	if bool(get_meta("reduced_motion", false)):
-		animation_player.play(&"enter")
-		animation_player.seek(0.9, true)
-		progress.play_cold_start()
+		_apply_cold_entry_final()
+		progress.finish_motion()
 		return
+	animation_player.play(&"RESET")
+	animation_player.advance(0.0)
 	animation_player.play(&"enter")
-	_entry_interaction_ready = false
+	progress.play_cold_start(0.42)
+	_set_entry_interaction_ready(false)
 	get_tree().create_timer(0.65).timeout.connect(
-		func() -> void: _entry_interaction_ready = true, CONNECT_ONE_SHOT
+		func() -> void: _set_entry_interaction_ready(true), CONNECT_ONE_SHOT
 	)
 
 
@@ -109,6 +127,9 @@ func active_motion_count() -> int:
 		animation_active
 		+ (_pager.active_motion_count() if _pager != null else 0)
 		+ progress.active_motion_count()
+		+ album_button.active_motion_count()
+		+ menu_button.active_motion_count()
+		+ all_themes_button.active_motion_count()
 	)
 
 
@@ -121,6 +142,8 @@ func debug_state_snapshot() -> Dictionary:
 		"animation_playing": animation_player.is_playing(),
 		"pager_motion": _pager.active_motion_count() if _pager != null else 0,
 		"progress_motion": progress.active_motion_count(),
+		"entry_interaction_ready": _entry_interaction_ready,
+		"reduced_motion": bool(get_meta("reduced_motion", false)),
 	}
 
 
@@ -178,10 +201,12 @@ func _set_cover(slot: TextureRect, theme: Variant) -> void:
 
 func _layout_cover_slots(offset: float) -> void:
 	var width := maxf(1.0, size.x)
+	cover_slots.pivot_offset = size * 0.5
 	for pair in [[previous_cover, -1.0], [current_cover, 0.0], [next_cover, 1.0]]:
 		var slot: TextureRect = pair[0]
 		slot.position = Vector2((float(pair[1]) * width) + offset, 0.0)
 		slot.size = size
+		slot.pivot_offset = slot.size * 0.5
 
 
 func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
@@ -267,9 +292,10 @@ func _on_gesture_input(event: InputEvent) -> void:
 	if _transitioning_to_levels or _pager == null:
 		return
 	if not _entry_interaction_ready:
-		animation_player.seek(0.9, true)
-		_entry_interaction_ready = true
+		_finish_cold_entry()
 		return
+	if animation_player.is_playing() or progress.active_motion_count() > 0:
+		_finish_cold_entry()
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
 		if mouse.button_index == MOUSE_BUTTON_LEFT:
@@ -292,3 +318,34 @@ func _on_resized() -> void:
 	if _view_model == null:
 		return
 	_apply_selected_theme(false)
+
+
+func _apply_cold_entry_final() -> void:
+	animation_player.play(&"enter")
+	animation_player.seek(MotionTokenResource.home_cold_duration, true)
+	animation_player.pause()
+	_set_entry_interaction_ready(true)
+
+
+func _finish_cold_entry() -> void:
+	_apply_cold_entry_final()
+	progress.finish_motion()
+
+
+func _cancel_button_motion() -> void:
+	album_button.cancel_motion()
+	menu_button.cancel_motion()
+	all_themes_button.cancel_motion()
+
+
+func _on_fixed_action_started() -> void:
+	if animation_player.is_playing() or progress.active_motion_count() > 0:
+		_finish_cold_entry()
+
+
+func _set_entry_interaction_ready(is_ready: bool) -> void:
+	_entry_interaction_ready = is_ready
+	var filter := Control.MOUSE_FILTER_STOP if is_ready else Control.MOUSE_FILTER_IGNORE
+	album_button.mouse_filter = filter
+	menu_button.mouse_filter = filter
+	all_themes_button.mouse_filter = filter
