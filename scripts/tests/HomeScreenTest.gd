@@ -427,7 +427,16 @@ func _run() -> void:
 		"home_reverse_gesture_returns_without_commit"
 	)
 	home.debug_begin_drag()
-	home.debug_drag(-home.size.x * 0.50, 1.0)
+	home.debug_drag(-home.size.x * 0.25, 1.0)
+	_check(
+		(
+			is_equal_approx(float(home.debug_state_snapshot().gesture_progress), 0.25)
+			and home.theme_name.modulate.a > 0.0
+			and incoming_theme_name.modulate.a <= 0.01
+		),
+		"home_drag_quarter_state"
+	)
+	home.debug_drag(-home.size.x * 0.25, 1.0)
 	_check(
 		(
 			home.get_node("SafeArea/SafeContent/InfoIncoming").visible
@@ -441,6 +450,15 @@ func _run() -> void:
 		),
 		"home_incoming_information_layers"
 	)
+	home.debug_drag(-home.size.x * 0.25, 1.0)
+	_check(
+		(
+			is_equal_approx(float(home.debug_state_snapshot().gesture_progress), 0.75)
+			and incoming_theme_name.modulate.a >= 0.99
+			and home.incoming_page_label.modulate.a > 0.0
+		),
+		"home_drag_three_quarter_state"
+	)
 	home.debug_end_drag()
 	await create_timer(0.35).timeout
 	_check(
@@ -448,13 +466,35 @@ func _run() -> void:
 		"home_drag_commits_once"
 	)
 	home.debug_begin_drag()
+	home.debug_drag(home.size.x * 0.10, 0.03)
+	home.debug_end_drag()
+	await create_timer(0.35).timeout
+	_check(
+		_changed_theme == "topic_01" and home.debug_state_snapshot().selected_index == 0,
+		"home_velocity_commits_below_ratio"
+	)
+	home.debug_begin_drag()
+	home.debug_drag(-home.size.x * 0.30, 1.0)
+	home.debug_end_drag()
+	await create_timer(0.35).timeout
+	_check(home.debug_state_snapshot().selected_index == 1, "home_restores_second_theme")
+	home.debug_begin_drag()
 	home.debug_drag(4.0, 0.05)
 	home.debug_end_drag()
 	await create_timer(0.40).timeout
 	_check(_activated_theme == "topic_02", "home_small_drag_activates")
 	home.set_reduced_motion(true)
+	var reduced_name_position: Vector2 = home.theme_name.position
+	var reduced_progress_position: Vector2 = home.progress.position
 	home.debug_begin_drag()
 	home.debug_drag(home.size.x * 0.30, 0.12)
+	_check(
+		(
+			home.theme_name.position.is_equal_approx(reduced_name_position)
+			and home.progress.position.is_equal_approx(reduced_progress_position)
+		),
+		"home_reduced_motion_disables_information_displacement"
+	)
 	home.debug_end_drag()
 	await create_timer(0.14).timeout
 	_check(

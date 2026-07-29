@@ -2,7 +2,7 @@ class_name AllThemesScreen
 extends Control
 
 signal close_requested
-signal theme_activated(theme_id: String, source_rect: Rect2)
+signal theme_activated(theme_id: String, source_rect: Rect2, source_texture: Texture2D)
 
 const ThemeCardScene := preload("res://scenes/ui/foundation/ThemeCard.tscn")
 
@@ -210,12 +210,15 @@ func _on_card_pressed(card: Control) -> void:
 	_set_interaction_enabled(false)
 	var theme_id := str(card.get("theme_id"))
 	var source_rect: Rect2 = card.call(&"source_rect")
+	var source_texture := card.call(&"source_texture") as Texture2D
 	if _reduced_motion:
-		theme_activated.emit(theme_id, source_rect)
+		theme_activated.emit(theme_id, source_rect, source_texture)
 		return
 	_selection_tween = create_tween()
 	_selection_tween.tween_interval(0.08)
-	_selection_tween.tween_callback(func() -> void: theme_activated.emit(theme_id, source_rect))
+	_selection_tween.tween_callback(
+		func() -> void: theme_activated.emit(theme_id, source_rect, source_texture)
+	)
 	_selection_tween.finished.connect(_finish_selection_motion, CONNECT_ONE_SHOT)
 
 

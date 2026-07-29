@@ -21,7 +21,7 @@ func _run() -> void:
 	screen.size = Vector2(393, 852)
 	await process_frame
 	screen.theme_activated.connect(
-		func(theme_id: String, source_rect: Rect2) -> void:
+		func(theme_id: String, source_rect: Rect2, _source_texture: Texture2D) -> void:
 			_selected_theme = theme_id
 			_source_rect = source_rect
 	)
