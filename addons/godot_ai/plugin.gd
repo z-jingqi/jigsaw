@@ -3,6 +3,7 @@ extends EditorPlugin
 
 const GAME_HELPER_AUTOLOAD_NAME := "_mcp_game_helper"
 const GAME_HELPER_AUTOLOAD_PATH := "res://addons/godot_ai/runtime/game_helper.gd"
+const GDUNIT4_PLUGIN_CONFIG_PATH := "res://addons/gdUnit4/plugin.cfg"
 
 ## Editor-process Logger subclass — captures parse errors, @tool runtime
 ## errors, and push_error/push_warning so the LLM can read them via
@@ -243,7 +244,21 @@ func _enter_tree() -> void:
 	_game_log_buffer = GameLogBuffer.new()
 	_editor_log_buffer = EditorLogBuffer.new()
 	_surfaced_error_tracker = SurfacedErrorTracker.new(_editor_log_buffer, _game_log_buffer)
-	_attach_editor_logger()
+	if _gdunit4_editor_plugin_enabled():
+		## Godot AI and GdUnit4 both register GDScript Logger instances.
+		## On Godot 4.6.2/macOS, keeping both active until editor shutdown can
+		## route allocator cleanup errors through LoggerBind after Godot's type
+		## mutex has already been destroyed, causing SIGABRT on every quit.
+		## Keep the rest of the MCP bridge available and disable only the
+		## conflicting editor-process error capture.
+		_editor_log_buffer.append(
+			"warn",
+			"Editor log capture is disabled while the GdUnit4 editor plugin is enabled "
+			+ "to avoid a Godot 4.6 shutdown crash.",
+		)
+		print("MCP | editor log capture disabled for GdUnit4 shutdown compatibility")
+	else:
+		_attach_editor_logger()
 	_dispatcher = Dispatcher.new(_log_buffer, _surfaced_error_tracker)
 	_dispatcher.mcp_logging = _log_buffer.enabled
 	_startup_trace_phase("core_objects")
@@ -578,6 +593,14 @@ func _exit_tree() -> void:
 func _attach_editor_logger() -> void:
 	_editor_logger = EditorLogger.new(_editor_log_buffer)
 	OS.add_logger(_editor_logger)
+
+
+func _gdunit4_editor_plugin_enabled() -> bool:
+	var enabled_plugins: PackedStringArray = ProjectSettings.get_setting(
+		"editor_plugins/enabled",
+		PackedStringArray(),
+	)
+	return enabled_plugins.has(GDUNIT4_PLUGIN_CONFIG_PATH)
 
 
 ## Remove old Logger-quarantine artifacts left by extract-over-live
