@@ -13,6 +13,16 @@ depend on the MCP server being available.
 - Vendored subtree: `plugin/addons/godot_ai`
 - License: MIT; see `LICENSE` in this directory.
 
+Local compatibility patch:
+
+- `plugin.gd` does not register Godot AI's editor-process `Logger` while the
+  GdUnit4 editor plugin is enabled. Godot 4.6.2 on macOS otherwise aborts
+  during process shutdown when both plugins keep GDScript loggers active.
+  Scene tools, runtime control, MCP transport, game logs, screenshots, and
+  structured command diagnostics remain available; only passive editor error
+  capture is disabled for that combined-plugin session.
+
 Do not use the plugin's self-update action in this repository. Upgrade by
 reviewing a specific upstream release, replacing the complete vendored subtree,
-and updating the commit and archive checksum above.
+reapplying the compatibility patch if it is still necessary, and updating the
+commit and archive checksum above.

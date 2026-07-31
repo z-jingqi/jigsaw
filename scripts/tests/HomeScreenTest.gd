@@ -107,7 +107,6 @@ func _run() -> void:
 	var progress_cat := home_progress.get_node("Journey/Cat") as TextureRect
 	var progress_fish := home_progress.get_node("Journey/Fish") as TextureRect
 	var progress_completion := home_progress.get_node("Journey/Completion") as TextureRect
-	var completion_fish := home_progress.get_node("Journey/Completion/FishOverlay") as TextureRect
 	var first_paw := home_progress.get_node("Journey/Paws/Paw1") as TextureRect
 	var title_font: Font = home.theme_name.get_theme_font(&"font")
 	_check(
@@ -120,8 +119,8 @@ func _run() -> void:
 	_check(
 		(
 			absf(progress_fish.size.x - progress_completion.size.x * 0.75) <= 0.5
-			and completion_fish.size.is_equal_approx(progress_fish.size)
 			and absf(progress_completion.size.y - progress_cat.size.y) <= 0.5
+			and not progress_completion.has_node("FishOverlay")
 			and title_font is FontVariation
 			and float((title_font as FontVariation).variation_opentype.get(&"wght", 0.0)) >= 900.0
 			and (title_font as FontVariation).variation_embolden >= 0.8
@@ -262,7 +261,6 @@ func _run() -> void:
 			and not progress_cat.visible
 			and not progress_fish.visible
 			and progress_completion.visible
-			and completion_fish.visible
 		),
 		"home_progress_completion_keeps_scale_ground_and_step"
 	)
