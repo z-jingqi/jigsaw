@@ -182,7 +182,7 @@ func _test_component_scenes() -> void:
 	_check(
 		(
 			theme_card.theme_id == "shanhai"
-			and theme_card.get_node("Margin/Content/Progress/Numeric").text == "2 / 5"
+			and theme_card.get_node("Information/Content/Progress").text == "2 / 5"
 		),
 		"theme_card_view_model"
 	)

@@ -325,6 +325,10 @@ func set_viewport(width: int, height: int) -> void:
 
 func state_snapshot() -> Dictionary:
 	var navigation := _navigator.debug_state_snapshot()
+	var screen_state: Dictionary = {}
+	var active_screen := _navigator.current_screen_view()
+	if active_screen != null and active_screen.has_method(&"debug_state_snapshot"):
+		screen_state = active_screen.call(&"debug_state_snapshot")
 	var topic := _services.content.topic_by_id(_current_theme_id)
 	var progress := _catalog.theme_progress(topic) if not topic.is_empty() else null
 	return {
@@ -336,9 +340,13 @@ func state_snapshot() -> Dictionary:
 		"viewport": [_reported_viewport().x, _reported_viewport().y],
 		"reduced_motion": _reduced_motion(),
 		"active_motion_count": _active_motion_count(),
-		"motion_phase": navigation.get("motion_phase", "idle"),
-		"transition_kind": navigation.get("transition_kind", ""),
-		"gesture_progress": navigation.get("gesture_progress", 0.0),
+		"motion_phase": screen_state.get("motion_phase", navigation.get("motion_phase", "idle")),
+		"transition_kind":
+		screen_state.get("transition_kind", navigation.get("transition_kind", "")),
+		"gesture_progress":
+		screen_state.get("gesture_progress", navigation.get("gesture_progress", 0.0)),
+		"page_index": screen_state.get("page_index", 0),
+		"page_count": screen_state.get("page_count", 0),
 		"completed_modes": progress.completed_modes if progress != null else 0,
 		"total_modes": progress.total_modes if progress != null else 0,
 		"progress_ratio": progress.ratio if progress != null else 0.0,
