@@ -1,5 +1,14 @@
 # Repository Instructions
 
+> **The test suites are paused while the UI is being reworked.** The screens are
+> changing shape faster than the assertions can follow, so the suites fail for
+> reasons that are not defects. `RUN_TESTS` in `.github/workflows/quality.yml` is
+> `"false"`: the `gdunit` and `runtime-validation` jobs still run and report, so
+> the required checks on `main` are satisfied, but they execute nothing. The
+> `quality` job still lints. Until this note is removed, verify visual work by
+> running the app and inspecting it rather than by the criteria below, and say
+> plainly in any handoff that the suites did not run.
+
 When the game UI, layout, or visual flow needs validation, prefer running a Godot validation script in a normal non-headless window. This exercises the real display server, runs the relevant screens automatically, prints explicit pass/fail results, and exits without requiring manual window control. Do not add `--headless` when the purpose is visual validation.
 
 Discover validation scripts from the current checkout before choosing one:
