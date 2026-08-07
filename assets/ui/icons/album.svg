@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <title>Album</title>
+  <!--
+    Picture gallery: frame, sun and a mountain skyline. Sized so its optical
+    weight matches the other icons in this folder.
+  -->
+  <g fill="none" stroke="#0B4750" stroke-width="11"
+     stroke-linecap="round" stroke-linejoin="round">
+    <rect x="26" y="38" width="188" height="164" rx="34"/>
+    <circle cx="76" cy="88" r="15"/>
+    <path d="M 34,186 L 102,114 L 142,158 L 166,134 L 210,180"/>
+  </g>
+</svg>

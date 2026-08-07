@@ -1,5 +1,6 @@
 extends SceneTree
 
+const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
 const ScreenScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
@@ -90,8 +91,11 @@ func _run() -> void:
 	)
 	screen.navigation_exit({})
 	await create_timer(0.25).timeout
+	var exit_released: bool = await MotionSettle.released(
+		self, func() -> int: return screen.active_motion_count()
+	)
 	_check(
-		screen.debug_active_card_count() == 0 and screen.active_motion_count() == 0,
+		exit_released and screen.debug_active_card_count() == 0,
 		"exit_clears_virtual_cards_and_motion"
 	)
 	screen.navigation_enter({"view_model": _view_model(2)}, {"reduced_motion": true})
