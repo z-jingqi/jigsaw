@@ -1,5 +1,6 @@
 extends SceneTree
 
+const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
 const ThemeProgressScene := preload("res://scenes/ui/foundation/ThemeProgress.tscn")
 const IconButtonScene := preload("res://scenes/ui/foundation/IconButton.tscn")
 const PillButtonScene := preload("res://scenes/ui/foundation/PillButton.tscn")
@@ -61,7 +62,10 @@ func _run() -> void:
 	progress.set_progress_data(_progress(2, 5, 0.4, 2, false))
 	_check(progress.active_motion_count() == 1, "journey_progress_motion")
 	await create_timer(0.30).timeout
-	_check(progress.active_motion_count() == 0, "journey_motion_released")
+	var journey_released: bool = await MotionSettle.released(
+		self, func() -> int: return progress.active_motion_count()
+	)
+	_check(journey_released, "journey_motion_released")
 	progress.set_progress_data(_progress(5, 5, 1.0, 5, true))
 	_check(_visible_paws(progress) == 0, "journey_complete_hides_paws")
 	_check(
@@ -248,10 +252,10 @@ func _test_modal_interruption() -> void:
 	await create_timer(0.04).timeout
 	modal_shell.play_open(false)
 	await create_timer(0.30).timeout
-	_check(
-		modal_shell.phase == "open" and modal_shell.active_motion_count() == 0,
-		"modal_interrupted_reopen"
+	var reopened: bool = await MotionSettle.released(
+		self, func() -> int: return modal_shell.active_motion_count()
 	)
+	_check(reopened and modal_shell.phase == "open", "modal_interrupted_reopen")
 	modal_shell.play_close(true)
 	await process_frame
 	var no_residual_modal := root.find_children("ModalShell", "Control", true, false).is_empty()

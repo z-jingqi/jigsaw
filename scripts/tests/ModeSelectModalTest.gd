@@ -1,5 +1,6 @@
 extends SceneTree
 
+const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
 const ModalScene := preload("res://scenes/modals/ModeSelectModal.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
@@ -40,15 +41,27 @@ func _test_available_selection_closes_before_signal() -> void:
 		"start_resume_actions"
 	)
 	await create_timer(0.30).timeout
-	_check(int(modal.call(&"active_motion_count")) == 0, "open_motion_released")
+	var open_released: bool = await MotionSettle.released(
+		self, func() -> int: return int(modal.call(&"active_motion_count"))
+	)
+	_check(open_released, "open_motion_released")
 	(polygon as Button).pressed.emit()
 	_check(_selection_count == 0, "selection_waits_for_close")
 	await create_timer(0.20).timeout
+	var emitted: bool = await MotionSettle.until(self, func() -> bool: return _selection_count >= 1)
 	_check(
-		_selection_count == 1 and _selected_mode == &"polygon" and _selected_policy == &"start",
+		(
+			emitted
+			and _selection_count == 1
+			and _selected_mode == &"polygon"
+			and _selected_policy == &"start"
+		),
 		"selection_emitted_once_after_close"
 	)
-	_check(int(modal.call(&"active_motion_count")) == 0, "close_motion_released")
+	var close_released: bool = await MotionSettle.released(
+		self, func() -> int: return int(modal.call(&"active_motion_count"))
+	)
+	_check(close_released, "close_motion_released")
 	modal.queue_free()
 	await process_frame
 
@@ -64,7 +77,8 @@ func _test_unavailable_and_close() -> void:
 	_check(_selection_count == 0, "unavailable_never_selects")
 	modal.call(&"request_close")
 	await create_timer(0.20).timeout
-	_check(_close_count == 1, "close_emits_once")
+	var closed: bool = await MotionSettle.until(self, func() -> bool: return _close_count >= 1)
+	_check(closed and _close_count == 1, "close_emits_once")
 	modal.queue_free()
 	await process_frame
 

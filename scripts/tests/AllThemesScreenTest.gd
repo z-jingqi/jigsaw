@@ -1,5 +1,6 @@
 extends SceneTree
 
+const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
 const ScreenScene := preload("res://scenes/screens/AllThemesScreen.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
@@ -29,7 +30,10 @@ func _run() -> void:
 	var view_model: Variant = _view_model()
 	screen.navigation_enter({"view_model": view_model}, {"reduced_motion": false})
 	await create_timer(0.36).timeout
-	_check(screen.active_motion_count() == 0, "enter_animation_releases")
+	var entered: bool = await MotionSettle.released(
+		self, func() -> int: return screen.active_motion_count()
+	)
+	_check(entered, "enter_animation_releases")
 	var animation_player: AnimationPlayer = screen.get_node("AnimationPlayer")
 	_check(
 		(
@@ -69,8 +73,12 @@ func _run() -> void:
 	)
 	incomplete.pressed.emit()
 	await create_timer(0.1).timeout
+	var activated: bool = await MotionSettle.until(
+		self, func() -> bool: return not _selected_theme.is_empty()
+	)
 	_check(
-		_selected_theme == "topic_01" and _source_rect.size.x > 0.0, "theme_activation_source_rect"
+		activated and _selected_theme == "topic_01" and _source_rect.size.x > 0.0,
+		"theme_activation_source_rect"
 	)
 	screen.navigation_set_active(false)
 	screen.navigation_set_active(true)

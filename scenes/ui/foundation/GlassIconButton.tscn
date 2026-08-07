@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/ui/foundation/GlassButton.gd" id="1_button"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/icons/settings.svg" id="3_settings"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/settings.svg" id="3_settings"]
 
 [node name="GlassIconButton" type="Button"]
 custom_minimum_size = Vector2(144, 144)
