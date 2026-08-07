@@ -34,7 +34,7 @@ Only launch the project interactively when the validation scripts cannot expose 
 Godot.exe --path <resolved-repository-root>
 ```
 
-For interactive inspection, wait briefly for the scene to render, then inspect the displayed game window. Press `D` while the game window is focused to toggle the in-game Dev Test panel when needed. For a quick smoke run, start the window, wait about 2 seconds, then terminate the process. On macOS desktop runs, the warning `Orientation not supported by this display server` is expected and does not block launch.
+For interactive inspection, wait briefly for the scene to render, then inspect the displayed game window. To reach a specific state without replaying a manual input sequence, drive `Game.debug_execute()` from a validation script instead. For a quick smoke run, start the window, wait about 2 seconds, then terminate the process. On macOS desktop runs, the warning `Orientation not supported by this display server` is expected and does not block launch.
 
 ## Git and pull request integration
 
