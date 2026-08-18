@@ -11,36 +11,40 @@ const CoverMotionScript := preload("res://scripts/screens/HomeCoverMotion.gd")
 const ThemeInfoMotionScript := preload("res://scripts/screens/HomeThemeInfoMotion.gd")
 const MotionTokenResource := preload("res://themes/motion_tokens.tres")
 
-## Theme titles range from "猫" to "The Classic of Mountains and Seas", so the
-## title shrinks to fit its reserved width before it is allowed to wrap.
-const TITLE_MAX_FONT_SIZE := 88
-const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 60
-const TITLE_WRAP_MIN_FONT_SIZE := 36
-const TITLE_CONTENT_MARGIN := 104.0
+const DESIGN_WIDTH := 1206.0
+const DESIGN_HEIGHT := 2622.0
+const CARD_ASPECT := 0.62
+const CARD_WIDTH_RATIO := 0.79
+const HEADER_CLEARANCE := 298.0
+const BOTTOM_CLEARANCE := 660.0
+const CARD_GAP := 72.0
+const SIDE_PEEK := 110.0
+const FRAME_INSET_RATIO := Vector2(0.085, 0.07)
+const TITLE_MAX_FONT_SIZE := 82
+const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 54
+const TITLE_WRAP_MIN_FONT_SIZE := 34
 
 @onready var cover_slots: Control = $CoverSlots
 @onready var previous_cover: TextureRect = $CoverSlots/Previous
 @onready var current_cover: TextureRect = $CoverSlots/Current
 @onready var next_cover: TextureRect = $CoverSlots/Next
 @onready var logo: TextureRect = $SafeArea/SafeContent/Header/Logo
-@onready var album_button: Button = $SafeArea/SafeContent/Header/AlbumButton
-@onready var menu_button: Button = $SafeArea/SafeContent/Header/MenuButton
-@onready var bottom_panel: Panel = $BottomPanel
-@onready var info_panel: Control = $BottomPanel/InfoLive
-@onready var theme_name: Label = $BottomPanel/InfoLive/ThemeName
-@onready var page_label: Control = $BottomPanel/InfoLive/PageBadge
-@onready var page_text: Label = $BottomPanel/InfoLive/PageBadge/PageText
-@onready var caption: Label = $BottomPanel/InfoLive/Caption
-@onready var progress_track: Control = $BottomPanel/InfoLive/ProgressTrack
-@onready var progress_fill: Control = $BottomPanel/InfoLive/ProgressTrack/ProgressFill
-@onready var incoming_info: Control = $BottomPanel/InfoIncoming
-@onready var incoming_name: Label = $BottomPanel/InfoIncoming/ThemeName
-@onready var incoming_page_label: Control = $BottomPanel/InfoIncoming/PageBadge
-@onready var incoming_page_text: Label = $BottomPanel/InfoIncoming/PageBadge/PageText
-@onready var incoming_caption: Label = $BottomPanel/InfoIncoming/Caption
-@onready var incoming_progress_fill: Control = $BottomPanel/InfoIncoming/ProgressTrack/ProgressFill
-@onready var start_button: Button = $BottomPanel/StartButton
-@onready var animation_player: AnimationPlayer = $AnimationPlayer
+@onready var album_button: ActionButton = $SafeArea/SafeContent/Header/AlbumButton
+@onready var menu_button: ActionButton = $SafeArea/SafeContent/Header/MenuButton
+@onready var bottom_content: Control = $SafeArea/SafeContent/BottomContent
+@onready var info_panel := bottom_content.get_node("InfoLive") as Control
+@onready var theme_name := info_panel.get_node("ThemeName") as Label
+@onready var progress_group := info_panel.get_node("ProgressGroup") as Control
+@onready var progress_count := progress_group.get_node("ProgressCount") as Label
+@onready var progress_fill := progress_group.get_node("ProgressTrack/ProgressFill") as Control
+@onready var incoming_info := bottom_content.get_node("InfoIncoming") as Control
+@onready var incoming_name := incoming_info.get_node("ThemeName") as Label
+@onready var incoming_progress_group := incoming_info.get_node("ProgressGroup") as Control
+@onready var incoming_progress_count := incoming_progress_group.get_node("ProgressCount") as Label
+@onready var incoming_progress_fill := (
+	incoming_progress_group.get_node("ProgressTrack/ProgressFill") as Control
+)
+@onready var start_button: ActionButton = $SafeArea/SafeContent/BottomContent/StartButton
 
 var _view_model: Variant
 var _themes: Array = []
@@ -55,6 +59,9 @@ var _transitioning_to_levels := false
 var _pointer_gesture_active := false
 var _progress_ratio := 0.0
 var _incoming_progress_ratio := 0.0
+var _card_size := Vector2.ZERO
+var _card_stride := 1.0
+var _card_top := 0.0
 
 
 func _ready() -> void:
@@ -63,15 +70,12 @@ func _ready() -> void:
 	_pager.page_settled.connect(_on_pager_settled)
 	_pager.activation_requested.connect(_on_pager_activation_requested)
 	_cover_motion = CoverMotionScript.new(previous_cover, current_cover, next_cover)
+	_info_motion = ThemeInfoMotionScript.new(info_panel, incoming_info)
 	album_button.pressed.connect(all_themes_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	start_button.pressed.connect(_on_pager_activation_requested)
-	album_button.button_down.connect(_on_fixed_action_started)
-	menu_button.button_down.connect(_on_fixed_action_started)
-	start_button.button_down.connect(_on_fixed_action_started)
 	resized.connect(_on_resized)
 	_apply_cold_entry_final()
-	_info_motion = ThemeInfoMotionScript.new(info_panel, incoming_info)
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
@@ -105,11 +109,10 @@ func set_reduced_motion(enabled: bool) -> void:
 	set_meta("reduced_motion", enabled)
 	album_button.set_reduced_motion(enabled)
 	menu_button.set_reduced_motion(enabled)
+	start_button.set_reduced_motion(enabled)
 	if enabled:
 		if _pager != null:
 			_pager.cancel_to_current()
-		if animation_player.is_playing():
-			_finish_cold_entry()
 		_cancel_button_motion()
 
 
@@ -124,24 +127,15 @@ func play_cold_entry() -> void:
 	if _first_entry_played:
 		return
 	_first_entry_played = true
-	if bool(get_meta("reduced_motion", false)):
-		_apply_cold_entry_final()
-		return
-	animation_player.play(&"RESET")
-	animation_player.advance(0.0)
-	animation_player.play(&"enter")
-	_set_entry_interaction_ready(false)
-	get_tree().create_timer(0.65).timeout.connect(
-		func() -> void: _set_entry_interaction_ready(true), CONNECT_ONE_SHOT
-	)
+	_apply_cold_entry_final()
 
 
 func active_motion_count() -> int:
 	return (
-		(1 if animation_player.is_playing() else 0)
-		+ (_pager.active_motion_count() if _pager != null else 0)
+		(_pager.active_motion_count() if _pager != null else 0)
 		+ album_button.active_motion_count()
 		+ menu_button.active_motion_count()
+		+ start_button.active_motion_count()
 	)
 
 
@@ -150,8 +144,8 @@ func debug_state_snapshot() -> Dictionary:
 		"selected_index": _selected_index,
 		"theme_id": str(_themes[_selected_index].theme_id) if not _themes.is_empty() else "",
 		"active_motion_count": active_motion_count(),
-		"animation": str(animation_player.current_animation),
-		"animation_playing": animation_player.is_playing(),
+		"animation": "",
+		"animation_playing": false,
 		"pager_motion": _pager.active_motion_count() if _pager != null else 0,
 		"gesture_progress": _pager.gesture_progress() if _pager != null else 0.0,
 		"gesture_offset": _pager.gesture_offset() if _pager != null else 0.0,
@@ -187,11 +181,10 @@ func transition_source_texture() -> Texture2D:
 func _apply_selected_theme() -> void:
 	if _themes.is_empty():
 		theme_name.text = ""
-		_set_page_number(page_text, 0, 0)
-		_set_progress(progress_fill, 0.0, caption)
+		_set_progress(progress_fill, progress_count, null)
 		return
 	var selected: Variant = _themes[_selected_index]
-	_set_information(theme_name, page_text, caption, progress_fill, selected, _selected_index)
+	_set_information(theme_name, progress_count, progress_fill, selected)
 	_progress_ratio = float(selected.progress.ratio)
 	_incoming_index = -1
 	_info_motion.reset()
@@ -200,7 +193,7 @@ func _apply_selected_theme() -> void:
 	_set_cover(next_cover, _theme_at(_selected_index + 1))
 	_layout_cover_slots(0.0)
 	_cover_motion.reset()
-	_pager.configure(_themes.size(), _selected_index, maxf(1.0, size.x))
+	_pager.configure(_themes.size(), _selected_index, _card_stride)
 
 
 func _theme_at(index: int) -> Variant:
@@ -216,46 +209,56 @@ func _set_cover(slot: TextureRect, theme_model: Variant) -> void:
 
 
 func _layout_cover_slots(offset: float, direction := 0, overlap_ratio := 0.0) -> void:
-	var width := maxf(1.0, size.x)
-	cover_slots.pivot_offset = size * 0.5
+	_update_card_metrics()
+	var center_x := (size.x - _card_size.x) * 0.5
+	var frame_inset := _card_size * FRAME_INSET_RATIO
+	var cover_size := _card_size - frame_inset * 2.0
 	for pair in [[previous_cover, -1.0], [current_cover, 0.0], [next_cover, 1.0]]:
 		var slot: TextureRect = pair[0]
-		slot.position = Vector2((float(pair[1]) * width) + offset, 0.0)
+		var outer_position := Vector2(center_x + float(pair[1]) * _card_stride + offset, _card_top)
 		if direction > 0 and slot == next_cover:
-			slot.position.x -= width * overlap_ratio
+			outer_position.x -= _card_stride * overlap_ratio
 		elif direction < 0 and slot == previous_cover:
-			slot.position.x += width * overlap_ratio
-		slot.size = size
+			outer_position.x += _card_stride * overlap_ratio
+		slot.position = outer_position + frame_inset
+		slot.size = cover_size
 		slot.pivot_offset = slot.size * 0.5
+		var frame := slot.get_node("Frame") as TextureRect
+		frame.position = -frame_inset
+		frame.size = _card_size
+	_cover_motion.set_card_aspect(cover_size)
+
+
+func _update_card_metrics() -> void:
+	var unit := maxf(0.45, minf(size.x / DESIGN_WIDTH, size.y / DESIGN_HEIGHT))
+	var max_width := size.x * CARD_WIDTH_RATIO
+	var header_clearance := HEADER_CLEARANCE * unit
+	var bottom_clearance := BOTTOM_CLEARANCE * unit
+	var available_height := maxf(260.0 * unit, size.y - header_clearance - bottom_clearance)
+	var card_height := minf(max_width / CARD_ASPECT, available_height)
+	var card_width := minf(max_width, card_height * CARD_ASPECT)
+	_card_size = Vector2(card_width, card_height)
+	var center_margin := (size.x - card_width) * 0.5
+	var responsive_gap := maxf(CARD_GAP * unit, center_margin - SIDE_PEEK * unit)
+	_card_stride = card_width + responsive_gap
+	_card_top = header_clearance + maxf(0.0, (available_height - card_height) * 0.32)
 
 
 func _set_information(
-	name_label: Label,
-	page: Label,
-	caption_label: Label,
-	fill: Control,
-	theme_model: Variant,
-	index: int
+	name_label: Label, count_label: Label, fill: Control, theme_model: Variant
 ) -> void:
 	_fit_title(name_label, str(theme_model.title))
-	_set_page_number(page, index + 1, _themes.size())
-	_set_progress(fill, float(theme_model.progress.ratio), caption_label)
+	_set_progress(fill, count_label, theme_model.progress)
 
 
-## The title never crosses the panel's mid-line, so it first shrinks to fit that
-## width on one line; a name too long for even the smallest single-line size
-## shrinks further and wraps onto a second line.
 func _fit_title(label: Label, text: String) -> void:
 	label.text = text
-	# Derived from the panel rather than read off the label, so the result does
-	# not depend on whether layout has run yet.
-	var panel_width := bottom_panel.size.x
-	if panel_width <= 1.0:
-		panel_width = size.x
-	var available := maxf(1.0, panel_width * 0.5 - TITLE_CONTENT_MARGIN)
+	var available := label.size.x
+	if available <= 1.0:
+		available = maxf(1.0, size.x * 0.55)
 	var box_height := label.size.y
 	if box_height <= 1.0:
-		box_height = 144.0
+		box_height = 206.0
 	var font := label.get_theme_font("font")
 
 	var single := TITLE_MAX_FONT_SIZE
@@ -282,18 +285,20 @@ func _fit_title(label: Label, text: String) -> void:
 	label.tooltip_text = text
 
 
-func _set_page_number(label: Label, current: int, total: int) -> void:
-	var semantic_text := "%02d / %02d" % [current, total]
-	label.text = semantic_text
-	label.tooltip_text = semantic_text
-
-
-func _set_progress(fill: Control, ratio: float, caption_label: Label) -> void:
-	var clamped := clampf(ratio, 0.0, 1.0)
+func _set_progress(fill: Control, count_label: Label, progress: Variant) -> void:
+	if progress == null:
+		fill.visible = false
+		count_label.text = "0 / 0"
+		count_label.accessibility_name = "已完成 0 / 总数 0"
+		return
+	var clamped := clampf(float(progress.ratio), 0.0, 1.0)
+	fill.visible = clamped > 0.0
 	fill.anchor_right = clamped
-	fill.offset_right = 0.0
-	if caption_label != null:
-		caption_label.text = "已完成 %d%%" % roundi(clamped * 100.0)
+	fill.offset_right = -4.0
+	count_label.text = "%d / %d" % [progress.completed_modes, progress.total_modes]
+	count_label.accessibility_name = (
+		"已完成 %d / 总数 %d" % [progress.completed_modes, progress.total_modes]
+	)
 
 
 func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
@@ -305,13 +310,8 @@ func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float
 		return
 	var incoming_index := posmod(_selected_index + direction, _themes.size())
 	if incoming_index != _incoming_index:
-		_set_information.call(
-			incoming_name,
-			incoming_page_text,
-			incoming_caption,
-			incoming_progress_fill,
-			_themes[incoming_index],
-			incoming_index
+		_set_information(
+			incoming_name, incoming_progress_count, incoming_progress_fill, _themes[incoming_index]
 		)
 		_incoming_progress_ratio = float(_themes[incoming_index].progress.ratio)
 		_incoming_index = incoming_index
@@ -357,7 +357,7 @@ func _input(event: InputEvent) -> void:
 		if mouse.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if mouse.pressed:
-			if _is_fixed_action_at(mouse.position):
+			if _is_fixed_action_at(mouse.position) or not _is_cover_interaction_at(mouse.position):
 				return
 			_begin_pointer_gesture()
 		elif _pointer_gesture_active:
@@ -367,7 +367,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
-			if _is_fixed_action_at(touch.position):
+			if _is_fixed_action_at(touch.position) or not _is_cover_interaction_at(touch.position):
 				return
 			_begin_pointer_gesture()
 		elif _pointer_gesture_active:
@@ -377,8 +377,6 @@ func _input(event: InputEvent) -> void:
 
 
 func _begin_pointer_gesture() -> void:
-	if not _entry_interaction_ready or animation_player.is_playing():
-		_finish_cold_entry()
 	_pointer_gesture_active = true
 	_pager.begin()
 
@@ -388,13 +386,15 @@ func _end_pointer_gesture() -> void:
 	_pager.end()
 
 
-## The bottom panel owns its own presses, so a drag started there must not also
-## page the carousel.
 func _is_fixed_action_at(viewport_position: Vector2) -> bool:
-	for action in [album_button, menu_button, start_button, bottom_panel]:
+	for action in [album_button, menu_button, start_button, bottom_content]:
 		if action.visible and action.get_global_rect().has_point(viewport_position):
 			return true
 	return false
+
+
+func _is_cover_interaction_at(viewport_position: Vector2) -> bool:
+	return current_cover.visible and current_cover.get_global_rect().has_point(viewport_position)
 
 
 func _on_resized() -> void:
@@ -408,26 +408,15 @@ func _on_resized() -> void:
 
 
 func _apply_cold_entry_final() -> void:
-	animation_player.play(&"enter")
-	animation_player.seek(MotionTokenResource.home_cold_duration, true)
-	animation_player.pause()
 	_set_entry_interaction_ready(true)
-
-
-func _finish_cold_entry() -> void:
-	_apply_cold_entry_final()
 
 
 func _cancel_button_motion() -> void:
 	album_button.cancel_motion()
 	menu_button.cancel_motion()
+	start_button.cancel_motion()
 	current_cover.scale = Vector2.ONE
 	current_cover.modulate.a = 1.0
-
-
-func _on_fixed_action_started() -> void:
-	if animation_player.is_playing():
-		_finish_cold_entry()
 
 
 func _set_entry_interaction_ready(is_ready: bool) -> void:

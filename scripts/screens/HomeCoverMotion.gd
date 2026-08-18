@@ -10,6 +10,7 @@ var _previous: TextureRect
 var _current: TextureRect
 var _next: TextureRect
 var _previous_material: ShaderMaterial
+var _current_material: ShaderMaterial
 var _next_material: ShaderMaterial
 
 
@@ -18,10 +19,18 @@ func _init(previous: TextureRect, current: TextureRect, next: TextureRect) -> vo
 	_current = current
 	_next = next
 	_previous_material = _create_crossfade_material()
+	_current_material = _create_crossfade_material()
 	_next_material = _create_crossfade_material()
 	_previous.material = _previous_material
+	_current.material = _current_material
 	_next.material = _next_material
 	reset()
+
+
+func set_card_aspect(card_size: Vector2) -> void:
+	var aspect := card_size.x / maxf(1.0, card_size.y)
+	for card_material in [_previous_material, _current_material, _next_material]:
+		card_material.set_shader_parameter(&"card_aspect", aspect)
 
 
 func apply(direction: int, progress: float, reduced_motion := false) -> void:
@@ -48,7 +57,7 @@ func reset() -> void:
 	cover_parent.move_child(_previous, 0)
 	cover_parent.move_child(_current, 1)
 	cover_parent.move_child(_next, 2)
-	for crossfade_material in [_previous_material, _next_material]:
+	for crossfade_material in [_previous_material, _current_material, _next_material]:
 		crossfade_material.set_shader_parameter(&"edge_direction", 0.0)
 		crossfade_material.set_shader_parameter(&"feather_width", 0.001)
 

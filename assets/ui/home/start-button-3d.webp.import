@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dyfl14qor8e2s"
-path="res://.godot/imported/jigcat-logo.webp-d322f0cd28801e18a991ff96c81dc794.ctex"
+uid="uid://bmvo7rmqxfe5e"
+path="res://.godot/imported/start-button-3d.webp-67cd7f5617c1c618a6f40cc5cfcaae89.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/home/jigcat-logo.webp"
-dest_files=["res://.godot/imported/jigcat-logo.webp-d322f0cd28801e18a991ff96c81dc794.ctex"]
+source_file="res://assets/ui/home/start-button-3d.webp"
+dest_files=["res://.godot/imported/start-button-3d.webp-67cd7f5617c1c618a6f40cc5cfcaae89.ctex"]
 
 [params]
 
