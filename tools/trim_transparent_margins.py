@@ -3,6 +3,9 @@
 
 The crop keeps every meaningful alpha-visible component. Tiny isolated alpha
 specks are ignored by default so invisible border noise does not block trimming.
+
+Files are written next to the input with a suffix. Pass --in-place to replace
+the source instead; the tool never overwrites a source image by accident.
 """
 
 from __future__ import annotations
@@ -10,10 +13,10 @@ from __future__ import annotations
 import argparse
 import shutil
 import tempfile
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 
@@ -65,91 +68,118 @@ def collect_inputs(inputs: list[Path], recursive: bool) -> list[InputFile]:
     return files
 
 
-def output_path_for(input_file: InputFile, output_dir: Path | None) -> Path:
+def output_path_for(
+    input_file: InputFile, output_dir: Path | None, suffix: str, in_place: bool
+) -> Path:
+    src = input_file.path
+    if in_place and output_dir is None:
+        return src
     if output_dir is None:
-        return input_file.path
-    return (output_dir.resolve() / input_file.relative_path).resolve()
+        return src.with_name(f"{src.stem}{suffix}{src.suffix}")
+
+    destination = (output_dir.resolve() / input_file.relative_path).resolve()
+    if destination == src and not in_place:
+        destination = destination.with_name(f"{destination.stem}{suffix}{destination.suffix}")
+    return destination
 
 
-def alpha_bbox(
-    image: Image.Image,
-    min_alpha: int,
-    min_component_pixels: int,
-) -> tuple[int, int, int, int] | None:
-    alpha = image.convert("RGBA").getchannel("A")
-    mask = alpha.point(lambda value: 255 if value >= min_alpha else 0)
-    if min_component_pixels <= 1:
-        return mask.getbbox()
-    return filtered_alpha_bbox(mask, min_component_pixels)
+def row_runs(row: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Start (inclusive) and end (exclusive) of each True run in a boolean row."""
+    edges = np.diff(np.concatenate(([0], row.view(np.uint8), [0])).astype(np.int8))
+    return np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
 
 
-def filtered_alpha_bbox(mask: Image.Image, min_component_pixels: int) -> tuple[int, int, int, int] | None:
-    width, height = mask.size
-    pixels = mask.load()
-    seen = bytearray(width * height)
-    kept_bbox: tuple[int, int, int, int] | None = None
-    fallback_bbox: tuple[int, int, int, int] | None = None
-    fallback_size = 0
+def content_bbox(mask: np.ndarray, min_component_pixels: int) -> tuple[int, int, int, int] | None:
+    """Union of the bounding boxes of all components of at least the given size.
 
-    for sy in range(height):
-        for sx in range(width):
-            start_idx = sy * width + sx
-            if seen[start_idx] or pixels[sx, sy] == 0:
-                seen[start_idx] = 1
-                continue
+    Components are labelled by merging horizontal runs across adjacent rows, so
+    the work is proportional to the number of runs rather than to the pixel
+    count. Falls back to the single largest component when every component is
+    below the threshold, so a small-but-real sprite is never dropped.
+    """
+    height = mask.shape[0]
+    parent: list[int] = []
+    runs: list[tuple[int, int, int]] = []
 
-            queue: deque[tuple[int, int]] = deque([(sx, sy)])
-            seen[start_idx] = 1
-            count = 0
-            left = right = sx
-            top = bottom = sy
+    def find(node: int) -> int:
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
 
-            while queue:
-                x, y = queue.popleft()
-                count += 1
-                left = min(left, x)
-                top = min(top, y)
-                right = max(right, x)
-                bottom = max(bottom, y)
-                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                    if nx < 0 or ny < 0 or nx >= width or ny >= height:
-                        continue
-                    idx = ny * width + nx
-                    if seen[idx]:
-                        continue
-                    seen[idx] = 1
-                    if pixels[nx, ny] != 0:
-                        queue.append((nx, ny))
+    def union(left: int, right: int) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[max(left_root, right_root)] = min(left_root, right_root)
 
-            component_bbox = (left, top, right + 1, bottom + 1)
-            if count > fallback_size:
-                fallback_size = count
-                fallback_bbox = component_bbox
-            if count < min_component_pixels:
-                continue
-            kept_bbox = union_bbox(kept_bbox, component_bbox)
+    previous_ids: list[int] = []
+    previous_starts = previous_ends = np.empty(0, dtype=np.int64)
 
-    return kept_bbox or fallback_bbox
+    for y in range(height):
+        starts, ends = row_runs(mask[y])
+        current_ids = []
+        for start, end in zip(starts, ends):
+            parent.append(len(runs))
+            current_ids.append(len(runs))
+            runs.append((y, int(start), int(end)))
 
+        # Merge with the previous row wherever the runs overlap horizontally.
+        i = j = 0
+        while i < len(current_ids) and j < len(previous_ids):
+            if ends[i] <= previous_starts[j]:
+                i += 1
+            elif previous_ends[j] <= starts[i]:
+                j += 1
+            else:
+                union(current_ids[i], previous_ids[j])
+                if ends[i] < previous_ends[j]:
+                    i += 1
+                else:
+                    j += 1
+        previous_ids, previous_starts, previous_ends = current_ids, starts, ends
 
-def union_bbox(
-    a: tuple[int, int, int, int] | None,
-    b: tuple[int, int, int, int],
-) -> tuple[int, int, int, int]:
-    if a is None:
-        return b
+    if not runs:
+        return None
+
+    counts: dict[int, int] = {}
+    boxes: dict[int, tuple[int, int, int, int]] = {}
+    for index, (y, start, end) in enumerate(runs):
+        root = find(index)
+        counts[root] = counts.get(root, 0) + (end - start)
+        if root in boxes:
+            left, top, right, bottom = boxes[root]
+            boxes[root] = (min(left, start), min(top, y), max(right, end), max(bottom, y + 1))
+        else:
+            boxes[root] = (start, y, end, y + 1)
+
+    kept = [boxes[root] for root, count in counts.items() if count >= min_component_pixels]
+    if not kept:
+        kept = [boxes[max(counts, key=lambda root: counts[root])]]
+
     return (
-        min(a[0], b[0]),
-        min(a[1], b[1]),
-        max(a[2], b[2]),
-        max(a[3], b[3]),
+        min(box[0] for box in kept),
+        min(box[1] for box in kept),
+        max(box[2] for box in kept),
+        max(box[3] for box in kept),
     )
 
 
+def alpha_bbox(
+    image: Image.Image, min_alpha: int, min_component_pixels: int
+) -> tuple[int, int, int, int] | None:
+    alpha = np.asarray(image.convert("RGBA").getchannel("A"), dtype=np.uint8)
+    mask = alpha >= min_alpha
+    if not mask.any():
+        return None
+    if min_component_pixels <= 1:
+        rows = np.flatnonzero(mask.any(axis=1))
+        cols = np.flatnonzero(mask.any(axis=0))
+        return int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1
+    return content_bbox(mask, min_component_pixels)
+
+
 def expand_bbox(
-    bbox: tuple[int, int, int, int],
-    image_size: tuple[int, int],
-    padding: int,
+    bbox: tuple[int, int, int, int], image_size: tuple[int, int], padding: int
 ) -> tuple[int, int, int, int]:
     left, top, right, bottom = bbox
     width, height = image_size
@@ -175,18 +205,23 @@ def save_image(image: Image.Image, dst: Path, image_format: str | None) -> None:
 def trim_one(
     input_file: InputFile,
     output_dir: Path | None,
+    suffix: str,
     padding: int,
     min_alpha: int,
     min_component_pixels: int,
+    in_place: bool,
+    overwrite: bool,
 ) -> Result:
     src = input_file.path
-    dst = output_path_for(input_file, output_dir)
+    dst = output_path_for(input_file, output_dir, suffix, in_place)
+    if dst == src and not in_place:
+        return Result(src, dst, None, None, "skipped", "refusing to overwrite the source; pass --in-place")
+    if dst != src and dst.exists() and not overwrite:
+        return Result(src, dst, None, None, "skipped", "destination exists; pass --overwrite to replace it")
+
     dst.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
-        prefix=f"{src.stem}-",
-        suffix=src.suffix,
-        dir=dst.parent,
-        delete=False,
+        prefix=f"{src.stem}-", suffix=src.suffix, dir=dst.parent, delete=False
     ) as handle:
         tmp = Path(handle.name)
 
@@ -215,12 +250,19 @@ def trim_one(
 def print_result(result: Result) -> None:
     target = "" if result.src == result.dst else f" -> {result.dst}"
     if result.status == "wrote" and result.before_size and result.after_size:
-        print(f"wrote {result.src}{target}: {result.before_size[0]}x{result.before_size[1]} -> {result.after_size[0]}x{result.after_size[1]}")
+        print(
+            f"wrote {result.src}{target}: "
+            f"{result.before_size[0]}x{result.before_size[1]} -> "
+            f"{result.after_size[0]}x{result.after_size[1]}"
+        )
         return
     if result.before_size and result.after_size:
-        print(f"{result.status} {result.src}: {result.before_size[0]}x{result.before_size[1]} ({result.detail})")
+        print(
+            f"{result.status} {result.src}{target}: "
+            f"{result.before_size[0]}x{result.before_size[1]} ({result.detail})"
+        )
         return
-    print(f"{result.status} {result.src}: {result.detail}")
+    print(f"{result.status} {result.src}{target}: {result.detail}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -230,6 +272,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("inputs", type=Path, nargs="+", help="Image files or directories to scan")
     parser.add_argument("-r", "--recursive", action="store_true", help="Scan directories recursively")
     parser.add_argument("-o", "--output-dir", type=Path, help="Write trimmed files into this directory")
+    parser.add_argument(
+        "--suffix",
+        default="-trimmed",
+        help="Suffix used when writing next to inputs. Default: -trimmed",
+    )
+    parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="Replace the source image instead of writing a new file.",
+    )
     parser.add_argument("--padding", type=non_negative_int, default=0, help="Transparent padding to keep. Default: 0")
     parser.add_argument(
         "--min-alpha",
@@ -243,6 +295,7 @@ def parse_args() -> argparse.Namespace:
         default=8,
         help="Ignore isolated alpha components smaller than this. Default: 8",
     )
+    parser.add_argument("--overwrite", action="store_true", help="Replace an existing destination file")
     return parser.parse_args()
 
 
@@ -255,7 +308,16 @@ def main() -> int:
 
     written = 0
     for input_file in files:
-        result = trim_one(input_file, args.output_dir, args.padding, args.min_alpha, args.min_component_pixels)
+        result = trim_one(
+            input_file,
+            args.output_dir,
+            args.suffix,
+            args.padding,
+            args.min_alpha,
+            args.min_component_pixels,
+            args.in_place,
+            args.overwrite,
+        )
         print_result(result)
         if result.status == "wrote":
             written += 1
