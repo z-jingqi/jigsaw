@@ -11,5 +11,4 @@ The runtime files were background-removed, alpha-trimmed, resized, and encoded
 as transparent WebP assets with the repository image tools.
 
 All foreground assets are generated without cast, contact, ambient, or drop
-shadows. Visual shadows are owned by Godot scene styles so their color, offset,
-softness, and Reduced Motion behavior remain adjustable at runtime.
+shadows. The homepage does not add replacement runtime shadows.

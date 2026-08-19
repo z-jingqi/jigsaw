@@ -223,9 +223,6 @@ func _layout_cover_slots(offset: float, direction := 0, overlap_ratio := 0.0) ->
 		slot.position = outer_position + frame_inset
 		slot.size = cover_size
 		slot.pivot_offset = slot.size * 0.5
-		var shadow := slot.get_node("Shadow") as Panel
-		shadow.position = -frame_inset
-		shadow.size = _card_size
 		var frame := slot.get_node("Frame") as TextureRect
 		frame.position = -frame_inset
 		frame.size = _card_size

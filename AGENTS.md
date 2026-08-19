@@ -81,9 +81,9 @@ For interactive inspection, wait briefly for the scene to render, then inspect t
   edge pixels. A preview or filename is not evidence that the image has real
   transparency.
 - Generated UI foreground assets must not contain baked cast, contact, ambient,
-  or drop shadows. When the interface needs depth, implement the shadow in
-  Godot with scene styles, shaders, or dedicated runtime nodes so it remains
-  adjustable and does not create an inner border when the asset is resized.
+  or drop shadows. Do not add replacement runtime shadows unless the approved
+  design explicitly requires them; depth must come from the asset's own shape,
+  material, and restrained internal highlights by default.
 - Keep the generated source outside the runtime asset path. Only the processed,
   alpha-verified, trimmed, and compressed result belongs under `assets/`.
 

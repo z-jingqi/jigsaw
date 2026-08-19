@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -47,30 +47,6 @@ corner_radius_bottom_left = 108
 corner_detail = 16
 anti_aliasing = true
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_cover_shadow"]
-bg_color = Color(1, 1, 1, 0.001)
-corner_radius_top_left = 64
-corner_radius_top_right = 64
-corner_radius_bottom_right = 64
-corner_radius_bottom_left = 64
-corner_detail = 16
-shadow_color = Color(0.25098, 0.164706, 0.0784314, 0.16)
-shadow_size = 18
-shadow_offset = Vector2(0, 12)
-anti_aliasing = true
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_start_shadow"]
-bg_color = Color(1, 1, 1, 0.001)
-corner_radius_top_left = 72
-corner_radius_top_right = 72
-corner_radius_bottom_right = 72
-corner_radius_bottom_left = 72
-corner_detail = 16
-shadow_color = Color(0.458824, 0.164706, 0.0980392, 0.28)
-shadow_size = 12
-shadow_offset = Vector2(0, 10)
-anti_aliasing = true
-
 [node name="HomeScreen" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -107,12 +83,6 @@ expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
 
-[node name="Shadow" type="Panel" parent="CoverSlots/Previous"]
-show_behind_parent = true
-layout_mode = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_cover_shadow")
-
 [node name="Frame" type="TextureRect" parent="CoverSlots/Previous"]
 layout_mode = 0
 texture = ExtResource("9_frame")
@@ -125,12 +95,6 @@ expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
 
-[node name="Shadow" type="Panel" parent="CoverSlots/Current"]
-show_behind_parent = true
-layout_mode = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_cover_shadow")
-
 [node name="Frame" type="TextureRect" parent="CoverSlots/Current"]
 layout_mode = 0
 texture = ExtResource("9_frame")
@@ -142,12 +106,6 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
-
-[node name="Shadow" type="Panel" parent="CoverSlots/Next"]
-show_behind_parent = true
-layout_mode = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_cover_shadow")
 
 [node name="Frame" type="TextureRect" parent="CoverSlots/Next"]
 layout_mode = 0
@@ -440,20 +398,6 @@ texture = ExtResource("10_button")
 expand_mode = 1
 stretch_mode = 0
 mouse_filter = 2
-
-[node name="StartButtonShadow" type="Panel" parent="SafeArea/SafeContent/BottomContent"]
-z_index = -1
-layout_mode = 1
-anchors_preset = 0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -280.0
-offset_top = 364.0
-offset_right = 280.0
-offset_bottom = 508.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_start_shadow")
 
 [node name="StartButton" type="Button" parent="SafeArea/SafeContent/BottomContent"]
 layout_mode = 1
