@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="8_action"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/theme-card-frame-3d.webp" id="9_frame"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/start-button-3d.webp" id="10_button"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/background-mint.webp" id="11_background"]
 
 [sub_resource type="FontVariation" id="FontVariation_title"]
 base_font = ExtResource("7_font")
@@ -65,7 +66,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_home")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -73,7 +74,9 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0.733333, 0.917647, 0.862745, 1)
+texture = ExtResource("11_background")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="CoverSlots" type="Control" parent="."]
 layout_mode = 1
@@ -217,7 +220,7 @@ mouse_filter = 2
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 240.0
+offset_bottom = 350.0
 grow_horizontal = 2
 mouse_filter = 2
 
@@ -225,10 +228,10 @@ mouse_filter = 2
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 30.0
+offset_left = 64.0
 offset_top = 4.0
-offset_right = -390.0
-offset_bottom = 210.0
+offset_right = -64.0
+offset_bottom = 144.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.286275, 0.207843, 0.105882, 1)
 theme_override_colors/font_shadow_color = Color(1, 0.956863, 0.827451, 0.72)
@@ -245,22 +248,20 @@ mouse_filter = 2
 
 [node name="ProgressGroup" type="Control" parent="SafeArea/SafeContent/BottomContent/InfoLive"]
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
+anchors_preset = 10
 anchor_right = 1.0
-offset_left = -360.0
-offset_top = 52.0
-offset_right = -10.0
-offset_bottom = 222.0
-grow_horizontal = 0
+offset_left = 64.0
+offset_top = 162.0
+offset_right = -64.0
+offset_bottom = 334.0
+grow_horizontal = 2
 mouse_filter = 2
 
 [node name="ProgressPaw" type="TextureRect" parent="SafeArea/SafeContent/BottomContent/InfoLive/ProgressGroup"]
 layout_mode = 0
-offset_left = 4.0
 offset_top = 2.0
-offset_right = 96.0
-offset_bottom = 82.0
+offset_right = 68.0
+offset_bottom = 62.0
 texture = ExtResource("6_paw")
 expand_mode = 1
 stretch_mode = 5
@@ -268,10 +269,10 @@ mouse_filter = 2
 
 [node name="ProgressCount" type="Label" parent="SafeArea/SafeContent/BottomContent/InfoLive/ProgressGroup"]
 layout_mode = 0
-offset_left = 110.0
+offset_left = 82.0
 offset_top = 0.0
-offset_right = 344.0
-offset_bottom = 84.0
+offset_right = 380.0
+offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.286275, 0.207843, 0.105882, 1)
 theme_override_colors/font_shadow_color = Color(1, 0.956863, 0.827451, 0.72)
 theme_override_constants/shadow_offset_x = 2
@@ -282,11 +283,12 @@ vertical_alignment = 1
 mouse_filter = 2
 
 [node name="ProgressTrack" type="Panel" parent="SafeArea/SafeContent/BottomContent/InfoLive/ProgressGroup"]
-layout_mode = 0
-offset_left = 52.0
-offset_top = 112.0
-offset_right = 344.0
-offset_bottom = 142.0
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 94.0
+offset_bottom = 126.0
+grow_horizontal = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_track")
 
@@ -308,7 +310,7 @@ modulate = Color(1, 1, 1, 0)
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 240.0
+offset_bottom = 350.0
 grow_horizontal = 2
 mouse_filter = 2
 
@@ -316,10 +318,10 @@ mouse_filter = 2
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 30.0
+offset_left = 64.0
 offset_top = 4.0
-offset_right = -390.0
-offset_bottom = 210.0
+offset_right = -64.0
+offset_bottom = 144.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.286275, 0.207843, 0.105882, 1)
 theme_override_colors/font_shadow_color = Color(1, 0.956863, 0.827451, 0.72)
@@ -336,22 +338,20 @@ mouse_filter = 2
 
 [node name="ProgressGroup" type="Control" parent="SafeArea/SafeContent/BottomContent/InfoIncoming"]
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
+anchors_preset = 10
 anchor_right = 1.0
-offset_left = -360.0
-offset_top = 52.0
-offset_right = -10.0
-offset_bottom = 222.0
-grow_horizontal = 0
+offset_left = 64.0
+offset_top = 162.0
+offset_right = -64.0
+offset_bottom = 334.0
+grow_horizontal = 2
 mouse_filter = 2
 
 [node name="ProgressPaw" type="TextureRect" parent="SafeArea/SafeContent/BottomContent/InfoIncoming/ProgressGroup"]
 layout_mode = 0
-offset_left = 4.0
 offset_top = 2.0
-offset_right = 96.0
-offset_bottom = 82.0
+offset_right = 68.0
+offset_bottom = 62.0
 texture = ExtResource("6_paw")
 expand_mode = 1
 stretch_mode = 5
@@ -359,10 +359,10 @@ mouse_filter = 2
 
 [node name="ProgressCount" type="Label" parent="SafeArea/SafeContent/BottomContent/InfoIncoming/ProgressGroup"]
 layout_mode = 0
-offset_left = 110.0
+offset_left = 82.0
 offset_top = 0.0
-offset_right = 344.0
-offset_bottom = 84.0
+offset_right = 380.0
+offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.286275, 0.207843, 0.105882, 1)
 theme_override_colors/font_shadow_color = Color(1, 0.956863, 0.827451, 0.72)
 theme_override_constants/shadow_offset_x = 2
@@ -373,11 +373,12 @@ vertical_alignment = 1
 mouse_filter = 2
 
 [node name="ProgressTrack" type="Panel" parent="SafeArea/SafeContent/BottomContent/InfoIncoming/ProgressGroup"]
-layout_mode = 0
-offset_left = 52.0
-offset_top = 112.0
-offset_right = 344.0
-offset_bottom = 142.0
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 94.0
+offset_bottom = 126.0
+grow_horizontal = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_track")
 
@@ -393,32 +394,29 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBox_fill")
 
-[node name="StartButtonBackground" type="NinePatchRect" parent="SafeArea/SafeContent/BottomContent"]
+[node name="StartButtonBackground" type="TextureRect" parent="SafeArea/SafeContent/BottomContent"]
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 10.0
-offset_top = 282.0
-offset_right = -10.0
-offset_bottom = 536.0
+anchors_preset = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -280.0
+offset_top = 364.0
+offset_right = 280.0
+offset_bottom = 508.0
 grow_horizontal = 2
 texture = ExtResource("10_button")
-patch_margin_left = 150
-patch_margin_top = 130
-patch_margin_right = 150
-patch_margin_bottom = 130
-axis_stretch_horizontal = 0
-axis_stretch_vertical = 0
+expand_mode = 1
+stretch_mode = 0
 mouse_filter = 2
 
 [node name="StartButton" type="Button" parent="SafeArea/SafeContent/BottomContent"]
-custom_minimum_size = Vector2(0, 206)
 layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 24.0
-offset_top = 302.0
-offset_right = -24.0
+anchors_preset = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -280.0
+offset_top = 364.0
+offset_right = 280.0
 offset_bottom = 508.0
 grow_horizontal = 2
 focus_mode = 0

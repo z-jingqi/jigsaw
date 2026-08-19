@@ -3,7 +3,7 @@ shader_type canvas_item;
 uniform float edge_direction = 0.0;
 uniform float feather_width : hint_range(0.001, 0.2) = 0.001;
 uniform float card_aspect : hint_range(0.25, 1.5) = 0.62;
-uniform float corner_radius : hint_range(0.0, 0.25) = 0.055;
+uniform float corner_radius : hint_range(0.0, 0.25) = 0.082;
 uniform float outer_margin : hint_range(0.0, 0.15) = 0.0;
 
 
