@@ -4,6 +4,7 @@ extends RefCounted
 const OUTGOING_DEPTH_SCALE := 0.008
 const INCOMING_START_SCALE := 1.03
 const MAX_OVERLAP_RATIO := 0.1
+const CARD_CORNER_RADIUS := 0.082
 const CrossfadeShader := preload("res://shaders/ui/home_cover_crossfade.gdshader")
 
 var _previous: TextureRect
@@ -29,8 +30,18 @@ func _init(previous: TextureRect, current: TextureRect, next: TextureRect) -> vo
 
 func set_card_aspect(card_size: Vector2) -> void:
 	var aspect := card_size.x / maxf(1.0, card_size.y)
-	for card_material in [_previous_material, _current_material, _next_material]:
+	for pair in [
+		[_previous_material, _previous],
+		[_current_material, _current],
+		[_next_material, _next],
+	]:
+		var card_material := pair[0] as ShaderMaterial
+		var cover := pair[1] as TextureRect
 		card_material.set_shader_parameter(&"card_aspect", aspect)
+		var texture_size := cover.texture.get_size() if cover.texture != null else card_size
+		card_material.set_shader_parameter(
+			&"texture_aspect", texture_size.x / maxf(1.0, texture_size.y)
+		)
 
 
 func apply(direction: int, progress: float, reduced_motion := false) -> void:
@@ -69,4 +80,5 @@ func overlap_ratio(progress: float) -> float:
 func _create_crossfade_material() -> ShaderMaterial:
 	var crossfade_material := ShaderMaterial.new()
 	crossfade_material.shader = CrossfadeShader
+	crossfade_material.set_shader_parameter(&"corner_radius", CARD_CORNER_RADIUS)
 	return crossfade_material
