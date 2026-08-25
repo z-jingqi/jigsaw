@@ -404,6 +404,12 @@ func _begin_transition(
 	var context := _navigation_context(reason)
 	context["source_view"] = source_view
 	context["target_view"] = target_view
+	context["source_companion"] = (
+		payload.get("_transition_source_companion") if reason == "pop" else null
+	)
+	context["target_companion"] = (
+		payload.get("_transition_target_companion") if reason != "pop" else null
+	)
 	context["source_rect"] = payload.get("_transition_source_rect", Rect2())
 	context["source_texture"] = payload.get("_transition_source_texture")
 	_transition_host.play(kind, context)
@@ -433,18 +439,12 @@ func _transition_kind(route: StringName) -> StringName:
 	var source := String(current_screen_entry().get("route", StringName()))
 	if source == "home" and route == &"levels":
 		return &"home_to_levels"
-	if source == "home" and route == &"all_themes":
-		return &"home_to_all_themes"
-	if source == "all_themes" and route == &"levels":
-		return &"card_to_levels"
 	return &"screen"
 
 
 func _pop_transition_kind(source: StringName, target: StringName) -> StringName:
 	if source == &"levels" and target == &"home":
 		return &"levels_to_home"
-	if source == &"all_themes" and target == &"home":
-		return &"all_themes_to_home"
 	return &"screen"
 
 

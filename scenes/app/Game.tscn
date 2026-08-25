@@ -1,11 +1,26 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/navigation/AppNavigator.gd" id="1_navigator"]
 [ext_resource type="Script" path="res://scripts/navigation/TransitionHost.gd" id="2_transition"]
 [ext_resource type="Script" path="res://scripts/app/Game.gd" id="3_game"]
+[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="4_tabletop"]
 
 [node name="Game" type="Node2D"]
 script = ExtResource("3_game")
+
+[node name="TabletopLayer" type="CanvasLayer" parent="."]
+layer = -10
+
+[node name="Background" type="TextureRect" parent="TabletopLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_tabletop")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="AppNavigator" type="Node" parent="."]
 script = ExtResource("1_navigator")

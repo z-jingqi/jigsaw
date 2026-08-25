@@ -1,46 +1,117 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/runtime/SwapActionBarView.gd" id="1_bar"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/PillButton.tscn" id="2_pill"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="2_action"]
+[ext_resource type="Texture2D" path="res://assets/ui/gameplay/move-row-up-primary.webp" id="3_move"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_bar"]
-bg_color = Color(0.0352941, 0.0823529, 0.105882, 0.9)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-border_width_top = 2
-border_color = Color(0.39, 0.43, 0.34, 0.46)
-
-[node name="SwapActionBar" type="Panel"]
-custom_minimum_size = Vector2(0, 88)
+[node name="SwapActionBar" type="Control"]
+custom_minimum_size = Vector2(0, 400)
 layout_mode = 3
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -88.0
+offset_top = -400.0
 grow_horizontal = 2
 grow_vertical = 0
-mouse_filter = 0
-theme_override_styles/panel = SubResource("StyleBox_bar")
+mouse_filter = 2
 script = ExtResource("1_bar")
 
-[node name="Actions" type="HBoxContainer" parent="."]
+[node name="Actions" type="Control" parent="."]
 layout_mode = 1
-anchors_preset = 10
+anchors_preset = 15
 anchor_right = 1.0
-offset_top = 16.0
-offset_bottom = -16.0
+anchor_bottom = 1.0
 grow_horizontal = 2
-theme_override_constants/separation = 12
-alignment = 1
+grow_vertical = 2
 mouse_filter = 2
 
-[node name="MoveUp" parent="Actions" instance=ExtResource("2_pill")]
-layout_mode = 2
-text = "Move row up"
-accessibility_label = "Move selected row up"
+[node name="MoveUpGroup" type="Control" parent="Actions"]
+layout_mode = 0
+offset_right = 228.0
+offset_bottom = 228.0
+mouse_filter = 2
 
-[node name="MoveDown" parent="Actions" instance=ExtResource("2_pill")]
-layout_mode = 2
-text = "Move row down"
-accessibility_label = "Move selected row down"
+[node name="Shadow" type="TextureRect" parent="Actions/MoveUpGroup"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 11.0
+offset_right = 236.0
+offset_bottom = 239.0
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Visual" type="TextureRect" parent="Actions/MoveUpGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="HitTarget" type="Button" parent="Actions/MoveUpGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+flat = true
+script = ExtResource("2_action")
+kind = 2
+accessibility_label = "Move all rows up one row"
+
+[node name="MoveDownGroup" type="Control" parent="Actions"]
+layout_mode = 0
+offset_right = 228.0
+offset_bottom = 228.0
+mouse_filter = 2
+
+[node name="Shadow" type="TextureRect" parent="Actions/MoveDownGroup"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 11.0
+offset_right = 236.0
+offset_bottom = 239.0
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
+rotation = 3.1415927
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Visual" type="TextureRect" parent="Actions/MoveDownGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+rotation = 3.1415927
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="HitTarget" type="Button" parent="Actions/MoveDownGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+flat = true
+script = ExtResource("2_action")
+kind = 2
+accessibility_label = "Move all rows down one row"

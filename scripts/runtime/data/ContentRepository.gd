@@ -42,6 +42,10 @@ func topic_cover(topic: Dictionary) -> Texture2D:
 	return _repository.topic_cover_texture(topic)
 
 
+func topic_background(topic: Dictionary) -> Texture2D:
+	return _repository.topic_background_texture(topic)
+
+
 func level_thumbnail(level: Dictionary) -> Texture2D:
 	return _repository.level_thumbnail(level)
 

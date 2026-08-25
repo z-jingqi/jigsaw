@@ -60,56 +60,24 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 	)
 
 
-func all_themes(current_theme_id: String) -> AppViewModels.AllThemesViewModel:
-	var topics: Array[Dictionary] = _content.topics()
-	var resolved_id := _resolve_theme_id(topics, current_theme_id)
-	var cards: Array[AppViewModels.ThemeCardViewModel] = []
-	for topic in topics:
-		var progress := theme_progress(topic)
-		(
-			cards
-			. append(
-				(
-					ViewModelsScript
-					. ThemeCardViewModel
-					. new(
-						{
-							"theme_id": topic["id"],
-							"title": topic["name"],
-							"cover_texture": _content.topic_cover(topic),
-							"progress": progress,
-							"is_current": str(topic["id"]) == resolved_id,
-							"is_new": progress.completed_modes == 0,
-						}
-					)
-				)
-			)
-		)
-	return (
-		ViewModelsScript
-		. AllThemesViewModel
-		. new(
-			{
-				"revision": _revision,
-				"cards": cards,
-				"current_theme_id": resolved_id,
-			}
-		)
-	)
-
-
 func level_list(
 	theme_id: String, requested_focus_level_id: String = ""
 ) -> AppViewModels.LevelListViewModel:
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var cards: Array[AppViewModels.LevelCardViewModel] = []
 	var focus_id := ""
+	var unlock_budget := 1
 	for level in topic.get("levels", []):
 		if typeof(level) != TYPE_DICTIONARY:
 			continue
 		var modes: Array[AppViewModels.ModeStatusViewModel] = _mode_statuses(topic, level)
+		var locked := unlock_budget <= 0
+		if not locked:
+			unlock_budget -= 1
+			if _has_completed_mode(modes):
+				unlock_budget += maxi(1, int(level.get("unlock_grant", 1)))
 		var is_recommended: bool = requested_focus_level_id == str(level["id"])
-		if focus_id.is_empty() and _has_unfinished_mode(modes):
+		if focus_id.is_empty() and not locked and _has_unfinished_mode(modes):
 			focus_id = str(level["id"])
 		(
 			cards
@@ -122,7 +90,7 @@ func level_list(
 							"level_id": level["id"],
 							"title": level["title"],
 							"thumbnail": _content.level_thumbnail(level),
-							"locked": false,
+							"locked": locked,
 							"recommended": is_recommended,
 							"modes": modes,
 						}
@@ -143,6 +111,7 @@ func level_list(
 				"revision": _revision,
 				"theme_id": topic.get("id", ""),
 				"theme_title": topic.get("name", ""),
+				"background_texture": _content.topic_background(topic),
 				"theme_progress": theme_progress(topic),
 				"focus_level_id":
 				requested_focus_level_id if not requested_focus_level_id.is_empty() else focus_id,
@@ -155,6 +124,7 @@ func level_list(
 func mode_select(theme_id: String, level_id: String) -> AppViewModels.ModeSelectViewModel:
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var level: Dictionary = _content.level_by_id(theme_id, level_id)
+	var level_media: Dictionary = _content.level_media(_content.level_config(level))
 	return (
 		ViewModelsScript
 		. ModeSelectViewModel
@@ -164,6 +134,8 @@ func mode_select(theme_id: String, level_id: String) -> AppViewModels.ModeSelect
 				"theme_id": theme_id,
 				"level_id": level_id,
 				"level_title": level.get("title", ""),
+				"background_texture": _content.topic_background(topic),
+				"preview_texture": level_media.get("texture"),
 				"options": _mode_statuses(topic, level),
 			}
 		)
@@ -232,7 +204,13 @@ func _mode_statuses(
 		)
 		result.append(
 			ViewModelsScript.ModeStatusViewModel.new(
-				StringName(mode), _mode_label(mode), status, action, available
+				StringName(mode),
+				_mode_label(mode),
+				status,
+				action,
+				available,
+				_mode_short_label(mode),
+				_mode_action_label(action)
 			)
 		)
 	return result
@@ -254,8 +232,31 @@ func _has_unfinished_mode(modes: Array[AppViewModels.ModeStatusViewModel]) -> bo
 	return false
 
 
+func _has_completed_mode(modes: Array[AppViewModels.ModeStatusViewModel]) -> bool:
+	for mode in modes:
+		if mode.enabled and mode.status == &"completed":
+			return true
+	return false
+
+
 func _mode_label(mode: String) -> String:
 	return _strings.text("mode_%s" % mode) if _strings != null else mode.capitalize()
+
+
+func _mode_short_label(mode: String) -> String:
+	return _strings.text("mode_short_%s" % mode) if _strings != null else mode.capitalize()
+
+
+func _mode_action_label(action: StringName) -> String:
+	if _strings == null:
+		return String(action).capitalize()
+	match action:
+		&"resume":
+			return _strings.text("continue")
+		&"replay":
+			return _strings.text("replay")
+		_:
+			return _strings.text("start_game")
 
 
 func _resolve_theme_id(themes: Array[Dictionary], requested_id: String) -> String:

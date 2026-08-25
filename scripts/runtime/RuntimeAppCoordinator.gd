@@ -13,7 +13,6 @@ const SystemPresenterScript := preload("res://scripts/runtime/presentation/Syste
 const GameStringsScript := preload("res://scripts/app/GameStrings.gd")
 const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
-const AllThemesScene := preload("res://scenes/screens/AllThemesScreen.tscn")
 const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 const ModeSelectScene := preload("res://scenes/modals/ModeSelectModal.tscn")
@@ -40,6 +39,7 @@ var _debug_viewport := Vector2i.ZERO
 var _pending_after_modal: Callable
 var _home_guide_timer: SceneTreeTimer
 var _dev_panel: Control
+var _returning_to_levels := false
 
 
 func _init(game: Node2D) -> void:
@@ -127,19 +127,6 @@ func show_home(theme_id := "") -> Dictionary:
 	return result
 
 
-func show_all_themes() -> Dictionary:
-	var result := _navigator.push(
-		&"all_themes",
-		{
-			"current_theme_id": _current_theme_id,
-			"view_model": _catalog.all_themes(_current_theme_id)
-		}
-	)
-	if bool(result.get("ok", false)):
-		_bind_all_themes(_navigator.current_screen_view() as AllThemesScreen)
-	return result
-
-
 func show_levels(
 	theme_id: String,
 	focus_level_id := "",
@@ -206,7 +193,9 @@ func enter_level(
 		"level_id": level_id,
 		"mode": mode,
 		"start_policy": start_policy,
-		"view_model": _catalog.gameplay(theme_id, level_id, mode)
+		"view_model": _catalog.gameplay(theme_id, level_id, mode),
+		"_transition_target_companion": _world_host,
+		"_transition_source_companion": _world_host,
 	}
 	var result := _navigator.push(&"gameplay", payload)
 	if bool(result.get("ok", false)):
@@ -226,6 +215,7 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 	var config := _services.content.config_with_theme_background(
 		_services.content.level_config(level), topic
 	)
+	config["_persistent_tabletop_background"] = true
 	var media := _services.content.level_media(config)
 	_apply_feedback_preferences()
 	var loaded := _board.start(
@@ -315,6 +305,7 @@ func set_reduced_motion(enabled: bool) -> Dictionary:
 	if bool(result.get("ok", false)):
 		_apply_feedback_preferences()
 		_navigator.set_reduced_motion(enabled)
+		_apply_reduced_motion_to_active_views(enabled)
 	return result
 
 
@@ -392,7 +383,6 @@ func preview_complete() -> Dictionary:
 func _bind_routes() -> void:
 	var routes := {
 		&"home": HomeScene,
-		&"all_themes": AllThemesScene,
 		&"levels": LevelsScene,
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
@@ -411,28 +401,16 @@ func _bind_home(screen: HomeScreen) -> void:
 		return
 	screen.selected_theme_changed.connect(_on_home_theme_changed)
 	screen.theme_activated.connect(_on_home_theme_activated)
-	screen.all_themes_requested.connect(show_all_themes)
 	screen.menu_requested.connect(show_settings)
 	_schedule_home_guide(screen)
-
-
-func _bind_all_themes(screen: AllThemesScreen) -> void:
-	if screen == null:
-		return
-	screen.close_requested.connect(_navigator.pop)
-	screen.theme_activated.connect(
-		func(theme_id: String, rect: Rect2, texture: Texture2D) -> void:
-			show_levels(theme_id, "", true, rect, texture)
-	)
 
 
 func _bind_levels(screen: RuntimeLevelListScreen) -> void:
 	if screen == null:
 		return
 	screen.back_requested.connect(_navigator.pop)
-	screen.level_selected.connect(
-		func(level_id: String) -> void: show_mode_select(_current_theme_id, level_id)
-	)
+	screen.level_selected.connect(_on_level_focused)
+	screen.mode_selected.connect(_on_level_focus_mode_selected)
 
 
 func _bind_gameplay(screen: GameplayScreen) -> void:
@@ -488,6 +466,16 @@ func _on_mode_selected(mode: StringName, policy: StringName) -> void:
 	_pending_after_modal = func() -> void:
 		enter_level(_current_theme_id, _current_level_id, String(mode), String(policy))
 	close_modal()
+
+
+func _on_level_focused(level_id: String) -> void:
+	_current_level_id = level_id
+	_current_mode = ""
+	_services.session.set_current(_current_theme_id, level_id)
+
+
+func _on_level_focus_mode_selected(level_id: String, mode: StringName, policy: StringName) -> void:
+	enter_level(_current_theme_id, level_id, String(mode), String(policy))
 
 
 func _on_setting_changed(key: StringName, enabled: bool) -> void:
@@ -586,13 +574,10 @@ func _complete_mode_tutorial(mode: String) -> void:
 
 func _return_to_levels() -> void:
 	_persist_board()
-	var focus := _current_level_id
-	_clear_board()
-	_navigator.pop()
-	_current_mode = ""
-	var view := _navigator.current_screen_view() as RuntimeLevelListScreen
-	if view != null:
-		view.refresh_view_model(_catalog.level_list(_current_theme_id, focus))
+	_returning_to_levels = true
+	var result := _navigator.pop()
+	if not bool(result.get("ok", false)):
+		_returning_to_levels = false
 
 
 func _persist_board() -> void:
@@ -671,6 +656,14 @@ func _cancel_home_guide_timer() -> void:
 
 func _on_route_changed(route: StringName, payload: Dictionary) -> void:
 	_state.update(route, payload)
+	if route == &"levels" and _returning_to_levels:
+		_returning_to_levels = false
+		var focus := _current_level_id
+		_clear_board()
+		_current_mode = ""
+		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
+		if levels != null:
+			levels.refresh_view_model(_catalog.level_list(_current_theme_id, focus), true)
 	if (
 		not _pending_after_modal.is_valid()
 		or not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty()
@@ -687,8 +680,19 @@ func run_deferred(action: Callable) -> void:
 
 
 func _on_motion_preference_changed(_snapshot: Dictionary, _revision: int) -> void:
-	_navigator.set_reduced_motion(_reduced_motion())
+	var enabled := _reduced_motion()
+	_navigator.set_reduced_motion(enabled)
+	_apply_reduced_motion_to_active_views(enabled)
 	_apply_feedback_preferences()
+
+
+func _apply_reduced_motion_to_active_views(enabled: bool) -> void:
+	var screen := _navigator.current_screen_view()
+	if screen != null and screen.has_method(&"set_reduced_motion"):
+		screen.call(&"set_reduced_motion", enabled)
+	var route_view := _navigator.current_route_view()
+	if route_view != null and route_view != screen and route_view.has_method(&"set_reduced_motion"):
+		route_view.call(&"set_reduced_motion", enabled)
 
 
 func _screen_name() -> String:

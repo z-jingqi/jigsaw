@@ -1,84 +1,121 @@
 class_name HomeCoverMotion
 extends RefCounted
 
-const OUTGOING_DEPTH_SCALE := 0.008
-const INCOMING_START_SCALE := 1.03
-const MAX_OVERLAP_RATIO := 0.1
-const CARD_CORNER_RADIUS := 0.082
-const CrossfadeShader := preload("res://shaders/ui/home_cover_crossfade.gdshader")
+## Keeps a bounded five-card carousel pool. Card edges retain a fixed gap while
+## the selected card and its neighbours scale continuously with drag distance.
 
-var _previous: TextureRect
-var _current: TextureRect
-var _next: TextureRect
-var _previous_material: ShaderMaterial
-var _current_material: ShaderMaterial
-var _next_material: ShaderMaterial
+const SIDE_CARD_SCALE := 0.86
+const FAR_CARD_SCALE := 0.74
+const CARD_CORNER_RADIUS := 0.045
+const OFFSETS: Array[int] = [-2, -1, 0, 1, 2]
+const CoverShader := preload("res://shaders/ui/home_cover_crossfade.gdshader")
 
-
-func _init(previous: TextureRect, current: TextureRect, next: TextureRect) -> void:
-	_previous = previous
-	_current = current
-	_next = next
-	_previous_material = _create_crossfade_material()
-	_current_material = _create_crossfade_material()
-	_next_material = _create_crossfade_material()
-	_previous.material = _previous_material
-	_current.material = _current_material
-	_next.material = _next_material
-	reset()
+var _covers: Array[TextureRect] = []
+var _materials: Array[ShaderMaterial] = []
+var _host: Control
 
 
-func set_card_aspect(card_size: Vector2) -> void:
-	var aspect := card_size.x / maxf(1.0, card_size.y)
-	for pair in [
-		[_previous_material, _previous],
-		[_current_material, _current],
-		[_next_material, _next],
-	]:
-		var card_material := pair[0] as ShaderMaterial
-		var cover := pair[1] as TextureRect
-		card_material.set_shader_parameter(&"card_aspect", aspect)
-		var texture_size := cover.texture.get_size() if cover.texture != null else card_size
-		card_material.set_shader_parameter(
-			&"texture_aspect", texture_size.x / maxf(1.0, texture_size.y)
-		)
+func _init(covers: Array) -> void:
+	for value in covers:
+		var cover := value as TextureRect
+		if cover == null:
+			continue
+		_covers.append(cover)
+		var cover_material := ShaderMaterial.new()
+		cover_material.shader = CoverShader
+		cover_material.set_shader_parameter(&"corner_radius", CARD_CORNER_RADIUS)
+		cover_material.set_shader_parameter(&"edge_direction", 0.0)
+		cover_material.set_shader_parameter(&"feather_width", 0.001)
+		cover.material = cover_material
+		_materials.append(cover_material)
+	_host = _covers[0].get_parent() as Control if not _covers.is_empty() else null
 
 
-func apply(direction: int, progress: float, reduced_motion := false) -> void:
-	reset()
-	if direction == 0 or progress <= 0.0:
+func apply_layout(
+	direction: int,
+	progress: float,
+	card_size: Vector2,
+	viewport_center: Vector2,
+	gap: float,
+	frame_inset: float,
+	reduced_motion: bool
+) -> void:
+	if _covers.size() != OFFSETS.size() or card_size.x <= 0.0 or card_size.y <= 0.0:
 		return
 	var amount := clampf(progress, 0.0, 1.0)
-	var incoming := _next if direction > 0 else _previous
-	var incoming_material := _next_material if direction > 0 else _previous_material
-	incoming.get_parent().move_child(incoming, incoming.get_parent().get_child_count() - 1)
-	incoming_material.set_shader_parameter(&"edge_direction", float(direction))
-	incoming_material.set_shader_parameter(&"feather_width", overlap_ratio(amount))
-	if not reduced_motion:
-		var outgoing_scale := 1.0 - sin(amount * PI) * OUTGOING_DEPTH_SCALE
-		_current.scale = Vector2.ONE * outgoing_scale
-		incoming.scale = Vector2.ONE * lerpf(INCOMING_START_SCALE, 1.0, amount)
+	var signed_progress := float(direction) * amount
+	var scales: Dictionary = {}
+	var widths: Dictionary = {}
+	for offset in OFFSETS:
+		var distance := absf(float(offset) - signed_progress)
+		if reduced_motion and amount > 0.0:
+			distance = absf(float(offset - direction))
+		var scale_value := _scale_for_distance(distance)
+		scales[offset] = scale_value
+		widths[offset] = card_size.x * scale_value
+
+	var centers := {0: 0.0}
+	for offset in [1, 2]:
+		centers[offset] = (
+			float(centers[offset - 1])
+			+ float(widths[offset - 1]) * 0.5
+			+ gap
+			+ float(widths[offset]) * 0.5
+		)
+	for offset in [-1, -2]:
+		centers[offset] = (
+			float(centers[offset + 1])
+			- float(widths[offset + 1]) * 0.5
+			- gap
+			- float(widths[offset]) * 0.5
+		)
+
+	var focus_anchor := 0.0
+	if direction != 0 and centers.has(direction):
+		focus_anchor = lerpf(0.0, float(centers[direction]), amount)
+	for index in _covers.size():
+		var cover := _covers[index]
+		var offset := OFFSETS[index]
+		var scale_value := float(scales[offset])
+		cover.size = card_size
+		cover.pivot_offset = card_size * 0.5
+		cover.scale = Vector2.ONE * scale_value
+		cover.position = viewport_center - card_size * 0.5
+		cover.position.x += float(centers[offset]) - focus_anchor
+		cover.z_index = 100 - roundi(absf(float(offset) - signed_progress) * 10.0)
+		cover.modulate = Color.WHITE
+		var frame := cover.get_node("CardFrame") as Control
+		frame.position = Vector2.ONE * -frame_inset
+		frame.size = card_size + Vector2.ONE * frame_inset * 2.0
+		_configure_material(index, cover, card_size)
 
 
-func reset() -> void:
-	for cover in [_previous, _current, _next]:
-		cover.scale = Vector2.ONE
-		cover.modulate.a = 1.0
-	var cover_parent := _current.get_parent()
-	cover_parent.move_child(_previous, 0)
-	cover_parent.move_child(_current, 1)
-	cover_parent.move_child(_next, 2)
-	for crossfade_material in [_previous_material, _current_material, _next_material]:
-		crossfade_material.set_shader_parameter(&"edge_direction", 0.0)
-		crossfade_material.set_shader_parameter(&"feather_width", 0.001)
+func pool_size() -> int:
+	return _covers.size()
 
 
-func overlap_ratio(progress: float) -> float:
-	return maxf(0.001, MAX_OVERLAP_RATIO * sin(clampf(progress, 0.0, 1.0) * PI))
+func visible_cover_count() -> int:
+	if not is_instance_valid(_host):
+		return 0
+	var viewport_rect := _host.get_global_rect()
+	var count := 0
+	for cover in _covers:
+		if cover.visible and viewport_rect.intersects(cover.get_global_rect()):
+			count += 1
+	return count
 
 
-func _create_crossfade_material() -> ShaderMaterial:
-	var crossfade_material := ShaderMaterial.new()
-	crossfade_material.shader = CrossfadeShader
-	crossfade_material.set_shader_parameter(&"corner_radius", CARD_CORNER_RADIUS)
-	return crossfade_material
+func _scale_for_distance(distance: float) -> float:
+	if distance <= 1.0:
+		return lerpf(1.0, SIDE_CARD_SCALE, distance)
+	if distance <= 2.0:
+		return lerpf(SIDE_CARD_SCALE, FAR_CARD_SCALE, distance - 1.0)
+	return FAR_CARD_SCALE
+
+
+func _configure_material(index: int, cover: TextureRect, card_size: Vector2) -> void:
+	var material := _materials[index]
+	var card_aspect := card_size.x / maxf(1.0, card_size.y)
+	var texture_size := cover.texture.get_size() if cover.texture != null else card_size
+	material.set_shader_parameter(&"card_aspect", card_aspect)
+	material.set_shader_parameter(&"texture_aspect", texture_size.x / maxf(1.0, texture_size.y))

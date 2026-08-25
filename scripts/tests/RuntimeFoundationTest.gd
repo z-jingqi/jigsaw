@@ -131,8 +131,6 @@ func _run() -> void:
 		catalog_home.total_themes > 0 and catalog_home.selected_theme_id == "topic_01",
 		"home_view_model"
 	)
-	var catalog_all_themes = presenter.all_themes("topic_01")
-	_check(catalog_all_themes.cards.size() == catalog_home.total_themes, "all_themes_view_model")
 	var catalog_levels = presenter.level_list("topic_01")
 	_check(
 		not catalog_levels.levels.is_empty() and catalog_levels.theme_progress.total_modes > 0,

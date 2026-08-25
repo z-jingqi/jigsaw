@@ -12,6 +12,7 @@ var _items: Array = []
 var _columns := 2
 var _gap := Vector2(12.0, 24.0)
 var _card_size := Vector2(150.0, 180.0)
+var _footer_space := 0.0
 var _visible: Dictionary = {}
 var _pool: Array[Control] = []
 
@@ -23,11 +24,14 @@ func _init(scroll: ScrollContainer, content: Control, card_scene: PackedScene) -
 	_scroll.get_v_scroll_bar().value_changed.connect(func(_value: float) -> void: render_visible())
 
 
-func configure(items: Array, columns: int, gap: Vector2, card_size: Vector2) -> void:
+func configure(
+	items: Array, columns: int, gap: Vector2, card_size: Vector2, footer_space := 0.0
+) -> void:
 	_items = items
 	_columns = maxi(1, columns)
 	_gap = gap
 	_card_size = card_size
+	_footer_space = maxf(0.0, footer_space)
 	_relayout()
 	render_visible()
 
@@ -94,12 +98,37 @@ func active_card_count() -> int:
 	return _visible.size()
 
 
+func visible_cards() -> Array[Control]:
+	var result: Array[Control] = []
+	var indices := _visible.keys()
+	indices.sort()
+	for index in indices:
+		var card := _visible[index] as Control
+		if is_instance_valid(card):
+			result.append(card)
+	return result
+
+
+func card_for_level_id(level_id: String) -> Control:
+	for card in visible_cards():
+		if str(card.get("level_id")) == level_id:
+			return card
+	return null
+
+
 func _relayout() -> void:
 	var row_count := _row_count()
 	var content_width := float(_columns) * _card_size.x + float(_columns - 1) * _gap.x
 	_content.custom_minimum_size = Vector2(
 		content_width,
-		maxf(0.0, float(row_count) * _card_size.y + maxf(0.0, float(row_count - 1)) * _gap.y)
+		maxf(
+			0.0,
+			(
+				float(row_count) * _card_size.y
+				+ maxf(0.0, float(row_count - 1)) * _gap.y
+				+ _footer_space
+			)
+		)
 	)
 
 

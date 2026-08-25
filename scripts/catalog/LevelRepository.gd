@@ -135,7 +135,7 @@ func load_config_path(config_path: String) -> Dictionary:
 	return config
 
 
-func level_thumbnail(level: Dictionary, target_size := Vector2i(260, 260)) -> Texture2D:
+func level_thumbnail(level: Dictionary, target_size := Vector2i(480, 360)) -> Texture2D:
 	var level_config := load_level_config(level)
 	var image_path := level_thumbnail_source_path(level_config)
 	return runtime_thumbnail(image_path, target_size)
@@ -144,6 +144,11 @@ func level_thumbnail(level: Dictionary, target_size := Vector2i(260, 260)) -> Te
 func topic_cover_texture(topic: Dictionary) -> Texture2D:
 	var cover_path := str(topic.get("cover", ""))
 	return cached_texture(cover_path) if not cover_path.is_empty() else null
+
+
+func topic_background_texture(topic: Dictionary) -> Texture2D:
+	var background_path := str(topic.get("level_background", ""))
+	return cached_texture(background_path) if not background_path.is_empty() else null
 
 
 func topic_icon_texture(topic: Dictionary) -> Texture2D:

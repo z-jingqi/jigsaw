@@ -13,9 +13,11 @@ const VIEW_MAX_RATIO := 2.40
 const TRACKPAD_MAGNIFY_MIN := 0.86
 const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
-const BOARD_SCREEN_EDGE_GAP := 5.0
-const BOARD_LINE_FRAME_WIDTH := 2
-const BOARD_TARGET_BACKGROUND_ALPHA := 0.25
+const BOARD_SCREEN_EDGE_GAP := 62.0
+const SWAP_BOARD_SCREEN_EDGE_GAP := 60.0
+const SWAP_VIEW_FIT_PADDING := 60.0
+const BOARD_LINE_FRAME_WIDTH := 1
+const BOARD_TARGET_BACKGROUND_ALPHA := 0.22
 const VIEW_HINT_PADDING := 58.0
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
 const HINT_OUTLINE_SCREEN_WIDTH := 5.0
@@ -63,8 +65,8 @@ const TRAY_DRAG_LIFT_MARGIN := 28.0
 const TRAY_DRAG_Z_INDEX := 4095
 const TRAY_INERTIA_MIN_SPEED := 90.0
 const TRAY_INERTIA_FRICTION := 9.0
-const TRAY_TOP_BORDER_HEIGHT := 2.0
-const TRAY_TOP_BORDER_COLOR := Color(0.39, 0.43, 0.34, 0.46)
+const TRAY_TOP_BORDER_HEIGHT := 3.0
+const TRAY_TOP_BORDER_COLOR := Color(0.32, 0.19, 0.10, 0.30)
 const BoardLayoutScript := preload("res://scripts/gameplay/board/BoardLayout.gd")
 const BoardStateControllerScript := preload("res://scripts/gameplay/board/BoardStateController.gd")
 const BoardViewControllerScript := preload("res://scripts/gameplay/board/BoardViewController.gd")
@@ -195,6 +197,10 @@ func _ready() -> void:
 	swap_controller = BoardSwapControllerScript.new(self)
 	snap_controller = BoardSnapControllerScript.new(self)
 	placement_controller = BoardPlacementControllerScript.new(self)
+
+
+func board_screen_edge_gap() -> float:
+	return SWAP_BOARD_SCREEN_EDGE_GAP if current_mode == "swap" else BOARD_SCREEN_EDGE_GAP
 
 
 func _exit_tree() -> void:

@@ -125,17 +125,6 @@ func _validate_debug_contract(game: Game) -> void:
 
 
 func _validate_runtime_routes(game: Game) -> void:
-	var all_themes := game.debug_execute("show_all_themes")
-	_check(bool(all_themes.get("ok", false)), "debug_show_all_themes")
-	await create_timer(0.40).timeout
-	_check(str(game.debug_state_snapshot().screen) == "all_themes", "all_themes_route")
-	var gallery := game.get_node("UiLayer/ScreenHost").get_child(-1) as AllThemesScreen
-	if gallery != null:
-		gallery.close_button.pressed.emit()
-	await create_timer(0.40).timeout
-	if not str(game.debug_state_snapshot().modal).is_empty():
-		game.debug_execute("close_modal")
-		await create_timer(0.40).timeout
 	var levels := game.debug_execute("show_levels", {"topic_id": "topic_01"})
 	_check(bool(levels.get("ok", false)), "debug_show_levels")
 	await create_timer(0.40).timeout

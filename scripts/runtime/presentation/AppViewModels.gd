@@ -24,8 +24,10 @@ class ModeStatusViewModel:
 	extends RefCounted
 	var mode: StringName
 	var label: String
+	var short_label: String
 	var status: StringName
 	var action: StringName
+	var action_label: String
 	var enabled: bool
 
 	func _init(
@@ -33,12 +35,16 @@ class ModeStatusViewModel:
 		p_label: String,
 		p_status: StringName,
 		p_action: StringName,
-		p_enabled: bool
+		p_enabled: bool,
+		p_short_label := "",
+		p_action_label := ""
 	) -> void:
 		mode = p_mode
 		label = p_label
+		short_label = p_short_label if not p_short_label.is_empty() else p_label
 		status = p_status
 		action = p_action
+		action_label = p_action_label
 		enabled = p_enabled
 
 
@@ -84,42 +90,6 @@ class HomeViewModel:
 		show_home_guide = bool(data["show_home_guide"])
 
 
-class ThemeCardViewModel:
-	extends RefCounted
-	var theme_id: String
-	var title: String
-	var cover_texture: Texture2D
-	var cover_focus: Vector2
-	var progress: ThemeProgressViewModel
-	var is_current: bool
-	var is_new: bool
-	var is_complete: bool
-
-	func _init(data: Dictionary) -> void:
-		theme_id = str(data["theme_id"])
-		title = str(data["title"])
-		cover_texture = data["cover_texture"]
-		cover_focus = data.get("cover_focus", Vector2(0.5, 0.5))
-		progress = data["progress"]
-		is_current = bool(data["is_current"])
-		is_new = bool(data["is_new"])
-		is_complete = progress.is_complete
-
-
-class AllThemesViewModel:
-	extends RefCounted
-	var revision: int
-	var cards: Array[ThemeCardViewModel]
-	var current_theme_id: String
-	var theme_count_text: String
-
-	func _init(data: Dictionary) -> void:
-		revision = int(data["revision"])
-		cards.assign(data["cards"])
-		current_theme_id = str(data["current_theme_id"])
-		theme_count_text = "%d" % cards.size()
-
-
 class LevelCardViewModel:
 	extends RefCounted
 	var level_id: String
@@ -145,6 +115,7 @@ class LevelListViewModel:
 	var revision: int
 	var theme_id: String
 	var theme_title: String
+	var background_texture: Texture2D
 	var theme_progress: ThemeProgressViewModel
 	var focus_level_id: String
 	var levels: Array[LevelCardViewModel]
@@ -153,6 +124,7 @@ class LevelListViewModel:
 		revision = int(data["revision"])
 		theme_id = str(data["theme_id"])
 		theme_title = str(data["theme_title"])
+		background_texture = data.get("background_texture")
 		theme_progress = data["theme_progress"]
 		focus_level_id = str(data["focus_level_id"])
 		levels.assign(data["levels"])
@@ -164,6 +136,8 @@ class ModeSelectViewModel:
 	var theme_id: String
 	var level_id: String
 	var level_title: String
+	var background_texture: Texture2D
+	var preview_texture: Texture2D
 	var options: Array[ModeStatusViewModel]
 
 	func _init(data: Dictionary) -> void:
@@ -171,6 +145,8 @@ class ModeSelectViewModel:
 		theme_id = str(data["theme_id"])
 		level_id = str(data["level_id"])
 		level_title = str(data["level_title"])
+		background_texture = data.get("background_texture")
+		preview_texture = data.get("preview_texture")
 		options.assign(data["options"])
 
 

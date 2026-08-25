@@ -19,8 +19,6 @@ func execute(command: String, args: Dictionary = {}) -> Dictionary:
 			pass
 		"show_home", "show_topics":
 			result = _runtime.show_home(str(args.get("theme_id", "")))
-		"show_all_themes":
-			result = _runtime.show_all_themes()
 		"show_levels":
 			if not _strings(args, ["topic_id"]):
 				return _failure(command, "invalid_argument", "topic_id is required.")

@@ -3,7 +3,6 @@ extends Control
 
 signal selected_theme_changed(theme_id: String)
 signal theme_activated(theme_id: String)
-signal all_themes_requested
 signal menu_requested
 
 const PagerControllerScript := preload("res://scripts/screens/HomePagerController.gd")
@@ -13,33 +12,38 @@ const MotionTokenResource := preload("res://themes/motion_tokens.tres")
 
 const DESIGN_WIDTH := 1206.0
 const DESIGN_HEIGHT := 2622.0
-const CARD_ASPECT := 0.595
-const CARD_WIDTH_RATIO := 0.78
-const HEADER_CLEARANCE := 390.0
-const BOTTOM_CLEARANCE := 650.0
-const CARD_GAP := 40.0
-const SIDE_PEEK := 110.0
-const FRAME_INSET_RATIO := Vector2(0.025, 0.018)
-const TITLE_MAX_FONT_SIZE := 82
-const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 54
-const TITLE_WRAP_MIN_FONT_SIZE := 34
+const CARD_ASPECT := 0.61
+const CARD_WIDTH_RATIO := 0.708
+const HEADER_CLEARANCE := 600.0
+const BOTTOM_CLEARANCE := 620.0
+const CARD_GAP := 104.0
+const FRAME_INSET := 12.0
+const TITLE_MAX_FONT_SIZE := 108
+const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 44
+const TITLE_WRAP_MIN_FONT_SIZE := 36
+const TITLE_GROUP_MARGIN := 24.0
+const TITLE_ORNAMENT_GAP := 18.0
+const TITLE_ORNAMENT_MIN_WIDTH := 64.0
+const TITLE_ORNAMENT_MAX_WIDTH := 116.0
+const TITLE_BOX_HEIGHT := 160.0
 
 @onready var cover_slots: Control = $CoverSlots
+@onready var far_previous_cover: TextureRect = $CoverSlots/FarPrevious
 @onready var previous_cover: TextureRect = $CoverSlots/Previous
 @onready var current_cover: TextureRect = $CoverSlots/Current
 @onready var next_cover: TextureRect = $CoverSlots/Next
+@onready var far_next_cover: TextureRect = $CoverSlots/FarNext
 @onready var logo: TextureRect = $SafeArea/SafeContent/Header/Logo
-@onready var album_button: ActionButton = $SafeArea/SafeContent/Header/AlbumButton
 @onready var menu_button: ActionButton = $SafeArea/SafeContent/Header/MenuButton
 @onready var bottom_content: Control = $SafeArea/SafeContent/BottomContent
-@onready var info_panel := bottom_content.get_node("InfoLive") as Control
+@onready var info_panel := $ThemeInfoLayer/InfoLive as Control
 @onready var theme_name := info_panel.get_node("ThemeName") as Label
-@onready var progress_group := info_panel.get_node("ProgressGroup") as Control
+@onready var progress_group := info_panel.get_node("ProgressTag") as Control
 @onready var progress_count := progress_group.get_node("ProgressCount") as Label
 @onready var progress_fill := progress_group.get_node("ProgressTrack/ProgressFill") as Control
-@onready var incoming_info := bottom_content.get_node("InfoIncoming") as Control
+@onready var incoming_info := $ThemeInfoLayer/InfoIncoming as Control
 @onready var incoming_name := incoming_info.get_node("ThemeName") as Label
-@onready var incoming_progress_group := incoming_info.get_node("ProgressGroup") as Control
+@onready var incoming_progress_group := incoming_info.get_node("ProgressTag") as Control
 @onready var incoming_progress_count := incoming_progress_group.get_node("ProgressCount") as Label
 @onready var incoming_progress_fill := (
 	incoming_progress_group.get_node("ProgressTrack/ProgressFill") as Control
@@ -68,12 +72,21 @@ func _ready() -> void:
 	_pager = PagerControllerScript.new(self, MotionTokenResource)
 	_pager.drag_updated.connect(_on_pager_drag_updated)
 	_pager.page_settled.connect(_on_pager_settled)
-	_pager.activation_requested.connect(_on_pager_activation_requested)
-	_cover_motion = CoverMotionScript.new(previous_cover, current_cover, next_cover)
+	_cover_motion = (
+		CoverMotionScript
+		. new(
+			[
+				far_previous_cover,
+				previous_cover,
+				current_cover,
+				next_cover,
+				far_next_cover,
+			]
+		)
+	)
 	_info_motion = ThemeInfoMotionScript.new(info_panel, incoming_info)
-	album_button.pressed.connect(all_themes_requested.emit)
 	menu_button.pressed.connect(menu_requested.emit)
-	start_button.pressed.connect(_on_pager_activation_requested)
+	start_button.pressed.connect(_on_enter_pressed)
 	resized.connect(_on_resized)
 	_apply_cold_entry_final()
 
@@ -90,7 +103,7 @@ func navigation_exit(_context: Dictionary) -> void:
 	_pointer_gesture_active = false
 	if _pager != null:
 		_pager.finish_to_current()
-	_cover_motion.reset()
+	_layout_cover_slots(0, 0.0)
 	_cancel_button_motion()
 
 
@@ -107,7 +120,6 @@ func navigation_set_active(is_active: bool) -> void:
 
 func set_reduced_motion(enabled: bool) -> void:
 	set_meta("reduced_motion", enabled)
-	album_button.set_reduced_motion(enabled)
 	menu_button.set_reduced_motion(enabled)
 	start_button.set_reduced_motion(enabled)
 	if enabled:
@@ -133,7 +145,6 @@ func play_cold_entry() -> void:
 func active_motion_count() -> int:
 	return (
 		(_pager.active_motion_count() if _pager != null else 0)
-		+ album_button.active_motion_count()
 		+ menu_button.active_motion_count()
 		+ start_button.active_motion_count()
 	)
@@ -152,6 +163,8 @@ func debug_state_snapshot() -> Dictionary:
 		"entry_interaction_ready": _entry_interaction_ready,
 		"reduced_motion": bool(get_meta("reduced_motion", false)),
 		"progress_ratio": _progress_ratio,
+		"cover_pool_size": _cover_motion.pool_size() if _cover_motion != null else 0,
+		"visible_cover_count": _cover_motion.visible_cover_count() if _cover_motion != null else 0,
 	}
 
 
@@ -183,16 +196,14 @@ func _apply_selected_theme() -> void:
 		theme_name.text = ""
 		_set_progress(progress_fill, progress_count, null)
 		return
+	_update_card_metrics()
 	var selected: Variant = _themes[_selected_index]
 	_set_information(theme_name, progress_count, progress_fill, selected)
 	_progress_ratio = float(selected.progress.ratio)
 	_incoming_index = -1
 	_info_motion.reset()
-	_set_cover(previous_cover, _theme_at(_selected_index - 1))
-	_set_cover(current_cover, selected)
-	_set_cover(next_cover, _theme_at(_selected_index + 1))
-	_layout_cover_slots(0.0)
-	_cover_motion.reset()
+	_reconcile_covers()
+	_layout_cover_slots(0, 0.0)
 	_pager.configure(_themes.size(), _selected_index, _card_stride)
 
 
@@ -208,46 +219,124 @@ func _set_cover(slot: TextureRect, theme_model: Variant) -> void:
 		slot.texture = theme_model.cover_texture
 
 
-func _layout_cover_slots(offset: float, direction := 0, overlap_ratio := 0.0) -> void:
+func _reconcile_covers() -> void:
+	var used_indices: Dictionary = {}
+	for pair in [
+		[current_cover, 0],
+		[previous_cover, -1],
+		[next_cover, 1],
+		[far_previous_cover, -2],
+		[far_next_cover, 2],
+	]:
+		var cover := pair[0] as TextureRect
+		var offset := int(pair[1])
+		var model_index := posmod(_selected_index + offset, _themes.size())
+		if used_indices.has(model_index):
+			_set_cover(cover, null)
+			continue
+		used_indices[model_index] = true
+		_set_cover(cover, _themes[model_index])
+
+
+func _layout_cover_slots(direction: int, progress: float) -> void:
 	_update_card_metrics()
-	var center_x := (size.x - _card_size.x) * 0.5
-	var frame_inset := _card_size * FRAME_INSET_RATIO
-	var cover_size := _card_size - frame_inset * 2.0
-	for pair in [[previous_cover, -1.0], [current_cover, 0.0], [next_cover, 1.0]]:
-		var slot: TextureRect = pair[0]
-		var outer_position := Vector2(center_x + float(pair[1]) * _card_stride + offset, _card_top)
-		if direction > 0 and slot == next_cover:
-			outer_position.x -= _card_stride * overlap_ratio
-		elif direction < 0 and slot == previous_cover:
-			outer_position.x += _card_stride * overlap_ratio
-		slot.position = outer_position + frame_inset
-		slot.size = cover_size
-		slot.pivot_offset = slot.size * 0.5
-		var frame := slot.get_node("Frame") as TextureRect
-		frame.position = -frame_inset
-		frame.size = _card_size
-	_cover_motion.set_card_aspect(cover_size)
+	var unit := _layout_unit()
+	_cover_motion.apply_layout(
+		direction,
+		progress,
+		_card_size,
+		Vector2(size.x * 0.5, _card_top + _card_size.y * 0.5),
+		CARD_GAP * unit,
+		FRAME_INSET * unit,
+		bool(get_meta("reduced_motion", false))
+	)
 
 
 func _update_card_metrics() -> void:
-	var unit := maxf(0.45, minf(size.x / DESIGN_WIDTH, size.y / DESIGN_HEIGHT))
-	var max_width := size.x * CARD_WIDTH_RATIO
+	var unit := _layout_unit()
+	var max_width := minf(size.x * CARD_WIDTH_RATIO, 854.0 * unit)
 	var header_clearance := HEADER_CLEARANCE * unit
 	var bottom_clearance := BOTTOM_CLEARANCE * unit
 	var available_height := maxf(260.0 * unit, size.y - header_clearance - bottom_clearance)
 	var card_height := minf(max_width / CARD_ASPECT, available_height)
 	var card_width := minf(max_width, card_height * CARD_ASPECT)
 	_card_size = Vector2(card_width, card_height)
-	var center_margin := (size.x - card_width) * 0.5
-	var responsive_gap := maxf(CARD_GAP * unit, center_margin - SIDE_PEEK * unit)
-	_card_stride = card_width + responsive_gap
+	_card_stride = card_width * 0.93 + CARD_GAP * unit
 	_card_top = header_clearance + maxf(0.0, (available_height - card_height) * 0.32)
+	_layout_theme_info(info_panel, unit)
+	_layout_theme_info(incoming_info, unit)
+
+
+func _layout_unit() -> float:
+	return maxf(0.45, minf(size.x / DESIGN_WIDTH, size.y / DESIGN_HEIGHT))
+
+
+func _layout_theme_info(panel: Control, unit: float) -> void:
+	var center_x := (size.x - _card_size.x) * 0.5
+	_prepare_title_label(panel, unit)
+
+	var progress_tag := panel.get_node("ProgressTag") as Control
+	progress_tag.size = Vector2(320.0, 132.0) * unit
+	progress_tag.position = Vector2(
+		center_x + _card_size.x - progress_tag.size.x - 16.0 * unit,
+		_card_top + _card_size.y - progress_tag.size.y - 8.0 * unit
+	)
+
+
+func _prepare_title_label(panel: Control, unit: float) -> void:
+	var name_label := panel.get_node("ThemeName") as Label
+	var group_width := maxf(1.0, _card_size.x - TITLE_GROUP_MARGIN * 2.0 * unit)
+	var reserved_width := (TITLE_ORNAMENT_MIN_WIDTH + TITLE_ORNAMENT_GAP) * 2.0 * unit
+	var label_width := maxf(1.0, group_width - reserved_width)
+	var title_top := _card_top - 190.0 * unit
+	name_label.position = Vector2((size.x - label_width) * 0.5, title_top)
+	name_label.size = Vector2(label_width, TITLE_BOX_HEIGHT * unit)
+
+
+func _layout_title_decorations(panel: Control, unit: float) -> void:
+	var name_label := panel.get_node("ThemeName") as Label
+	var left := panel.get_node("TitleOrnamentLeft") as TextureRect
+	var right := panel.get_node("TitleOrnamentRight") as TextureRect
+	var group_limit := maxf(1.0, _card_size.x - TITLE_GROUP_MARGIN * 2.0 * unit)
+	var gap := TITLE_ORNAMENT_GAP * unit
+	var label_width := name_label.size.x
+
+	if name_label.autowrap_mode == TextServer.AUTOWRAP_OFF:
+		var font := name_label.get_theme_font("font")
+		var font_size := name_label.get_theme_font_size("font_size")
+		var measured := (
+			font.get_string_size(name_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		)
+		label_width = minf(label_width, ceilf(measured + 8.0 * unit))
+
+	var ornament_room := maxf(0.0, (group_limit - label_width - gap * 2.0) * 0.5)
+	var ornament_width := minf(TITLE_ORNAMENT_MAX_WIDTH * unit, ornament_room)
+	var total_width := label_width + (ornament_width + gap) * 2.0
+	var group_left := (size.x - total_width) * 0.5
+	var center_y := name_label.position.y + name_label.size.y * 0.5
+	var texture_size := left.texture.get_size() if left.texture != null else Vector2(256.0, 145.0)
+	var ornament_height := minf(
+		72.0 * unit, ornament_width * texture_size.y / maxf(1.0, texture_size.x)
+	)
+
+	left.position = Vector2(group_left, center_y - ornament_height * 0.5)
+	left.size = Vector2(ornament_width, ornament_height)
+	name_label.position.x = group_left + ornament_width + gap
+	name_label.size.x = label_width
+	right.position = Vector2(
+		name_label.position.x + label_width + gap, center_y - ornament_height * 0.5
+	)
+	right.size = Vector2(ornament_width, ornament_height)
 
 
 func _set_information(
 	name_label: Label, count_label: Label, fill: Control, theme_model: Variant
 ) -> void:
+	var panel := name_label.get_parent() as Control
+	var unit := _layout_unit()
+	_prepare_title_label(panel, unit)
 	_fit_title(name_label, str(theme_model.title))
+	_layout_title_decorations(panel, unit)
 	_set_progress(fill, count_label, theme_model.progress)
 
 
@@ -288,22 +377,21 @@ func _fit_title(label: Label, text: String) -> void:
 func _set_progress(fill: Control, count_label: Label, progress: Variant) -> void:
 	if progress == null:
 		fill.visible = false
-		count_label.text = "0 / 0"
+		count_label.text = "完成 0 / 0"
 		count_label.accessibility_name = "已完成 0 / 总数 0"
 		return
 	var clamped := clampf(float(progress.ratio), 0.0, 1.0)
 	fill.visible = clamped > 0.0
 	fill.anchor_right = clamped
-	fill.offset_right = -4.0
-	count_label.text = "%d / %d" % [progress.completed_modes, progress.total_modes]
+	fill.offset_right = -2.0
+	count_label.text = "完成 %d / %d" % [progress.completed_modes, progress.total_modes]
 	count_label.accessibility_name = (
 		"已完成 %d / 总数 %d" % [progress.completed_modes, progress.total_modes]
 	)
 
 
-func _on_pager_drag_updated(direction: int, pager_progress: float, offset: float) -> void:
-	_layout_cover_slots(offset, direction, _cover_motion.overlap_ratio(pager_progress))
-	_cover_motion.apply(direction, pager_progress, bool(get_meta("reduced_motion", false)))
+func _on_pager_drag_updated(direction: int, pager_progress: float, _offset: float) -> void:
+	_layout_cover_slots(direction, pager_progress)
 	if direction == 0:
 		_incoming_index = -1
 		_info_motion.reset()
@@ -328,23 +416,15 @@ func _on_pager_settled(next_index: int, committed: bool) -> void:
 		_apply_selected_theme()
 		selected_theme_changed.emit(str(_themes[_selected_index].theme_id))
 	else:
-		_layout_cover_slots(0.0)
-		_cover_motion.reset()
+		_layout_cover_slots(0, 0.0)
 		_incoming_index = -1
 		_info_motion.reset()
 
 
-func _on_pager_activation_requested() -> void:
+func _on_enter_pressed() -> void:
 	if _transitioning_to_levels or _themes.is_empty():
 		return
 	_transitioning_to_levels = true
-	if not bool(get_meta("reduced_motion", false)):
-		var tween := create_tween().set_parallel(true)
-		tween.tween_property(
-			current_cover, "scale", Vector2(1.01, 1.01), MotionTokenResource.press_duration
-		)
-		tween.tween_property(current_cover, "modulate:a", 0.92, MotionTokenResource.press_duration)
-		await tween.finished
 	theme_activated.emit(str(_themes[_selected_index].theme_id))
 	_transitioning_to_levels = false
 
@@ -387,7 +467,7 @@ func _end_pointer_gesture() -> void:
 
 
 func _is_fixed_action_at(viewport_position: Vector2) -> bool:
-	for action in [album_button, menu_button, start_button, bottom_content]:
+	for action in [menu_button, start_button, bottom_content]:
 		if action.visible and action.get_global_rect().has_point(viewport_position):
 			return true
 	return false
@@ -412,16 +492,14 @@ func _apply_cold_entry_final() -> void:
 
 
 func _cancel_button_motion() -> void:
-	album_button.cancel_motion()
 	menu_button.cancel_motion()
 	start_button.cancel_motion()
-	current_cover.scale = Vector2.ONE
-	current_cover.modulate.a = 1.0
+	if _cover_motion != null:
+		_layout_cover_slots(0, 0.0)
 
 
 func _set_entry_interaction_ready(is_ready: bool) -> void:
 	_entry_interaction_ready = is_ready
 	var filter := Control.MOUSE_FILTER_STOP if is_ready else Control.MOUSE_FILTER_IGNORE
-	album_button.mouse_filter = filter
 	menu_button.mouse_filter = filter
 	start_button.mouse_filter = filter

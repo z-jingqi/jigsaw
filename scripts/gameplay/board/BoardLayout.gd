@@ -1,7 +1,9 @@
 extends RefCounted
 class_name BoardLayout
 
-const BOARD_HORIZONTAL_GAP := 5.0
+const BOARD_HORIZONTAL_GAP_RATIO := 0.052
+const BOARD_HORIZONTAL_GAP_MIN := 18.0
+const BOARD_HORIZONTAL_GAP_MAX := 82.0
 
 
 static func mobile_board_layout(
@@ -14,10 +16,15 @@ static func mobile_board_layout(
 	var content_bottom := clampf(
 		viewport_size.y - bottom_reserved_height, content_top, viewport_size.y
 	)
+	var horizontal_gap := clampf(
+		viewport_size.x * BOARD_HORIZONTAL_GAP_RATIO,
+		BOARD_HORIZONTAL_GAP_MIN,
+		BOARD_HORIZONTAL_GAP_MAX,
+	)
 	var play_area := Rect2(
-		Vector2(BOARD_HORIZONTAL_GAP, content_top),
+		Vector2(horizontal_gap, content_top),
 		Vector2(
-			maxf(1.0, viewport_size.x - BOARD_HORIZONTAL_GAP * 2.0),
+			maxf(1.0, viewport_size.x - horizontal_gap * 2.0),
 			maxf(1.0, content_bottom - content_top),
 		)
 	)

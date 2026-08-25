@@ -18,23 +18,6 @@ func _run() -> void:
 		str(game.debug_state_snapshot().get("screen", "")) == "home",
 		"project_main_enters_scene_home"
 	)
-	var all_themes := game.debug_execute("show_all_themes")
-	_check(bool(all_themes.get("ok", false)), "debug_opens_all_themes")
-	await create_timer(0.40).timeout
-	_check(
-		str(game.debug_state_snapshot().get("screen", "")) == "all_themes",
-		"all_themes_is_real_scene_route"
-	)
-	var gallery := game.get_node("UiLayer/ScreenHost").get_child(-1) as AllThemesScreen
-	if gallery != null:
-		gallery.close_button.pressed.emit()
-	await create_timer(0.40).timeout
-	_check(
-		str(game.debug_state_snapshot().get("screen", "")) == "home", "all_themes_returns_to_home"
-	)
-	if not str(game.debug_state_snapshot().get("modal", "")).is_empty():
-		game.debug_execute("close_modal")
-		await create_timer(0.40).timeout
 	var settings := game.debug_execute("show_settings")
 	_check(bool(settings.get("ok", false)), "debug_opens_settings")
 	await create_timer(0.40).timeout

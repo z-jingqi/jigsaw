@@ -4,176 +4,174 @@ extends Control
 signal close_requested
 signal mode_selected(mode: StringName, start_policy: StringName)
 
-const ModeOptionScene := preload("res://scenes/ui/foundation/ModeOption.tscn")
+const ModeStatusIconScene := preload("res://scenes/ui/foundation/ModeStatusIcon.tscn")
 
-@onready var shell: AnimatedModalShell = $ModalShell
-@onready var title_label: Label = $ModalShell/Panel/Content/Header/Title
-@onready var close_button: Button = $ModalShell/Panel/Content/Header/CloseButton
-@onready var subtitle_label: Label = $ModalShell/Panel/Content/Subtitle
-@onready var options: VBoxContainer = $ModalShell/Panel/Content/Options
+@onready var background: TextureRect = $Background
+@onready var content: Control = $SafeArea/Content
+@onready var back_button: Button = $SafeArea/Content/Header/BackButton
+@onready var title_label: Label = $SafeArea/Content/Header/Title
+@onready var preview: TextureRect = $SafeArea/Content/Preview
+@onready var options: HBoxContainer = $SafeArea/Content/Options
+@onready var start_button: ActionButton = $SafeArea/Content/StartButton
+@onready var start_label: Label = $SafeArea/Content/StartButton/Label
 
 var _view_model: Variant
+var _selected_option: Variant
 var _reduced_motion := false
-var _pending_selection: Dictionary = {}
-var _content_tween: Tween
-var _closing := false
 
 
 func _ready() -> void:
-	close_button.pressed.connect(request_close)
-	shell.closed.connect(_on_shell_closed)
-	resized.connect(_configure_panel)
-	_configure_panel()
+	back_button.pressed.connect(request_close)
+	start_button.pressed.connect(_on_start_pressed)
+	resized.connect(_apply_layout)
+	content.resized.connect(_apply_layout)
+	_apply_layout()
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
 	if payload.has("view_model"):
 		set_view_model(payload["view_model"])
-	opening()
 
 
 func navigation_exit(_context: Dictionary) -> void:
-	_stop_content_motion()
-	if is_instance_valid(shell):
-		shell.dispose()
+	for child in options.get_children():
+		child.cancel_motion()
+	start_button.cancel_motion()
 
 
 func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
-	if not is_active:
-		_stop_content_motion()
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
+	start_button.set_reduced_motion(enabled)
+	for child in options.get_children():
+		child.set_reduced_motion(enabled)
 
 
 func set_view_model(view_model: Variant) -> void:
 	_view_model = view_model
 	if not is_node_ready():
 		return
+	background.texture = _read("background_texture") as Texture2D
+	preview.texture = _read("preview_texture") as Texture2D
 	title_label.text = str(_read("level_title", ""))
-	subtitle_label.text = "Choose a mode"
 	_reconcile_options()
-	_configure_panel()
+	_apply_layout()
 
 
 func opening() -> void:
-	if not is_instance_valid(shell):
-		return
-	_closing = false
-	_pending_selection.clear()
-	_set_interaction_enabled(true)
-	shell.play_open(_reduced_motion)
-	_play_content_entry()
+	pass
 
 
 func request_close() -> void:
-	if _closing or not is_instance_valid(shell):
-		return
-	_closing = true
-	_set_interaction_enabled(false)
-	_stop_content_motion()
-	shell.play_close(_reduced_motion)
+	close_requested.emit()
 
 
 func active_motion_count() -> int:
-	var shell_motion := shell.active_motion_count() if is_instance_valid(shell) else 0
-	return shell_motion + (1 if _content_tween != null else 0)
+	var count := start_button.active_motion_count()
+	for child in options.get_children():
+		count += child.active_motion_count()
+	return count
 
 
 func _reconcile_options() -> void:
 	for child in options.get_children():
 		options.remove_child(child)
 		child.queue_free()
+	var available: Array = []
 	for option_model in _read("options", []):
-		var option := ModeOptionScene.instantiate() as Control
+		if not bool(_read_from(option_model, "enabled", false)):
+			continue
+		var option := ModeStatusIconScene.instantiate() as ModeStatusIcon
 		options.add_child(option)
-		option.call(&"set_view_model", option_model)
-		option.connect(&"selection_requested", _on_option_selected)
+		option.set_variant(&"selector")
+		option.set_interactive(true)
+		option.set_reduced_motion(_reduced_motion)
+		option.set_view_model(option_model)
+		option.selection_requested.connect(_on_option_selected)
+		available.append(option_model)
+	_selected_option = _default_option(available)
+	_refresh_selection()
 
 
-func _on_option_selected(mode: StringName, start_policy: StringName) -> void:
-	if _closing:
-		return
-	_pending_selection = {"mode": mode, "start_policy": start_policy}
-	request_close()
+func _default_option(available: Array) -> Variant:
+	for status in [&"in_progress", &"not_started", &"completed"]:
+		for option_model in available:
+			if StringName(_read_from(option_model, "status", &"")) == status:
+				return option_model
+	return null
 
 
-func _on_shell_closed(_closed_shell: AnimatedModalShell) -> void:
-	_stop_content_motion()
-	if _pending_selection.is_empty():
-		close_requested.emit()
-	else:
-		mode_selected.emit(_pending_selection.mode, _pending_selection.start_policy)
-	_pending_selection.clear()
+func _on_option_selected(mode: StringName, _policy: StringName) -> void:
+	for option_model in _read("options", []):
+		if StringName(_read_from(option_model, "mode", &"")) == mode:
+			_selected_option = option_model
+			break
+	_refresh_selection()
 
 
-func _set_interaction_enabled(enabled: bool) -> void:
-	close_button.disabled = not enabled
+func _refresh_selection() -> void:
+	var selected_mode := StringName(_read_from(_selected_option, "mode", &""))
 	for child in options.get_children():
-		child.call(&"set_interaction_enabled", enabled)
+		child.set_selected(child.mode() == selected_mode)
+	start_button.disabled = selected_mode.is_empty()
+	var action_text := str(_read_from(_selected_option, "action_label", ""))
+	start_label.text = action_text if not action_text.is_empty() else "开始拼图"
 
 
-func _play_content_entry() -> void:
-	_stop_content_motion()
-	if _reduced_motion:
-		_set_content_visible_state()
+func _on_start_pressed() -> void:
+	if _selected_option == null or start_button.disabled:
 		return
-	title_label.modulate.a = 0.0
-	title_label.position.y = 8.0
-	for child in options.get_children():
-		child.modulate.a = 0.0
-		child.position.y += 8.0
-	_content_tween = create_tween().set_parallel(true)
-	_content_tween.tween_property(title_label, "modulate:a", 1.0, 0.22)
-	_content_tween.tween_property(title_label, "position:y", 0.0, 0.22)
-	for index in options.get_child_count():
-		var option := options.get_child(index) as Control
-		_content_tween.tween_property(option, "modulate:a", 1.0, 0.20).set_delay(
-			float(index) * 0.035
-		)
-		_content_tween.tween_property(option, "position:y", 0.0, 0.20).set_delay(
-			float(index) * 0.035
-		)
-	_content_tween.finished.connect(_stop_content_motion, CONNECT_ONE_SHOT)
+	mode_selected.emit(
+		StringName(_read_from(_selected_option, "mode", &"")),
+		StringName(_read_from(_selected_option, "action", &"start"))
+	)
 
 
-func _set_content_visible_state() -> void:
-	title_label.modulate.a = 1.0
-	title_label.position.y = 0.0
-	for child in options.get_children():
-		child.modulate.a = 1.0
-		child.position.y = 0.0
-
-
-func _stop_content_motion() -> void:
-	if _content_tween != null and _content_tween.is_valid():
-		_content_tween.kill()
-	_content_tween = null
-
-
-func _configure_panel() -> void:
-	if not is_instance_valid(shell):
+func _apply_layout() -> void:
+	if not is_node_ready() or content.size.x <= 0.0 or content.size.y <= 0.0:
 		return
-	var width := minf(560.0, maxf(280.0, size.x - 40.0))
-	var option_count := options.get_child_count() if is_instance_valid(options) else 1
-	var height := minf(size.y - 40.0, 160.0 + float(maxi(1, option_count)) * 116.0)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("FFF9EC")
-	style.corner_radius_top_left = 28
-	style.corner_radius_top_right = 28
-	style.corner_radius_bottom_left = 28
-	style.corner_radius_bottom_right = 28
-	style.shadow_color = Color(0.02, 0.10, 0.13, 0.24)
-	style.shadow_size = 18
-	style.shadow_offset = Vector2(0, 8)
-	shell.configure_panel(Vector2(width, height), style, Vector4(24, 20, 24, 20))
+	var available := content.size
+	$SafeArea/Content/Header.size = Vector2(available.x, 180.0)
+	back_button.position = Vector2(8.0, 16.0)
+	back_button.size = Vector2(116.0, 116.0)
+	title_label.offset_left = 150.0
+	title_label.offset_top = 8.0
+	title_label.offset_right = -150.0
+	title_label.offset_bottom = 140.0
+	var top := 300.0
+	var preview_width := minf(1040.0, available.x - 24.0)
+	var preview_height := preview_width
+	preview.size = Vector2(preview_width, preview_height)
+	preview.position = Vector2((available.x - preview_width) * 0.5, top)
+	var options_width := minf(900.0, available.x - 80.0)
+	options.size = Vector2(options_width, 316.0)
+	options.position = Vector2(
+		(available.x - options_width) * 0.5, preview.position.y + preview_height + 72.0
+	)
+	var button_width := minf(760.0, available.x - 240.0)
+	start_button.size = Vector2(button_width, 184.0)
+	start_button.position = Vector2(
+		(available.x - button_width) * 0.5,
+		minf(available.y - 232.0, options.position.y + options.size.y + 450.0)
+	)
+	var shader_material := preview.material as ShaderMaterial
+	if shader_material != null and preview_height > 0.0:
+		shader_material.set_shader_parameter("rect_aspect", 1.0)
+		shader_material.set_shader_parameter("rect_size", preview.size)
 
 
 func _read(field: String, fallback: Variant = null) -> Variant:
-	if _view_model is Dictionary:
-		return _view_model.get(field, fallback)
-	return _view_model.get(field) if _view_model != null else fallback
+	return _read_from(_view_model, field, fallback)
+
+
+func _read_from(source: Variant, field: String, fallback: Variant) -> Variant:
+	if source is Dictionary:
+		return source.get(field, fallback)
+	if source == null:
+		return fallback
+	return source.get(field)
