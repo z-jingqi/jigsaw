@@ -89,13 +89,19 @@ static func _run_piped(
 			## Kill before draining: a pipe read can block while the child is
 			## still alive. Once it exits, drain any buffered partial output.
 			OS.kill(pid)
-			var kill_deadline := Time.get_ticks_msec() + _KILL_GRACE_MS
-			while OS.is_process_running(pid) and Time.get_ticks_msec() < kill_deadline:
-				OS.delay_msec(_POLL_INTERVAL_MS)
+			var process_stopped := true
+			if OS.get_name() == "Windows":
+				## Unix OS.kill() waits for and reaps the child. Polling that PID
+				## again calls waitpid() a second time and reports ECHILD (errno 10).
+				## Windows kill is asynchronous, so retain the grace-period poll there.
+				var kill_deadline := Time.get_ticks_msec() + _KILL_GRACE_MS
+				while OS.is_process_running(pid) and Time.get_ticks_msec() < kill_deadline:
+					OS.delay_msec(_POLL_INTERVAL_MS)
+				process_stopped = not OS.is_process_running(pid)
 
 			var partial_stdout := ""
 			var partial_stderr := ""
-			if not OS.is_process_running(pid):
+			if process_stopped:
 				partial_stdout = _drain_pipe(stdio)
 				partial_stderr = _drain_pipe(stderr_pipe) if capture_stderr else ""
 			_close_pipes(stdio, stderr_pipe)
