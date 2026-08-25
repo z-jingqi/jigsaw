@@ -18,7 +18,7 @@ func fit_view_to_pieces(animate := true) -> void:
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		reset_view()
 		return
-	_fit_view_to_world_rect(bounds.grow(host.VIEW_FIT_PADDING), animate, 1.0, true)
+	_fit_view_to_world_rect(bounds.grow(host.SWAP_VIEW_FIT_PADDING), animate, 1.0, true)
 
 
 func reset_view() -> void:
@@ -248,7 +248,8 @@ func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
 	if board.size.x <= 0.0 or board.size.y <= 0.0:
 		return
 	var view_rect: Rect2 = _world_view_screen_rect()
-	var usable_size: Vector2 = view_rect.size - Vector2.ONE * host.BOARD_SCREEN_EDGE_GAP * 2.0
+	var edge_gap: float = host.board_screen_edge_gap()
+	var usable_size: Vector2 = view_rect.size - Vector2.ONE * edge_gap * 2.0
 	var target_scale := maxf(
 		0.001,
 		minf(
@@ -349,7 +350,7 @@ func _focus_hint_pair(pair: Array) -> void:
 
 
 func _pan_hint_bounds_into_view(bounds: Rect2) -> void:
-	var view_rect: Rect2 = _world_view_screen_rect().grow(-host.BOARD_SCREEN_EDGE_GAP)
+	var view_rect: Rect2 = _world_view_screen_rect().grow(-host.board_screen_edge_gap())
 	if view_rect.size.x <= 0.0 or view_rect.size.y <= 0.0:
 		return
 	var screen_bounds := Rect2(_world_to_screen(bounds.position), bounds.size * host.view_scale)

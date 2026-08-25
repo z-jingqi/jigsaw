@@ -90,7 +90,13 @@ def output_path_for(input_file: InputFile, output_dir: Path | None, suffix: str)
     src = input_file.path
     if output_dir is None:
         return src.with_name(f"{src.stem}{suffix}.jpg")
-    return (output_dir.resolve() / input_file.relative_path).with_suffix(".jpg").resolve()
+
+    destination = (output_dir.resolve() / input_file.relative_path).with_suffix(".jpg").resolve()
+    if destination == src:
+        # Converting a JPEG into its own directory would otherwise rewrite the
+        # original in place, so fall back to the suffixed name.
+        destination = destination.with_name(f"{destination.stem}{suffix}.jpg")
+    return destination
 
 
 def has_alpha(image: Image.Image) -> bool:

@@ -68,6 +68,25 @@ For interactive inspection, wait briefly for the scene to render, then inspect t
 - Preserve the current visual timing and behavior unless the task explicitly asks for a redesign. Do not migrate a Tween solely because an editor tool can create an animation.
 - Reduced Motion must jump to the correct end state, and interrupted/repeated transitions must not flash, leak nodes, or leave active motion behind.
 
+## Generated image assets
+
+- Never ask image generation tools for a transparent background. Generated
+  "transparent" images can contain a baked checkerboard or another fake
+  background even when the preview looks transparent.
+- When a runtime asset needs transparency, generate it on a perfectly flat,
+  high-contrast solid-color background that does not occur in the subject.
+  Remove that background with the repository Python image tools, trim excess
+  transparent margins, then resize and encode the final runtime format.
+- Before importing the asset into Godot, inspect the actual alpha channel and
+  edge pixels. A preview or filename is not evidence that the image has real
+  transparency.
+- Generated UI foreground assets must not contain baked cast, contact, ambient,
+  or drop shadows. Do not add replacement runtime shadows unless the approved
+  design explicitly requires them; depth must come from the asset's own shape,
+  material, and restrained internal highlights by default.
+- Keep the generated source outside the runtime asset path. Only the processed,
+  alpha-verified, trimmed, and compressed result belongs under `assets/`.
+
 ## Godot AI editor loop
 
 Godot AI is an optional development bridge, not a runtime dependency or the source of truth for correctness. When it is available, use this order:

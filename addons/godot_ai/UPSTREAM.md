@@ -21,6 +21,10 @@ Local compatibility patch:
   Scene tools, runtime control, MCP transport, game logs, screenshots, and
   structured command diagnostics remain available; only passive editor error
   capture is disabled for that combined-plugin session.
+- `clients/_cli_exec.gd` does not poll a killed child again on Unix. Godot's
+  Unix `OS.kill()` waits for and reaps the child, so a follow-up
+  `OS.is_process_running()` reports `ECHILD` (errno 10). Windows retains the
+  upstream grace-period poll because process termination is asynchronous there.
 
 Do not use the plugin's self-update action in this repository. Upgrade by
 reviewing a specific upstream release, replacing the complete vendored subtree,

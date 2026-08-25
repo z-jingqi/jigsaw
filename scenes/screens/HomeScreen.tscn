@@ -1,119 +1,74 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/GlassIconButton.tscn" id="4_icon"]
-[ext_resource type="Texture2D" path="res://assets/ui/brand/jigcat-logo.webp" id="6_logo"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/album.svg" id="7_album"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="8_title_font"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/logo-sticker-3d.webp" id="3_logo"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="4_ornament"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/settings-clay-3d.webp" id="5_settings"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/progress-plaque-3d.webp" id="6_plaque"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="7_font"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="8_action"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/start-button-3d.webp" id="10_button"]
+[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="11_background"]
 
-[sub_resource type="FontVariation" id="FontVariation_home_title"]
-base_font = ExtResource("8_title_font")
-variation_opentype = {&"wght": 900.0}
-variation_embolden = 0.85
-
-[sub_resource type="FontVariation" id="FontVariation_home_strong"]
-base_font = ExtResource("8_title_font")
-variation_opentype = {&"wght": 800.0}
-variation_embolden = 0.4
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
-bg_color = Color(0.980392, 0.917647, 0.843137, 1)
-corner_radius_top_left = 82
-corner_radius_top_right = 82
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_badge"]
-bg_color = Color(0.0980392, 0.364706, 0.392157, 1)
-corner_radius_top_left = 42
-corner_radius_top_right = 42
-corner_radius_bottom_right = 42
-corner_radius_bottom_left = 42
+[sub_resource type="StyleBoxFlat" id="StyleBox_card_frame"]
+bg_color = Color(0.996078, 0.941176, 0.792157, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.807843, 0.654902, 0.419608, 0.78)
+corner_radius_top_left = 52
+corner_radius_top_right = 52
+corner_radius_bottom_right = 52
+corner_radius_bottom_left = 52
+corner_detail = 16
+shadow_color = Color(0.345098, 0.184314, 0.0745098, 0.22)
+shadow_size = 10
+shadow_offset = Vector2(0, 12)
+anti_aliasing = true
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_track"]
-bg_color = Color(0.776471, 0.839216, 0.788235, 1)
-corner_radius_top_left = 11
-corner_radius_top_right = 11
-corner_radius_bottom_right = 11
-corner_radius_bottom_left = 11
+bg_color = Color(0.494118, 0.286275, 0.145098, 0.74)
+corner_radius_top_right = 7
+corner_radius_bottom_right = 7
+corner_radius_bottom_left = 7
+corner_radius_top_left = 7
+anti_aliasing = true
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_fill"]
-bg_color = Color(0.917647, 0.321569, 0.145098, 1)
-corner_radius_top_left = 11
-corner_radius_top_right = 11
-corner_radius_bottom_right = 11
-corner_radius_bottom_left = 11
+bg_color = Color(0.960784, 0.411765, 0.286275, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+anti_aliasing = true
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_start_normal"]
-bg_color = Color(0.917647, 0.321569, 0.145098, 1)
-corner_radius_top_left = 56
-corner_radius_top_right = 56
-corner_radius_bottom_right = 56
-corner_radius_bottom_left = 56
+[sub_resource type="StyleBoxFlat" id="StyleBox_start_focus"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.352941, 0.25098, 0.129412, 0.9)
+corner_radius_top_left = 108
+corner_radius_top_right = 108
+corner_radius_bottom_right = 108
+corner_radius_bottom_left = 108
+corner_detail = 16
+anti_aliasing = true
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_start_pressed"]
-bg_color = Color(0.847059, 0.266667, 0.109804, 1)
-corner_radius_top_left = 56
-corner_radius_top_right = 56
-corner_radius_bottom_right = 56
-corner_radius_bottom_left = 56
-
-[sub_resource type="Animation" id="Animation_reset"]
-resource_name = "RESET"
-tracks/0/type = "value"
-tracks/0/path = NodePath("SafeArea/SafeContent/Header:modulate:a")
-tracks/0/interp = 1
-tracks/0/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [0.0]}
-tracks/1/type = "value"
-tracks/1/path = NodePath("SafeArea/SafeContent/Header:offset_top")
-tracks/1/interp = 1
-tracks/1/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [43.0]}
-tracks/2/type = "value"
-tracks/2/path = NodePath("SafeArea/SafeContent/Header:offset_bottom")
-tracks/2/interp = 1
-tracks/2/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [179.0]}
-tracks/3/type = "value"
-tracks/3/path = NodePath("BottomPanel:modulate:a")
-tracks/3/interp = 1
-tracks/3/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [0.0]}
-tracks/4/type = "value"
-tracks/4/path = NodePath("BottomPanel:offset_top")
-tracks/4/interp = 1
-tracks/4/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [-651.0]}
-tracks/5/type = "value"
-tracks/5/path = NodePath("BottomPanel:offset_bottom")
-tracks/5/interp = 1
-tracks/5/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [140.0]}
-
-[sub_resource type="Animation" id="Animation_enter"]
-resource_name = "enter"
-length = 0.9
-tracks/0/type = "value"
-tracks/0/path = NodePath("SafeArea/SafeContent/Header:modulate:a")
-tracks/0/interp = 1
-tracks/0/keys = {"times": PackedFloat32Array(0.06, 0.42), "transitions": PackedFloat32Array(0.4, 1), "update": 0, "values": [0.0, 1.0]}
-tracks/1/type = "value"
-tracks/1/path = NodePath("SafeArea/SafeContent/Header:offset_top")
-tracks/1/interp = 1
-tracks/1/keys = {"times": PackedFloat32Array(0.06, 0.52), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [43.0, 71.0]}
-tracks/2/type = "value"
-tracks/2/path = NodePath("SafeArea/SafeContent/Header:offset_bottom")
-tracks/2/interp = 1
-tracks/2/keys = {"times": PackedFloat32Array(0.06, 0.52), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [179.0, 207.0]}
-tracks/3/type = "value"
-tracks/3/path = NodePath("BottomPanel:modulate:a")
-tracks/3/interp = 1
-tracks/3/keys = {"times": PackedFloat32Array(0.18, 0.56), "transitions": PackedFloat32Array(0.4, 1), "update": 0, "values": [0.0, 1.0]}
-tracks/4/type = "value"
-tracks/4/path = NodePath("BottomPanel:offset_top")
-tracks/4/interp = 1
-tracks/4/keys = {"times": PackedFloat32Array(0.18, 0.78), "transitions": PackedFloat32Array(0.3, 1), "update": 0, "values": [-651.0, -791.0]}
-tracks/5/type = "value"
-tracks/5/path = NodePath("BottomPanel:offset_bottom")
-tracks/5/interp = 1
-tracks/5/keys = {"times": PackedFloat32Array(0.18, 0.78), "transitions": PackedFloat32Array(0.3, 1), "update": 0, "values": [140.0, 0.0]}
-
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_home"]
-_data = {&"RESET": SubResource("Animation_reset"), &"enter": SubResource("Animation_enter")}
+[sub_resource type="StyleBoxFlat" id="StyleBox_start_shadow"]
+bg_color = Color(0.301961, 0.145098, 0.054902, 0.01)
+corner_radius_top_left = 112
+corner_radius_top_right = 112
+corner_radius_bottom_right = 112
+corner_radius_bottom_left = 112
+corner_detail = 16
+shadow_color = Color(0.301961, 0.145098, 0.054902, 0.2)
+shadow_size = 12
+shadow_offset = Vector2(-8, 12)
+anti_aliasing = true
 
 [node name="HomeScreen" type="Control"]
 layout_mode = 3
@@ -123,6 +78,19 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_home")
+
+[node name="Background" type="TextureRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("11_background")
+expand_mode = 1
+stretch_mode = 6
 
 [node name="CoverSlots" type="Control" parent="."]
 layout_mode = 1
@@ -134,20 +102,60 @@ grow_vertical = 2
 clip_contents = true
 mouse_filter = 2
 
+[node name="FarPrevious" type="TextureRect" parent="CoverSlots"]
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
+
+[node name="CardFrame" type="Panel" parent="CoverSlots/FarPrevious"]
+show_behind_parent = true
+layout_mode = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card_frame")
+
 [node name="Previous" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
+
+[node name="CardFrame" type="Panel" parent="CoverSlots/Previous"]
+show_behind_parent = true
+layout_mode = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card_frame")
 
 [node name="Current" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
 
+[node name="CardFrame" type="Panel" parent="CoverSlots/Current"]
+show_behind_parent = true
+layout_mode = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card_frame")
+
 [node name="Next" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
 stretch_mode = 6
 mouse_filter = 2
+
+[node name="CardFrame" type="Panel" parent="CoverSlots/Next"]
+show_behind_parent = true
+layout_mode = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card_frame")
+
+[node name="FarNext" type="TextureRect" parent="CoverSlots"]
+expand_mode = 1
+stretch_mode = 6
+mouse_filter = 2
+
+[node name="CardFrame" type="Panel" parent="CoverSlots/FarNext"]
+show_behind_parent = true
+layout_mode = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card_frame")
 
 [node name="GestureCatcher" type="Control" parent="."]
 layout_mode = 1
@@ -157,6 +165,195 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 0
+
+[node name="ThemeInfoLayer" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="InfoLive" type="Control" parent="ThemeInfoLayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TitleOrnamentLeft" type="TextureRect" parent="ThemeInfoLayer/InfoLive"]
+layout_mode = 0
+texture = ExtResource("4_ornament")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="TitleOrnamentRight" type="TextureRect" parent="ThemeInfoLayer/InfoLive"]
+layout_mode = 0
+texture = ExtResource("4_ornament")
+expand_mode = 1
+stretch_mode = 5
+flip_h = true
+mouse_filter = 2
+
+[node name="ThemeName" type="Label" parent="ThemeInfoLayer/InfoLive"]
+layout_mode = 0
+theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
+theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.64)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 4
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 108
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+max_lines_visible = 2
+clip_text = true
+text_overrun_behavior = 3
+mouse_filter = 2
+
+[node name="ProgressTag" type="NinePatchRect" parent="ThemeInfoLayer/InfoLive"]
+layout_mode = 0
+texture = ExtResource("6_plaque")
+patch_margin_left = 72
+patch_margin_top = 48
+patch_margin_right = 72
+patch_margin_bottom = 48
+mouse_filter = 2
+
+[node name="ProgressCount" type="Label" parent="ThemeInfoLayer/InfoLive/ProgressTag"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 28.0
+offset_top = 18.0
+offset_right = -28.0
+offset_bottom = 78.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 42
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="ProgressTrack" type="Panel" parent="ThemeInfoLayer/InfoLive/ProgressTag"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 54.0
+offset_top = 92.0
+offset_right = -54.0
+offset_bottom = 106.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_track")
+
+[node name="ProgressFill" type="Panel" parent="ThemeInfoLayer/InfoLive/ProgressTag/ProgressTrack"]
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = -2.0
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_fill")
+
+[node name="InfoIncoming" type="Control" parent="ThemeInfoLayer"]
+visible = false
+modulate = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TitleOrnamentLeft" type="TextureRect" parent="ThemeInfoLayer/InfoIncoming"]
+layout_mode = 0
+texture = ExtResource("4_ornament")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="TitleOrnamentRight" type="TextureRect" parent="ThemeInfoLayer/InfoIncoming"]
+layout_mode = 0
+texture = ExtResource("4_ornament")
+expand_mode = 1
+stretch_mode = 5
+flip_h = true
+mouse_filter = 2
+
+[node name="ThemeName" type="Label" parent="ThemeInfoLayer/InfoIncoming"]
+layout_mode = 0
+theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
+theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.64)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 4
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 108
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+max_lines_visible = 2
+clip_text = true
+text_overrun_behavior = 3
+mouse_filter = 2
+
+[node name="ProgressTag" type="NinePatchRect" parent="ThemeInfoLayer/InfoIncoming"]
+layout_mode = 0
+texture = ExtResource("6_plaque")
+patch_margin_left = 72
+patch_margin_top = 48
+patch_margin_right = 72
+patch_margin_bottom = 48
+mouse_filter = 2
+
+[node name="ProgressCount" type="Label" parent="ThemeInfoLayer/InfoIncoming/ProgressTag"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 28.0
+offset_top = 18.0
+offset_right = -28.0
+offset_bottom = 78.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 42
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="ProgressTrack" type="Panel" parent="ThemeInfoLayer/InfoIncoming/ProgressTag"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 54.0
+offset_top = 92.0
+offset_right = -54.0
+offset_bottom = 106.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_track")
+
+[node name="ProgressFill" type="Panel" parent="ThemeInfoLayer/InfoIncoming/ProgressTag/ProgressTrack"]
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 2.0
+offset_top = 2.0
+offset_right = -2.0
+offset_bottom = -2.0
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_fill")
 
 [node name="SafeArea" parent="." instance=ExtResource("2_safe")]
 layout_mode = 1
@@ -172,263 +369,132 @@ mouse_filter = 2
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = 71.0
-offset_bottom = 207.0
+offset_top = 136.0
+offset_bottom = 376.0
 grow_horizontal = 2
 mouse_filter = 2
 
+[node name="LogoShadow" type="TextureRect" parent="SafeArea/SafeContent/Header"]
+layout_mode = 0
+offset_left = -10.0
+offset_top = 42.0
+offset_right = 530.0
+offset_bottom = 222.0
+modulate = Color(0.321569, 0.152941, 0.054902, 0.2)
+texture = ExtResource("3_logo")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
 [node name="Logo" type="TextureRect" parent="SafeArea/SafeContent/Header"]
+layout_mode = 0
+offset_top = 28.0
+offset_right = 540.0
+offset_bottom = 208.0
+texture = ExtResource("3_logo")
+expand_mode = 1
+stretch_mode = 0
+mouse_filter = 2
+
+[node name="MenuShadow" type="TextureRect" parent="SafeArea/SafeContent/Header"]
 layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-offset_right = 393.0
-grow_vertical = 2
-texture = ExtResource("6_logo")
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -205.0
+offset_top = 42.0
+offset_right = -35.0
+offset_bottom = 212.0
+grow_horizontal = 0
+modulate = Color(0.321569, 0.152941, 0.054902, 0.24)
+texture = ExtResource("5_settings")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="AlbumButton" parent="SafeArea/SafeContent/Header" instance=ExtResource("4_icon")]
+[node name="MenuButton" type="Button" parent="SafeArea/SafeContent/Header"]
+custom_minimum_size = Vector2(170, 170)
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -312.0
-offset_right = -176.0
-offset_bottom = 136.0
+offset_left = -191.0
+offset_top = 26.0
+offset_right = -21.0
+offset_bottom = 196.0
 grow_horizontal = 0
-icon_texture = ExtResource("7_album")
-text = ""
-accessibility_label = "All themes"
+focus_mode = 0
+mouse_default_cursor_shape = 2
+icon = ExtResource("5_settings")
+flat = true
+expand_icon = true
+icon_max_width = 160
+script = ExtResource("8_action")
+kind = 2
+accessibility_label = "设置"
 
-[node name="MenuButton" parent="SafeArea/SafeContent/Header" instance=ExtResource("4_icon")]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -136.0
-offset_right = 0.0
-offset_bottom = 136.0
-grow_horizontal = 0
-text = ""
-accessibility_label = "Settings"
-press_icon_rotation_degrees = 8.0
-
-[node name="BottomPanel" type="Panel" parent="."]
+[node name="BottomContent" type="Control" parent="SafeArea/SafeContent"]
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -791.0
+offset_top = -500.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_styles/panel = SubResource("StyleBox_panel")
-
-[node name="InfoLive" type="Control" parent="BottomPanel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 mouse_filter = 2
 
-[node name="ThemeName" type="Label" parent="BottomPanel/InfoLive"]
+[node name="StartButtonShadow" type="Panel" parent="SafeArea/SafeContent/BottomContent"]
 layout_mode = 1
-anchors_preset = 10
+anchors_preset = 0
+anchor_left = 0.5
 anchor_right = 0.5
-offset_left = 104.0
-offset_top = 88.0
-offset_right = 0.0
-offset_bottom = 232.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.160784, 0.14902, 0.145098, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_title")
-theme_override_font_sizes/font_size = 88
-vertical_alignment = 1
-autowrap_mode = 3
-max_lines_visible = 2
-clip_text = true
-text_overrun_behavior = 3
-mouse_filter = 2
-
-[node name="PageBadge" type="Panel" parent="BottomPanel/InfoLive"]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -333.0
-offset_top = 114.0
-offset_right = -104.0
-offset_bottom = 196.0
-grow_horizontal = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_badge")
-
-[node name="PageText" type="Label" parent="BottomPanel/InfoLive/PageBadge"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_colors/font_color = Color(0.996078, 0.964706, 0.909804, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_strong")
-theme_override_font_sizes/font_size = 46
-horizontal_alignment = 1
-vertical_alignment = 1
-text = "01 / 04"
-mouse_filter = 2
-
-[node name="Caption" type="Label" parent="BottomPanel/InfoLive"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 104.0
-offset_top = 258.0
-offset_right = -104.0
-offset_bottom = 322.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.160784, 0.14902, 0.145098, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_strong")
-theme_override_font_sizes/font_size = 52
-vertical_alignment = 1
-mouse_filter = 2
-
-[node name="ProgressTrack" type="Panel" parent="BottomPanel/InfoLive"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 104.0
-offset_top = 354.0
-offset_right = -104.0
-offset_bottom = 376.0
+offset_left = -315.0
+offset_top = 83.0
+offset_right = 315.0
+offset_bottom = 313.0
 grow_horizontal = 2
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_track")
+theme_override_styles/panel = SubResource("StyleBox_start_shadow")
 
-[node name="ProgressFill" type="Panel" parent="BottomPanel/InfoLive/ProgressTrack"]
+[node name="StartButtonBackground" type="TextureRect" parent="SafeArea/SafeContent/BottomContent"]
 layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-grow_vertical = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_fill")
-
-[node name="InfoIncoming" type="Control" parent="BottomPanel"]
-visible = false
-modulate = Color(1, 1, 1, 0)
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="ThemeName" type="Label" parent="BottomPanel/InfoIncoming"]
-layout_mode = 1
-anchors_preset = 10
+anchors_preset = 0
+anchor_left = 0.5
 anchor_right = 0.5
-offset_left = 104.0
-offset_top = 88.0
-offset_right = 0.0
-offset_bottom = 232.0
+offset_left = -315.0
+offset_top = 83.0
+offset_right = 315.0
+offset_bottom = 313.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(0.160784, 0.14902, 0.145098, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_title")
-theme_override_font_sizes/font_size = 88
-vertical_alignment = 1
-autowrap_mode = 3
-max_lines_visible = 2
-clip_text = true
-text_overrun_behavior = 3
+texture = ExtResource("10_button")
+expand_mode = 1
+stretch_mode = 0
 mouse_filter = 2
 
-[node name="PageBadge" type="Panel" parent="BottomPanel/InfoIncoming"]
+[node name="StartButton" type="Button" parent="SafeArea/SafeContent/BottomContent"]
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -333.0
-offset_top = 114.0
-offset_right = -104.0
-offset_bottom = 196.0
-grow_horizontal = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_badge")
-
-[node name="PageText" type="Label" parent="BottomPanel/InfoIncoming/PageBadge"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_colors/font_color = Color(0.996078, 0.964706, 0.909804, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_strong")
-theme_override_font_sizes/font_size = 46
-horizontal_alignment = 1
-vertical_alignment = 1
-text = "02 / 04"
-mouse_filter = 2
-
-[node name="Caption" type="Label" parent="BottomPanel/InfoIncoming"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 104.0
-offset_top = 258.0
-offset_right = -104.0
-offset_bottom = 322.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.160784, 0.14902, 0.145098, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_strong")
-theme_override_font_sizes/font_size = 52
-vertical_alignment = 1
-mouse_filter = 2
-
-[node name="ProgressTrack" type="Panel" parent="BottomPanel/InfoIncoming"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 104.0
-offset_top = 354.0
-offset_right = -104.0
-offset_bottom = 376.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_track")
-
-[node name="ProgressFill" type="Panel" parent="BottomPanel/InfoIncoming/ProgressTrack"]
-layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-grow_vertical = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_fill")
-
-[node name="StartButton" type="Button" parent="BottomPanel"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 104.0
-offset_top = 488.0
-offset_right = -104.0
-offset_bottom = 671.0
+anchors_preset = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -315.0
+offset_top = 83.0
+offset_right = 315.0
+offset_bottom = 313.0
 grow_horizontal = 2
 focus_mode = 0
-theme_override_colors/font_color = Color(0.996078, 0.964706, 0.909804, 1)
-theme_override_colors/font_hover_color = Color(0.996078, 0.964706, 0.909804, 1)
-theme_override_colors/font_pressed_color = Color(0.996078, 0.964706, 0.909804, 1)
-theme_override_fonts/font = SubResource("FontVariation_home_title")
-theme_override_font_sizes/font_size = 62
-theme_override_styles/normal = SubResource("StyleBox_start_normal")
-theme_override_styles/hover = SubResource("StyleBox_start_normal")
-theme_override_styles/pressed = SubResource("StyleBox_start_pressed")
-theme_override_styles/focus = SubResource("StyleBox_start_normal")
-text = "开始拼图"
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-libraries = {&"": SubResource("AnimationLibrary_home")}
+mouse_default_cursor_shape = 2
+theme_override_colors/font_color = Color(1, 0.968627, 0.870588, 1)
+theme_override_colors/font_hover_color = Color(1, 0.984314, 0.921569, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.941176, 0.827451, 1)
+theme_override_colors/font_shadow_color = Color(0.458824, 0.164706, 0.0980392, 0.52)
+theme_override_constants/shadow_offset_x = 3
+theme_override_constants/shadow_offset_y = 5
+theme_override_fonts/font = ExtResource("7_font")
+theme_override_font_sizes/font_size = 72
+theme_override_styles/focus = SubResource("StyleBox_start_focus")
+text = "进入"
+flat = true
+script = ExtResource("8_action")
+kind = 0
+accessibility_label = "进入主题"

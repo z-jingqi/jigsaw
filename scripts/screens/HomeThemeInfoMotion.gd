@@ -1,9 +1,8 @@
 class_name HomeThemeInfoMotion
 extends RefCounted
 
-## Crossfades the bottom panel's theme block while the cover carousel is dragged.
-## Both blocks sit on the same opaque panel, so the outgoing copy leaves and the
-## incoming copy arrives as whole groups rather than per-field.
+## Crossfades the title and card-attached progress tag while the carousel is dragged.
+## The outgoing and incoming copies move as whole groups rather than per-field.
 const SHIFT_DISTANCE := 72.0
 
 var _outgoing: Control

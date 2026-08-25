@@ -9,6 +9,8 @@ func _init(owner: Node2D) -> void:
 
 
 func _add_level_background(level_config: Dictionary) -> void:
+	if bool(level_config.get("_persistent_tabletop_background", false)):
+		return
 	var viewport_size := host.get_viewport_rect().size
 	var bg := ColorRect.new()
 	bg.color = _level_background_color(level_config)
@@ -113,11 +115,11 @@ func _add_board_line_frame() -> void:
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	var surface: Color = _topic_ui_color("surface", Color("#F5F0E3"))
+	var surface := Color("#7A5538")
 	surface.a = host.BOARD_TARGET_BACKGROUND_ALPHA
 	style.bg_color = surface
-	var outline: Color = _topic_ui_color("outline", Color("#879174"))
-	outline.a = 0.78
+	var outline := Color("#5B3922")
+	outline.a = 0.24
 	style.border_color = outline
 	style.border_width_left = host.BOARD_LINE_FRAME_WIDTH
 	style.border_width_top = host.BOARD_LINE_FRAME_WIDTH
@@ -128,6 +130,10 @@ func _add_board_line_frame() -> void:
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
+	style.shadow_color = Color(0.24, 0.12, 0.055, 0.24)
+	style.shadow_size = maxi(8, roundi(minf(frame.size.x, frame.size.y) * 0.012))
+	style.shadow_offset = Vector2(0.0, maxf(7.0, frame.size.y * 0.007))
+	style.anti_aliasing = true
 	frame.add_theme_stylebox_override("panel", style)
 	host.world_root.add_child(frame)
 

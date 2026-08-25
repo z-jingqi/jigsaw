@@ -15,7 +15,6 @@ var _all_ok := true
 var _failures: Array[String] = []
 var _changed_theme := ""
 var _activated_theme := ""
-var _all_themes_requested := false
 
 
 func _initialize() -> void:
@@ -29,12 +28,10 @@ func _run() -> void:
 	await process_frame
 	home.selected_theme_changed.connect(func(theme_id: String) -> void: _changed_theme = theme_id)
 	home.theme_activated.connect(func(theme_id: String) -> void: _activated_theme = theme_id)
-	home.all_themes_requested.connect(func() -> void: _all_themes_requested = true)
 	home.set_view_model(_home_view_model())
 	await process_frame
 	var logo: TextureRect = home.get_node("SafeArea/SafeContent/Header/Logo")
 	var safe_area: SafeAreaContainer = home.get_node("SafeArea")
-	var album_button: Button = home.get_node("SafeArea/SafeContent/Header/AlbumButton")
 	var menu_button: Button = home.get_node("SafeArea/SafeContent/Header/MenuButton")
 	var header := home.get_node("SafeArea/SafeContent/Header") as Control
 	var gesture_catcher := home.get_node("GestureCatcher") as Control
@@ -43,15 +40,8 @@ func _run() -> void:
 	# --- header -------------------------------------------------------------
 	_check(logo.texture != null, "home_logo_texture")
 	_check(is_equal_approx(safe_area.compact_breakpoint, 9999.0), "home_phone_safe_area_width")
-	_check(album_button.get_script() == GlassButtonScript, "home_album_glass_button")
 	_check(menu_button.get_script() == GlassButtonScript, "home_settings_glass_button")
-	_check(
-		(
-			album_button.get_global_rect().size.x >= 44.0
-			and menu_button.get_global_rect().size.x >= 44.0
-		),
-		"home_glass_button_touch_targets"
-	)
+	_check(menu_button.get_global_rect().size.x >= 44.0, "home_glass_button_touch_targets")
 	_check(
 		(
 			gesture_catcher.mouse_filter == Control.MOUSE_FILTER_STOP
@@ -62,26 +52,13 @@ func _run() -> void:
 		),
 		"home_passive_layers_do_not_block_pointer_paging"
 	)
+	_check(menu_button.icon_texture != null, "home_header_icon_assets")
 	_check(
-		(
-			album_button.icon_texture != null
-			and menu_button.icon_texture != null
-			and album_button.icon_texture != menu_button.icon_texture
-		),
-		"home_header_icon_assets"
-	)
-	_check(
-		(
-			logo.get_global_rect().end.x <= album_button.get_global_rect().position.x
-			and album_button.get_global_rect().end.x <= menu_button.get_global_rect().position.x
-		),
+		logo.get_global_rect().end.x <= menu_button.get_global_rect().position.x,
 		"home_header_actions_do_not_overlap_logo"
 	)
 	_check(
-		(
-			album_button.get_rect().position.y >= 0.0
-			and menu_button.get_global_position().x + menu_button.size.x <= home.size.x - 20.0
-		),
+		menu_button.get_global_position().x + menu_button.size.x <= home.size.x - 20.0,
 		"home_header_actions_use_safe_inset"
 	)
 
@@ -169,8 +146,6 @@ func _run() -> void:
 		"home_progress_fill_tracks_ratio"
 	)
 	_check(not home.incoming_info.visible, "home_incoming_hidden_at_rest")
-	album_button.pressed.emit()
-	_check(_all_themes_requested, "home_album_opens_all_themes")
 	_check(home.get_node("CoverSlots/Current").texture != null, "home_current_cover")
 
 	# --- cold entry ---------------------------------------------------------
@@ -252,7 +227,6 @@ func _run() -> void:
 	_check(
 		(
 			home._is_fixed_action_at(home.bottom_panel.position + Vector2(24.0, 40.0))
-			and home._is_fixed_action_at(album_button.get_global_rect().get_center())
 			and home._is_fixed_action_at(menu_button.get_global_rect().get_center())
 			and not home._is_fixed_action_at(Vector2(home.size.x * 0.5, home.size.y * 0.3))
 		),

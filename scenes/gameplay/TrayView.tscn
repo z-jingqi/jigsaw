@@ -2,19 +2,15 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_tray"]
 bg_color = Color(0.0352941, 0.0823529, 0.105882, 0)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-border_width_top = 2
-border_color = Color(0.39, 0.43, 0.34, 0.46)
 
 [node name="TrayView" type="Panel"]
-custom_minimum_size = Vector2(0, 112)
+custom_minimum_size = Vector2(0, 400)
 layout_mode = 3
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -112.0
+offset_top = -400.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2

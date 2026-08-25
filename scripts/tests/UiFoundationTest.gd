@@ -4,7 +4,6 @@ const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
 const ThemeProgressScene := preload("res://scenes/ui/foundation/ThemeProgress.tscn")
 const IconButtonScene := preload("res://scenes/ui/foundation/IconButton.tscn")
 const PillButtonScene := preload("res://scenes/ui/foundation/PillButton.tscn")
-const ThemeCardScene := preload("res://scenes/ui/foundation/ThemeCard.tscn")
 const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 const SettingsRowScene := preload("res://scenes/ui/foundation/SettingsRow.tscn")
 const SafeAreaScene := preload("res://scenes/ui/foundation/SafeAreaContainer.tscn")
@@ -132,14 +131,11 @@ func _visible_paws(progress: Control) -> int:
 func _test_component_scenes() -> void:
 	var icon_button = IconButtonScene.instantiate()
 	var pill_button = PillButtonScene.instantiate()
-	var theme_card = ThemeCardScene.instantiate()
 	var level_card = LevelCardScene.instantiate()
 	var settings_row = SettingsRowScene.instantiate()
 	var safe_area = SafeAreaScene.instantiate()
 	var modal_shell = ModalShellScene.instantiate()
-	for component in [
-		icon_button, pill_button, theme_card, level_card, settings_row, safe_area, modal_shell
-	]:
+	for component in [icon_button, pill_button, level_card, settings_row, safe_area, modal_shell]:
 		root.add_child(component)
 	await process_frame
 	_check(
@@ -176,21 +172,6 @@ func _test_component_scenes() -> void:
 	_check(icon_button.scale.is_equal_approx(Vector2.ONE), "button_reduced_motion")
 	icon_button.gui_input.emit(pointer_up)
 	icon_button.set_reduced_motion(false)
-	theme_card.set_view_model(
-		{
-			"theme_id": "shanhai",
-			"title": "The Classic of Mountains and Seas",
-			"progress": _progress(2, 5, 0.4, 2, false)
-		}
-	)
-	_check(
-		(
-			theme_card.theme_id == "shanhai"
-			and theme_card.get_node("Margin/Content/Progress/Numeric").text == "2 / 5"
-		),
-		"theme_card_view_model"
-	)
-	_check(not theme_card.accessibility_name.is_empty(), "theme_card_accessibility")
 	level_card.set_view_model(
 		{
 			"level_id": "shanhai_08",

@@ -62,7 +62,13 @@ def output_path_for(input_file: InputFile, output_dir: Path | None, suffix: str)
     src = input_file.path
     if output_dir is None:
         return src.with_name(f"{src.stem}{suffix}{src.suffix}")
-    return (output_dir.resolve() / input_file.relative_path).resolve()
+
+    destination = (output_dir.resolve() / input_file.relative_path).resolve()
+    if destination == src:
+        # Resizing into the source's own directory would otherwise destroy the
+        # original, so fall back to the suffixed name.
+        destination = destination.with_name(f"{destination.stem}{suffix}{destination.suffix}")
+    return destination
 
 
 def target_size_for(
@@ -110,6 +116,8 @@ def resize_one(
 ) -> Result:
     src = input_file.path
     dst = output_path_for(input_file, output_dir, suffix)
+    if dst == src:
+        return Result(src, dst, None, None, "skipped", "refusing to overwrite the source image")
     if dst.exists() and not overwrite:
         return Result(src, dst, None, None, "skipped", "destination exists; pass --overwrite to replace it")
 

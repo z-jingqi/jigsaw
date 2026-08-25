@@ -57,13 +57,6 @@ func _register_runtime_contracts() -> void:
 	)
 	register_definition(
 		RouteDefinitionScript.new(
-			&"all_themes",
-			RouteDefinitionScript.Presentation.SCREEN,
-			{"current_theme_id": TYPE_STRING}
-		)
-	)
-	register_definition(
-		RouteDefinitionScript.new(
 			&"levels",
 			RouteDefinitionScript.Presentation.SCREEN,
 			{"theme_id": TYPE_STRING},
