@@ -1,10 +1,12 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/modals/SettingsModal.gd" id="1_modal"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/ModalShell.tscn" id="2_shell"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SettingsRow.tscn" id="3_row"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4_font"]
 
 [node name="SettingsModal" type="Control"]
+z_index = 100
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -16,32 +18,46 @@ script = ExtResource("1_modal")
 [node name="ModalShell" parent="." instance=ExtResource("2_shell")]
 layout_mode = 1
 
-[node name="Header" type="HBoxContainer" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 84)
+[node name="Header" type="Control" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 152)
 layout_mode = 2
 
 [node name="Title" type="Label" parent="ModalShell/Panel/Content/Header"]
-layout_mode = 2
-size_flags_horizontal = 3
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
-theme_override_font_sizes/font_size = 44
+theme_override_fonts/font = ExtResource("4_font")
+theme_override_font_sizes/font_size = 66
+horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Close" type="Button" parent="ModalShell/Panel/Content/Header"]
-custom_minimum_size = Vector2(84, 84)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
-theme_override_font_sizes/font_size = 52
+custom_minimum_size = Vector2(116, 116)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -116.0
+offset_bottom = 116.0
+grow_horizontal = 0
+theme_override_colors/font_color = Color(0.968627, 0.921569, 0.843137, 1)
+theme_override_colors/font_hover_color = Color(1, 0.956863, 0.890196, 1)
+theme_override_colors/font_pressed_color = Color(0.968627, 0.921569, 0.843137, 1)
+theme_override_colors/font_disabled_color = Color(0.968627, 0.921569, 0.843137, 0.52)
+theme_override_font_sizes/font_size = 68
 text = "×"
 tooltip_text = "Close"
 accessibility_name = "Close"
+focus_mode = 0
 
 [node name="Rows" type="VBoxContainer" parent="ModalShell/Panel/Content"]
 layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="Haptics" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
-layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 0
 
 [node name="Music" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
 layout_mode = 2
@@ -49,10 +65,16 @@ layout_mode = 2
 [node name="SoundEffects" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
 layout_mode = 2
 
+[node name="Haptics" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
+layout_mode = 2
+
+[node name="ReducedMotion" parent="ModalShell/Panel/Content/Rows" instance=ExtResource("3_row")]
+layout_mode = 2
+
 [node name="Error" type="Label" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 22)
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.74, 0.20, 0.18, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 24
 autowrap_mode = 2
 visible = false

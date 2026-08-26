@@ -50,6 +50,8 @@ const TEXT := {
 		"guide_enter_hint": "Tap Enter",
 		"got_it": "Got it",
 		"complete": "Puzzle complete",
+		"completion_title": "Done!",
+		"completion_return": "Levels",
 		"completed_mode": "Completed: %s",
 		"next": "Next",
 		"switch_mode": "Other mode"
@@ -102,6 +104,8 @@ const TEXT := {
 		"guide_enter_hint": "点击进入",
 		"got_it": "知道了",
 		"complete": "拼图完成",
+		"completion_title": "完成啦",
+		"completion_return": "返回关卡",
 		"completed_mode": "已完成：%s",
 		"next": "下一关",
 		"switch_mode": "换个模式"
@@ -154,6 +158,8 @@ const TEXT := {
 		"guide_enter_hint": "入るをタップ",
 		"got_it": "OK",
 		"complete": "パズル完成",
+		"completion_title": "完成！",
+		"completion_return": "レベルへ",
 		"completed_mode": "完成：%s",
 		"next": "次へ",
 		"switch_mode": "別モード"

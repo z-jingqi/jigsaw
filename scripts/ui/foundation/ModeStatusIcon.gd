@@ -25,6 +25,7 @@ var _view_model: Variant
 var _variant := &"card"
 var _interactive := false
 var _selected := false
+var _show_progress_dot := true
 
 
 func _ready() -> void:
@@ -43,7 +44,7 @@ func set_view_model(view_model: Variant) -> void:
 
 
 func set_variant(value: StringName) -> void:
-	_variant = value if value in [&"selector", &"focus"] else &"card"
+	_variant = value if value in [&"selector", &"focus", &"completion"] else &"card"
 	if is_node_ready():
 		_apply_layout()
 		_apply_view_model()
@@ -60,6 +61,12 @@ func set_selected(value: bool) -> void:
 	if is_node_ready():
 		selection_paw.visible = _variant in [&"selector", &"focus"] and value
 		_apply_icon_rect()
+
+
+func set_show_progress_dot(enabled: bool) -> void:
+	_show_progress_dot = enabled
+	if is_node_ready():
+		_apply_view_model()
 
 
 func mode() -> StringName:
@@ -94,7 +101,7 @@ func _apply_view_model() -> void:
 		SHADOW_COLOR.r, SHADOW_COLOR.g, SHADOW_COLOR.b, SHADOW_COLOR.a * icon_opacity
 	)
 	icon_shadow.visible = icon_rect.texture != null
-	progress_dot.visible = status == &"in_progress"
+	progress_dot.visible = _show_progress_dot and status == &"in_progress"
 	label.text = str(_read("short_label", _read("label", "")))
 	label.visible = _variant == &"selector"
 	selection_paw.visible = _variant in [&"selector", &"focus"] and _selected
@@ -128,6 +135,12 @@ func _apply_layout() -> void:
 		progress_dot.size = Vector2(32, 32)
 		selection_paw.position = Vector2(80, 178)
 		selection_paw.size = Vector2(50, 46)
+	elif _variant == &"completion":
+		custom_minimum_size = Vector2(180, 170)
+		size = custom_minimum_size
+		label.visible = false
+		progress_dot.visible = false
+		selection_paw.visible = false
 	else:
 		custom_minimum_size = Vector2(120, 112)
 		size = custom_minimum_size
@@ -154,6 +167,11 @@ func _apply_icon_rect() -> void:
 		icon_rect.position = Vector2((210.0 - icon_size.x) * 0.5, (178.0 - icon_size.y) * 0.5)
 		icon_shadow.size = icon_size
 		icon_shadow.position = icon_rect.position + Vector2(4, 7)
+	elif _variant == &"completion":
+		icon_rect.position = Vector2(15, 8)
+		icon_rect.size = Vector2(150, 150)
+		icon_shadow.position = icon_rect.position + Vector2(4, 7)
+		icon_shadow.size = icon_rect.size
 	else:
 		icon_rect.position = Vector2(13, 4)
 		icon_rect.size = Vector2(94, 94)

@@ -176,6 +176,7 @@ class SettingsViewModel:
 	var haptics_enabled: bool
 	var music_enabled: bool
 	var sound_effects_enabled: bool
+	var reduced_motion_enabled: bool
 	var pending: Dictionary
 	var error_text: Dictionary
 
@@ -184,6 +185,7 @@ class SettingsViewModel:
 		haptics_enabled = bool(data["haptics_enabled"])
 		music_enabled = bool(data["music_enabled"])
 		sound_effects_enabled = bool(data["sound_effects_enabled"])
+		reduced_motion_enabled = bool(data["reduced_motion_enabled"])
 		pending = data.get("pending", {}).duplicate(true)
 		error_text = data.get("error_text", {}).duplicate(true)
 
@@ -216,6 +218,7 @@ class CompletionViewModel:
 	var description: String
 	var completed_texture: Texture2D
 	var primary_action_text: String
+	var modes: Array[ModeStatusViewModel]
 
 	func _init(data: Dictionary) -> void:
 		revision = int(data["revision"])
@@ -228,3 +231,4 @@ class CompletionViewModel:
 		description = str(data["description"])
 		completed_texture = data["completed_texture"]
 		primary_action_text = str(data["primary_action_text"])
+		modes.assign(data.get("modes", []))

@@ -142,6 +142,30 @@ func mode_select(theme_id: String, level_id: String) -> AppViewModels.ModeSelect
 	)
 
 
+func completion_modes(
+	theme_id: String, level_id: String, completed_mode: StringName
+) -> Array[AppViewModels.ModeStatusViewModel]:
+	var topic: Dictionary = _content.topic_by_id(theme_id)
+	var level: Dictionary = _content.level_by_id(theme_id, level_id)
+	var result: Array[AppViewModels.ModeStatusViewModel] = []
+	for option in _mode_statuses(topic, level):
+		if option.mode == completed_mode and option.enabled:
+			result.append(
+				ViewModelsScript.ModeStatusViewModel.new(
+					option.mode,
+					option.label,
+					&"completed",
+					&"replay",
+					true,
+					option.short_label,
+					_mode_action_label(&"replay")
+				)
+			)
+		else:
+			result.append(option)
+	return result
+
+
 func gameplay(
 	theme_id: String, level_id: String, mode: StringName
 ) -> AppViewModels.GameplayViewModel:
