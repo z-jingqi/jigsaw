@@ -4,80 +4,122 @@ extends Control
 signal confirm_requested(completion_event_id: String)
 signal dismissed(completion_event_id: String)
 
-@onready var shell: AnimatedModalShell = $ModalShell
-@onready var title_label: Label = $ModalShell/Panel/Content/Title
-@onready var image_rect: TextureRect = $ModalShell/Panel/Content/CompletedImage
-@onready var level_label: Label = $ModalShell/Panel/Content/LevelName
-@onready var description_label: Label = $ModalShell/Panel/Content/Description
-@onready var confirm_button: Button = $ModalShell/Panel/Content/Confirm
-@onready var confetti: Node2D = $CompletionConfetti
+const CompletionLayoutScript := preload("res://scripts/modals/CompletionLayout.gd")
+const ModeStatusIconScene := preload("res://scenes/ui/foundation/ModeStatusIcon.tscn")
+
+@onready var canvas: Control = $Canvas
+@onready var header: Control = $Canvas/Header
+@onready var back_button: ActionButton = $Canvas/Header/BackButton
+@onready var level_label: Label = $Canvas/Header/LevelTitle
+@onready var card_stage: Control = $Canvas/CardStage
+@onready var card_frame: Panel = $Canvas/CardStage/CardFrame
+@onready var image_rect: TextureRect = $Canvas/CardStage/CompletedImage
+@onready var completion_paw: TextureRect = $Canvas/CardStage/CompletionPaw
+@onready var celebration: Control = $Canvas/Celebration
+@onready var left_leaf: TextureRect = $Canvas/Celebration/LeftLeaf
+@onready var title_label: Label = $Canvas/Celebration/Title
+@onready var right_leaf: TextureRect = $Canvas/Celebration/RightLeaf
+@onready var mode_row: HBoxContainer = $Canvas/ModeRow
+@onready var confirm_button: ActionButton = $Canvas/Confirm
+@onready var confirm_label: Label = $Canvas/Confirm/Label
+@onready var animation_player: AnimationPlayer = $AnimationPlayer
 
 var _view_model: AppViewModels.CompletionViewModel
+var _layout := CompletionLayoutScript.new()
 var _reduced_motion := false
 var _closing := false
 var _confirming := false
-var _content_tween: Tween
 
 
 func _ready() -> void:
+	back_button.pressed.connect(_request_confirm)
 	confirm_button.pressed.connect(_request_confirm)
-	shell.closed.connect(_on_shell_closed)
-	resized.connect(_configure_panel)
-	_configure_panel()
+	animation_player.animation_finished.connect(_on_animation_finished)
+	resized.connect(_apply_layout)
+	_apply_layout()
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	_reduced_motion = bool(context.get("reduced_motion", false))
+	back_button.set_reduced_motion(_reduced_motion)
+	confirm_button.set_reduced_motion(_reduced_motion)
 	_view_model = payload.get("view_model", null) as AppViewModels.CompletionViewModel
 	if _view_model == null:
 		return
+	level_label.text = _view_model.level_title
 	title_label.text = _view_model.title
 	image_rect.texture = _view_model.completed_texture
-	level_label.text = _view_model.level_title
-	description_label.text = _view_model.description
-	description_label.visible = not _view_model.description.is_empty()
-	confirm_button.text = _view_model.primary_action_text
-	_configure_panel()
-	_open()
+	confirm_label.text = _view_model.primary_action_text
+	_reconcile_modes(_view_model.modes)
+	_apply_layout()
+	_play_open()
 
 
 func navigation_exit(_context: Dictionary) -> void:
-	_stop_content_motion()
-	confetti.call(&"stop")
-	if is_instance_valid(shell):
-		shell.dispose()
+	animation_player.stop()
+	back_button.cancel_motion()
+	confirm_button.cancel_motion()
+	for child in mode_row.get_children():
+		if child is ActionButton:
+			child.cancel_motion()
+
+
+func navigation_set_active(is_active: bool) -> void:
+	visible = is_active
+	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 
 
 func request_dismiss() -> void:
-	if _closing:
-		return
-	_confirming = false
-	_request_close()
+	_request_confirm()
 
 
 func active_motion_count() -> int:
-	return (
-		(1 if _content_tween != null else 0)
-		+ (shell.active_motion_count() if is_instance_valid(shell) else 0)
-	)
+	var count := 1 if animation_player.is_playing() else 0
+	count += back_button.active_motion_count()
+	count += confirm_button.active_motion_count()
+	return count
 
 
 func _request_confirm() -> void:
-	if _closing:
+	if _closing or _view_model == null:
 		return
 	_confirming = true
-	_request_close()
+	_play_close()
 
 
-func _request_close() -> void:
+func _play_open() -> void:
+	_closing = false
+	_confirming = false
+	back_button.disabled = false
+	confirm_button.disabled = false
+	animation_player.stop()
+	if _reduced_motion:
+		animation_player.play(&"RESET")
+		animation_player.advance(0.0)
+		animation_player.stop(true)
+	else:
+		animation_player.play(&"open")
+
+
+func _play_close() -> void:
 	_closing = true
+	back_button.disabled = true
 	confirm_button.disabled = true
-	_stop_content_motion()
-	confetti.call(&"stop")
-	shell.play_close(_reduced_motion)
+	back_button.cancel_motion()
+	confirm_button.cancel_motion()
+	animation_player.stop()
+	if _reduced_motion:
+		_finish_close()
+	else:
+		animation_player.play(&"close")
 
 
-func _on_shell_closed(_closed_shell: AnimatedModalShell) -> void:
+func _on_animation_finished(animation_name: StringName) -> void:
+	if animation_name == &"close":
+		_finish_close()
+
+
+func _finish_close() -> void:
 	if _view_model == null:
 		return
 	if _confirming:
@@ -86,65 +128,35 @@ func _on_shell_closed(_closed_shell: AnimatedModalShell) -> void:
 		dismissed.emit(_view_model.completion_event_id)
 
 
-func _open() -> void:
-	_closing = false
-	_confirming = false
-	confirm_button.disabled = false
-	shell.configure_shade(Color(0.14, 0.09, 0.05, 0.72))
-	shell.play_open(_reduced_motion)
-	_play_content_entry()
-	confetti.call(&"start", _reduced_motion)
+func _reconcile_modes(modes: Array[AppViewModels.ModeStatusViewModel]) -> void:
+	for child in mode_row.get_children():
+		mode_row.remove_child(child)
+		child.queue_free()
+	for mode_model in modes:
+		var status_icon := ModeStatusIconScene.instantiate() as ModeStatusIcon
+		mode_row.add_child(status_icon)
+		status_icon.set_variant(&"completion")
+		status_icon.set_interactive(false)
+		status_icon.set_show_progress_dot(false)
+		status_icon.set_reduced_motion(_reduced_motion)
+		status_icon.set_view_model(mode_model)
 
 
-func _play_content_entry() -> void:
-	_stop_content_motion()
-	var controls: Array[Control] = [
-		title_label, image_rect, level_label, description_label, confirm_button
-	]
-	if _reduced_motion:
-		for control in controls:
-			control.modulate.a = 1.0
-		image_rect.scale = Vector2.ONE
+func _apply_layout() -> void:
+	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
-	for control in controls:
-		control.modulate.a = 0.0
-	image_rect.pivot_offset = image_rect.size * 0.5
-	image_rect.scale = Vector2(0.96, 0.96)
-	_content_tween = create_tween().set_parallel(true)
-	for index in controls.size():
-		var control := controls[index]
-		_content_tween.tween_property(control, "modulate:a", 1.0, 0.22).set_delay(
-			0.12 + float(index) * 0.05
-		)
+	_layout.apply_header(size, header, back_button, level_label)
+	_layout.apply_card(size, card_stage, card_frame, image_rect, completion_paw)
 	(
-		_content_tween
-		. tween_property(image_rect, "scale", Vector2.ONE, 0.36)
-		. set_delay(0.12)
-		. set_trans(Tween.TRANS_CUBIC)
-		. set_ease(Tween.EASE_OUT)
+		_layout
+		. apply_footer(
+			size,
+			celebration,
+			left_leaf,
+			title_label,
+			right_leaf,
+			mode_row,
+			confirm_button,
+			confirm_label,
+		)
 	)
-	_content_tween.finished.connect(_stop_content_motion, CONNECT_ONE_SHOT)
-
-
-func _stop_content_motion() -> void:
-	if _content_tween != null and _content_tween.is_valid():
-		_content_tween.kill()
-	_content_tween = null
-
-
-func _configure_panel() -> void:
-	if not is_instance_valid(shell):
-		return
-	var panel_size := Vector2(
-		minf(520.0, maxf(300.0, size.x - 40.0)), minf(720.0, maxf(420.0, size.y - 40.0))
-	)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("FFF8EC")
-	style.corner_radius_top_left = 28
-	style.corner_radius_top_right = 28
-	style.corner_radius_bottom_left = 28
-	style.corner_radius_bottom_right = 28
-	style.shadow_color = Color(0.02, 0.10, 0.13, 0.24)
-	style.shadow_size = 18
-	style.shadow_offset = Vector2(0, 8)
-	shell.configure_panel(panel_size, style, Vector4(26, 22, 26, 24))

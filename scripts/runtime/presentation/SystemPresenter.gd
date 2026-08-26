@@ -30,6 +30,7 @@ func settings(
 				"haptics_enabled": value["haptics_enabled"],
 				"music_enabled": value["music_enabled"],
 				"sound_effects_enabled": value["sound_effects_enabled"],
+				"reduced_motion_enabled": value["reduced_motion_enabled"],
 				"pending": pending,
 				"error_text": error_text,
 			}

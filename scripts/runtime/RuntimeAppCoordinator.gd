@@ -248,7 +248,8 @@ func show_settings() -> Dictionary:
 		"title": _strings.text("settings_title"),
 		"haptics": _strings.text("haptics"),
 		"music": _strings.text("music"),
-		"sound_effects": _strings.text("sfx")
+		"sound_effects": _strings.text("sfx"),
+		"reduced_motion": _strings.text("reduce_motion")
 	}
 	var result := _navigator.show_modal(
 		&"settings", {"view_model": _system.settings(), "labels": labels}
@@ -528,19 +529,27 @@ func _show_completion() -> void:
 	var level := _services.content.level_by_id(_current_theme_id, _current_level_id)
 	var config := _services.content.level_config(level)
 	var media := _services.content.level_media(config)
-	var view_model := ViewModels.CompletionViewModel.new(
-		{
-			"revision": 1,
-			"theme_id": _current_theme_id,
-			"level_id": _current_level_id,
-			"mode": _current_mode,
-			"completion_event_id": _completion_event_id,
-			"title": _strings.text("complete"),
-			"level_title": level.get("title", ""),
-			"description": level.get("description", ""),
-			"completed_texture": media.get("texture"),
-			"primary_action_text": _strings.text("return_levels")
-		}
+	var completion_modes := _catalog.completion_modes(
+		_current_theme_id, _current_level_id, StringName(_current_mode)
+	)
+	var view_model := (
+		ViewModels
+		. CompletionViewModel
+		. new(
+			{
+				"revision": 1,
+				"theme_id": _current_theme_id,
+				"level_id": _current_level_id,
+				"mode": _current_mode,
+				"completion_event_id": _completion_event_id,
+				"title": _strings.text("completion_title"),
+				"level_title": level.get("title", ""),
+				"description": level.get("description", ""),
+				"completed_texture": media.get("texture"),
+				"primary_action_text": _strings.text("completion_return"),
+				"modes": completion_modes,
+			}
+		)
 	)
 	var result := _navigator.show_modal(
 		&"completion",

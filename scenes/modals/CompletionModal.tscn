@@ -1,8 +1,112 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/modals/CompletionModal.gd" id="1_modal"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/ModalShell.tscn" id="2_shell"]
-[ext_resource type="Script" path="res://scripts/effects/CompletionConfetti.gd" id="3_confetti"]
+[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="2_tabletop"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/IconButton.tscn" id="3_icon"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/back-arrow-primary.webp" id="4_back"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="5_font"]
+[ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="6_shader"]
+[ext_resource type="Texture2D" path="res://assets/ui/levels/completion-paw-primary.webp" id="7_paw"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="8_leaf"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="9_action"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/start-button-3d.webp" id="10_button"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_completed"]
+resource_local_to_scene = true
+shader = ExtResource("6_shader")
+shader_parameter/corner_radius = 0.032
+shader_parameter/rect_aspect = 0.75
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card"]
+bg_color = Color(0.996078, 0.956863, 0.843137, 1)
+border_width_left = 5
+border_width_top = 5
+border_width_right = 5
+border_width_bottom = 5
+border_color = Color(1, 0.976471, 0.894118, 1)
+corner_radius_top_left = 34
+corner_radius_top_right = 34
+corner_radius_bottom_right = 34
+corner_radius_bottom_left = 34
+corner_detail = 16
+shadow_color = Color(0.286275, 0.145098, 0.0509804, 0.24)
+shadow_size = 12
+shadow_offset = Vector2(-4, 12)
+anti_aliasing = true
+
+[sub_resource type="StyleBoxEmpty" id="StyleBox_empty"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBox_focus"]
+
+[sub_resource type="Animation" id="Animation_reset"]
+resource_name = "RESET"
+tracks/0/type = "value"
+tracks/0/path = NodePath("Canvas/Header:modulate:a")
+tracks/0/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
+tracks/1/type = "value"
+tracks/1/path = NodePath("Canvas/CardStage:modulate:a")
+tracks/1/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
+tracks/2/type = "value"
+tracks/2/path = NodePath("Canvas/CardStage:scale")
+tracks/2/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [Vector2(1, 1)]}
+tracks/3/type = "value"
+tracks/3/path = NodePath("Canvas/Celebration:modulate:a")
+tracks/3/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
+tracks/4/type = "value"
+tracks/4/path = NodePath("Canvas/ModeRow:modulate:a")
+tracks/4/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
+tracks/5/type = "value"
+tracks/5/path = NodePath("Canvas/Confirm:modulate:a")
+tracks/5/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
+
+[sub_resource type="Animation" id="Animation_open"]
+resource_name = "open"
+length = 0.52
+tracks/0/type = "value"
+tracks/0/path = NodePath("Canvas/Header:modulate:a")
+tracks/0/keys = {"times": PackedFloat32Array(0, 0.18), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [0.0, 1.0]}
+tracks/1/type = "value"
+tracks/1/path = NodePath("Canvas/CardStage:modulate:a")
+tracks/1/keys = {"times": PackedFloat32Array(0.04, 0.3), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [0.0, 1.0]}
+tracks/2/type = "value"
+tracks/2/path = NodePath("Canvas/CardStage:scale")
+tracks/2/interp = 2
+tracks/2/keys = {"times": PackedFloat32Array(0.04, 0.34), "transitions": PackedFloat32Array(0.25, 1), "update": 0, "values": [Vector2(0.965, 0.965), Vector2(1, 1)]}
+tracks/3/type = "value"
+tracks/3/path = NodePath("Canvas/Celebration:modulate:a")
+tracks/3/keys = {"times": PackedFloat32Array(0.2, 0.38), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [0.0, 1.0]}
+tracks/4/type = "value"
+tracks/4/path = NodePath("Canvas/ModeRow:modulate:a")
+tracks/4/keys = {"times": PackedFloat32Array(0.27, 0.45), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [0.0, 1.0]}
+tracks/5/type = "value"
+tracks/5/path = NodePath("Canvas/Confirm:modulate:a")
+tracks/5/keys = {"times": PackedFloat32Array(0.34, 0.52), "transitions": PackedFloat32Array(0.35, 1), "update": 0, "values": [0.0, 1.0]}
+
+[sub_resource type="Animation" id="Animation_close"]
+resource_name = "close"
+length = 0.2
+tracks/0/type = "value"
+tracks/0/path = NodePath("Canvas/Header:modulate:a")
+tracks/0/keys = {"times": PackedFloat32Array(0, 0.18), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [1.0, 0.0]}
+tracks/1/type = "value"
+tracks/1/path = NodePath("Canvas/CardStage:modulate:a")
+tracks/1/keys = {"times": PackedFloat32Array(0, 0.2), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [1.0, 0.0]}
+tracks/2/type = "value"
+tracks/2/path = NodePath("Canvas/CardStage:scale")
+tracks/2/interp = 2
+tracks/2/keys = {"times": PackedFloat32Array(0, 0.2), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [Vector2(1, 1), Vector2(0.975, 0.975)]}
+tracks/3/type = "value"
+tracks/3/path = NodePath("Canvas/Celebration:modulate:a")
+tracks/3/keys = {"times": PackedFloat32Array(0, 0.14), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [1.0, 0.0]}
+tracks/4/type = "value"
+tracks/4/path = NodePath("Canvas/ModeRow:modulate:a")
+tracks/4/keys = {"times": PackedFloat32Array(0, 0.14), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [1.0, 0.0]}
+tracks/5/type = "value"
+tracks/5/path = NodePath("Canvas/Confirm:modulate:a")
+tracks/5/keys = {"times": PackedFloat32Array(0, 0.12), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [1.0, 0.0]}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_completion"]
+_data = {&"RESET": SubResource("Animation_reset"), &"close": SubResource("Animation_close"), &"open": SubResource("Animation_open")}
 
 [node name="CompletionModal" type="Control"]
 layout_mode = 3
@@ -11,53 +115,207 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 0
 script = ExtResource("1_modal")
 
-[node name="ModalShell" parent="." instance=ExtResource("2_shell")]
+[node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_tabletop")
+expand_mode = 1
+stretch_mode = 6
 
-[node name="CompletionConfetti" type="Node2D" parent="."]
-z_index = 4
-script = ExtResource("3_confetti")
-
-[node name="Title" type="Label" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.85, 0.43, 0.17, 1)
-theme_override_font_sizes/font_size = 34
-horizontal_alignment = 1
-vertical_alignment = 1
+[node name="Canvas" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
 
-[node name="CompletedImage" type="TextureRect" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 280)
-layout_mode = 2
-size_flags_vertical = 3
+[node name="Header" type="Control" parent="Canvas"]
+layout_mode = 0
+offset_right = 1206.0
+offset_bottom = 220.0
+mouse_filter = 2
+
+[node name="BackButton" parent="Canvas/Header" instance=ExtResource("3_icon")]
+layout_mode = 0
+offset_left = 68.0
+offset_top = 70.0
+offset_right = 216.0
+offset_bottom = 218.0
+theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
+theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
+icon = ExtResource("4_back")
+expand_icon = true
+icon_max_width = 132
+accessibility_label = "Back to levels"
+
+[node name="LevelTitle" type="Label" parent="Canvas/Header"]
+layout_mode = 0
+offset_left = 246.0
+offset_top = 70.0
+offset_right = 960.0
+offset_bottom = 218.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 68
+horizontal_alignment = 1
+vertical_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="CardStage" type="Control" parent="Canvas"]
+layout_mode = 0
+offset_left = 115.0
+offset_top = 388.0
+offset_right = 1091.0
+offset_bottom = 1689.0
+mouse_filter = 2
+
+[node name="CardFrame" type="Panel" parent="Canvas/CardStage"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBox_card")
+
+[node name="CompletedImage" type="TextureRect" parent="Canvas/CardStage"]
+material = SubResource("ShaderMaterial_completed")
+layout_mode = 0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 968.0
+offset_bottom = 1293.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="CompletionPaw" type="TextureRect" parent="Canvas/CardStage"]
+z_index = 3
+layout_mode = 0
+offset_left = 828.0
+offset_top = -30.0
+offset_right = 988.0
+offset_bottom = 119.0
+mouse_filter = 2
+texture = ExtResource("7_paw")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="Celebration" type="Control" parent="Canvas"]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 1756.0
+offset_right = 1078.0
+offset_bottom = 1900.0
 mouse_filter = 2
 
-[node name="LevelName" type="Label" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 44)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.35, 0.23, 0.13, 1)
-theme_override_font_sizes/font_size = 25
+[node name="LeftLeaf" type="TextureRect" parent="Canvas/Celebration"]
+layout_mode = 0
+offset_left = 86.0
+offset_top = 35.0
+offset_right = 246.0
+offset_bottom = 126.0
+mouse_filter = 2
+texture = ExtResource("8_leaf")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Title" type="Label" parent="Canvas/Celebration"]
+layout_mode = 0
+offset_left = 275.0
+offset_right = 675.0
+offset_bottom = 144.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.56)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 4
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 88
+text = "完成啦"
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2
+clip_text = true
 
-[node name="Description" type="Label" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 42)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.54, 0.41, 0.28, 1)
-theme_override_font_sizes/font_size = 16
-autowrap_mode = 2
+[node name="RightLeaf" type="TextureRect" parent="Canvas/Celebration"]
+layout_mode = 0
+offset_left = 704.0
+offset_top = 35.0
+offset_right = 864.0
+offset_bottom = 126.0
+mouse_filter = 2
+texture = ExtResource("8_leaf")
+expand_mode = 1
+stretch_mode = 5
+flip_h = true
+
+[node name="ModeRow" type="HBoxContainer" parent="Canvas"]
+layout_mode = 0
+offset_left = 303.0
+offset_top = 1930.0
+offset_right = 903.0
+offset_bottom = 2042.0
+mouse_filter = 2
+theme_override_constants/separation = 58
+alignment = 1
+
+[node name="Confirm" type="Button" parent="Canvas"]
+custom_minimum_size = Vector2(600, 185)
+layout_mode = 0
+offset_left = 303.0
+offset_top = 2184.0
+offset_right = 903.0
+offset_bottom = 2369.0
+theme_override_styles/normal = SubResource("StyleBox_empty")
+theme_override_styles/hover = SubResource("StyleBox_empty")
+theme_override_styles/pressed = SubResource("StyleBox_empty")
+theme_override_styles/disabled = SubResource("StyleBox_empty")
+theme_override_styles/focus = SubResource("StyleBox_focus")
+flat = true
+script = ExtResource("9_action")
+accessibility_label = "Back to levels"
+
+[node name="Background" type="TextureRect" parent="Canvas/Confirm"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("10_button")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Label" type="Label" parent="Canvas/Confirm"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.976471, 0.917647, 1)
+theme_override_colors/font_shadow_color = Color(0.341176, 0.105882, 0.0352941, 0.48)
+theme_override_constants/shadow_offset_y = 3
+theme_override_fonts/font = ExtResource("5_font")
+theme_override_font_sizes/font_size = 58
+text = "返回关卡"
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2
 
-[node name="Confirm" type="Button" parent="ModalShell/Panel/Content"]
-custom_minimum_size = Vector2(0, 58)
-layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 22
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {&"": SubResource("AnimationLibrary_completion")}
