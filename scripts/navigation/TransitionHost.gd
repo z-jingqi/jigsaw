@@ -3,11 +3,11 @@ extends Control
 
 signal transition_settled(committed: bool)
 
-const NORMAL_DURATION := 0.50
-const HOME_TO_LEVELS_DURATION := 0.56
-const LEVELS_TO_HOME_DURATION := 0.42
+const NORMAL_DURATION := 0.38
+const HOME_TO_LEVELS_DURATION := 0.40
+const LEVELS_TO_HOME_DURATION := 0.34
 const REDUCED_MOTION_DURATION := 0.12
-const TARGET_OVERLAP_DELAY := 0.07
+const TARGET_OVERLAP_DELAY := 0.0
 
 var _active_tween: Tween
 var _active_sequence := 0
@@ -37,7 +37,7 @@ func play(kind: StringName, context: Dictionary = {}) -> Dictionary:
 	_active_context = context.duplicate(true)
 	_motion_phase = &"running"
 	_gesture_progress = float(context.get("gesture_progress", 0.0))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var duration := _duration_for(kind, bool(context.get("reduced_motion", false)))
 	_source_view = context.get("source_view") as Control
 	_target_view = context.get("target_view") as Control
@@ -135,20 +135,20 @@ func _configure_tabletop_slide(kind: StringName, duration: float) -> bool:
 	_target_view.position = target_final - Vector2(travel * exit_direction, 0.0)
 	(
 		_active_tween
-		. tween_property(_source_view, "position", source_target, duration * 0.82)
-		. set_trans(Tween.TRANS_QUART)
-		. set_ease(Tween.EASE_IN)
+		. tween_property(_source_view, "position", source_target, duration * 0.88)
+		. set_trans(Tween.TRANS_CUBIC)
+		. set_ease(Tween.EASE_OUT)
 	)
 	(
 		_active_tween
-		. tween_property(_target_view, "position", target_final, duration * 0.86)
+		. tween_property(_target_view, "position", target_final, duration * 0.92)
 		. set_delay(TARGET_OVERLAP_DELAY)
 		. set_trans(Tween.TRANS_CUBIC)
 		. set_ease(Tween.EASE_OUT)
 	)
-	_animate_companion(_source_companion, travel * exit_direction, duration * 0.82, 0.0, true)
+	_animate_companion(_source_companion, travel * exit_direction, duration * 0.88, 0.0, true)
 	_animate_companion(
-		_target_companion, -travel * exit_direction, duration * 0.86, TARGET_OVERLAP_DELAY, false
+		_target_companion, -travel * exit_direction, duration * 0.92, TARGET_OVERLAP_DELAY, false
 	)
 	return true
 
@@ -167,8 +167,8 @@ func _animate_companion(
 		_active_tween
 		. tween_property(companion, "position", final_position, duration)
 		. set_delay(delay)
-		. set_trans(Tween.TRANS_QUART if outgoing else Tween.TRANS_CUBIC)
-		. set_ease(Tween.EASE_IN if outgoing else Tween.EASE_OUT)
+		. set_trans(Tween.TRANS_CUBIC)
+		. set_ease(Tween.EASE_OUT)
 	)
 
 

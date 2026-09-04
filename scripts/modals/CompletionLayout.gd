@@ -1,6 +1,9 @@
 class_name CompletionLayout
 extends RefCounted
 
+const NavigationControlMetricsScript := preload(
+	"res://scripts/ui/foundation/NavigationControlMetrics.gd"
+)
 const DESIGN_SIZE := Vector2(1206.0, 2622.0)
 
 var _base_card_style: StyleBoxFlat
@@ -19,7 +22,7 @@ func apply_header(
 	header.position = Vector2(origin_x, _y(54.0, scale, extra_height))
 	header.size = Vector2(DESIGN_SIZE.x * scale, 220.0 * scale)
 	back_button.position = Vector2(68.0, 16.0) * scale
-	back_button.size = Vector2.ONE * 148.0 * scale
+	back_button.size = Vector2.ONE * NavigationControlMetricsScript.BACK_BUTTON_SIZE * scale
 	back_button.custom_minimum_size = back_button.size
 	level_label.position = Vector2(246.0, 16.0) * scale
 	level_label.size = Vector2(714.0, 148.0) * scale

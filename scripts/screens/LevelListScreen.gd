@@ -8,6 +8,9 @@ signal mode_selected(level_id: String, mode: StringName, start_policy: StringNam
 const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
 const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
+const NavigationControlMetricsScript := preload(
+	"res://scripts/ui/foundation/NavigationControlMetrics.gd"
+)
 
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
 @onready var header: Control = $SafeArea/Content/Header
@@ -16,7 +19,7 @@ const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 @onready var title_right_ornament: TextureRect = $SafeArea/Content/Header/TitleRightOrnament
 @onready var progress: Control = $SafeArea/Content/Header/Progress
 @onready var progress_count: Label = $SafeArea/Content/Header/Progress/Count
-@onready var scroll: ScrollContainer = $SafeArea/Content/Scroll
+@onready var scroll: TouchScrollContainer = $SafeArea/Content/Scroll
 @onready var grid_content: Control = $SafeArea/Content/Scroll/GridContent
 @onready var focus_overlay: LevelFocusOverlay = $LevelFocusOverlay
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
@@ -66,12 +69,15 @@ func _exit_tree() -> void:
 
 
 func navigation_set_active(is_active: bool) -> void:
+	scroll.set_touch_scroll_enabled(is_active and not focus_overlay.is_active())
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
+	if _grid != null:
+		_grid.set_reduced_motion(enabled)
 	if is_instance_valid(focus_overlay):
 		focus_overlay.set_reduced_motion(enabled)
 
@@ -81,7 +87,7 @@ func set_view_model(view_model: Variant) -> void:
 	theme_title.text = str(view_model.theme_title)
 	progress_count.text = (
 		"%d / %d"
-		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
+		% [view_model.theme_progress.completed_levels, view_model.theme_progress.total_levels]
 	)
 	_apply_header_layout()
 	call_deferred("_apply_layout")
@@ -92,7 +98,7 @@ func refresh_view_model(view_model: Variant, preserve_focus := false) -> void:
 	theme_title.text = str(view_model.theme_title)
 	progress_count.text = (
 		"%d / %d"
-		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
+		% [view_model.theme_progress.completed_levels, view_model.theme_progress.total_levels]
 	)
 	_apply_header_layout()
 	if preserve_focus and focus_overlay.is_active():
@@ -120,12 +126,21 @@ func debug_active_card_count() -> int:
 	return _grid.active_card_count() if _grid != null else 0
 
 
+func is_content_ready() -> bool:
+	return (
+		_view_model != null
+		and _grid != null
+		and (_view_model.levels.is_empty() or _grid.active_card_count() > 0)
+		and _grid.is_content_ready()
+	)
+
+
 func open_level_focus(level_id: String) -> bool:
 	if _grid == null or focus_overlay.is_active():
 		return false
 	var card := _grid.card_for_level_id(level_id) as LevelCard
 	var card_view_model: Variant = _level_view_model(level_id)
-	if card == null or card.disabled or card_view_model == null:
+	if card == null or card.is_locked() or card_view_model == null:
 		return false
 	_unlock_sequence.clear()
 	return focus_overlay.open(card, card_view_model, _grid.visible_cards(), scroll)
@@ -189,7 +204,8 @@ func _apply_header_layout() -> void:
 		return
 	var available_width := header.size.x
 	back_button.position = Vector2(8.0, 16.0)
-	back_button.size = Vector2(112.0, 112.0)
+	back_button.size = Vector2.ONE * NavigationControlMetricsScript.BACK_BUTTON_SIZE
+	back_button.custom_minimum_size = back_button.size
 	progress.size = Vector2(266.0, 110.0)
 	progress.position = Vector2(available_width - progress.size.x + 28.0, 20.0)
 	var reserved_side := maxf(back_button.position.x + back_button.size.x, progress.size.x + 4.0)

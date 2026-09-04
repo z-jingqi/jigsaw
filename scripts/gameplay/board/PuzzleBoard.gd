@@ -4,14 +4,9 @@ class_name PuzzleBoard
 signal completed
 signal state_changed(state: Dictionary)
 
-const SNAP_TOLERANCE := 22.0
 const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
-const VIEW_MIN_RATIO := 0.90
-const VIEW_MAX_RATIO := 2.40
-const TRACKPAD_MAGNIFY_MIN := 0.86
-const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
 const BOARD_SCREEN_EDGE_GAP := 62.0
 const SWAP_BOARD_SCREEN_EDGE_GAP := 60.0
@@ -32,9 +27,6 @@ const HINT_TRAY_SCROLL_TIME := 0.3
 const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.0
-const SNAP_PREVIEW_PULL := 0.10
-const SNAP_PREVIEW_COLOR := Color(0.16, 0.70, 0.62, 0.92)
-const SNAP_PREVIEW_SCREEN_WIDTH := 3.0
 const SEAM_SCREEN_WIDTH := 1.6
 const SHIMMER_DURATION := 0.7
 const SWAP_FALLBACK_COLS := 5
@@ -51,22 +43,20 @@ const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
 const GROUP_Z_STEP := 64
-const TRAY_HEIGHT_RATIO := 1.0 / 6.0
-const TRAY_MIN_HEIGHT := 132.0
+const TRAY_HEIGHT_RATIO := 1.0 / 4.0
+const TRAY_MIN_HEIGHT := 220.0
 const TRAY_PADDING := 14.0
 const TRAY_VERTICAL_SAFE_GAP := 50.0
-const TRAY_GAP := 32.0
+const TRAY_ROW_COUNT := 2
+const TRAY_ROW_GAP := 36.0
+const TRAY_GAP := 20.0
 const TRAY_ANIMATION_TIME := 0.20
 const TRAY_Z_INDEX := 4090
 const TRAY_HIT_PADDING := 18.0
-const TRAY_EXIT_THRESHOLD := 18.0
-const TRAY_GESTURE_DECIDE_THRESHOLD := 12.0
-const TRAY_DRAG_LIFT_MARGIN := 28.0
+const TOUCH_DRAG_LIFT_DISTANCE := 120.0
 const TRAY_DRAG_Z_INDEX := 4095
-const TRAY_INERTIA_MIN_SPEED := 90.0
-const TRAY_INERTIA_FRICTION := 9.0
 const TRAY_TOP_BORDER_HEIGHT := 3.0
-const TRAY_TOP_BORDER_COLOR := Color(0.32, 0.19, 0.10, 0.30)
+const TRAY_TOP_BORDER_COLOR := Color(1.0, 0.95, 0.82, 0.58)
 const BoardLayoutScript := preload("res://scripts/gameplay/board/BoardLayout.gd")
 const BoardStateControllerScript := preload("res://scripts/gameplay/board/BoardStateController.gd")
 const BoardViewControllerScript := preload("res://scripts/gameplay/board/BoardViewController.gd")
@@ -75,10 +65,14 @@ const BoardGeometryScript := preload("res://scripts/gameplay/board/BoardGeometry
 const BoardAppearanceScript := preload("res://scripts/gameplay/board/BoardAppearance.gd")
 const BoardSessionBuilderScript := preload("res://scripts/gameplay/board/BoardSessionBuilder.gd")
 const BoardTrayControllerScript := preload("res://scripts/gameplay/board/BoardTrayController.gd")
+const TrayGestureControllerScript := preload(
+	"res://scripts/gameplay/board/TrayGestureController.gd"
+)
 const BoardInputControllerScript := preload("res://scripts/gameplay/board/BoardInputController.gd")
 const BoardHintControllerScript := preload("res://scripts/gameplay/board/BoardHintController.gd")
 const BoardSwapControllerScript := preload("res://scripts/gameplay/board/BoardSwapController.gd")
 const BoardSnapControllerScript := preload("res://scripts/gameplay/board/BoardSnapController.gd")
+const BoardPieceFeedbackScript := preload("res://scripts/gameplay/board/BoardPieceFeedback.gd")
 const BoardPlacementControllerScript := preload(
 	"res://scripts/gameplay/board/BoardPlacementController.gd"
 )
@@ -100,8 +94,6 @@ var tray_background: Panel
 var tray_top_border: ColorRect
 var tray_bounds_override := Rect2()
 var view_scale := 1.0
-var view_target_scale := 1.0
-var view_target_ratio := 1.0
 var base_view_scale := 1.0
 var base_view_offset := Vector2.ZERO
 var view_offset := Vector2.ZERO
@@ -112,8 +104,6 @@ var locked_groups: Array = []
 var tray_scroll_offset := 0.0
 var tray_content_width := 0.0
 var tray_panning := false
-var tray_pending_group = null
-var tray_pending_total_delta := Vector2.ZERO
 var tray_scroll_velocity := 0.0
 var tray_last_pan_msec := 0
 var tray_inertia_active := false
@@ -121,10 +111,6 @@ var swap_tiles: Array = []
 var dragging = null
 var dragging_from_tray := false
 var dragging_tray_index := -1
-var tray_drag_screen_offset := Vector2.ZERO
-var tray_drag_target_screen_offset := Vector2.ZERO
-var tray_drag_offset_tween: Tween
-var tray_drag_local_grab := Vector2.ZERO
 var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
 var swap_drag_start_slot := -1
@@ -142,10 +128,6 @@ var active_touches := {}
 var drag_offset := Vector2.ZERO
 var panning := false
 var pan_touch_index := -1
-var pinch_active := false
-var pinch_start_distance := 0.0
-var pinch_start_scale := 1.0
-var pinch_start_world_midpoint := Vector2.ZERO
 var hud_top_reserved_height := 56.0
 var hud_bottom_reserved_height := 0.0
 var drag_blockers: Array[Rect2] = []
@@ -158,9 +140,6 @@ var hint_pending := false
 var hint_tray_scroll_tween: Tween
 var hint_clear_timer: Timer
 var hint_count := 0
-var snap_preview_lines: Array[Line2D] = []
-var snap_preview_key := ""
-var snap_ready_key := ""
 var debug_bounds_overlay_enabled := false
 var debug_bounds_overlay: Control
 var state_emit_pending := false
@@ -176,10 +155,12 @@ var geometry
 var appearance
 var session_builder
 var tray_controller
+var tray_gesture
 var input_controller
 var hint_controller
 var swap_controller
 var snap_controller
+var piece_feedback
 var placement_controller
 
 
@@ -192,10 +173,12 @@ func _ready() -> void:
 	appearance = BoardAppearanceScript.new(self)
 	session_builder = BoardSessionBuilderScript.new(self)
 	tray_controller = BoardTrayControllerScript.new(self)
+	tray_gesture = TrayGestureControllerScript.new(self)
 	input_controller = BoardInputControllerScript.new(self)
 	hint_controller = BoardHintControllerScript.new(self)
 	swap_controller = BoardSwapControllerScript.new(self)
 	snap_controller = BoardSnapControllerScript.new(self)
+	piece_feedback = BoardPieceFeedbackScript.new(self)
 	placement_controller = BoardPlacementControllerScript.new(self)
 
 
@@ -203,7 +186,18 @@ func board_screen_edge_gap() -> float:
 	return SWAP_BOARD_SCREEN_EDGE_GAP if current_mode == "swap" else BOARD_SCREEN_EDGE_GAP
 
 
+func _notification(what: int) -> void:
+	if input_controller == null:
+		return
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		input_controller.cancel_gesture()
+	elif what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
+		input_controller.cancel_gesture()
+
+
 func _exit_tree() -> void:
+	if input_controller != null:
+		input_controller.reset()
 	# Composition helpers are RefCounted; break their back-references so the
 	# board and helpers cannot keep each other alive after a test or scene exit.
 	_cancel_runtime_animations()
@@ -221,10 +215,12 @@ func _exit_tree() -> void:
 		appearance,
 		session_builder,
 		tray_controller,
+		tray_gesture,
 		input_controller,
 		hint_controller,
 		swap_controller,
 		snap_controller,
+		piece_feedback,
 		placement_controller
 	]:
 		if controller != null:
@@ -232,15 +228,15 @@ func _exit_tree() -> void:
 
 
 func _cancel_runtime_animations() -> void:
+	if piece_feedback != null:
+		piece_feedback.cancel_all()
 	for group in groups:
 		if group == null:
 			continue
 		if group.tray_tween != null and group.tray_tween.is_valid():
 			group.tray_tween.kill()
 		group.tray_tween = null
-	for tween in [
-		view_tween, tray_drag_offset_tween, swap_target_preview_tween, hint_tray_scroll_tween
-	]:
+	for tween in [view_tween, swap_target_preview_tween, hint_tray_scroll_tween]:
 		if tween != null and tween.is_valid():
 			tween.kill()
 	for tween in hint_blink_tweens:
@@ -249,7 +245,6 @@ func _cancel_runtime_animations() -> void:
 	if hint_controller != null:
 		hint_controller._stop_hint_clear_timer()
 	view_tween = null
-	tray_drag_offset_tween = null
 	swap_target_preview_tween = null
 	hint_tray_scroll_tween = null
 	hint_blink_tweens.clear()
@@ -262,20 +257,7 @@ func _process(delta: float) -> void:
 		_update_hint_line_width(swap_target_preview_line)
 	if debug_bounds_overlay_enabled:
 		_refresh_debug_bounds_overlay()
-	if not tray_inertia_active:
-		return
-	var previous := tray_scroll_offset
-	tray_scroll_offset += tray_scroll_velocity * delta
-	_clamp_tray_scroll()
-	_layout_tray(true)
-	if is_equal_approx(previous, tray_scroll_offset):
-		_stop_tray_inertia()
-		return
-	var decay := maxf(0.0, 1.0 - TRAY_INERTIA_FRICTION * delta)
-	tray_scroll_velocity *= decay
-	if absf(tray_scroll_velocity) < TRAY_INERTIA_MIN_SPEED:
-		_stop_tray_inertia()
-	_notify_state_changed()
+	tray_controller.process_scroll(delta)
 
 
 func set_feedback_preferences(
@@ -283,6 +265,10 @@ func set_feedback_preferences(
 ) -> void:
 	haptics_enabled = next_haptics_enabled
 	reduced_motion = next_reduced_motion
+	if reduced_motion and piece_feedback != null:
+		piece_feedback.cancel_all()
+		if not groups.is_empty():
+			_check_complete()
 	edge_contrast_mode = (
 		next_edge_contrast_mode
 		if ["auto", "dark", "light"].has(next_edge_contrast_mode)
@@ -295,20 +281,7 @@ func _motion_duration(duration: float) -> float:
 
 
 func _trigger_haptic(kind: String) -> void:
-	if not haptics_enabled:
-		return
-	var duration := 8
-	var amplitude := 0.16
-	if kind == "ready":
-		duration = 12
-		amplitude = 0.22
-	elif kind == "snap" or kind == "swap":
-		duration = 28
-		amplitude = 0.48
-	elif kind == "complete":
-		duration = 70
-		amplitude = 0.72
-	Input.vibrate_handheld(duration, amplitude)
+	piece_feedback.trigger_haptic(kind)
 
 
 func state_snapshot() -> Dictionary:
@@ -337,10 +310,6 @@ func _restore_group_state(snapshot: Dictionary) -> void:
 
 func _restore_swap_state(snapshot: Dictionary) -> void:
 	state_controller.restore_swap_state(snapshot)
-
-
-func _restore_view_state(snapshot: Dictionary) -> void:
-	state_controller.restore_view_state(snapshot)
 
 
 func _notify_state_changed(immediate := false) -> void:
@@ -395,6 +364,7 @@ func start(
 
 
 func clear() -> void:
+	input_controller.reset()
 	state_controller.cancel_pending()
 	_clear_hint_highlights()
 	_clear_swap_target_preview()
@@ -411,8 +381,6 @@ func clear() -> void:
 	tray_scroll_offset = 0.0
 	tray_content_width = 0.0
 	tray_panning = false
-	tray_pending_group = null
-	tray_pending_total_delta = Vector2.ZERO
 	tray_scroll_velocity = 0.0
 	tray_last_pan_msec = 0
 	tray_inertia_active = false
@@ -420,10 +388,6 @@ func clear() -> void:
 	dragging = null
 	dragging_from_tray = false
 	dragging_tray_index = -1
-	tray_drag_screen_offset = Vector2.ZERO
-	tray_drag_target_screen_offset = Vector2.ZERO
-	tray_drag_offset_tween = null
-	tray_drag_local_grab = Vector2.ZERO
 	last_drag_screen_pos = Vector2.ZERO
 	swap_dragging = null
 	swap_drag_start_slot = -1
@@ -443,9 +407,6 @@ func clear() -> void:
 	hint_tray_scroll_tween = null
 	hint_clear_timer = null
 	hint_count = 0
-	_clear_snap_preview()
-	snap_preview_key = ""
-	snap_ready_key = ""
 	debug_bounds_overlay_enabled = false
 	debug_bounds_overlay = null
 	drag_blockers.clear()
@@ -453,15 +414,12 @@ func clear() -> void:
 	active_touches.clear()
 	panning = false
 	pan_touch_index = -1
-	pinch_active = false
 	world_root = null
 	tray_root = null
 	tray_background = null
 	tray_top_border = null
 	tray_bounds_override = Rect2()
 	view_scale = 1.0
-	view_target_scale = 1.0
-	view_target_ratio = 1.0
 	base_view_scale = 1.0
 	base_view_offset = Vector2.ZERO
 	view_offset = Vector2.ZERO
@@ -500,22 +458,6 @@ func _world_to_screen(world_pos: Vector2) -> Vector2:
 	return view_controller._world_to_screen(world_pos)
 
 
-func _view_ratio() -> float:
-	return view_controller._view_ratio()
-
-
-func _view_ratio_for_scale(scale: float) -> float:
-	return view_controller._view_ratio_for_scale(scale)
-
-
-func _clamped_actual_scale(scale: float) -> float:
-	return view_controller._clamped_actual_scale(scale)
-
-
-func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
-	view_controller._zoom_view_at(screen_anchor, target_scale)
-
-
 func _pan_view(delta: Vector2) -> void:
 	view_controller._pan_view(delta)
 
@@ -526,14 +468,6 @@ func _begin_pan(screen_pos: Vector2, touch_index: int) -> void:
 
 func _end_pan() -> void:
 	view_controller._end_pan()
-
-
-func _begin_pinch() -> void:
-	view_controller._begin_pinch()
-
-
-func _update_pinch() -> void:
-	view_controller._update_pinch()
 
 
 func _clamp_view_to_table() -> void:
@@ -696,6 +630,10 @@ func _pan_tray(delta_x: float, record_velocity := true) -> void:
 	tray_controller._pan_tray(delta_x, record_velocity)
 
 
+func _begin_tray_pan() -> void:
+	tray_controller._begin_tray_pan()
+
+
 func _stop_tray_inertia() -> void:
 	tray_controller._stop_tray_inertia()
 
@@ -716,14 +654,6 @@ func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := T
 	return tray_controller._tray_group_at_screen(screen_pos, exclude, hit_padding)
 
 
-func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
-	tray_controller._begin_tray_piece_press(group, screen_pos)
-
-
-func _end_tray_piece_press() -> void:
-	tray_controller._end_tray_piece_press()
-
-
 func _group_local_bounds(group) -> Rect2:
 	return tray_controller._group_local_bounds(group)
 
@@ -732,12 +662,8 @@ func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) ->
 	tray_controller._send_group_to_world(group, world_position, local_scale)
 
 
-func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
-	tray_controller._update_pending_tray_drag(screen_pos, relative)
-
-
 func _update_drag_position(screen_pos: Vector2) -> void:
-	tray_controller._update_drag_position(screen_pos)
+	input_controller.update_drag_position(screen_pos)
 
 
 func _move_group_to(group, target_position: Vector2, use_visible_area := true) -> void:
@@ -772,8 +698,8 @@ func _member_bounds_points_list(member: Dictionary) -> Array[PackedVector2Array]
 	return placement_controller._member_bounds_points_list(member)
 
 
-func _end_drag() -> void:
-	input_controller._end_drag()
+func _end_drag(allow_placement := true) -> void:
+	input_controller._end_drag(allow_placement)
 
 
 func _group_at_world(world_pos: Vector2):
@@ -794,8 +720,8 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	swap_controller._begin_swap_drag(screen_pos)
 
 
-func _end_swap_drag() -> void:
-	swap_controller._end_swap_drag()
+func _end_swap_drag(allow_placement := true) -> void:
+	swap_controller._end_swap_drag(allow_placement)
 
 
 func _move_swap_tile_to(tile, target_position: Vector2) -> void:
@@ -852,18 +778,6 @@ func _bring_to_front(group) -> void:
 
 func _refresh_group_z_indices() -> void:
 	snap_controller._refresh_group_z_indices()
-
-
-func _update_snap_preview(active) -> void:
-	snap_controller._update_snap_preview(active)
-
-
-func _clear_snap_preview() -> void:
-	snap_controller._clear_snap_preview()
-
-
-func _refresh_snap_preview_line_widths() -> void:
-	snap_controller._refresh_snap_preview_line_widths()
 
 
 func _try_snap_chain(active) -> bool:

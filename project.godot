@@ -15,17 +15,23 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Jigsaw"
-run/main_scene="res://scenes/app/Game.tscn"
+run/main_scene="res://scenes/app/StartupLoading.tscn"
 config/features=PackedStringArray("4.6")
+boot_splash/bg_color=Color(0.964706, 0.921569, 0.831373, 1)
+boot_splash/show_image=false
 
 [autoload]
 
+DesktopWindowSizing="*res://scripts/platform/DesktopWindowSizing.gd"
+AndroidFramePacing="*res://scripts/platform/AndroidFramePacing.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
 window/size/viewport_width=1206
 window/size/viewport_height=2622
+window/size/window_width_override.windows=432
+window/size/window_height_override.windows=940
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
@@ -38,3 +44,4 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/gdUn
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

@@ -39,15 +39,18 @@ stretch_mode = 5
 mouse_filter = 2
 
 [node name="BackButton" parent="Hud" instance=ExtResource("2_icon")]
+custom_minimum_size = Vector2(148, 148)
 layout_mode = 0
 offset_left = 68.0
 offset_top = 70.0
 offset_right = 216.0
 offset_bottom = 218.0
 focus_mode = 0
+action_mode = 0
 mouse_default_cursor_shape = 2
 icon = ExtResource("6_back")
 expand_icon = true
+icon_max_width = 132
 accessibility_label = "Back to levels"
 
 [node name="Title" type="Label" parent="Hud"]
@@ -87,6 +90,7 @@ offset_top = 70.0
 offset_right = 1138.0
 offset_bottom = 218.0
 focus_mode = 0
+action_mode = 0
 mouse_default_cursor_shape = 2
 icon = ExtResource("7_hint")
 expand_icon = true

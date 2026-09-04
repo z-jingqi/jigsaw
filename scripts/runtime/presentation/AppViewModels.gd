@@ -4,20 +4,20 @@ extends RefCounted
 
 class ThemeProgressViewModel:
 	extends RefCounted
-	var completed_modes: int
-	var total_modes: int
+	var completed_levels: int
+	var total_levels: int
 	var ratio: float
 	var paw_count: int
 	var is_complete: bool
 	var accessibility_text: String
 
 	func _init(value: Dictionary) -> void:
-		completed_modes = int(value["completed_modes"])
-		total_modes = int(value["total_modes"])
+		completed_levels = int(value["completed_levels"])
+		total_levels = int(value["total_levels"])
 		ratio = float(value["ratio"])
 		paw_count = int(value["paw_count"])
 		is_complete = bool(value["is_complete"])
-		accessibility_text = "%d / %d" % [completed_modes, total_modes]
+		accessibility_text = "%d / %d" % [completed_levels, total_levels]
 
 
 class ModeStatusViewModel:
@@ -95,6 +95,7 @@ class LevelCardViewModel:
 	var level_id: String
 	var title: String
 	var thumbnail: Texture2D
+	var thumbnail_loader: Callable
 	var locked: bool
 	var recommended: bool
 	var newly_unlocked: bool
@@ -103,11 +104,17 @@ class LevelCardViewModel:
 	func _init(data: Dictionary) -> void:
 		level_id = str(data["level_id"])
 		title = str(data["title"])
-		thumbnail = data["thumbnail"]
+		thumbnail = data.get("thumbnail") as Texture2D
+		thumbnail_loader = data.get("thumbnail_loader", Callable()) as Callable
 		locked = bool(data["locked"])
 		recommended = bool(data["recommended"])
 		newly_unlocked = bool(data.get("newly_unlocked", false))
 		modes.assign(data["modes"])
+
+	func load_thumbnail() -> Texture2D:
+		if thumbnail == null and thumbnail_loader.is_valid():
+			thumbnail = thumbnail_loader.call() as Texture2D
+		return thumbnail
 
 
 class LevelListViewModel:

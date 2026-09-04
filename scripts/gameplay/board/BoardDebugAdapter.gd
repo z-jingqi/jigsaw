@@ -23,8 +23,11 @@ func debug_runtime_metrics() -> Dictionary:
 					"in_tray": group.in_tray,
 					"screen_height": bounds.size.y * host._tray_original_screen_scale(),
 					"scale": group.tray_scale,
+					"lane": group.tray_lane,
 					"slot_x": group.tray_slot.position.x,
+					"slot_y": group.tray_slot.position.y,
 					"slot_w": group.tray_slot.size.x,
+					"slot_h": group.tray_slot.size.y,
 				}
 			)
 		)
@@ -33,10 +36,24 @@ func debug_runtime_metrics() -> Dictionary:
 		"groups": host.groups.size(),
 		"locked_groups": host.locked_groups.size(),
 		"tray_groups": host.tray_groups.size(),
+		"snap": host.snap_controller.distance_metrics(),
 		"tray":
 		{
 			"height": area.size.y,
-			"usable_height": maxf(24.0, area.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0),
+			"row_count": host.TRAY_ROW_COUNT,
+			"row_gap": host.TRAY_ROW_GAP,
+			"usable_height":
+			maxf(
+				24.0,
+				(
+					(
+						area.size.y
+						- host.TRAY_VERTICAL_SAFE_GAP * 2.0
+						- host.TRAY_ROW_GAP * float(host.TRAY_ROW_COUNT - 1)
+					)
+					/ float(host.TRAY_ROW_COUNT)
+				)
+			),
 			"vertical_gap": host.TRAY_VERTICAL_SAFE_GAP,
 			"scroll": host.tray_scroll_offset,
 			"content_width": host.tray_content_width,
@@ -58,18 +75,21 @@ func debug_clear_hint() -> void:
 
 
 func debug_reset_tray() -> void:
+	host._stop_tray_inertia()
 	host.tray_scroll_offset = 0.0
 	host.tray_scroll_velocity = 0.0
 	host._layout_tray(false)
 
 
 func debug_scroll_tray_left() -> void:
+	host._stop_tray_inertia()
 	host.tray_scroll_offset = 0.0
 	host.tray_scroll_velocity = 0.0
 	host._layout_tray(true)
 
 
 func debug_scroll_tray_right() -> void:
+	host._stop_tray_inertia()
 	host.tray_scroll_offset = maxf(
 		0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING
 	)
@@ -94,7 +114,6 @@ func debug_run_interaction_smoke() -> Dictionary:
 		"hint": false,
 		"hint_timeout": true,
 		"hint_stops_on_drag": true,
-		"snap_preview": true,
 		"snap_shimmer_only": true,
 		"swap_preview": true,
 		"snap": true,
@@ -113,7 +132,6 @@ func debug_run_interaction_smoke() -> Dictionary:
 		"hint",
 		"hint_timeout",
 		"hint_stops_on_drag",
-		"snap_preview",
 		"snap_shimmer_only",
 		"swap_preview",
 		"snap",
@@ -201,20 +219,14 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 	debug_clear_hint()
 	var pair: Array = host._find_hint_pair()
 	if pair.is_empty():
-		result["snap_preview"] = false
 		result["snap_shimmer_only"] = false
 		result["snap"] = false
 	else:
 		var active = pair[0]
 		host._send_group_to_world(
-			active, active.anchor_home + Vector2(host._snap_tolerance() * 1.05, 0.0)
+			active, active.anchor_home + Vector2(host._snap_tolerance() * 0.92, 0.0)
 		)
 		active.node.scale = Vector2.ONE
-		host._update_snap_preview(active)
-		var outside_hidden: bool = host.snap_preview_lines.is_empty()
-		active.node.position = active.anchor_home + Vector2(host._snap_tolerance() * 0.92, 0.0)
-		host._update_snap_preview(active)
-		result["snap_preview"] = outside_hidden and not host.snap_preview_lines.is_empty()
 		var group_count_before: int = host.groups.size()
 		host.PieceVisualFactoryScript.set_group_lifted(active, true, host, false)
 		host.dragging = active
@@ -232,7 +244,6 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		result["snap"] = (
 			host.groups.size() < group_count_before and active.locked and host.dragging == null
 		)
-		host._clear_snap_preview()
 	debug_force_complete()
 	result["complete"] = host.completion_emitted
 
@@ -367,7 +378,6 @@ func _debug_check_row_shift() -> bool:
 
 func debug_force_complete() -> void:
 	host._clear_hint_highlights()
-	host._clear_snap_preview()
 	if host.current_mode == "swap":
 		for tile in host.swap_tiles:
 			tile["slot_index"] = int(tile["correct_index"])
@@ -395,7 +405,6 @@ func debug_force_complete() -> void:
 
 func debug_prepare_restore_snapshot() -> Dictionary:
 	host.hint_count = 2
-	host._zoom_view_at(host._world_view_screen_rect().get_center(), host.base_view_scale * 1.45)
 	if host.current_mode == "swap":
 		var pair: Array = host._find_swap_hint_pair()
 		if pair.size() >= 2:
@@ -427,7 +436,6 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 	var checks := {
 		"mode": str(actual.get("mode", "")) == str(expected.get("mode", "")),
 		"hint_count": int(actual.get("hint_count", -1)) == int(expected.get("hint_count", -2)),
-		"view": _debug_view_state_matches(actual.get("view", {}), expected.get("view", {})),
 		"tray_scroll":
 		(
 			absf(
@@ -463,20 +471,6 @@ func debug_validate_restored_snapshot(expected: Dictionary) -> Dictionary:
 			"expected_ratio": float(expected.get("tray", {}).get("scroll_ratio", 0.0)),
 		},
 	}
-
-
-func _debug_view_state_matches(actual, expected) -> bool:
-	if typeof(actual) != TYPE_DICTIONARY or typeof(expected) != TYPE_DICTIONARY:
-		return false
-	return (
-		absf(float(actual.get("ratio", 1.0)) - float(expected.get("ratio", 1.0))) <= 0.01
-		and (
-			host._json_vector(actual.get("offset", [])).distance_to(
-				host._json_vector(expected.get("offset", []))
-			)
-			<= 1.0
-		)
-	)
 
 
 func _debug_swap_state_matches(actual: Array, expected: Array) -> bool:

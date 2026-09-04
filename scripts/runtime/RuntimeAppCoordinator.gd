@@ -21,6 +21,8 @@ const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
 const ModeTutorialScene := preload("res://scenes/modals/ModeTutorialModal.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
+const StartupWarmupScript := preload("res://scripts/runtime/StartupWarmup.gd")
+const ButtonHapticsScript := preload("res://scripts/ui/feedback/ButtonHaptics.gd")
 
 var _game: Node2D
 var _navigator: AppNavigator
@@ -46,7 +48,7 @@ func _init(game: Node2D) -> void:
 	_game = game
 
 
-func start() -> void:
+func start(show_initial_home := true) -> void:
 	_strings.set_locale(GameStringsScript.detect_locale())
 	var content := ContentRepositoryScript.new()
 	var progress := ProgressRepositoryScript.new()
@@ -55,6 +57,7 @@ func start() -> void:
 	var motion := MotionPreferencesScript.new(settings)
 	_services = AppServicesScript.new(content, progress, session, settings, motion)
 	_services.load()
+	_services.haptics = ButtonHapticsScript.new(_game, settings)
 	_catalog = CatalogPresenterScript.new(content, progress, session, _strings)
 	_system = SystemPresenterScript.new(settings, motion, _strings)
 	_navigator = _game.get_node("AppNavigator") as AppNavigator
@@ -69,11 +72,25 @@ func start() -> void:
 	_apply_feedback_preferences()
 	_game.get_viewport().size_changed.connect(_refresh_board_blockers)
 	_current_theme_id = _services.initial_home_theme_id()
-	show_home(_current_theme_id)
+	if show_initial_home:
+		show_home(_current_theme_id)
+
+
+func prepare_startup(on_progress: Callable) -> Dictionary:
+	var warmup := StartupWarmupScript.new()
+	await warmup.prepare(
+		_game.get_node("UiLayer/ScreenHost") as Control, _services.content, _catalog, on_progress
+	)
+	var result := show_home(_current_theme_id)
+	settle_navigation()
+	return result
 
 
 func shutdown() -> void:
 	_cancel_home_guide_timer()
+	if _services != null and _services.haptics != null:
+		_services.haptics.dispose()
+		_services.haptics = null
 	_board = null
 	_game = null
 
@@ -118,12 +135,12 @@ func show_home(theme_id := "") -> Dictionary:
 	_current_level_id = ""
 	_current_mode = ""
 	_current_theme_id = _valid_theme_id(theme_id if not theme_id.is_empty() else _current_theme_id)
-	_services.session.set_current(_current_theme_id)
 	var result := _navigator.set_root(
 		&"home", {"theme_id": _current_theme_id, "view_model": _catalog.home(_current_theme_id)}
 	)
 	if bool(result.get("ok", false)):
 		_bind_home(_navigator.current_screen_view() as HomeScreen)
+		_defer_session_current(_current_theme_id)
 	return result
 
 
@@ -141,7 +158,6 @@ func show_levels(
 	_current_theme_id = theme_id
 	_current_level_id = focus_level_id
 	_current_mode = ""
-	_services.session.set_current(theme_id, focus_level_id)
 	var payload := {
 		"theme_id": theme_id,
 		"focus_level_id": focus_level_id,
@@ -154,6 +170,7 @@ func show_levels(
 	)
 	if bool(result.get("ok", false)):
 		_bind_levels(_navigator.current_screen_view() as RuntimeLevelListScreen)
+		_defer_session_current(theme_id, focus_level_id)
 	return result
 
 
@@ -187,7 +204,6 @@ func enter_level(
 	_completion_event_id = ""
 	if start_policy == "replay":
 		_services.session.clear_play_state(theme_id, level_id, mode)
-	_services.session.set_current(theme_id, level_id, mode)
 	var payload := {
 		"theme_id": theme_id,
 		"level_id": level_id,
@@ -202,11 +218,17 @@ func enter_level(
 		var screen := _navigator.current_screen_view() as GameplayScreen
 		_bind_gameplay(screen)
 		_game.call_deferred("_start_runtime_board", screen)
+		_defer_session_current(theme_id, level_id, mode)
 	return result
 
 
 func start_runtime_board(screen: GameplayScreen) -> void:
-	if not is_instance_valid(screen) or _current_mode.is_empty():
+	if (
+		not is_instance_valid(screen)
+		or _current_mode.is_empty()
+		or _navigator.current_screen_view() != screen
+		or String(_navigator.current_screen_entry().get("route", "")) != "gameplay"
+	):
 		return
 	var topic := _services.content.topic_by_id(_current_theme_id)
 	var level := _services.content.level_by_id(_current_theme_id, _current_level_id)
@@ -239,8 +261,6 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		_board.apply_state_snapshot(restore)
 	screen.mark_board_live()
 	_refresh_board_blockers()
-	if not _services.progress.tutorial_seen(&"mode", _current_mode):
-		show_mode_tutorial(_current_mode)
 
 
 func show_settings() -> Dictionary:
@@ -331,8 +351,8 @@ func state_snapshot() -> Dictionary:
 		"motion_phase": navigation.get("motion_phase", "idle"),
 		"transition_kind": navigation.get("transition_kind", ""),
 		"gesture_progress": navigation.get("gesture_progress", 0.0),
-		"completed_modes": progress.completed_modes if progress != null else 0,
-		"total_modes": progress.total_modes if progress != null else 0,
+		"completed_levels": progress.completed_levels if progress != null else 0,
+		"total_levels": progress.total_levels if progress != null else 0,
 		"progress_ratio": progress.ratio if progress != null else 0.0,
 		"progress_paw_count": progress.paw_count if progress != null else 0,
 		"theme_complete": progress.is_complete if progress != null else false,
@@ -439,7 +459,7 @@ func _bind_settings(modal: SettingsModal) -> void:
 
 func _on_home_theme_changed(theme_id: String) -> void:
 	_current_theme_id = theme_id
-	_services.session.set_current(theme_id)
+	_defer_session_current(theme_id)
 	if not _services.progress.tutorial_seen(&"home_swipe"):
 		_services.progress.mark_tutorial_seen(&"home_swipe")
 		var guide := _navigator.current_route_view() as HomeFirstRunGuide
@@ -472,7 +492,7 @@ func _on_mode_selected(mode: StringName, policy: StringName) -> void:
 func _on_level_focused(level_id: String) -> void:
 	_current_level_id = level_id
 	_current_mode = ""
-	_services.session.set_current(_current_theme_id, level_id)
+	_defer_session_current(_current_theme_id, level_id)
 
 
 func _on_level_focus_mode_selected(level_id: String, mode: StringName, policy: StringName) -> void:
@@ -582,14 +602,23 @@ func _complete_mode_tutorial(mode: String) -> void:
 
 
 func _return_to_levels() -> void:
-	_persist_board()
+	var pending_persist := _board_persist_payload()
 	_returning_to_levels = true
 	var result := _navigator.pop()
 	if not bool(result.get("ok", false)):
 		_returning_to_levels = false
+		return
+	if not pending_persist.is_empty():
+		_defer_board_persist(pending_persist)
 
 
 func _persist_board() -> void:
+	var payload := _board_persist_payload()
+	if not payload.is_empty():
+		_services.session.save_play_state(payload.state, payload.piece_ids)
+
+
+func _board_persist_payload() -> Dictionary:
 	if (
 		is_instance_valid(_board)
 		and not _current_theme_id.is_empty()
@@ -597,10 +626,25 @@ func _persist_board() -> void:
 		and not _current_mode.is_empty()
 		and _board.should_persist_state()
 	):
-		_services.session.save_play_state(
-			_board.session_snapshot(_current_theme_id, _current_level_id),
-			_board.session_piece_ids()
-		)
+		return {
+			"state": _board.session_snapshot(_current_theme_id, _current_level_id),
+			"piece_ids": _board.session_piece_ids(),
+		}
+	return {}
+
+
+func _defer_board_persist(payload: Dictionary) -> void:
+	var action := func() -> void:
+		if _services != null:
+			_services.session.save_play_state(payload.state, payload.piece_ids)
+	_game.call_deferred("_run_runtime_action", action)
+
+
+func _defer_session_current(theme_id: String, level_id := "", mode := "") -> void:
+	var action := func() -> void:
+		if _services != null:
+			_services.session.set_current(theme_id, level_id, mode)
+	_game.call_deferred("_run_runtime_action", action)
 
 
 func _clear_board() -> void:

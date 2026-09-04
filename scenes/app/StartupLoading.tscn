@@ -1,0 +1,103 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/app/StartupLoading.gd" id="1_loading"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/logo-sticker-3d.webp" id="2_logo"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="3_font"]
+
+[sub_resource type="StyleBoxFlat" id="Style_track"]
+bg_color = Color(0.89, 0.82, 0.70, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="Style_fill"]
+bg_color = Color(0.82, 0.32, 0.12, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="Style_retry"]
+bg_color = Color(0.89, 0.82, 0.70, 1)
+content_margin_top = 18.0
+content_margin_bottom = 18.0
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[node name="StartupLoading" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_loading")
+
+[node name="Content" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="Content"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.964706, 0.921569, 0.831373, 1)
+
+[node name="Center" type="VBoxContainer" parent="Content"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -150.0
+offset_right = 260.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 40
+alignment = 1
+
+[node name="Logo" type="TextureRect" parent="Content/Center"]
+custom_minimum_size = Vector2(520, 180)
+layout_mode = 2
+mouse_filter = 2
+texture = ExtResource("2_logo")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Status" type="Label" parent="Content/Center"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.36, 0.24, 0.14, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 34
+text = "正在加载…"
+horizontal_alignment = 1
+
+[node name="Progress" type="ProgressBar" parent="Content/Center"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/background = SubResource("Style_track")
+theme_override_styles/fill = SubResource("Style_fill")
+show_percentage = false
+
+[node name="Retry" type="Button" parent="Content/Center"]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.36, 0.24, 0.14, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 34
+theme_override_styles/normal = SubResource("Style_retry")
+theme_override_styles/hover = SubResource("Style_retry")
+theme_override_styles/pressed = SubResource("Style_retry")
+text = "重试"

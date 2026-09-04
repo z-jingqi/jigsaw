@@ -146,11 +146,13 @@ offset_bottom = 220.0
 mouse_filter = 2
 
 [node name="BackButton" parent="Canvas/Header" instance=ExtResource("3_icon")]
+custom_minimum_size = Vector2(148, 148)
 layout_mode = 0
 offset_left = 68.0
 offset_top = 70.0
 offset_right = 216.0
 offset_bottom = 218.0
+action_mode = 0
 theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
 theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
 icon = ExtResource("4_back")

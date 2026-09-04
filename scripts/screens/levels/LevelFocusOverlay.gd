@@ -69,6 +69,8 @@ func open(
 	_view_model = view_model
 	_selected_card = card
 	_scroll = scroll_control
+	if _scroll is TouchScrollContainer:
+		_scroll.set_touch_scroll_enabled(false)
 	_saved_scroll_position = scroll_control.scroll_vertical
 	visible = true
 	_phase = &"opening"
@@ -408,6 +410,8 @@ func _finish_close(emit_closed: bool) -> void:
 	_view_model = null
 	_selected_option = null
 	_selected_card = null
+	if is_instance_valid(_scroll) and _scroll is TouchScrollContainer:
+		_scroll.set_touch_scroll_enabled(true)
 	_scroll = null
 	_phase = &"idle"
 	visible = false

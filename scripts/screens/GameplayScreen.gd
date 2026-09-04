@@ -18,6 +18,7 @@ const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLa
 
 var _view_model: Variant
 var _input_live := false
+var _navigation_active := false
 var _layout_scale := 1.0
 var _layout := GameplayLayoutScript.new()
 
@@ -43,9 +44,12 @@ func navigation_exit(_context: Dictionary) -> void:
 
 
 func navigation_set_active(is_active: bool) -> void:
+	_navigation_active = is_active
 	visible = is_active
 	if not is_active:
 		_set_input_live(false)
+	else:
+		back_button.disabled = false
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -128,7 +132,7 @@ func bottom_reserved_height() -> float:
 
 func _set_input_live(enabled: bool) -> void:
 	_input_live = enabled
-	back_button.disabled = not enabled
+	back_button.disabled = not _navigation_active
 	hint_button.disabled = not enabled
 	swap_action_bar.set_actions_enabled(enabled)
 

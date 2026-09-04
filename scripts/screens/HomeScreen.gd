@@ -61,6 +61,8 @@ var _first_entry_played := false
 var _entry_interaction_ready := true
 var _transitioning_to_levels := false
 var _pointer_gesture_active := false
+var _pointer_index := -1
+var _pointer_position := Vector2.ZERO
 var _progress_ratio := 0.0
 var _incoming_progress_ratio := 0.0
 var _card_size := Vector2.ZERO
@@ -384,9 +386,9 @@ func _set_progress(fill: Control, count_label: Label, progress: Variant) -> void
 	fill.visible = clamped > 0.0
 	fill.anchor_right = clamped
 	fill.offset_right = -2.0
-	count_label.text = "完成 %d / %d" % [progress.completed_modes, progress.total_modes]
+	count_label.text = "完成 %d / %d" % [progress.completed_levels, progress.total_levels]
 	count_label.accessibility_name = (
-		"已完成 %d / 总数 %d" % [progress.completed_modes, progress.total_modes]
+		"已完成 %d 关 / 共 %d 关" % [progress.completed_levels, progress.total_levels]
 	)
 
 
@@ -424,13 +426,17 @@ func _on_pager_settled(next_index: int, committed: bool) -> void:
 func _on_enter_pressed() -> void:
 	if _transitioning_to_levels or _themes.is_empty():
 		return
+	_pointer_gesture_active = false
+	_pager.finish_to_visible()
 	_transitioning_to_levels = true
 	theme_activated.emit(str(_themes[_selected_index].theme_id))
 	_transitioning_to_levels = false
 
 
 func _input(event: InputEvent) -> void:
-	if _transitioning_to_levels or _pager == null:
+	if _transitioning_to_levels or _pager == null or not is_visible_in_tree():
+		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
@@ -439,31 +445,45 @@ func _input(event: InputEvent) -> void:
 		if mouse.pressed:
 			if _is_fixed_action_at(mouse.position) or not _is_cover_interaction_at(mouse.position):
 				return
-			_begin_pointer_gesture()
-		elif _pointer_gesture_active:
+			_begin_pointer_gesture(mouse.position, -1)
+		elif _pointer_gesture_active and _pointer_index == -1:
 			_end_pointer_gesture()
-	elif event is InputEventMouseMotion and _pointer_gesture_active:
-		_pager.drag_by((event as InputEventMouseMotion).relative.x)
+	elif event is InputEventMouseMotion and _pointer_gesture_active and _pointer_index == -1:
+		_drag_pointer(event.position)
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
+			if _pointer_gesture_active:
+				return
 			if _is_fixed_action_at(touch.position) or not _is_cover_interaction_at(touch.position):
 				return
-			_begin_pointer_gesture()
-		elif _pointer_gesture_active:
-			_end_pointer_gesture()
-	elif event is InputEventScreenDrag and _pointer_gesture_active:
-		_pager.drag_by((event as InputEventScreenDrag).relative.x)
+			_begin_pointer_gesture(touch.position, touch.index)
+		elif _pointer_gesture_active and _pointer_index == touch.index:
+			_end_pointer_gesture(touch.canceled)
+	elif (
+		event is InputEventScreenDrag and _pointer_gesture_active and event.index == _pointer_index
+	):
+		_drag_pointer(event.position)
 
 
-func _begin_pointer_gesture() -> void:
+func _begin_pointer_gesture(point: Vector2, index: int) -> void:
 	_pointer_gesture_active = true
+	_pointer_index = index
+	_pointer_position = point
 	_pager.begin()
 
 
-func _end_pointer_gesture() -> void:
+func _drag_pointer(point: Vector2) -> void:
+	_pager.drag_by(point.x - _pointer_position.x)
+	_pointer_position = point
+
+
+func _end_pointer_gesture(cancelled := false) -> void:
 	_pointer_gesture_active = false
-	_pager.end()
+	if cancelled:
+		_pager.cancel_to_current()
+	else:
+		_pager.end()
 
 
 func _is_fixed_action_at(viewport_position: Vector2) -> bool:

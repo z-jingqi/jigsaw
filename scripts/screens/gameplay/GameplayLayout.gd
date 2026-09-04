@@ -1,15 +1,18 @@
 extends RefCounted
 class_name GameplayLayout
 
+const NavigationControlMetricsScript := preload(
+	"res://scripts/ui/foundation/NavigationControlMetrics.gd"
+)
 const DESIGN_SIZE := Vector2(1206.0, 2622.0)
 const HEADER_TOP := 70.0
 const HEADER_HEIGHT := 220.0
-const HEADER_CONTROL_SIZE := 148.0
+const HEADER_CONTROL_SIZE := NavigationControlMetricsScript.BACK_BUTTON_SIZE
 const HEADER_SIDE_MARGIN := 68.0
 const HEADER_TITLE_MAX_WIDTH := 700.0
 const HEADER_TITLE_MAX_FONT_SIZE := 74
 const HEADER_TITLE_MIN_FONT_SIZE := 38
-const TRAY_HEIGHT := 400.0
+const TRAY_HEIGHT := 656.0
 const SWAP_ACTION_HEIGHT := 400.0
 
 

@@ -78,7 +78,7 @@ func set_root(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 
 func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
-	var preparation := _prepare_navigation(false)
+	var preparation := _prepare_navigation(true)
 	if not bool(preparation.get("ok", false)):
 		return preparation
 	if _screen_stack.is_empty():
@@ -108,7 +108,7 @@ func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 
 func replace(route: StringName, payload: Dictionary = {}) -> Dictionary:
-	var preparation := _prepare_navigation(false)
+	var preparation := _prepare_navigation(true)
 	if not bool(preparation.get("ok", false)):
 		return preparation
 	if _screen_stack.is_empty():
@@ -172,7 +172,7 @@ func pop() -> Dictionary:
 
 
 func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
-	var preparation := _prepare_navigation(false)
+	var preparation := _prepare_navigation(true)
 	if not bool(preparation.get("ok", false)):
 		return preparation
 	if not _modal_entry.is_empty():

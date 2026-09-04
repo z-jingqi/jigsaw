@@ -51,28 +51,30 @@ layout_mode = 2
 [node name="Header" type="Control" parent="SafeArea/Content"]
 layout_mode = 0
 offset_right = 603.0
-offset_bottom = 72.0
+offset_bottom = 180.0
 
 [node name="BackButton" parent="SafeArea/Content/Header" instance=ExtResource("3_icon")]
+custom_minimum_size = Vector2(148, 148)
 layout_mode = 1
 offset_left = 8.0
-offset_top = 2.0
-offset_right = 64.0
-offset_bottom = 64.0
+offset_top = 16.0
+offset_right = 156.0
+offset_bottom = 164.0
+action_mode = 0
 theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
 theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
 icon = ExtResource("8_back")
 expand_icon = true
-icon_max_width = 100
+icon_max_width = 132
 accessibility_label = "Back to levels"
 
 [node name="Title" type="Label" parent="SafeArea/Content/Header"]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_left = 78.0
-offset_right = -78.0
-offset_bottom = 66.0
+offset_left = 180.0
+offset_right = -180.0
+offset_bottom = 148.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
 theme_override_fonts/font = ExtResource("6_font")

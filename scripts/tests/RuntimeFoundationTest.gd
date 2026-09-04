@@ -133,7 +133,7 @@ func _run() -> void:
 	)
 	var catalog_levels = presenter.level_list("topic_01")
 	_check(
-		not catalog_levels.levels.is_empty() and catalog_levels.theme_progress.total_modes > 0,
+		not catalog_levels.levels.is_empty() and catalog_levels.theme_progress.total_levels > 0,
 		"level_list_view_model"
 	)
 	var mode_select = presenter.mode_select("topic_01", catalog_levels.levels[0].level_id)

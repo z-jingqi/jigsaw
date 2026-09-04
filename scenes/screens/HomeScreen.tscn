@@ -164,7 +164,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 0
+mouse_filter = 2
 
 [node name="ThemeInfoLayer" type="Control" parent="."]
 layout_mode = 1
@@ -483,6 +483,7 @@ offset_right = 315.0
 offset_bottom = 313.0
 grow_horizontal = 2
 focus_mode = 0
+action_mode = 0
 mouse_default_cursor_shape = 2
 theme_override_colors/font_color = Color(1, 0.968627, 0.870588, 1)
 theme_override_colors/font_hover_color = Color(1, 0.984314, 0.921569, 1)

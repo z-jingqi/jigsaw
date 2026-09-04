@@ -3,7 +3,11 @@ class_name SnapSolver
 
 
 static func find_match_data(
-	active, others: Array, snap_tolerance: float, rotation_tolerance: float
+	active,
+	others: Array,
+	snap_tolerance: float,
+	rotation_tolerance: float,
+	distance_transform := Transform2D.IDENTITY
 ) -> Dictionary:
 	var best := {}
 	var best_distance := INF
@@ -15,10 +19,10 @@ static func find_match_data(
 			> rotation_tolerance
 		):
 			continue
-		var candidate := _closest_neighbor_match(active, other)
+		var candidate := _closest_neighbor_match(active, other, distance_transform)
 		if candidate.is_empty():
 			continue
-		var distance := float(candidate["distance"])
+		var distance := float(candidate["measured_distance"])
 		if distance <= snap_tolerance and distance < best_distance:
 			best_distance = distance
 			best = candidate
@@ -26,7 +30,7 @@ static func find_match_data(
 	return best
 
 
-static func _closest_neighbor_match(a, b) -> Dictionary:
+static func _closest_neighbor_match(a, b, distance_transform: Transform2D) -> Dictionary:
 	var best := {}
 	var best_distance := INF
 	for am in a.members:
@@ -38,14 +42,18 @@ static func _closest_neighbor_match(a, b) -> Dictionary:
 			var b_anchor: Vector2 = b.node.position + bm["visual"].position.rotated(b.node.rotation)
 			var actual: Vector2 = b_anchor - a_anchor
 			var correction := actual - expected
-			var distance := correction.length()
+			# Measure the displacement only, without the window/camera translation.
+			var distance := (
+				(distance_transform.x * correction.x + distance_transform.y * correction.y).length()
+			)
 			if distance < best_distance:
 				best_distance = distance
 				best = {
 					"active_member": am,
 					"other_member": bm,
 					"correction": correction,
-					"distance": distance,
+					"distance": correction.length(),
+					"measured_distance": distance,
 				}
 	return best
 

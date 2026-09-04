@@ -1,6 +1,10 @@
 extends RefCounted
 class_name BoardSnapController
 
+const SNAP_DISTANCE_CM := 0.3
+const CENTIMETERS_PER_INCH := 2.54
+const FALLBACK_DPI := 160
+
 var host: Node2D
 
 static var _shimmer_shader_cache: Shader = null
@@ -25,9 +29,6 @@ func _rotate_group(group) -> void:
 			if not host.groups.has(group) or not is_instance_valid(group.node):
 				return
 			group.is_animating = false
-			if _try_snap_chain(group):
-				_lock_group(group)
-			_check_complete()
 			host._notify_state_changed(true)
 	)
 
@@ -36,82 +37,15 @@ func _bring_to_front(group) -> void:
 	host.groups.erase(group)
 	host.groups.append(group)
 	_refresh_group_z_indices()
-	host._notify_state_changed()
 
 
 func _refresh_group_z_indices() -> void:
 	for index in host.groups.size():
-		host.groups[index].node.z_index = index * host.GROUP_Z_STEP
-
-
-func _update_snap_preview(active) -> void:
-	if (
-		active == null
-		or active.locked
-		or not is_instance_valid(active.node)
-		or absf(active.node.scale.x - 1.0) > 0.04
-	):
-		_clear_snap_preview()
-		return
-	var match := _snap_match_data(active)
-	if match.is_empty():
-		_clear_snap_preview()
-		return
-	var other = match.get("other", null)
-	var key := "%s>%s" % [host._debug_group_id(active), host._debug_group_id(other)]
-	if key != host.snap_preview_key:
-		_clear_snap_preview()
-		host.snap_preview_key = key
-		_add_snap_preview_outline(match.get("active_member", {}))
-		_add_snap_preview_outline(match.get("other_member", {}))
-	var distance := float(match.get("distance", _snap_tolerance()))
-	var correction: Vector2 = match.get("correction", Vector2.ZERO)
-	if distance > 0.5:
-		active.node.position += correction * host.SNAP_PREVIEW_PULL
-	if host.snap_ready_key != key:
-		host.snap_ready_key = key
-		host._trigger_haptic("ready")
-
-
-func _add_snap_preview_outline(member) -> void:
-	if typeof(member) != TYPE_DICTIONARY:
-		return
-	var visual: Node2D = member.get("visual", null)
-	if visual == null or not is_instance_valid(visual):
-		return
-	var line := Line2D.new()
-	line.name = "snap_preview_outline"
-	line.points = member.get("polygon", PackedVector2Array())
-	line.closed = true
-	line.default_color = host.SNAP_PREVIEW_COLOR
-	line.width = host.SNAP_PREVIEW_SCREEN_WIDTH
-	line.joint_mode = Line2D.LINE_JOINT_ROUND
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND
-	line.antialiased = true
-	line.z_index = 42
-	line.set_meta("screen_width", host.SNAP_PREVIEW_SCREEN_WIDTH)
-	visual.add_child(line)
-	host.snap_preview_lines.append(line)
-	host._update_hint_line_width(line)
-
-
-func _clear_snap_preview() -> void:
-	for line in host.snap_preview_lines:
-		if line != null and is_instance_valid(line):
-			line.queue_free()
-	host.snap_preview_lines.clear()
-	host.snap_preview_key = ""
-	host.snap_ready_key = ""
-
-
-func _refresh_snap_preview_line_widths() -> void:
-	var valid: Array[Line2D] = []
-	for line in host.snap_preview_lines:
-		if line != null and is_instance_valid(line):
-			host._update_hint_line_width(line)
-			valid.append(line)
-	host.snap_preview_lines = valid
+		var group = host.groups[index]
+		if group.in_tray:
+			host.tray_controller.restore_group_tray_z(group)
+		else:
+			group.node.z_index = index * host.GROUP_Z_STEP
 
 
 func _try_snap_chain(active) -> bool:
@@ -121,9 +55,10 @@ func _try_snap_chain(active) -> bool:
 	var progressed := true
 	while progressed:
 		progressed = false
-		var match := _snap_match_data(active)
-		var other = match.get("other", null)
-		if other != null:
+		# Placement is evaluated at the current release position.
+		var candidate := _snap_match_data(active)
+		var other = candidate.get("other", null)
+		if other != null and host.groups.has(other) and other.locked:
 			host._clear_hint_highlights()
 			active.absorb(other, host.SNAP_VISUAL_GAP)
 			host.groups.erase(other)
@@ -135,14 +70,24 @@ func _try_snap_chain(active) -> bool:
 			host.PieceVisualFactoryScript.add_seam_outline(active, _seam_line_width())
 			snapped = true
 			progressed = true
-	if snapped:
-		host._trigger_haptic("snap")
 	return snapped
 
 
 func _snap_match_data(active) -> Dictionary:
+	if (
+		active == null
+		or active.locked
+		or active.in_tray
+		or not is_instance_valid(active.node)
+		or not active.node.scale.is_equal_approx(Vector2.ONE)
+	):
+		return {}
 	return host.SnapSolverScript.find_match_data(
-		active, _locked_snap_targets(active), _snap_tolerance(), host.ROTATION_TOLERANCE
+		active,
+		_locked_snap_targets(active),
+		_snap_radius_pixels(),
+		host.ROTATION_TOLERANCE,
+		_world_to_screen_transform()
 	)
 
 
@@ -241,6 +186,7 @@ func _locked_snap_targets(active) -> Array:
 func _lock_group(group) -> void:
 	if group == null:
 		return
+	group.clear_tray_return_pose()
 	group.locked = true
 	group.in_tray = false
 	group.node.position = group.anchor_home
@@ -276,7 +222,37 @@ func _reindex_tray() -> void:
 
 
 func _snap_tolerance() -> float:
-	return clampf(host.SNAP_TOLERANCE * maxf(0.75, host.source_scale), 16.0, 24.0)
+	# Horizontal world-space equivalent for existing debug placement helpers.
+	var screen_transform := _world_to_screen_transform()
+	return _snap_radius_pixels() / maxf(0.001, screen_transform.x.length())
+
+
+func _world_to_screen_transform() -> Transform2D:
+	# CanvasItem.get_screen_transform() omits root viewport stretch. Include it
+	# explicitly so a 1206-wide canvas on a 720-pixel phone still measures pixels.
+	return (
+		host.get_viewport().get_screen_transform()
+		* host.world_root.get_global_transform_with_canvas()
+	)
+
+
+func _snap_radius_pixels() -> float:
+	var dpi := DisplayServer.screen_get_dpi(host.get_window().current_screen)
+	if dpi <= 0:
+		dpi = FALLBACK_DPI
+	# Android reports a density bucket, so physical centimeters are approximate.
+	return SNAP_DISTANCE_CM * float(dpi) / CENTIMETERS_PER_INCH
+
+
+func distance_metrics() -> Dictionary:
+	return {
+		"radius_cm": SNAP_DISTANCE_CM,
+		"radius_screen_px": _snap_radius_pixels(),
+		"radius_world_x": _snap_tolerance(),
+		"trigger": "release",
+		"duration_seconds": 0.0,
+		"animating": false,
+	}
 
 
 func _check_complete() -> void:
@@ -287,5 +263,4 @@ func _check_complete() -> void:
 			return
 	if not host.completion_emitted:
 		host.completion_emitted = true
-		host._trigger_haptic("complete")
 		host.completed.emit()

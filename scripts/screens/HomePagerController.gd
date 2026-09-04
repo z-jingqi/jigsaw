@@ -9,6 +9,8 @@ const CLICK_THRESHOLD := 8.0
 const COMMIT_RATIO := 0.25
 const FLING_VELOCITY := 760.0
 const EDGE_DAMPING := 0.28
+const KineticsScript := preload("res://scripts/ui/motion/ScrollKinetics.gd")
+const SETTLE_DECAY := 10.0
 
 var _host: Control
 var _tokens: MotionTokens
@@ -19,7 +21,7 @@ var _drag_total := 0.0
 var _velocity := 0.0
 var _dragging := false
 var _active := false
-var _last_usec := 0
+var _motion := KineticsScript.new()
 var _tween: Tween
 var _visual_direction := 0
 var _visual_progress := 0.0
@@ -48,7 +50,7 @@ func begin() -> void:
 	_drag_total = takeover_offset
 	_dragging = absf(takeover_offset) > CLICK_THRESHOLD
 	_velocity = 0.0
-	_last_usec = Time.get_ticks_usec()
+	_motion.begin(-takeover_offset)
 	if _dragging:
 		_emit_visual(
 			_direction_from_offset(takeover_offset),
@@ -59,16 +61,10 @@ func begin() -> void:
 		_emit_visual(0, 0.0, 0.0)
 
 
-func drag_by(delta_x: float, elapsed_override := -1.0) -> void:
+func drag_by(delta_x: float) -> void:
 	if not _active:
 		return
-	var elapsed := elapsed_override
-	if elapsed <= 0.0:
-		var now := Time.get_ticks_usec()
-		elapsed = maxf(0.001, float(now - _last_usec) / 1000000.0)
-		_last_usec = now
-	_drag_total += delta_x
-	_velocity = lerpf(_velocity, delta_x / elapsed, 0.45)
+	_drag_total = -_motion.drag_by(delta_x, -_page_width, _page_width)
 	if absf(_drag_total) > CLICK_THRESHOLD:
 		_dragging = true
 	if not _dragging:
@@ -85,6 +81,7 @@ func end() -> void:
 	if not _active:
 		return
 	_active = false
+	_velocity = -_motion.release()
 	if not _dragging:
 		_reset_gesture()
 		activation_requested.emit()
@@ -92,7 +89,9 @@ func end() -> void:
 	var direction := _direction_from_offset(_drag_total)
 	var ratio := absf(_drag_total) / _page_width
 	var can_commit := direction != 0 and _can_move(direction)
-	var should_commit := can_commit and (ratio >= COMMIT_RATIO or absf(_velocity) >= FLING_VELOCITY)
+	var flinging := absf(_velocity) >= FLING_VELOCITY
+	var moving_outward := _direction_from_offset(_velocity) == direction
+	var should_commit := can_commit and (moving_outward if flinging else ratio >= COMMIT_RATIO)
 	_settle(direction if should_commit else 0)
 
 
@@ -100,6 +99,8 @@ func cancel_to_current() -> void:
 	if not _active and _tween == null:
 		return
 	_active = false
+	_motion.stop()
+	_velocity = 0.0
 	_settle(0)
 
 
@@ -116,6 +117,12 @@ func finish_to_current() -> void:
 
 func current_index() -> int:
 	return _current_index
+
+
+func finish_to_visible() -> void:
+	var direction := _visual_direction if _visual_progress >= 0.5 else 0
+	cancel_motion()
+	_complete_settle(direction, direction != 0 and _can_move(direction))
 
 
 func is_dragging() -> bool:
@@ -143,24 +150,26 @@ func cancel_motion() -> void:
 func _settle(direction: int) -> void:
 	cancel_motion()
 	var committed := direction != 0 and _can_move(direction)
-	var target_progress := 1.0 if committed else 0.0
-	var duration := (
-		_tokens.reduced_motion_duration
-		if _tokens == null or _is_reduced()
-		else (_tokens.page_duration if committed else 0.22)
-	)
-	var start_progress := _visual_progress
-	var visual_direction := direction if direction != 0 else _visual_direction
-	if duration <= 0.0:
+	if _is_reduced():
 		_complete_settle(direction, committed)
 		return
+	var target_offset := -float(direction) * _page_width if committed else 0.0
+	var displacement := _visual_offset - target_offset
+	var duration := _tokens.page_duration if _tokens != null else 0.28
+	var frequency := SETTLE_DECAY / maxf(0.01, duration)
+	var coefficient := _velocity + frequency * displacement
 	_tween = _host.create_tween()
-	_tween.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	# Critically damped settling starts at the actual release position/velocity.
+	_tween.set_trans(Tween.TRANS_LINEAR)
 	_tween.tween_method(
-		func(value: float) -> void:
-			_emit_visual(visual_direction, value, -float(visual_direction) * value * _page_width),
-		start_progress,
-		target_progress,
+		func(elapsed: float) -> void:
+			var offset := (
+				target_offset + ((displacement + coefficient * elapsed) * exp(-frequency * elapsed))
+			)
+			offset = clampf(offset, -_page_width, _page_width)
+			_emit_visual(_direction_from_offset(offset), absf(offset) / _page_width, offset),
+		0.0,
+		duration,
 		duration
 	)
 	_tween.finished.connect(func() -> void: _complete_settle(direction, committed))
@@ -186,6 +195,7 @@ func _direction_from_offset(offset: float) -> int:
 
 
 func _reset_gesture() -> void:
+	_motion.stop()
 	_drag_total = 0.0
 	_velocity = 0.0
 	_dragging = false

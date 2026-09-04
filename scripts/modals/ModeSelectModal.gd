@@ -5,6 +5,9 @@ signal close_requested
 signal mode_selected(mode: StringName, start_policy: StringName)
 
 const ModeStatusIconScene := preload("res://scenes/ui/foundation/ModeStatusIcon.tscn")
+const NavigationControlMetricsScript := preload(
+	"res://scripts/ui/foundation/NavigationControlMetrics.gd"
+)
 
 @onready var background: TextureRect = $Background
 @onready var content: Control = $SafeArea/Content
@@ -138,10 +141,11 @@ func _apply_layout() -> void:
 	var available := content.size
 	$SafeArea/Content/Header.size = Vector2(available.x, 180.0)
 	back_button.position = Vector2(8.0, 16.0)
-	back_button.size = Vector2(116.0, 116.0)
-	title_label.offset_left = 150.0
+	back_button.size = Vector2.ONE * NavigationControlMetricsScript.BACK_BUTTON_SIZE
+	back_button.custom_minimum_size = back_button.size
+	title_label.offset_left = NavigationControlMetricsScript.BACK_BUTTON_SIZE + 32.0
 	title_label.offset_top = 8.0
-	title_label.offset_right = -150.0
+	title_label.offset_right = -(NavigationControlMetricsScript.BACK_BUTTON_SIZE + 32.0)
 	title_label.offset_bottom = 140.0
 	var top := 300.0
 	var preview_width := minf(1040.0, available.x - 24.0)

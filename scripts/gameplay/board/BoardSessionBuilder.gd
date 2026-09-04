@@ -35,8 +35,10 @@ func _start_play_session(play_mode: String) -> bool:
 		var is_seed: bool = seed_ids.has(str(piece.get("id", "")))
 		_create_group(piece, is_seed)
 	host.tray_scroll_offset = 0.0
-	host._layout_tray(true)
 	host.fit_view_to_pieces(false)
+	# Tray pieces use the fitted board's screen scale. Laying them out after the
+	# view is final keeps both lanes stable when either lane later closes a gap.
+	host._layout_tray(true)
 	for group in host.locked_groups:
 		host.PieceVisualFactoryScript.add_seam_outline(group, host._seam_line_width())
 	return true
@@ -457,6 +459,7 @@ func _create_group(piece: Dictionary, locked_seed := false) -> void:
 		host.locked_groups.append(group)
 	else:
 		group.in_tray = true
+		group.tray_lane = host.tray_groups.size() % host.TRAY_ROW_COUNT
 		host.tray_groups.append(group)
 		host._move_group_to_tray(group, host.tray_groups.size() - 1, true)
 

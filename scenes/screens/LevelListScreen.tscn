@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/LevelListScreen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="7_leaf"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/progress-plaque-3d.webp" id="8_plaque"]
 [ext_resource type="PackedScene" path="res://scenes/screens/levels/LevelFocusOverlay.tscn" id="9_focus"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/TouchScrollContainer.gd" id="10_scroll"]
 
 [sub_resource type="Animation" id="Animation_reset"]
 resource_name = "RESET"
@@ -81,16 +82,18 @@ offset_bottom = 264.0
 grow_horizontal = 2
 
 [node name="BackButton" parent="SafeArea/Content/Header" instance=ExtResource("3_icon")]
+custom_minimum_size = Vector2(148, 148)
 layout_mode = 1
 offset_left = 8.0
 offset_top = 16.0
-offset_right = 120.0
-offset_bottom = 128.0
+offset_right = 156.0
+offset_bottom = 164.0
+action_mode = 0
 theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
 theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
 icon = ExtResource("6_back")
 expand_icon = true
-icon_max_width = 100
+icon_max_width = 132
 accessibility_label = "Back"
 
 [node name="TitleLeftOrnament" type="TextureRect" parent="SafeArea/Content/Header"]
@@ -170,6 +173,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="SafeArea/Content"]
+script = ExtResource("10_scroll")
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -182,9 +186,11 @@ grow_horizontal = 2
 grow_vertical = 2
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 3
+scroll_deadzone = 18
 
 [node name="GridContent" type="Control" parent="SafeArea/Content/Scroll"]
 layout_mode = 2
+mouse_filter = 1
 
 [node name="LevelFocusOverlay" parent="." instance=ExtResource("9_focus")]
 layout_mode = 1

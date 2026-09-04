@@ -111,8 +111,8 @@ func _progress(
 	completed: int, total: int, ratio: float, paws: int, is_complete: bool
 ) -> Dictionary:
 	return {
-		"completed_modes": completed,
-		"total_modes": total,
+		"completed_levels": completed,
+		"total_levels": total,
 		"ratio": ratio,
 		"paw_count": paws,
 		"is_complete": is_complete,
@@ -216,9 +216,7 @@ func _test_component_scenes() -> void:
 		),
 		"modal_shell_timelines"
 	)
-	for component in [
-		icon_button, pill_button, theme_card, level_card, settings_row, safe_area, modal_shell
-	]:
+	for component in [icon_button, pill_button, level_card, settings_row, safe_area, modal_shell]:
 		component.queue_free()
 	await process_frame
 

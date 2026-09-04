@@ -9,9 +9,14 @@ var locked := false
 var is_seed := false
 var in_tray := false
 var tray_index := -1
+var tray_lane := -1
 var tray_scale := 1.0
 var tray_slot := Rect2()
 var tray_tween: Tween
+var tray_motion_generation := 0
+var tray_return_pose_valid := false
+var tray_return_screen_position := Vector2.ZERO
+var tray_return_screen_scale := 1.0
 
 
 func _init(group_node: Node2D, piece: Dictionary) -> void:
@@ -41,3 +46,15 @@ func absorb(other: PieceGroup, visual_gap := 0.0) -> void:
 		member["visual"].position = offset
 		members.append(member)
 	other.node.queue_free()
+
+
+func remember_tray_return_pose(screen_position: Vector2, screen_scale: float) -> void:
+	tray_return_pose_valid = true
+	tray_return_screen_position = screen_position
+	tray_return_screen_scale = screen_scale
+
+
+func clear_tray_return_pose() -> void:
+	tray_return_pose_valid = false
+	tray_return_screen_position = Vector2.ZERO
+	tray_return_screen_scale = 1.0

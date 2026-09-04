@@ -12,8 +12,6 @@ func _move_group_to(group, target_position: Vector2, use_visible_area := true) -
 	if group == null or not is_instance_valid(group.node):
 		return
 	group.node.position = _clamped_group_position(group, target_position, use_visible_area)
-	if use_visible_area:
-		host._notify_state_changed()
 
 
 func _clamped_group_position(group, target_position: Vector2, use_visible_area := true) -> Vector2:

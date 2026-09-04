@@ -5,6 +5,9 @@ signal level_selected(level_id: String)
 signal card_visible(card: Control, view_model: Variant)
 signal card_hidden(card: Control)
 
+const ThumbnailQueueScript := preload("res://scripts/screens/levels/LevelThumbnailQueue.gd")
+const CARDS_PER_FRAME := 2
+
 var _scroll: ScrollContainer
 var _content: Control
 var _card_scene: PackedScene
@@ -15,12 +18,18 @@ var _card_size := Vector2(150.0, 180.0)
 var _footer_space := 0.0
 var _visible: Dictionary = {}
 var _pool: Array[Control] = []
+var _reduced_motion := false
+var _thumbnail_queue: LevelThumbnailQueue
+var _pending_indices: Array[int] = []
+var _build_scheduled := false
+var _build_generation := 0
 
 
 func _init(scroll: ScrollContainer, content: Control, card_scene: PackedScene) -> void:
 	_scroll = scroll
 	_content = content
 	_card_scene = card_scene
+	_thumbnail_queue = ThumbnailQueueScript.new(scroll)
 	_scroll.get_v_scroll_bar().value_changed.connect(func(_value: float) -> void: render_visible())
 
 
@@ -45,6 +54,7 @@ func refresh_items(items: Array) -> void:
 			var card: Control = _visible[index]
 			if is_instance_valid(card):
 				card.call(&"set_view_model", _items[int(index)])
+				_thumbnail_queue.request(card as LevelCard)
 				card_visible.emit(card, _items[int(index)])
 	render_visible()
 
@@ -67,9 +77,31 @@ func render_visible() -> void:
 	for index in _visible.keys().duplicate():
 		if not wanted.has(index):
 			_release_index(int(index))
+	_pending_indices.clear()
 	for index in wanted:
 		if not _visible.has(index):
-			_acquire_index(int(index))
+			_pending_indices.append(int(index))
+	_schedule_card_build()
+
+
+func _schedule_card_build() -> void:
+	if _build_scheduled or _pending_indices.is_empty() or not _scroll.is_inside_tree():
+		return
+	_build_scheduled = true
+	_scroll.get_tree().process_frame.connect(
+		_build_pending_cards.bind(_build_generation), CONNECT_ONE_SHOT
+	)
+
+
+func _build_pending_cards(generation: int) -> void:
+	if generation != _build_generation:
+		return
+	_build_scheduled = false
+	for _slot in CARDS_PER_FRAME:
+		if _pending_indices.is_empty():
+			break
+		_acquire_index(_pending_indices.pop_front())
+	_schedule_card_build()
 
 
 func scroll_to_item(level_id: String) -> void:
@@ -82,6 +114,10 @@ func scroll_to_item(level_id: String) -> void:
 
 
 func clear() -> void:
+	_build_generation += 1
+	_pending_indices.clear()
+	_build_scheduled = false
+	_thumbnail_queue.clear()
 	for index in _visible.keys().duplicate():
 		_release_index(int(index))
 	for card in _pool:
@@ -90,12 +126,26 @@ func clear() -> void:
 	_pool.clear()
 
 
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	for card in _visible.values():
+		if is_instance_valid(card) and card.has_method(&"set_reduced_motion"):
+			card.call(&"set_reduced_motion", enabled)
+	for card in _pool:
+		if is_instance_valid(card) and card.has_method(&"set_reduced_motion"):
+			card.call(&"set_reduced_motion", enabled)
+
+
 func column_count() -> int:
 	return _columns
 
 
 func active_card_count() -> int:
 	return _visible.size()
+
+
+func is_content_ready() -> bool:
+	return _pending_indices.is_empty() and _thumbnail_queue.pending_count() == 0
 
 
 func visible_cards() -> Array[Control]:
@@ -145,15 +195,19 @@ func _acquire_index(index: int) -> void:
 	card.visible = true
 	var button := card as Button
 	button.disabled = false
+	button.mouse_filter = Control.MOUSE_FILTER_PASS
 	card.size = _card_size
 	card.custom_minimum_size = _card_size
 	card.position = _item_position(index)
 	card.call(&"set_view_model", _items[index])
+	if card.has_method(&"set_reduced_motion"):
+		card.call(&"set_reduced_motion", _reduced_motion)
 	if not card.has_meta(&"virtual_grid_wired"):
 		button.pressed.connect(_on_card_pressed.bind(button))
 		card.set_meta(&"virtual_grid_wired", true)
 	_content.add_child(card)
 	_visible[index] = card
+	_thumbnail_queue.request(card as LevelCard)
 	card_visible.emit(card, _items[index])
 
 
@@ -162,6 +216,9 @@ func _release_index(index: int) -> void:
 	_visible.erase(index)
 	if not is_instance_valid(card):
 		return
+	_thumbnail_queue.cancel(card)
+	if card.has_method(&"cancel_motion"):
+		card.call(&"cancel_motion")
 	card_hidden.emit(card)
 	card.get_parent().remove_child(card)
 	card.visible = false
@@ -175,7 +232,8 @@ func _item_position(index: int) -> Vector2:
 
 
 func _on_card_pressed(card: Button) -> void:
-	if card.disabled:
+	if card.has_method(&"is_locked") and bool(card.call(&"is_locked")):
+		card.call(&"play_locked_feedback")
 		return
 	level_selected.emit(str(card.get("level_id")))
 

@@ -120,7 +120,13 @@ func _view_model(
 	image.fill(Color("A8DCC6"))
 	var texture := ImageTexture.create_from_image(image)
 	var progress := ViewModels.ThemeProgressViewModel.new(
-		{"completed_modes": 4, "total_modes": 5, "ratio": 0.8, "paw_count": 5, "is_complete": false}
+		{
+			"completed_levels": 4,
+			"total_levels": 5,
+			"ratio": 0.8,
+			"paw_count": 5,
+			"is_complete": false
+		}
 	)
 	var cards: Array[ViewModels.LevelCardViewModel] = []
 	for index in count:

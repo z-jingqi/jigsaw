@@ -2,14 +2,14 @@ class_name ThemeProgressPolicy
 extends RefCounted
 
 
-static func build(completed_modes: int, total_modes: int) -> Dictionary:
-	var safe_total := maxi(0, total_modes)
-	var safe_completed := clampi(completed_modes, 0, safe_total)
+static func build(completed_levels: int, total_levels: int) -> Dictionary:
+	var safe_total := maxi(0, total_levels)
+	var safe_completed := clampi(completed_levels, 0, safe_total)
 	var ratio := float(safe_completed) / float(safe_total) if safe_total > 0 else 0.0
 	var is_complete := safe_total > 0 and safe_completed == safe_total
 	return {
-		"completed_modes": safe_completed,
-		"total_modes": safe_total,
+		"completed_levels": safe_completed,
+		"total_levels": safe_total,
 		"ratio": ratio,
 		"paw_count": paw_count_for_ratio(ratio),
 		"is_complete": is_complete,

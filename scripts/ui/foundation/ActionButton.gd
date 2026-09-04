@@ -42,6 +42,11 @@ func active_motion_count() -> int:
 	return _feedback.active_motion_count() if _feedback != null else 0
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_SCROLL_BEGIN:
+		cancel_motion()
+
+
 func _exit_tree() -> void:
 	if _feedback != null:
 		_feedback.dispose()

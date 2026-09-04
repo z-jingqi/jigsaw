@@ -94,8 +94,8 @@ func _validate_debug_contract(game: Game) -> void:
 	var state := game.debug_execute("state")
 	_check(bool(state.get("ok", false)) and str(state.state.screen) == "home", "debug_state_home")
 	for field in [
-		"completed_modes",
-		"total_modes",
+		"completed_levels",
+		"total_levels",
 		"progress_ratio",
 		"progress_paw_count",
 		"theme_complete",

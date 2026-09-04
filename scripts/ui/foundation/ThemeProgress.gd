@@ -50,8 +50,8 @@ func _render() -> void:
 	if not is_node_ready() or _view_model == null:
 		return
 	_stop_motion()
-	var completed := int(_read("completed_modes"))
-	var total := int(_read("total_modes"))
+	var completed := int(_read("completed_levels"))
+	var total := int(_read("total_levels"))
 	var paw_count := clampi(int(_read("paw_count")), 0, 5)
 	var is_complete := bool(_read("is_complete"))
 	var progress_changed := (

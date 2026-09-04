@@ -66,6 +66,11 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node, animate := 
 		if visual == null or not is_instance_valid(visual):
 			continue
 		var target_scale := LIFTED_SCALE if lifted else Vector2.ONE
+		if visual.has_meta("piece_lift_tween"):
+			var previous: Tween = visual.get_meta("piece_lift_tween")
+			if previous != null and previous.is_valid():
+				previous.kill()
+			visual.remove_meta("piece_lift_tween")
 		var shadow := visual.get_node_or_null("piece_lift_shadow")
 		if not animate:
 			visual.scale = target_scale
@@ -81,6 +86,7 @@ static func set_group_lifted(group, lifted: bool, tween_owner: Node, animate := 
 					)
 			continue
 		var tween := tween_owner.create_tween()
+		visual.set_meta("piece_lift_tween", tween)
 		tween.set_ease(Tween.EASE_OUT)
 		tween.set_trans(Tween.TRANS_CUBIC)
 		tween.parallel().tween_property(visual, "scale", target_scale, 0.12)

@@ -521,7 +521,13 @@ func _home_view_model() -> Variant:
 	image.fill(Color("F28A70"))
 	var texture := ImageTexture.create_from_image(image)
 	var progress := ViewModels.ThemeProgressViewModel.new(
-		{"completed_modes": 1, "total_modes": 5, "ratio": 0.2, "paw_count": 1, "is_complete": false}
+		{
+			"completed_levels": 1,
+			"total_levels": 5,
+			"ratio": 0.2,
+			"paw_count": 1,
+			"is_complete": false
+		}
 	)
 	var first := ViewModels.HomeThemeViewModel.new(
 		{

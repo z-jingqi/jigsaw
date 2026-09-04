@@ -6,13 +6,20 @@ const DebugCommandRouterScript := preload("res://scripts/debug/DebugCommandRoute
 
 var _runtime: RuntimeAppCoordinator
 var _debug_router: DebugCommandRouter
+var startup_managed := false
 
 
 func _ready() -> void:
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
 	_runtime = RuntimeAppCoordinatorScript.new(self)
-	_runtime.start()
+	_runtime.start(not startup_managed)
 	_debug_router = DebugCommandRouterScript.new(_runtime)
+
+
+func prepare_startup(on_progress: Callable) -> Dictionary:
+	var result := await _runtime.prepare_startup(on_progress)
+	startup_managed = false
+	return result
 
 
 func _exit_tree() -> void:
@@ -23,6 +30,8 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if startup_managed:
+		return
 	if (
 		event is InputEventKey
 		and event.pressed

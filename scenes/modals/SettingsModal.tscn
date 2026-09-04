@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/modals/SettingsModal.gd" id="1_modal"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/ModalShell.tscn" id="2_shell"]
+[ext_resource type="PackedScene" path="res://scenes/ui/AnimatedModalShell.tscn" id="2_shell"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SettingsRow.tscn" id="3_row"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4_font"]
 
@@ -78,3 +78,5 @@ theme_override_colors/font_color = Color(0.74, 0.20, 0.18, 1)
 theme_override_font_sizes/font_size = 24
 autowrap_mode = 2
 visible = false
+
+[editable path="ModalShell"]

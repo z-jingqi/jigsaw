@@ -3,6 +3,7 @@ class_name LevelAssetCache
 
 var texture_cache: Dictionary = {}
 var source_image_cache: Dictionary = {}
+var thumbnail_cache: Dictionary = {}
 
 
 func cached_texture(path: String) -> Texture2D:
@@ -10,6 +11,11 @@ func cached_texture(path: String) -> Texture2D:
 		return null
 	if texture_cache.has(path):
 		return texture_cache[path]
+	if path.begins_with("res://") and ResourceLoader.exists(path):
+		var imported_texture := load(path) as Texture2D
+		if imported_texture != null:
+			texture_cache[path] = imported_texture
+			return imported_texture
 	var extension := path.get_extension().to_lower()
 	if ["png", "jpg", "jpeg", "webp"].has(extension):
 		var direct_image := Image.load_from_file(image_file_path(path))
@@ -32,6 +38,9 @@ func cached_texture(path: String) -> Texture2D:
 func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 	if path.is_empty() or target_size.x <= 0 or target_size.y <= 0:
 		return null
+	var cache_key := "%s@%dx%d" % [path, target_size.x, target_size.y]
+	if thumbnail_cache.has(cache_key):
+		return thumbnail_cache[cache_key] as Texture2D
 	var source_texture: Texture2D = null
 	if path.begins_with("res://") and ResourceLoader.exists(path):
 		source_texture = load(path) as Texture2D
@@ -40,6 +49,7 @@ func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 		and source_texture.get_width() <= target_size.x
 		and source_texture.get_height() <= target_size.y
 	):
+		thumbnail_cache[cache_key] = source_texture
 		return source_texture
 	var image: Image = (
 		source_texture.get_image()
@@ -59,7 +69,9 @@ func runtime_thumbnail(path: String, target_size: Vector2i) -> Texture2D:
 	var height: int = max(1, int(round(float(image.get_height()) * ratio)))
 	if image.get_width() != width or image.get_height() != height:
 		image.resize(width, height, Image.INTERPOLATE_LANCZOS)
-	return ImageTexture.create_from_image(image)
+	var thumbnail := ImageTexture.create_from_image(image)
+	thumbnail_cache[cache_key] = thumbnail
+	return thumbnail
 
 
 func image_file_path(path: String) -> String:

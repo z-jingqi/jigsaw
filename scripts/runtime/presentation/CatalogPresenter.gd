@@ -67,9 +67,7 @@ func level_list(
 	var cards: Array[AppViewModels.LevelCardViewModel] = []
 	var focus_id := ""
 	var unlock_budget := 1
-	for level in topic.get("levels", []):
-		if typeof(level) != TYPE_DICTIONARY:
-			continue
+	for level in _theme_levels(topic):
 		var modes: Array[AppViewModels.ModeStatusViewModel] = _mode_statuses(topic, level)
 		var locked := unlock_budget <= 0
 		if not locked:
@@ -89,7 +87,7 @@ func level_list(
 						{
 							"level_id": level["id"],
 							"title": level["title"],
-							"thumbnail": _content.level_thumbnail(level),
+							"thumbnail_loader": _content.level_thumbnail.bind(level),
 							"locked": locked,
 							"recommended": is_recommended,
 							"modes": modes,
@@ -111,7 +109,6 @@ func level_list(
 				"revision": _revision,
 				"theme_id": topic.get("id", ""),
 				"theme_title": topic.get("name", ""),
-				"background_texture": _content.topic_background(topic),
 				"theme_progress": theme_progress(topic),
 				"focus_level_id":
 				requested_focus_level_id if not requested_focus_level_id.is_empty() else focus_id,
@@ -188,25 +185,33 @@ func gameplay(
 
 func theme_progress(topic: Dictionary) -> AppViewModels.ThemeProgressViewModel:
 	var completed := 0
-	var total := 0
-	for level in topic.get("levels", []):
-		if typeof(level) != TYPE_DICTIONARY:
-			continue
+	var levels := _theme_levels(topic)
+	for level in levels:
 		for mode in _content.available_modes(level):
-			total += 1
 			if _progress.is_mode_completed(str(topic["id"]), str(level["id"]), mode):
 				completed += 1
+				# Match unlocking: any completed available mode clears the level once.
+				break
 	return ViewModelsScript.ThemeProgressViewModel.new(
-		ThemeProgressPolicyScript.build(completed, total)
+		ThemeProgressPolicyScript.build(completed, levels.size())
 	)
+
+
+func _theme_levels(topic: Dictionary) -> Array[Dictionary]:
+	var levels: Array[Dictionary] = []
+	for level in topic.get("levels", []):
+		if typeof(level) == TYPE_DICTIONARY:
+			levels.append(level)
+	return levels
 
 
 func _mode_statuses(
 	topic: Dictionary, level: Dictionary
 ) -> Array[AppViewModels.ModeStatusViewModel]:
 	var result: Array[AppViewModels.ModeStatusViewModel] = []
+	var available_modes: Array[String] = _content.available_modes(level)
 	for mode in ["polygon", "knob", "swap"]:
-		var available: bool = _content.available_modes(level).has(mode)
+		var available := available_modes.has(mode)
 		var completed: bool = (
 			available
 			and _progress.is_mode_completed(
@@ -241,6 +246,8 @@ func _mode_statuses(
 
 
 func _session_state(topic: Dictionary, level: Dictionary, mode: String) -> Dictionary:
+	if not _session.has_play_state(str(topic.get("id", "")), str(level.get("id", "")), mode):
+		return {}
 	return _session.play_state(
 		str(topic.get("id", "")),
 		str(level.get("id", "")),

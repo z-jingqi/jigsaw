@@ -21,11 +21,6 @@ func snapshot() -> Dictionary:
 		"version": 2,
 		"mode": board.current_mode,
 		"hint_count": board.hint_count,
-		"view":
-		{
-			"ratio": board._view_ratio(),
-			"offset": board._vector_to_json(board.view_offset),
-		},
 		"tray":
 		{
 			"scroll": board.tray_scroll_offset,
@@ -77,12 +72,16 @@ func snapshot() -> Dictionary:
 			)
 		snapshot["groups"] = group_states
 		var tray_order := []
+		var tray_lanes := {}
 		for group in board.tray_groups:
 			if group == null:
 				continue
 			for member in group.members:
-				tray_order.append(str(member["id"]))
+				var piece_id := str(member["id"])
+				tray_order.append(piece_id)
+				tray_lanes[piece_id] = group.tray_lane
 		snapshot["tray_order"] = tray_order
+		snapshot["tray_lanes"] = tray_lanes
 	return snapshot
 
 
@@ -130,12 +129,16 @@ func session_snapshot(theme_id: String, level_id: String) -> Dictionary:
 		ids_in_group.sort()
 		connected_groups.append(ids_in_group)
 	var tray_order: Array[String] = []
+	var tray_lanes := {}
 	for group in board.tray_groups:
 		for member in group.members:
-			tray_order.append(str(member["id"]))
+			var piece_id := str(member["id"])
+			tray_order.append(piece_id)
+			tray_lanes[piece_id] = group.tray_lane
 	result["kind"] = "assembly"
 	result["connected_groups"] = connected_groups
 	result["tray_order"] = tray_order
+	result["tray_lanes"] = tray_lanes
 	return result
 
 
@@ -160,7 +163,6 @@ func apply(snapshot: Dictionary) -> void:
 		board._restore_swap_state(snapshot)
 	else:
 		board._restore_group_state(snapshot)
-	board._restore_view_state(snapshot)
 	board._check_complete()
 	board._check_swap_complete()
 
@@ -190,7 +192,13 @@ func _apply_session_state(snapshot: Dictionary) -> void:
 		var groups: Array = []
 		for ids in snapshot.get("connected_groups", []):
 			groups.append({"members": ids, "seed": false})
-		restore_group_state({"groups": groups, "tray_order": snapshot.get("tray_order", [])})
+		restore_group_state(
+			{
+				"groups": groups,
+				"tray_order": snapshot.get("tray_order", []),
+				"tray_lanes": snapshot.get("tray_lanes", {}),
+			}
+		)
 	board._check_complete()
 	board._check_swap_complete()
 
@@ -244,8 +252,15 @@ func restore_group_state(snapshot: Dictionary) -> void:
 	for group in board.groups:
 		if not group.locked and not board.tray_groups.has(group):
 			board.tray_groups.append(group)
+	var tray_lanes: Dictionary = snapshot.get("tray_lanes", {})
 	for index in board.tray_groups.size():
-		board._move_group_to_tray(board.tray_groups[index], index, true)
+		var group = board.tray_groups[index]
+		for member in group.members:
+			var piece_id := str(member["id"])
+			if tray_lanes.has(piece_id):
+				group.tray_lane = clampi(int(tray_lanes[piece_id]), 0, board.TRAY_ROW_COUNT - 1)
+				break
+		board._move_group_to_tray(group, index, true)
 	board.tray_scroll_offset = 0.0
 	board._layout_tray(true)
 	var tray_state: Dictionary = snapshot.get("tray", {})
@@ -294,22 +309,6 @@ func restore_swap_state(snapshot: Dictionary) -> void:
 	board.swap_tiles = next_tiles
 	for index in board.swap_tiles.size():
 		board.swap_tiles[index]["node"].z_index = index * board.GROUP_Z_STEP
-
-
-func restore_view_state(snapshot: Dictionary) -> void:
-	var view: Dictionary = snapshot.get("view", {})
-	if view.is_empty():
-		return
-	board.view_scale = board._clamped_actual_scale(
-		board.base_view_scale * float(view.get("ratio", 1.0))
-	)
-	board.view_target_scale = board.view_scale
-	board.view_target_ratio = board._view_ratio_for_scale(board.view_scale)
-	board.view_offset = board._json_vector(
-		view.get("offset", board._vector_to_json(board.base_view_offset))
-	)
-	board._clamp_view_to_table()
-	board._apply_view_transform()
 
 
 func notify_changed(immediate := false) -> void:

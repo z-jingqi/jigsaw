@@ -27,11 +27,11 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	host._notify_state_changed()
 
 
-func _end_swap_drag() -> void:
+func _end_swap_drag(allow_placement := true) -> void:
 	if host.swap_dragging == null:
 		return
 	var released = host.swap_dragging
-	var target = _swap_target_for_drag(released)
+	var target = _swap_target_for_drag(released) if allow_placement else null
 	_clear_swap_target_preview()
 	if target == null:
 		_animate_swap_tile_to(
@@ -208,7 +208,6 @@ func can_shift_rows() -> bool:
 		or host.swap_tiles.is_empty()
 		or host.swap_dragging != null
 		or host.panning
-		or host.pinch_active
 	):
 		return false
 	if _swap_rows() <= 1:
@@ -304,20 +303,20 @@ func _show_swap_hint() -> void:
 
 func _find_swap_hint_pair() -> Array:
 	var by_slot := {}
+	var by_correct_index := {}
 	for tile in host.swap_tiles:
 		by_slot[int(tile["slot_index"])] = tile
-	var fallback: Array = []
-	for tile in host.swap_tiles:
-		if int(tile["slot_index"]) == int(tile["correct_index"]):
+		by_correct_index[int(tile["correct_index"])] = tile
+	# Slot indices run left to right, then top to bottom. Draw order is unrelated.
+	for slot_index in range(_swap_cols() * _swap_rows()):
+		var occupant = by_slot.get(slot_index, null)
+		var correct_tile = by_correct_index.get(slot_index, null)
+		if occupant == null or correct_tile == null:
 			continue
-		var occupant = by_slot.get(int(tile["correct_index"]), null)
-		if occupant == null or occupant == tile:
+		if int(occupant["correct_index"]) == slot_index:
 			continue
-		if int(occupant["correct_index"]) == int(tile["slot_index"]):
-			return [tile, occupant]
-		if fallback.is_empty():
-			fallback = [tile, occupant]
-	return fallback
+		return [correct_tile, occupant]
+	return []
 
 
 func _add_swap_hint_outline(tile) -> void:
@@ -354,7 +353,6 @@ func _check_swap_complete() -> void:
 		if int(tile["slot_index"]) != int(tile["correct_index"]):
 			return
 	host.completion_emitted = true
-	host._trigger_haptic("complete")
 	host.completed.emit()
 
 

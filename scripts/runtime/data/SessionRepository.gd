@@ -36,9 +36,20 @@ func current() -> Dictionary:
 func set_current(theme_id: String, level_id: String = "", mode: String = "") -> Dictionary:
 	if theme_id.is_empty() or (not mode.is_empty() and not PLAY_MODES.has(mode)):
 		return {"ok": false, "error": "invalid_argument"}
+	var current_state: Dictionary = _data.get("current", {})
+	if (
+		str(current_state.get("theme_id", "")) == theme_id
+		and str(current_state.get("level_id", "")) == level_id
+		and str(current_state.get("mode", "")) == mode
+	):
+		return {"ok": true, "changed": false}
 	var next_data := _data.duplicate(true)
 	next_data["current"] = {"theme_id": theme_id, "level_id": level_id, "mode": mode}
 	return _commit(next_data)
+
+
+func has_play_state(theme_id: String, level_id: String, mode: String) -> bool:
+	return (_data["play_states"] as Dictionary).has(_state_key(theme_id, level_id, mode))
 
 
 func play_state(

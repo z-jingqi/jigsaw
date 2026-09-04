@@ -3,6 +3,7 @@ class_name LevelRepository
 
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_THUMBNAIL_FILE := "thumbnail.webp"
+const LEVEL_THUMBNAIL_MAX_SIZE := Vector2i(600, 600)
 const LevelAssetCacheScript = preload("res://scripts/catalog/LevelAssetCache.gd")
 
 var asset_cache := LevelAssetCacheScript.new()
@@ -10,6 +11,9 @@ var texture_cache: Dictionary = asset_cache.texture_cache
 var source_image_cache: Dictionary = asset_cache.source_image_cache
 var config_cache: Dictionary = {}
 var locale := "en"
+var _catalog_cache: Array[Dictionary] = []
+var _catalog_ready := false
+var _catalog_locale := ""
 
 
 func set_locale(next_locale: String) -> void:
@@ -17,6 +21,8 @@ func set_locale(next_locale: String) -> void:
 
 
 func build_catalog() -> Array[Dictionary]:
+	if _catalog_ready and _catalog_locale == locale:
+		return _catalog_cache
 	var catalog := load_config_path(LEVEL_CATALOG_PATH)
 	if catalog.has("topics") and typeof(catalog["topics"]) == TYPE_ARRAY:
 		var next_topics: Array[Dictionary] = []
@@ -88,7 +94,10 @@ func build_catalog() -> Array[Dictionary]:
 					}
 				)
 			)
-		return next_topics
+		_catalog_cache = next_topics
+		_catalog_locale = locale
+		_catalog_ready = true
+		return _catalog_cache
 	return []
 
 
@@ -120,10 +129,10 @@ func load_level_config(level: Dictionary) -> Dictionary:
 
 
 func load_config_path(config_path: String) -> Dictionary:
-	if config_path.is_empty() or not FileAccess.file_exists(config_path):
-		return {}
 	if config_cache.has(config_path):
 		return config_cache[config_path]
+	if config_path.is_empty() or not FileAccess.file_exists(config_path):
+		return {}
 	var file := FileAccess.open(config_path, FileAccess.READ)
 	if file == null:
 		return {}
@@ -135,7 +144,7 @@ func load_config_path(config_path: String) -> Dictionary:
 	return config
 
 
-func level_thumbnail(level: Dictionary, target_size := Vector2i(480, 360)) -> Texture2D:
+func level_thumbnail(level: Dictionary, target_size := LEVEL_THUMBNAIL_MAX_SIZE) -> Texture2D:
 	var level_config := load_level_config(level)
 	var image_path := level_thumbnail_source_path(level_config)
 	return runtime_thumbnail(image_path, target_size)
@@ -201,7 +210,14 @@ func level_list_image_path(level_config: Dictionary) -> String:
 
 func level_thumbnail_source_path(level_config: Dictionary) -> String:
 	var thumbnail_path := level_thumbnail_path(level_config)
-	if not thumbnail_path.is_empty() and FileAccess.file_exists(thumbnail_path):
+	# Exported textures are remapped resources, not their original source files.
+	if (
+		not thumbnail_path.is_empty()
+		and (
+			ResourceLoader.exists(thumbnail_path, "Texture2D")
+			or FileAccess.file_exists(thumbnail_path)
+		)
+	):
 		return thumbnail_path
 	return level_list_image_path(level_config)
 

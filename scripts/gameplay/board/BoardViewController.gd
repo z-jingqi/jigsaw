@@ -1,8 +1,6 @@
 extends RefCounted
 class_name BoardViewController
 
-const VIEW_MAX_RATIO := 2.40
-
 var host: Node2D
 
 
@@ -12,13 +10,13 @@ func _init(owner: Node2D) -> void:
 
 func fit_view_to_pieces(animate := true) -> void:
 	if host.current_mode != "swap":
-		_fit_view_to_board_outline(animate, true)
+		_fit_view_to_board_outline(animate)
 		return
 	var bounds: Rect2 = _world_content_bounds()
 	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		reset_view()
 		return
-	_fit_view_to_world_rect(bounds.grow(host.SWAP_VIEW_FIT_PADDING), animate, 1.0, true)
+	_fit_view_to_world_rect(bounds.grow(host.SWAP_VIEW_FIT_PADDING), animate)
 
 
 func reset_view() -> void:
@@ -27,8 +25,6 @@ func reset_view() -> void:
 
 func _reset_view_transform() -> void:
 	host.view_scale = 1.0
-	host.view_target_scale = 1.0
-	host.view_target_ratio = 1.0
 	host.base_view_scale = 1.0
 	host.base_view_offset = Vector2.ZERO
 	host.view_offset = Vector2.ZERO
@@ -41,7 +37,6 @@ func _apply_view_transform() -> void:
 	host.world_root.position = host.view_offset
 	host.world_root.scale = Vector2.ONE * host.view_scale
 	host._refresh_hint_line_widths()
-	host._refresh_snap_preview_line_widths()
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
@@ -52,41 +47,14 @@ func _world_to_screen(world_pos: Vector2) -> Vector2:
 	return world_pos * host.view_scale + host.view_offset
 
 
-func _view_ratio() -> float:
-	return _view_ratio_for_scale(host.view_scale)
-
-
-func _view_ratio_for_scale(scale: float) -> float:
-	return scale / maxf(0.001, host.base_view_scale)
-
-
-func _clamped_actual_scale(scale: float) -> float:
-	var min_scale: float = host.base_view_scale * host.VIEW_MIN_RATIO
-	var max_scale: float = host.base_view_scale * host.VIEW_MAX_RATIO
-	return clampf(scale, min_scale, maxf(min_scale, max_scale))
-
-
-func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
-	var before: Vector2 = _screen_to_world(screen_anchor)
-	host.view_scale = _clamped_actual_scale(target_scale)
-	host.view_target_scale = host.view_scale
-	host.view_target_ratio = _view_ratio_for_scale(host.view_scale)
-	host.view_offset = screen_anchor - before * host.view_scale
-	_clamp_view_to_table()
-	_apply_view_transform()
-	host._notify_state_changed()
-
-
 func _animate_view_to(
 	target_scale: float, target_offset: Vector2, duration: float, clamp_target := true
 ) -> void:
 	if host.view_tween != null and host.view_tween.is_valid():
 		host.view_tween.kill()
-	host.view_target_scale = _clamped_actual_scale(target_scale)
-	host.view_target_ratio = _view_ratio_for_scale(host.view_target_scale)
 	var start_scale: float = host.view_scale
 	var start_offset: Vector2 = host.view_offset
-	var final_scale: float = host.view_target_scale
+	var final_scale: float = target_scale
 	var final_offset: Vector2 = (
 		_clamped_view_offset(target_offset, final_scale) if clamp_target else target_offset
 	)
@@ -124,6 +92,7 @@ func _pan_view(delta: Vector2) -> void:
 
 
 func _begin_pan(_screen_pos: Vector2, touch_index: int) -> void:
+	_stop_view_motion()
 	host.panning = true
 	host.pan_touch_index = touch_index
 
@@ -133,43 +102,10 @@ func _end_pan() -> void:
 	host.pan_touch_index = -1
 
 
-func _begin_pinch() -> void:
-	host._end_drag()
-	_end_pan()
-	var points: Array[Vector2] = _active_touch_points()
-	if points.size() < 2:
-		return
-	host.pinch_active = true
-	host.pinch_start_distance = maxf(1.0, points[0].distance_to(points[1]))
-	host.pinch_start_scale = host.view_scale
-	var midpoint: Vector2 = (points[0] + points[1]) * 0.5
-	host.pinch_start_world_midpoint = _screen_to_world(midpoint)
-
-
-func _update_pinch() -> void:
-	var points: Array[Vector2] = _active_touch_points()
-	if points.size() < 2:
-		return
-	var distance: float = maxf(1.0, points[0].distance_to(points[1]))
-	var midpoint: Vector2 = (points[0] + points[1]) * 0.5
-	host.view_scale = _clamped_actual_scale(
-		host.pinch_start_scale * distance / host.pinch_start_distance
-	)
-	host.view_target_scale = host.view_scale
-	host.view_target_ratio = _view_ratio_for_scale(host.view_scale)
-	host.view_offset = midpoint - host.pinch_start_world_midpoint * host.view_scale
-	_clamp_view_to_table()
-	_apply_view_transform()
-	host._notify_state_changed()
-
-
-func _active_touch_points() -> Array[Vector2]:
-	var points: Array[Vector2] = []
-	for key in host.active_touches.keys():
-		points.append(host.active_touches[key])
-		if points.size() >= 2:
-			break
-	return points
+func _stop_view_motion() -> void:
+	if host.view_tween != null and host.view_tween.is_valid():
+		host.view_tween.kill()
+	host.view_tween = null
 
 
 func _clamp_view_to_table() -> void:
@@ -243,7 +179,7 @@ func _world_view_screen_rect() -> Rect2:
 	)
 
 
-func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
+func _fit_view_to_board_outline(animate: bool) -> void:
 	var board := Rect2(host.board_origin, host.source_size * host.source_scale)
 	if board.size.x <= 0.0 or board.size.y <= 0.0:
 		return
@@ -258,23 +194,17 @@ func _fit_view_to_board_outline(animate: bool, set_baseline := false) -> void:
 		)
 	)
 	var target_offset: Vector2 = view_rect.get_center() - board.get_center() * target_scale
-	if set_baseline:
-		host.base_view_scale = target_scale
-		host.base_view_offset = target_offset
-		host.view_target_ratio = 1.0
+	host.base_view_scale = target_scale
+	host.base_view_offset = target_offset
 	if animate:
 		_animate_view_to(target_scale, target_offset, 0.22, false)
 	else:
 		host.view_scale = target_scale
-		host.view_target_scale = target_scale
-		host.view_target_ratio = _view_ratio_for_scale(target_scale)
 		host.view_offset = target_offset
 		_apply_view_transform()
 
 
-func _fit_view_to_world_rect(
-	bounds: Rect2, animate: bool, max_ratio := VIEW_MAX_RATIO, set_baseline := false
-) -> void:
+func _fit_view_to_world_rect(bounds: Rect2, animate: bool) -> void:
 	var view_rect: Rect2 = _world_view_screen_rect()
 	var target_center := bounds.get_center()
 	var target_scale := minf(
@@ -283,26 +213,12 @@ func _fit_view_to_world_rect(
 	target_scale = maxf(0.001, target_scale)
 	var target_offset: Vector2 = view_rect.get_center() - target_center * target_scale
 	target_offset = _clamped_view_offset(target_offset, target_scale)
-	if set_baseline:
-		host.base_view_scale = target_scale
-		host.base_view_offset = target_offset
-		host.view_target_ratio = 1.0
-	else:
-		target_scale = _clamped_actual_scale(
-			clampf(
-				target_scale,
-				host.base_view_scale * host.VIEW_MIN_RATIO,
-				host.base_view_scale * minf(max_ratio, host.VIEW_MAX_RATIO)
-			)
-		)
-		target_offset = view_rect.get_center() - target_center * target_scale
-		target_offset = _clamped_view_offset(target_offset, target_scale)
+	host.base_view_scale = target_scale
+	host.base_view_offset = target_offset
 	if animate:
 		_animate_view_to(target_scale, target_offset, 0.22)
 	else:
 		host.view_scale = target_scale
-		host.view_target_scale = target_scale
-		host.view_target_ratio = _view_ratio_for_scale(target_scale)
 		host.view_offset = target_offset
 		_clamp_view_to_table()
 		_apply_view_transform()
