@@ -45,3 +45,9 @@ uses a lower-right shadow consistent with the upper-left scene light.
 Do not generate inner outlines, concentric rims, doubled borders, or inset
 copies for mode icons. Each glyph has one silhouette and one softly rounded
 outer edge.
+
+## First-release gameplay surfaces
+
+Shared puzzle pieces use a thin lower-right side and restrained directional bevels; source artwork and cut geometry remain unchanged. Side faces reuse source triangulation to avoid unstable concave fills at different display scales. Drag positions follow input directly; lift decoration must not delay them. Reduced Motion grid shifts use a single 0.2-second opacity recovery without spatial movement.
+
+The board and tray use warm parchment surfaces to separate pieces from the detailed desktop. The reference image is available on demand and preserves its full aspect ratio. Completion frames fit the original artwork rather than cropping it. Mode selection includes visible names and a one-sentence explanation of the selected mode.
