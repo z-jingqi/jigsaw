@@ -67,7 +67,7 @@ func start() -> void:
 	_board.completed.connect(_on_board_completed)
 	_board.state_changed.connect(_on_board_state_changed)
 	_apply_feedback_preferences()
-	_game.get_viewport().size_changed.connect(_refresh_board_blockers)
+	_game.get_viewport().size_changed.connect(_refresh_gameplay_layout, CONNECT_DEFERRED)
 	_current_theme_id = _services.initial_home_theme_id()
 	show_home(_current_theme_id)
 
@@ -618,6 +618,13 @@ func _refresh_board_blockers() -> void:
 	var screen := _navigator.current_screen_view() as GameplayScreen
 	if is_instance_valid(_board) and screen != null:
 		_board.set_drag_blockers(screen.board_reserved_rects())
+
+
+func _refresh_gameplay_layout() -> void:
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen == null:
+		return
+	preload("res://scripts/gameplay/board/BoardViewportLayout.gd").refresh(_board, screen)
 
 
 func _apply_feedback_preferences() -> void:
