@@ -10,11 +10,13 @@ const BEVEL_WIDTH := 2.2
 
 var points := PackedVector2Array()
 var surface := false
+var triangles := PackedInt32Array()
 
 
 func setup(polygon: PackedVector2Array, draw_surface: bool) -> void:
 	points = polygon
 	surface = draw_surface
+	triangles = Geometry2D.triangulate_polygon(points) if not surface else PackedInt32Array()
 	z_index = 2 if surface else -1
 	set_notify_transform(true)
 	queue_redraw()
@@ -34,7 +36,16 @@ func _draw() -> void:
 		var side := PackedVector2Array()
 		for point in points:
 			side.append(point + DEPTH / canvas_scale)
-		draw_colored_polygon(side, SIDE_COLOR)
+		# Translating a concave outline can make near-collinear knob edges fail
+		# triangulation at some viewport scales. Reuse the source triangulation.
+		for index in range(0, triangles.size(), 3):
+			draw_primitive(
+				PackedVector2Array(
+					[side[triangles[index]], side[triangles[index + 1]], side[triangles[index + 2]]]
+				),
+				PackedColorArray([SIDE_COLOR]),
+				PackedVector2Array(),
+			)
 		return
 	var width := BEVEL_WIDTH / canvas_scale
 	var winding := -1.0 if Geometry2D.is_polygon_clockwise(points) else 1.0
