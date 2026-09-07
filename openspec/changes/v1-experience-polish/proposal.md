@@ -1,0 +1,25 @@
+## Why
+
+首版已有三种玩法，但碎片质感、操作连续性与界面一致性仍需要打磨。以山海经九尾狐（topic_01/shanhai_01）作为共同样板，将改进放入共用运行模块，让其他关卡同步受益。
+
+## What Changes
+
+- 保留三种玩法和模式选择，不增加难度、社交、排行榜或每日挑战。
+- 清理已经退出产品的拼片旋转代码及过时说明，兼容旧状态。
+- 实现实体拼片侧边与倒角，统一三模式材质和拿放反馈。
+- 改善拖动、吸附、交换的连续性及中断处理。
+- 统一游戏页、完成页与模式入口，验证其他关卡复用。
+
+## Capabilities
+
+### New Capabilities
+
+- `puzzle-experience`: 三模式无旋转体验、实体材质、连续输入与作品展示的首版要求。
+
+### Modified Capabilities
+
+无既有 OpenSpec 主规范。
+
+## Impact
+
+影响 scripts/gameplay/board、scripts/screens、scripts/modals、相关场景与说明。保持现有关卡标识和进度，不引入运行时外部依赖。按 docs/V1_RELEASE_UPGRADE_PLAN.md 分阶段执行；真机验收和外部试玩未完成时不宣称可发布。

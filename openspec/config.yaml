@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Language: zh-CN
+  All artifacts must be written in zh-CN.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+  项目：JigCat，Godot 移动端竖屏拼图游戏。引擎版本以 project.godot 为准。
+  遵循仓库 AGENTS.md；它是开发、验证和 Git 集成规则的权威来源。
+  场景位于 scenes/，运行时脚本位于 scripts/，关卡数据位于 levels/，制作工具位于 level-editor/。
+  三种玩法（多边形、经典凹凸、方格交换）和模式选择都保留，不设难度选择。
+  产品已移除旋转；残留代码清理是待实施工作，不得描述成已经完成。
+  首版不做社交、排行榜、每日挑战。
+  首版改造规划见 docs/V1_RELEASE_UPGRADE_PLAN.md，视觉规范见 docs/UI_VISUAL_STYLE.md。
+  以一个关卡覆盖三模式来打磨共用实现，再抽查其他关卡；避免按样板关卡 ID 硬编码。
+  Game.gd 和 PuzzleBoard.gd 保持协调职责，新行为由专门模块承担。
+  当前 AGENTS.md 暂停测试套件：不要擅自启用、新建测试或更改视觉基线。
+  视觉验证运行正常非 headless 窗口，触控和震动使用真机；交付时如实说明未运行的套件。
+  实施遵守功能集成分支与 PR 流程，不直接推送 main。
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
