@@ -43,10 +43,6 @@ func _update_snap_preview(active) -> void:
 		host.snap_preview_key = key
 		_add_snap_preview_outline(match.get("active_member", {}))
 		_add_snap_preview_outline(match.get("other_member", {}))
-	var distance := float(match.get("distance", _snap_tolerance()))
-	var correction: Vector2 = match.get("correction", Vector2.ZERO)
-	if distance > 0.5:
-		active.node.position += correction * host.SNAP_PREVIEW_PULL
 	if host.snap_ready_key != key:
 		host.snap_ready_key = key
 		host._trigger_haptic("ready")

@@ -31,7 +31,6 @@ const HINT_TRAY_SCROLL_TIME := 0.3
 const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.0
-const SNAP_PREVIEW_PULL := 0.10
 const SNAP_PREVIEW_COLOR := Color(0.16, 0.70, 0.62, 0.92)
 const SNAP_PREVIEW_SCREEN_WIDTH := 3.0
 const SEAM_SCREEN_WIDTH := 1.6
@@ -199,6 +198,12 @@ func _ready() -> void:
 
 func board_screen_edge_gap() -> float:
 	return SWAP_BOARD_SCREEN_EDGE_GAP if current_mode == "swap" else BOARD_SCREEN_EDGE_GAP
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		if input_controller != null:
+			input_controller.cancel_interaction()
 
 
 func _exit_tree() -> void:

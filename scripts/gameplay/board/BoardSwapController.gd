@@ -144,7 +144,7 @@ func _clear_swap_target_preview() -> void:
 func _swap_tile_at_world(world_pos: Vector2, exclude = null):
 	for index in range(host.swap_tiles.size() - 1, -1, -1):
 		var tile = host.swap_tiles[index]
-		if tile == exclude:
+		if tile == exclude or bool(tile.get("is_animating", false)):
 			continue
 		var node: Node2D = tile["node"]
 		if not is_instance_valid(node):
@@ -173,21 +173,19 @@ func _set_swap_tile_lifted(tile, lifted: bool) -> void:
 	var node: Node2D = tile["node"]
 	if not is_instance_valid(node):
 		return
-	var target_scale := Vector2(1.025, 1.025) if lifted else Vector2.ONE
-	if host.reduced_motion:
-		node.scale = target_scale
-		return
-	var tween := host.create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(node, "scale", target_scale, 0.12)
+	var visual := node.get_child(0) as Node2D
+	host.PieceVisualFactoryScript.set_visual_lifted(visual, lifted, host, not host.reduced_motion)
 
 
 func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	if tile == null or not is_instance_valid(tile["node"]):
 		return
+	var previous: Tween = tile.get("position_tween", null)
+	if previous != null and previous.is_valid():
+		previous.kill()
 	tile["is_animating"] = true
-	var tween := host.create_tween()
+	var tween := host.create_tween().bind_node(tile["node"])
+	tile["position_tween"] = tween
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(
@@ -197,6 +195,7 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 		func(t = tile) -> void:
 			if is_instance_valid(t["node"]):
 				t["is_animating"] = false
+				t["position_tween"] = null
 			_check_swap_complete()
 			host._notify_state_changed(true)
 	)
@@ -351,6 +350,8 @@ func _check_swap_complete() -> void:
 	if host.completion_emitted or host.swap_tiles.is_empty():
 		return
 	for tile in host.swap_tiles:
+		if bool(tile.get("is_animating", false)):
+			return
 		if int(tile["slot_index"]) != int(tile["correct_index"]):
 			return
 	host.completion_emitted = true
