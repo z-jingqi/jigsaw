@@ -6,6 +6,7 @@ const TRAY_HIT_PADDING := 18.0
 var host: Node2D
 var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
 var grid_cells: Dictionary = {}
+var grab_gesture := preload("res://scripts/gameplay/board/TrayGrabGesture.gd").new()
 
 
 func _init(owner: Node2D) -> void:
@@ -163,7 +164,8 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 	group.tray_slot = cell.slot
 
 	var target_position: Vector2 = top_left - bounds.position * scale
-	group.node.z_index = index * host.GROUP_Z_STEP
+	group.node.z_as_relative = false
+	group.node.z_index = host.TRAY_Z_INDEX + 1
 	if instant:
 		group.is_animating = false
 		group.node.scale = Vector2.ONE * scale
@@ -202,20 +204,12 @@ func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := 
 	return null
 
 
-func _begin_tray_piece_press(group, _screen_pos: Vector2) -> void:
-	host.tray_pending_group = group
-	host.tray_pending_total_delta = Vector2.ZERO
-	group.node.z_index = host.TRAY_DRAG_Z_INDEX
-	host.PieceVisualFactoryScript.set_group_lifted(group, true, host, not host.reduced_motion)
+func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
+	_start_tray_world_drag(group, screen_pos)
 
 
 func _end_tray_piece_press() -> void:
-	var group = host.tray_pending_group
-	host.tray_pending_group = null
-	host.tray_pending_total_delta = Vector2.ZERO
-	if group != null and is_instance_valid(group.node):
-		host.PieceVisualFactoryScript.set_group_lifted(group, false, host, not host.reduced_motion)
-	_layout_tray(false)
+	grab_gesture.reset()
 
 
 func _group_local_bounds(group) -> Rect2:
@@ -246,37 +240,6 @@ func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) ->
 	host._bring_to_front(group)
 
 
-func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
-	if host.tray_pending_group == null:
-		return
-	host.tray_pending_total_delta += relative
-	var left_tray: bool = screen_pos.y < _tray_area().position.y - host.TRAY_EXIT_THRESHOLD
-	if (
-		host.tray_pending_total_delta.length() < host.TRAY_GESTURE_DECIDE_THRESHOLD
-		and not left_tray
-	):
-		return
-	if (
-		not left_tray
-		and absf(host.tray_pending_total_delta.x) > absf(host.tray_pending_total_delta.y)
-	):
-		_start_tray_scroll_from_pending(screen_pos)
-		return
-	_start_tray_world_drag(host.tray_pending_group, screen_pos)
-
-
-func _start_tray_scroll_from_pending(_screen_pos: Vector2) -> void:
-	host._clear_hint_highlights()
-	var group = host.tray_pending_group
-	var accumulated_x: float = host.tray_pending_total_delta.x
-	host.tray_pending_group = null
-	host.tray_pending_total_delta = Vector2.ZERO
-	if group != null and is_instance_valid(group.node):
-		host.PieceVisualFactoryScript.set_group_lifted(group, false, host, not host.reduced_motion)
-	host.tray_panning = true
-	_pan_tray(accumulated_x)
-
-
 func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	if group == null:
 		return
@@ -295,9 +258,14 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	var tray_node_screen_position: Vector2 = group.node.position
 	var tray_node_screen_scale: float = maxf(0.001, group.node.scale.x)
 	host.tray_drag_local_grab = (screen_pos - tray_node_screen_position) / tray_node_screen_scale
-	_send_group_to_world(group, host._screen_to_world(tray_node_screen_position), 1.0)
+	grab_gesture.begin(screen_pos)
+	_send_group_to_world(
+		group,
+		host._screen_to_world(tray_node_screen_position),
+		tray_node_screen_scale / maxf(0.001, host.view_scale)
+	)
+	group.node.z_as_relative = false
 	group.node.z_index = host.TRAY_DRAG_Z_INDEX
-	_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
 	_place_dragging_from_screen(screen_pos)
 	host.drag_offset = Vector2.ZERO
 	host._notify_state_changed()
@@ -306,13 +274,23 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 func _update_drag_position(screen_pos: Vector2) -> void:
 	host.last_drag_screen_pos = screen_pos
 	if host.dragging_from_tray:
-		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
+		var motion: Dictionary = grab_gesture.advance(screen_pos, _tray_area())
+		if motion.changed:
+			_stop_tray_inertia()
+		if not grab_gesture.scroll_locked:
+			_pan_tray(motion.delta_x)
+		var screen_scale: float = host.dragging.tray_scale
+		host.dragging.node.scale = (
+			Vector2.ONE
+			* (1.0 if grab_gesture.scroll_locked else screen_scale / maxf(0.001, host.view_scale))
+		)
 		_place_dragging_from_screen(screen_pos)
 		if _tray_area().has_point(screen_pos):
 			host._clear_snap_preview()
 		else:
 			host._update_snap_preview(host.dragging)
 		return
+
 	host._move_group_to(host.dragging, host._screen_to_world(screen_pos) + host.drag_offset)
 	host._update_snap_preview(host.dragging)
 
@@ -320,38 +298,8 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 func _place_dragging_from_screen(screen_pos: Vector2) -> void:
 	if host.dragging == null or not is_instance_valid(host.dragging.node):
 		return
-	var pointer_world: Vector2 = host._screen_to_world(screen_pos + host.tray_drag_screen_offset)
+	var pointer_world: Vector2 = host._screen_to_world(screen_pos)
 	host.dragging.node.position = (
 		pointer_world - host.tray_drag_local_grab * host.dragging.node.scale.x
 	)
 	host.dragging.node.z_index = host.TRAY_DRAG_Z_INDEX
-
-
-func _tray_drag_target_for_screen(screen_pos: Vector2) -> Vector2:
-	if host.dragging == null or _tray_area().has_point(screen_pos):
-		return Vector2.ZERO
-	var bounds: Rect2 = _group_local_bounds(host.dragging)
-	var bottom_at_pointer: float = bounds.end.y * host.view_scale
-	return Vector2(
-		0.0, minf(-host.TRAY_DRAG_LIFT_MARGIN, -host.TRAY_DRAG_LIFT_MARGIN - bottom_at_pointer)
-	)
-
-
-func _set_tray_drag_target_offset(target: Vector2) -> void:
-	if host.tray_drag_target_screen_offset.is_equal_approx(target):
-		return
-	host.tray_drag_target_screen_offset = target
-	if host.tray_drag_offset_tween != null and host.tray_drag_offset_tween.is_valid():
-		host.tray_drag_offset_tween.kill()
-	var start: Vector2 = host.tray_drag_screen_offset
-	host.tray_drag_offset_tween = host.create_tween()
-	host.tray_drag_offset_tween.set_ease(Tween.EASE_OUT)
-	host.tray_drag_offset_tween.set_trans(Tween.TRANS_CUBIC)
-	host.tray_drag_offset_tween.tween_method(
-		func(t: float) -> void:
-			host.tray_drag_screen_offset = start.lerp(host.tray_drag_target_screen_offset, t)
-			_place_dragging_from_screen(host.last_drag_screen_pos),
-		0.0,
-		1.0,
-		host._motion_duration(0.12)
-	)

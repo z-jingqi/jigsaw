@@ -64,9 +64,6 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		if host.tray_pending_group != null:
-			host._update_pending_tray_drag(motion.position, motion.relative)
-			return true
 		if host.tray_panning:
 			host._pan_tray(motion.relative.x)
 			return true
@@ -116,9 +113,6 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		if not host.active_touches.has(drag_event.index):
 			return false
 		host.active_touches[drag_event.index] = drag_event.position
-		if host.tray_pending_group != null and drag_event.index == host.active_touch_index:
-			host._update_pending_tray_drag(drag_event.position, drag_event.relative)
-			return true
 		if host.tray_panning and drag_event.index == host.active_touch_index:
 			host._pan_tray(drag_event.relative.x)
 			return true
@@ -157,6 +151,7 @@ func _is_empty_table(screen_pos: Vector2) -> bool:
 
 
 func cancel_interaction(clear_touches := true) -> void:
+	host.tray_controller.grab_gesture.reset()
 	if host.tray_drag_offset_tween != null and host.tray_drag_offset_tween.is_valid():
 		host.tray_drag_offset_tween.kill()
 	host.tray_drag_offset_tween = null
@@ -245,7 +240,13 @@ func _end_drag() -> void:
 	var released_group = host.dragging
 	var released_members: Array = released_group.members.duplicate()
 	host._clear_snap_preview()
-	var snapped: bool = host._try_snap_chain(host.dragging)
+	var allow_inertia: bool = (
+		host.dragging_from_tray and not host.tray_controller.grab_gesture.scroll_locked
+	)
+	var inside_tray: bool = host._tray_area().has_point(host.last_drag_screen_pos)
+	var snapped: bool = false
+	if not host.dragging_from_tray or not inside_tray:
+		snapped = host._try_snap_chain(host.dragging)
 	if host.dragging_from_tray and not snapped:
 		host._return_group_to_tray(released_group)
 	elif snapped:
@@ -267,4 +268,7 @@ func _end_drag() -> void:
 	host.tray_drag_offset_tween = null
 	host.tray_drag_local_grab = Vector2.ZERO
 	host.last_drag_screen_pos = Vector2.ZERO
+	host.tray_controller.grab_gesture.reset()
+	if allow_inertia:
+		host.tray_controller._start_tray_inertia()
 	host._notify_state_changed(true)

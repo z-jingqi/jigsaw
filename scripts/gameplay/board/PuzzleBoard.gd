@@ -15,8 +15,8 @@ const VIEW_FIT_PADDING := 36.0
 const BOARD_SCREEN_EDGE_GAP := 62.0
 const SWAP_BOARD_SCREEN_EDGE_GAP := 60.0
 const SWAP_VIEW_FIT_PADDING := 60.0
-const BOARD_LINE_FRAME_WIDTH := 1
 const BOARD_TARGET_BACKGROUND_ALPHA := 0.22
+const BOARD_LINE_FRAME_WIDTH := 1
 const VIEW_HINT_PADDING := 58.0
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
 const HINT_OUTLINE_SCREEN_WIDTH := 5.0
@@ -730,10 +730,6 @@ func _group_local_bounds(group) -> Rect2:
 
 func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) -> void:
 	tray_controller._send_group_to_world(group, world_position, local_scale)
-
-
-func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
-	tray_controller._update_pending_tray_drag(screen_pos, relative)
 
 
 func _update_drag_position(screen_pos: Vector2) -> void:
