@@ -6,6 +6,7 @@ const TRAY_HIT_PADDING := 18.0
 var host: Node2D
 var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
 var grid_cells: Dictionary = {}
+var scroll_physics := preload("res://scripts/gameplay/board/TrayScrollPhysics.gd").new()
 var grab_gesture := preload("res://scripts/gameplay/board/TrayGrabGesture.gd").new()
 
 
@@ -97,22 +98,17 @@ func _clamp_tray_scroll() -> void:
 func _pan_tray(delta_x: float, record_velocity := true) -> void:
 	if not host.hint_highlighted_groups.is_empty():
 		host._clear_hint_highlights()
-	var now := Time.get_ticks_msec()
-	if record_velocity:
-		var elapsed := (
-			maxf(0.001, float(now - host.tray_last_pan_msec) / 1000.0)
-			if host.tray_last_pan_msec > 0
-			else 0.016
-		)
-		host.tray_scroll_velocity = -delta_x / elapsed
-		host.tray_last_pan_msec = now
+	var previous: float = host.tray_scroll_offset
 	host.tray_scroll_offset -= delta_x
 	_clamp_tray_scroll()
+	if record_velocity:
+		scroll_physics.record(host.tray_scroll_offset - previous)
 	_layout_tray(true)
 	host._notify_state_changed()
 
 
 func _start_tray_inertia() -> void:
+	host.tray_scroll_velocity = scroll_physics.release_velocity()
 	if absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED:
 		_stop_tray_inertia()
 		return
@@ -120,9 +116,24 @@ func _start_tray_inertia() -> void:
 
 
 func _stop_tray_inertia() -> void:
+	scroll_physics.reset()
 	host.tray_inertia_active = false
 	host.tray_scroll_velocity = 0.0
 	host.tray_last_pan_msec = 0
+
+
+func process_scroll(delta: float) -> void:
+	if not host.tray_inertia_active:
+		return
+	var motion: Vector2 = scroll_physics.step(host.tray_scroll_velocity, delta)
+	var previous: float = host.tray_scroll_offset
+	_pan_tray(-motion.x, false)
+	host.tray_scroll_velocity = motion.y
+	if (
+		is_equal_approx(previous, host.tray_scroll_offset)
+		or absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED
+	):
+		_stop_tray_inertia()
 
 
 func _release_tray_pan() -> void:

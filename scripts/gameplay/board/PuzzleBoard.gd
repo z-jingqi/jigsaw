@@ -265,20 +265,7 @@ func _process(delta: float) -> void:
 		_update_hint_line_width(swap_target_preview_line)
 	if debug_bounds_overlay_enabled:
 		_refresh_debug_bounds_overlay()
-	if not tray_inertia_active:
-		return
-	var previous := tray_scroll_offset
-	tray_scroll_offset += tray_scroll_velocity * delta
-	_clamp_tray_scroll()
-	_layout_tray(true)
-	if is_equal_approx(previous, tray_scroll_offset):
-		_stop_tray_inertia()
-		return
-	var decay := maxf(0.0, 1.0 - TRAY_INERTIA_FRICTION * delta)
-	tray_scroll_velocity *= decay
-	if absf(tray_scroll_velocity) < TRAY_INERTIA_MIN_SPEED:
-		_stop_tray_inertia()
-	_notify_state_changed()
+	tray_controller.process_scroll(delta)
 
 
 func set_feedback_preferences(
