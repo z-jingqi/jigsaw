@@ -6,9 +6,9 @@ signal move_down_requested
 signal move_left_requested
 signal move_right_requested
 
-const BUTTON_SIZE := 228.0
+const BUTTON_SIZE := 188.0
 const BUTTON_GAP := 32.0
-const BOTTOM_MARGIN := 70.0
+const BOTTOM_MARGIN := 180.0
 const SHADOW_OFFSET := Vector2(8.0, 11.0)
 
 @onready var move_up_group: Control = $Actions/MoveUpGroup
@@ -98,9 +98,12 @@ func _configure_group(
 	visual.offset_right = 0.0
 	visual.offset_bottom = 0.0
 	shadow.pivot_offset = shadow.size * 0.5
-	shadow.rotation = angle
+	shadow.rotation = 0.0
 	visual.pivot_offset = visual.size * 0.5
-	visual.rotation = angle
+	visual.rotation = 0.0
+	var arrow := visual.get_node("Arrow") as TextureRect
+	arrow.pivot_offset = arrow.size * 0.5
+	arrow.rotation = angle
 
 
 func _set_group_pressed(group: Control, pressed: bool) -> void:

@@ -1,10 +1,11 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://sd10qrdcsd5s"]
 
-[ext_resource type="Script" path="res://scripts/gameplay/runtime/SwapActionBarView.gd" id="1_bar"]
-[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="2_action"]
-[ext_resource type="Texture2D" path="res://assets/ui/gameplay/move-row-up-primary.webp" id="3_move"]
+[ext_resource type="Script" uid="uid://dpejm44grikja" path="res://scripts/gameplay/runtime/SwapActionBarView.gd" id="1_bar"]
+[ext_resource type="Script" uid="uid://bk6q263xmpyq5" path="res://scripts/ui/foundation/ActionButton.gd" id="2_action"]
+[ext_resource type="Texture2D" uid="uid://bgtla651cic8y" path="res://assets/ui/gameplay/direction-button-base.webp" id="2_ieadn"]
+[ext_resource type="Texture2D" uid="uid://diq56q7ui1eax" path="res://assets/ui/gameplay/direction-arrow-up.webp" id="3_yy4a7"]
 
-[node name="SwapActionBar" type="Control"]
+[node name="SwapActionBar" type="Control" unique_id=1528973492]
 custom_minimum_size = Vector2(0, 400)
 layout_mode = 3
 anchors_preset = 12
@@ -17,7 +18,7 @@ grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("1_bar")
 
-[node name="Actions" type="Control" parent="."]
+[node name="Actions" type="Control" parent="." unique_id=214101743]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -26,37 +27,48 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="MoveUpGroup" type="Control" parent="Actions"]
-layout_mode = 0
+[node name="MoveUpGroup" type="Control" parent="Actions" unique_id=383203692]
+anchors_preset = 0
 offset_right = 228.0
 offset_bottom = 228.0
 mouse_filter = 2
 
-[node name="Shadow" type="TextureRect" parent="Actions/MoveUpGroup"]
+[node name="Shadow" type="TextureRect" parent="Actions/MoveUpGroup" unique_id=650790911]
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
 layout_mode = 0
 offset_left = 8.0
 offset_top = 11.0
 offset_right = 236.0
 offset_bottom = 239.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Visual" type="TextureRect" parent="Actions/MoveUpGroup"]
+[node name="Visual" type="TextureRect" parent="Actions/MoveUpGroup" unique_id=944716965]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="HitTarget" type="Button" parent="Actions/MoveUpGroup"]
+[node name="Arrow" type="TextureRect" parent="Actions/MoveUpGroup/Visual" unique_id=1948035302]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.18
+anchor_right = 0.82
+anchor_bottom = 0.82
+mouse_filter = 2
+texture = ExtResource("3_yy4a7")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HitTarget" type="Button" parent="Actions/MoveUpGroup" unique_id=474183256]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -70,39 +82,48 @@ script = ExtResource("2_action")
 kind = 2
 accessibility_label = "Move all rows up one row"
 
-[node name="MoveDownGroup" type="Control" parent="Actions"]
-layout_mode = 0
+[node name="MoveDownGroup" type="Control" parent="Actions" unique_id=1358656663]
+anchors_preset = 0
 offset_right = 228.0
 offset_bottom = 228.0
 mouse_filter = 2
 
-[node name="Shadow" type="TextureRect" parent="Actions/MoveDownGroup"]
+[node name="Shadow" type="TextureRect" parent="Actions/MoveDownGroup" unique_id=1883442052]
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
 layout_mode = 0
 offset_left = 8.0
 offset_top = 11.0
 offset_right = 236.0
 offset_bottom = 239.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
-rotation = 3.1415927
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Visual" type="TextureRect" parent="Actions/MoveDownGroup"]
+[node name="Visual" type="TextureRect" parent="Actions/MoveDownGroup" unique_id=160009326]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-rotation = 3.1415927
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="HitTarget" type="Button" parent="Actions/MoveDownGroup"]
+[node name="Arrow" type="TextureRect" parent="Actions/MoveDownGroup/Visual" unique_id=248311306]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.18
+anchor_right = 0.82
+anchor_bottom = 0.82
+mouse_filter = 2
+texture = ExtResource("3_yy4a7")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HitTarget" type="Button" parent="Actions/MoveDownGroup" unique_id=1353849385]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -116,37 +137,48 @@ script = ExtResource("2_action")
 kind = 2
 accessibility_label = "Move all rows down one row"
 
-[node name="MoveLeftGroup" type="Control" parent="Actions"]
-layout_mode = 0
+[node name="MoveLeftGroup" type="Control" parent="Actions" unique_id=976842820]
+anchors_preset = 0
 offset_right = 228.0
 offset_bottom = 228.0
 mouse_filter = 2
 
-[node name="Shadow" type="TextureRect" parent="Actions/MoveLeftGroup"]
+[node name="Shadow" type="TextureRect" parent="Actions/MoveLeftGroup" unique_id=1918241760]
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
 layout_mode = 0
 offset_left = 8.0
 offset_top = 11.0
 offset_right = 236.0
 offset_bottom = 239.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Visual" type="TextureRect" parent="Actions/MoveLeftGroup"]
+[node name="Visual" type="TextureRect" parent="Actions/MoveLeftGroup" unique_id=650162425]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="HitTarget" type="Button" parent="Actions/MoveLeftGroup"]
+[node name="Arrow" type="TextureRect" parent="Actions/MoveLeftGroup/Visual" unique_id=1325531398]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.18
+anchor_right = 0.82
+anchor_bottom = 0.82
+mouse_filter = 2
+texture = ExtResource("3_yy4a7")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HitTarget" type="Button" parent="Actions/MoveLeftGroup" unique_id=998179565]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -160,38 +192,48 @@ script = ExtResource("2_action")
 kind = 2
 accessibility_label = "Move all columns left one column"
 
-
-[node name="MoveRightGroup" type="Control" parent="Actions"]
-layout_mode = 0
+[node name="MoveRightGroup" type="Control" parent="Actions" unique_id=216841190]
+anchors_preset = 0
 offset_right = 228.0
 offset_bottom = 228.0
 mouse_filter = 2
 
-[node name="Shadow" type="TextureRect" parent="Actions/MoveRightGroup"]
+[node name="Shadow" type="TextureRect" parent="Actions/MoveRightGroup" unique_id=1857426306]
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
 layout_mode = 0
 offset_left = 8.0
 offset_top = 11.0
 offset_right = 236.0
 offset_bottom = 239.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="Visual" type="TextureRect" parent="Actions/MoveRightGroup"]
+[node name="Visual" type="TextureRect" parent="Actions/MoveRightGroup" unique_id=450283372]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("3_move")
+mouse_filter = 2
+texture = ExtResource("2_ieadn")
 expand_mode = 1
 stretch_mode = 5
-mouse_filter = 2
 
-[node name="HitTarget" type="Button" parent="Actions/MoveRightGroup"]
+[node name="Arrow" type="TextureRect" parent="Actions/MoveRightGroup/Visual" unique_id=1455647771]
+layout_mode = 0
+anchor_left = 0.18
+anchor_top = 0.18
+anchor_right = 0.82
+anchor_bottom = 0.82
+mouse_filter = 2
+texture = ExtResource("3_yy4a7")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="HitTarget" type="Button" parent="Actions/MoveRightGroup" unique_id=1167313058]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
