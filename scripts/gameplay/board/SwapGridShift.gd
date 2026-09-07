@@ -63,7 +63,13 @@ static func _animate_tile(
 		return
 	if host.reduced_motion:
 		node.position = target_position
-		_finish_tile(host, tile, pending)
+		# Preserve the final layout without spatial motion, but acknowledge the move.
+		var resting_alpha := node.modulate.a
+		node.modulate.a = resting_alpha * 0.78
+		var feedback := host.create_tween().bind_node(node)
+		feedback.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		feedback.tween_property(node, "modulate:a", resting_alpha, 0.2)
+		feedback.finished.connect(func() -> void: _finish_tile(host, tile, pending))
 		return
 	var duration: float = host.SWAP_ROW_SHIFT_ANIMATION_TIME
 	var tween := host.create_tween()

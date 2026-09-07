@@ -27,3 +27,7 @@
 测试套件仍按 AGENTS.md 暂停，未运行，未新增测试或更改视觉基线。未将鼠标事件检查当作真机触控验收；未穷举所有主题、教程页、锁定内容和异常弹窗。完成按钮通过已有完成预览进入验证，没有用预览冒充完整通关。早期临时诊断因超过桥接 8 秒限制及错误节点名称失败，已修正诊断并在新运行中重新验证；这些失败不是上述最终通过证据。
 
 结果文件在本机忽略目录 `.artifacts/v1-experience-polish/`：`button-review-polygon.json`、`button-review-knob.json`、`button-review-swap.json`、`navigation-button-review.json`、`mode-button-review.json`、`buttons-final-logs.json`。
+
+## Reduced Motion 反馈补充（2026-09-07）
+
+四向移动在减少动态效果下立即到达目标槽位，保留 0.2 秒的 78% 至原透明度淡入。正常窗口运行诊断确认四个方向起始／中间／结束状态正确，快速重复输入被保护，中途返回再进入无透明度或操作锁残留；结果均为 `ok: true`，游戏日志无脚本错误。测试套件仍按项目要求未运行。未改动本机设置开关。
