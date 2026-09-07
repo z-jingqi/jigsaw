@@ -103,7 +103,7 @@ func _apply_view_model() -> void:
 	icon_shadow.visible = icon_rect.texture != null
 	progress_dot.visible = _show_progress_dot and status == &"in_progress"
 	label.text = str(_read("short_label", _read("label", "")))
-	label.visible = _variant == &"selector"
+	label.visible = _variant in [&"selector", &"focus"]
 	selection_paw.visible = _variant in [&"selector", &"focus"] and _selected
 	accessibility_name = "%s, %s" % [str(_read("label", "")), _status_text(status)]
 	tooltip_text = accessibility_name
@@ -128,12 +128,15 @@ func _apply_layout() -> void:
 		selection_paw.position = Vector2(98, 270)
 		selection_paw.size = Vector2(52, 48)
 	elif _variant == &"focus":
-		custom_minimum_size = Vector2(210, 224)
+		custom_minimum_size = Vector2(210, 276)
 		size = custom_minimum_size
-		label.visible = false
+		label.visible = true
+		label.position = Vector2(0, 184)
+		label.size = Vector2(210, 42)
+		label.add_theme_font_size_override("font_size", 32)
 		progress_dot.position = Vector2(166, 2)
 		progress_dot.size = Vector2(32, 32)
-		selection_paw.position = Vector2(80, 178)
+		selection_paw.position = Vector2(80, 230)
 		selection_paw.size = Vector2(50, 46)
 	elif _variant == &"completion":
 		custom_minimum_size = Vector2(180, 170)

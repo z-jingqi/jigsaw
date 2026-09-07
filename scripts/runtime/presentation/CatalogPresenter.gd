@@ -234,7 +234,8 @@ func _mode_statuses(
 				action,
 				available,
 				_mode_short_label(mode),
-				_mode_action_label(action)
+				_mode_action_label(action),
+				_strings.text("mode_description_%s" % mode)
 			)
 		)
 	return result

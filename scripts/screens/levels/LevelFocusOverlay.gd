@@ -239,6 +239,7 @@ func _refresh_selection() -> void:
 	start_button.disabled = selected_mode.is_empty()
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	start_label.text = action_text if not action_text.is_empty() else "开始拼图"
+	$StartButton/Description.text = str(_read_from(_selected_option, "description", ""))
 
 
 func _on_start_pressed() -> void:
@@ -462,7 +463,7 @@ func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
 	var options_width := minf(760.0, size.x - 120.0)
-	options.size = Vector2(options_width, 224.0)
+	options.size = Vector2(options_width, 276.0)
 	options.position = Vector2((size.x - options_width) * 0.5, size.y * 0.535)
 	var button_width := minf(620.0, size.x * 0.52)
 	start_button.size = Vector2(button_width, 160.0)
