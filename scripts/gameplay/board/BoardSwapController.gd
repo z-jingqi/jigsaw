@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardSwapController
 
+const GridShiftScript := preload("res://scripts/gameplay/board/SwapGridShift.gd")
+
 var host: Node2D
 
 
@@ -202,85 +204,15 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 
 
 func can_shift_rows() -> bool:
-	if (
-		host.current_mode != "swap"
-		or host.swap_tiles.is_empty()
-		or host.swap_dragging != null
-		or host.panning
-		or host.pinch_active
-	):
-		return false
-	if _swap_rows() <= 1:
-		return false
-	for tile in host.swap_tiles:
-		if bool(tile.get("is_animating", false)):
-			return false
-	return true
+	return GridShiftScript.can_shift(host, false)
 
 
 func shift_rows(direction: int) -> void:
-	var step := signi(direction)
-	if step == 0 or not can_shift_rows():
-		return
-	host._clear_hint_highlights()
-	_clear_swap_target_preview()
-	var cols := _swap_cols()
-	var rows := _swap_rows()
-	var pending := {"count": host.swap_tiles.size()}
-	for tile in host.swap_tiles:
-		var old_slot := int(tile["slot_index"])
-		var old_row := int(old_slot / cols)
-		var col := old_slot % cols
-		var new_row := posmod(old_row + step, rows)
-		var new_slot := new_row * cols + col
-		var wraps := (step > 0 and old_row == rows - 1) or (step < 0 and old_row == 0)
-		tile["slot_index"] = new_slot
-		tile["is_animating"] = true
-		_animate_row_shift_tile(
-			tile, host._swap_slot_position(new_slot, cols, rows), step, wraps, pending
-		)
+	GridShiftScript.shift(host, direction, false)
 
 
-func _animate_row_shift_tile(
-	tile, target_position: Vector2, direction: int, wraps: bool, pending: Dictionary
-) -> void:
-	var node: Node2D = tile["node"]
-	if not is_instance_valid(node):
-		_finish_row_shift_tile(tile, pending)
-		return
-	if host.reduced_motion:
-		node.position = target_position
-		_finish_row_shift_tile(tile, pending)
-		return
-	var duration: float = host.SWAP_ROW_SHIFT_ANIMATION_TIME
-	var tween := host.create_tween()
-	tween.bind_node(node)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	if wraps:
-		var tile_height: float = float(tile.get("size", Vector2.ZERO).y)
-		var travel := Vector2(0.0, tile_height * float(direction))
-		tween.tween_property(node, "position", node.position + travel, duration * 0.5)
-		tween.tween_callback(
-			func() -> void:
-				if is_instance_valid(node):
-					node.position = target_position - travel
-		)
-		tween.tween_property(node, "position", target_position, duration * 0.5)
-	else:
-		tween.tween_property(node, "position", target_position, duration)
-	tween.finished.connect(func() -> void: _finish_row_shift_tile(tile, pending))
-
-
-func _finish_row_shift_tile(tile, pending: Dictionary) -> void:
-	if tile != null:
-		tile["is_animating"] = false
-	pending["count"] = maxi(0, int(pending.get("count", 1)) - 1)
-	if int(pending["count"]) > 0:
-		return
-	_check_swap_complete()
-	host._trigger_haptic("swap")
-	host._notify_state_changed(true)
+func shift_columns(direction: int) -> void:
+	GridShiftScript.shift(host, direction, true)
 
 
 func _show_swap_hint() -> void:

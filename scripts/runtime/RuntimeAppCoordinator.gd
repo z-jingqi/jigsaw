@@ -364,6 +364,11 @@ func shift_swap_rows(up: bool) -> void:
 		_board.shift_swap_rows_down()
 
 
+func shift_swap_columns(direction: int) -> void:
+	if is_instance_valid(_board):
+		_board.shift_swap_columns(direction)
+
+
 func debug_board(method: StringName) -> void:
 	if is_instance_valid(_board) and _board.has_method(method):
 		_board.call(method)
@@ -420,6 +425,8 @@ func _bind_gameplay(screen: GameplayScreen) -> void:
 	screen.hint_requested.connect(trigger_hint)
 	screen.move_swap_up_requested.connect(shift_swap_rows.bind(true))
 	screen.move_swap_down_requested.connect(shift_swap_rows.bind(false))
+	screen.move_swap_left_requested.connect(shift_swap_columns.bind(-1))
+	screen.move_swap_right_requested.connect(shift_swap_columns.bind(1))
 
 
 func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:

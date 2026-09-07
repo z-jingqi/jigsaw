@@ -3,9 +3,11 @@ extends Control
 
 signal move_up_requested
 signal move_down_requested
+signal move_left_requested
+signal move_right_requested
 
 const BUTTON_SIZE := 228.0
-const BUTTON_GAP := 68.0
+const BUTTON_GAP := 32.0
 const BOTTOM_MARGIN := 70.0
 const SHADOW_OFFSET := Vector2(8.0, 11.0)
 
@@ -13,6 +15,11 @@ const SHADOW_OFFSET := Vector2(8.0, 11.0)
 @onready var move_down_group: Control = $Actions/MoveDownGroup
 @onready var move_up: ActionButton = $Actions/MoveUpGroup/HitTarget
 @onready var move_down: ActionButton = $Actions/MoveDownGroup/HitTarget
+
+@onready var move_left_group: Control = $Actions/MoveLeftGroup
+@onready var move_right_group: Control = $Actions/MoveRightGroup
+@onready var move_left: ActionButton = $Actions/MoveLeftGroup/HitTarget
+@onready var move_right: ActionButton = $Actions/MoveRightGroup/HitTarget
 
 var _reduced_motion := false
 var _press_tweens: Dictionary = {}
@@ -25,6 +32,12 @@ func _ready() -> void:
 	move_up.button_up.connect(_set_group_pressed.bind(move_up_group, false))
 	move_down.button_down.connect(_set_group_pressed.bind(move_down_group, true))
 	move_down.button_up.connect(_set_group_pressed.bind(move_down_group, false))
+	move_left.pressed.connect(move_left_requested.emit)
+	move_right.pressed.connect(move_right_requested.emit)
+	move_left.button_down.connect(_set_group_pressed.bind(move_left_group, true))
+	move_left.button_up.connect(_set_group_pressed.bind(move_left_group, false))
+	move_right.button_down.connect(_set_group_pressed.bind(move_right_group, true))
+	move_right.button_up.connect(_set_group_pressed.bind(move_right_group, false))
 	resized.connect(_apply_layout)
 	_apply_layout()
 
@@ -38,11 +51,15 @@ func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
 	move_up.set_reduced_motion(enabled)
 	move_down.set_reduced_motion(enabled)
+	move_left.set_reduced_motion(enabled)
+	move_right.set_reduced_motion(enabled)
 
 
 func set_actions_enabled(enabled: bool) -> void:
 	move_up.disabled = not enabled
 	move_down.disabled = not enabled
+	move_left.disabled = not enabled
+	move_right.disabled = not enabled
 
 
 func _apply_layout() -> void:
@@ -51,22 +68,22 @@ func _apply_layout() -> void:
 	var scale := float(get_meta(&"gameplay_layout_scale", 1.0))
 	var button_size := BUTTON_SIZE * scale
 	var gap := BUTTON_GAP * scale
-	var total_width := button_size * 2.0 + gap
+	var total_width := button_size * 4.0 + gap * 3.0
 	var top := maxf(0.0, size.y - BOTTOM_MARGIN * scale - button_size)
-	_configure_group(
-		move_up_group, Vector2((size.x - total_width) * 0.5, top), button_size, false, scale
-	)
-	_configure_group(
-		move_down_group,
-		Vector2((size.x - total_width) * 0.5 + button_size + gap, top),
-		button_size,
-		true,
-		scale,
-	)
+	var groups := [move_left_group, move_up_group, move_down_group, move_right_group]
+	var angles := [-PI * 0.5, 0.0, PI, PI * 0.5]
+	for index in groups.size():
+		_configure_group(
+			groups[index],
+			Vector2((size.x - total_width) * 0.5 + index * (button_size + gap), top),
+			button_size,
+			angles[index],
+			scale
+		)
 
 
 func _configure_group(
-	group: Control, position: Vector2, button_size: float, rotated: bool, scale: float
+	group: Control, position: Vector2, button_size: float, angle: float, scale: float
 ) -> void:
 	group.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	group.position = position
@@ -81,9 +98,9 @@ func _configure_group(
 	visual.offset_right = 0.0
 	visual.offset_bottom = 0.0
 	shadow.pivot_offset = shadow.size * 0.5
-	shadow.rotation = PI if rotated else 0.0
+	shadow.rotation = angle
 	visual.pivot_offset = visual.size * 0.5
-	visual.rotation = PI if rotated else 0.0
+	visual.rotation = angle
 
 
 func _set_group_pressed(group: Control, pressed: bool) -> void:

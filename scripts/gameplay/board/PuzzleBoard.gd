@@ -808,6 +808,10 @@ func shift_swap_rows_down() -> void:
 	swap_controller.shift_rows(1)
 
 
+func shift_swap_columns(direction: int) -> void:
+	swap_controller.shift_columns(direction)
+
+
 func _show_swap_hint() -> void:
 	swap_controller._show_swap_hint()
 

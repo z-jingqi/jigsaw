@@ -115,3 +115,92 @@ flat = true
 script = ExtResource("2_action")
 kind = 2
 accessibility_label = "Move all rows down one row"
+
+[node name="MoveLeftGroup" type="Control" parent="Actions"]
+layout_mode = 0
+offset_right = 228.0
+offset_bottom = 228.0
+mouse_filter = 2
+
+[node name="Shadow" type="TextureRect" parent="Actions/MoveLeftGroup"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 11.0
+offset_right = 236.0
+offset_bottom = 239.0
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Visual" type="TextureRect" parent="Actions/MoveLeftGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="HitTarget" type="Button" parent="Actions/MoveLeftGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+flat = true
+script = ExtResource("2_action")
+kind = 2
+accessibility_label = "Move all columns left one column"
+
+
+[node name="MoveRightGroup" type="Control" parent="Actions"]
+layout_mode = 0
+offset_right = 228.0
+offset_bottom = 228.0
+mouse_filter = 2
+
+[node name="Shadow" type="TextureRect" parent="Actions/MoveRightGroup"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 11.0
+offset_right = 236.0
+offset_bottom = 239.0
+modulate = Color(0.301961, 0.145098, 0.054902, 0.22)
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Visual" type="TextureRect" parent="Actions/MoveRightGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("3_move")
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="HitTarget" type="Button" parent="Actions/MoveRightGroup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+flat = true
+script = ExtResource("2_action")
+kind = 2
+accessibility_label = "Move all columns right one column"
