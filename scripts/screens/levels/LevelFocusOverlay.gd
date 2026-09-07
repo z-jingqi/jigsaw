@@ -239,7 +239,6 @@ func _refresh_selection() -> void:
 	start_button.disabled = selected_mode.is_empty()
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	start_label.text = action_text if not action_text.is_empty() else "开始拼图"
-	$StartButton/Description.text = str(_read_from(_selected_option, "description", ""))
 
 
 func _on_start_pressed() -> void:

@@ -28,7 +28,6 @@ class ModeStatusViewModel:
 	var status: StringName
 	var action: StringName
 	var action_label: String
-	var description: String
 	var enabled: bool
 
 	func _init(
@@ -38,8 +37,7 @@ class ModeStatusViewModel:
 		p_action: StringName,
 		p_enabled: bool,
 		p_short_label := "",
-		p_action_label := "",
-		p_description := ""
+		p_action_label := ""
 	) -> void:
 		mode = p_mode
 		label = p_label
@@ -47,7 +45,6 @@ class ModeStatusViewModel:
 		status = p_status
 		action = p_action
 		action_label = p_action_label
-		description = p_description
 		enabled = p_enabled
 
 
