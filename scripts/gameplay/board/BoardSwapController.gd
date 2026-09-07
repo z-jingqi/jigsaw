@@ -303,20 +303,20 @@ func _show_swap_hint() -> void:
 
 func _find_swap_hint_pair() -> Array:
 	var by_slot := {}
+	var by_correct := {}
 	for tile in host.swap_tiles:
+		if bool(tile.get("is_animating", false)):
+			return []
 		by_slot[int(tile["slot_index"])] = tile
-	var fallback: Array = []
-	for tile in host.swap_tiles:
-		if int(tile["slot_index"]) == int(tile["correct_index"]):
+		by_correct[int(tile["correct_index"])] = tile
+	for slot in range(_swap_cols() * _swap_rows()):
+		var occupant = by_slot.get(slot)
+		if occupant == null or int(occupant["correct_index"]) == slot:
 			continue
-		var occupant = by_slot.get(int(tile["correct_index"]), null)
-		if occupant == null or occupant == tile:
-			continue
-		if int(occupant["correct_index"]) == int(tile["slot_index"]):
-			return [tile, occupant]
-		if fallback.is_empty():
-			fallback = [tile, occupant]
-	return fallback
+		var correct_piece = by_correct.get(slot)
+		if correct_piece != null:
+			return [correct_piece, occupant]
+	return []
 
 
 func _add_swap_hint_outline(tile) -> void:
