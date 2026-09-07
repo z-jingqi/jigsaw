@@ -50,9 +50,7 @@ func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
 	elif group.tray_slot.end.x > area.end.x:
 		target_offset += group.tray_slot.end.x - area.end.x
 	target_offset = clampf(
-		target_offset,
-		0.0,
-		maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING)
+		target_offset, 0.0, maxf(0.0, host.tray_content_width - host._tray_area().size.x)
 	)
 	if absf(target_offset - host.tray_scroll_offset) < 1.0:
 		on_done.call()
@@ -107,7 +105,8 @@ func _bring_hint_group_to_front(group) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
 	if group.in_tray:
-		group.node.z_index = host.HINT_GROUP_Z_INDEX
+		group.node.z_as_relative = false
+		group.node.z_index = host.TRAY_Z_INDEX + 2
 		return
 	host._bring_to_front(group)
 	group.node.z_index = host.HINT_GROUP_Z_INDEX

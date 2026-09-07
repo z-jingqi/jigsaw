@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardSwapController
 
+const GridShiftScript := preload("res://scripts/gameplay/board/SwapGridShift.gd")
+
 var host: Node2D
 
 
@@ -144,7 +146,7 @@ func _clear_swap_target_preview() -> void:
 func _swap_tile_at_world(world_pos: Vector2, exclude = null):
 	for index in range(host.swap_tiles.size() - 1, -1, -1):
 		var tile = host.swap_tiles[index]
-		if tile == exclude:
+		if tile == exclude or bool(tile.get("is_animating", false)):
 			continue
 		var node: Node2D = tile["node"]
 		if not is_instance_valid(node):
@@ -173,21 +175,19 @@ func _set_swap_tile_lifted(tile, lifted: bool) -> void:
 	var node: Node2D = tile["node"]
 	if not is_instance_valid(node):
 		return
-	var target_scale := Vector2(1.025, 1.025) if lifted else Vector2.ONE
-	if host.reduced_motion:
-		node.scale = target_scale
-		return
-	var tween := host.create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(node, "scale", target_scale, 0.12)
+	var visual := node.get_child(0) as Node2D
+	host.PieceVisualFactoryScript.set_visual_lifted(visual, lifted, host, not host.reduced_motion)
 
 
 func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 	if tile == null or not is_instance_valid(tile["node"]):
 		return
+	var previous: Tween = tile.get("position_tween", null)
+	if previous != null and previous.is_valid():
+		previous.kill()
 	tile["is_animating"] = true
-	var tween := host.create_tween()
+	var tween := host.create_tween().bind_node(tile["node"])
+	tile["position_tween"] = tween
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(
@@ -197,91 +197,22 @@ func _animate_swap_tile_to(tile, target_position: Vector2) -> void:
 		func(t = tile) -> void:
 			if is_instance_valid(t["node"]):
 				t["is_animating"] = false
+				t["position_tween"] = null
 			_check_swap_complete()
 			host._notify_state_changed(true)
 	)
 
 
 func can_shift_rows() -> bool:
-	if (
-		host.current_mode != "swap"
-		or host.swap_tiles.is_empty()
-		or host.swap_dragging != null
-		or host.panning
-		or host.pinch_active
-	):
-		return false
-	if _swap_rows() <= 1:
-		return false
-	for tile in host.swap_tiles:
-		if bool(tile.get("is_animating", false)):
-			return false
-	return true
+	return GridShiftScript.can_shift(host, false)
 
 
 func shift_rows(direction: int) -> void:
-	var step := signi(direction)
-	if step == 0 or not can_shift_rows():
-		return
-	host._clear_hint_highlights()
-	_clear_swap_target_preview()
-	var cols := _swap_cols()
-	var rows := _swap_rows()
-	var pending := {"count": host.swap_tiles.size()}
-	for tile in host.swap_tiles:
-		var old_slot := int(tile["slot_index"])
-		var old_row := int(old_slot / cols)
-		var col := old_slot % cols
-		var new_row := posmod(old_row + step, rows)
-		var new_slot := new_row * cols + col
-		var wraps := (step > 0 and old_row == rows - 1) or (step < 0 and old_row == 0)
-		tile["slot_index"] = new_slot
-		tile["is_animating"] = true
-		_animate_row_shift_tile(
-			tile, host._swap_slot_position(new_slot, cols, rows), step, wraps, pending
-		)
+	GridShiftScript.shift(host, direction, false)
 
 
-func _animate_row_shift_tile(
-	tile, target_position: Vector2, direction: int, wraps: bool, pending: Dictionary
-) -> void:
-	var node: Node2D = tile["node"]
-	if not is_instance_valid(node):
-		_finish_row_shift_tile(tile, pending)
-		return
-	if host.reduced_motion:
-		node.position = target_position
-		_finish_row_shift_tile(tile, pending)
-		return
-	var duration: float = host.SWAP_ROW_SHIFT_ANIMATION_TIME
-	var tween := host.create_tween()
-	tween.bind_node(node)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	if wraps:
-		var tile_height: float = float(tile.get("size", Vector2.ZERO).y)
-		var travel := Vector2(0.0, tile_height * float(direction))
-		tween.tween_property(node, "position", node.position + travel, duration * 0.5)
-		tween.tween_callback(
-			func() -> void:
-				if is_instance_valid(node):
-					node.position = target_position - travel
-		)
-		tween.tween_property(node, "position", target_position, duration * 0.5)
-	else:
-		tween.tween_property(node, "position", target_position, duration)
-	tween.finished.connect(func() -> void: _finish_row_shift_tile(tile, pending))
-
-
-func _finish_row_shift_tile(tile, pending: Dictionary) -> void:
-	if tile != null:
-		tile["is_animating"] = false
-	pending["count"] = maxi(0, int(pending.get("count", 1)) - 1)
-	if int(pending["count"]) > 0:
-		return
-	_check_swap_complete()
-	host._trigger_haptic("swap")
-	host._notify_state_changed(true)
+func shift_columns(direction: int) -> void:
+	GridShiftScript.shift(host, direction, true)
 
 
 func _show_swap_hint() -> void:
@@ -304,20 +235,20 @@ func _show_swap_hint() -> void:
 
 func _find_swap_hint_pair() -> Array:
 	var by_slot := {}
+	var by_correct := {}
 	for tile in host.swap_tiles:
+		if bool(tile.get("is_animating", false)):
+			return []
 		by_slot[int(tile["slot_index"])] = tile
-	var fallback: Array = []
-	for tile in host.swap_tiles:
-		if int(tile["slot_index"]) == int(tile["correct_index"]):
+		by_correct[int(tile["correct_index"])] = tile
+	for slot in range(_swap_cols() * _swap_rows()):
+		var occupant = by_slot.get(slot)
+		if occupant == null or int(occupant["correct_index"]) == slot:
 			continue
-		var occupant = by_slot.get(int(tile["correct_index"]), null)
-		if occupant == null or occupant == tile:
-			continue
-		if int(occupant["correct_index"]) == int(tile["slot_index"]):
-			return [tile, occupant]
-		if fallback.is_empty():
-			fallback = [tile, occupant]
-	return fallback
+		var correct_piece = by_correct.get(slot)
+		if correct_piece != null:
+			return [correct_piece, occupant]
+	return []
 
 
 func _add_swap_hint_outline(tile) -> void:
@@ -351,6 +282,8 @@ func _check_swap_complete() -> void:
 	if host.completion_emitted or host.swap_tiles.is_empty():
 		return
 	for tile in host.swap_tiles:
+		if bool(tile.get("is_animating", false)):
+			return
 		if int(tile["slot_index"]) != int(tile["correct_index"]):
 			return
 	host.completion_emitted = true

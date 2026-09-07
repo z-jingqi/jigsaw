@@ -5,6 +5,8 @@ signal back_requested
 signal hint_requested
 signal move_swap_up_requested
 signal move_swap_down_requested
+signal move_swap_left_requested
+signal move_swap_right_requested
 
 const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLayout.gd")
 
@@ -27,6 +29,8 @@ func _ready() -> void:
 	hint_button.pressed.connect(hint_requested.emit)
 	swap_action_bar.move_up_requested.connect(move_swap_up_requested.emit)
 	swap_action_bar.move_down_requested.connect(move_swap_down_requested.emit)
+	swap_action_bar.move_left_requested.connect(move_swap_left_requested.emit)
+	swap_action_bar.move_right_requested.connect(move_swap_right_requested.emit)
 	resized.connect(_apply_current_layout)
 	_set_input_live(false)
 	_apply_current_layout()

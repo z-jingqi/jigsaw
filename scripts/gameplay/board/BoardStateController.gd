@@ -14,9 +14,7 @@ func _init(owner: Node2D) -> void:
 
 
 func snapshot() -> Dictionary:
-	var tray_max_scroll := maxf(
-		0.0, board.tray_content_width - board._tray_area().size.x + board.TRAY_PADDING
-	)
+	var tray_max_scroll := maxf(0.0, board.tray_content_width - board._tray_area().size.x)
 	var snapshot := {
 		"version": 2,
 		"mode": board.current_mode,
@@ -59,6 +57,9 @@ func snapshot() -> Dictionary:
 		for group in board.groups:
 			if group == null or not is_instance_valid(group.node) or group.in_tray:
 				continue
+			# A captured tray piece remains in the tray until its drop is committed.
+			if group == board.dragging and board.dragging_from_tray:
+				continue
 			var ids := []
 			for member in group.members:
 				ids.append(str(member["id"]))
@@ -68,7 +69,6 @@ func snapshot() -> Dictionary:
 					{
 						"members": ids,
 						"position": board._vector_to_json(group.node.position),
-						"rotation": float(group.node.rotation_degrees),
 						"z": int(group.node.z_index),
 						"locked": bool(group.locked),
 						"seed": bool(group.is_seed),
@@ -222,6 +222,7 @@ func restore_group_state(snapshot: Dictionary) -> void:
 				for member in active.members:
 					piece_to_group[str(member["id"])] = active
 		active.node.position = active.anchor_home
+		# Legacy snapshots may contain rotation; only restore positive, unrotated pieces.
 		active.node.rotation_degrees = 0.0
 		active.locked = true
 		active.in_tray = false
@@ -249,9 +250,7 @@ func restore_group_state(snapshot: Dictionary) -> void:
 	board.tray_scroll_offset = 0.0
 	board._layout_tray(true)
 	var tray_state: Dictionary = snapshot.get("tray", {})
-	var max_scroll := maxf(
-		0.0, board.tray_content_width - board._tray_area().size.x + board.TRAY_PADDING
-	)
+	var max_scroll := maxf(0.0, board.tray_content_width - board._tray_area().size.x)
 	board.tray_scroll_offset = (
 		max_scroll * clampf(float(tray_state.get("scroll_ratio", 0.0)), 0.0, 1.0)
 		if tray_state.has("scroll_ratio")

@@ -43,7 +43,6 @@ func _run() -> void:
 			media["image"],
 			media["source_size"],
 			64.0,
-			false,
 			expected
 		)
 		await process_frame

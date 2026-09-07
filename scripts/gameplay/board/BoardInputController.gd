@@ -10,6 +10,7 @@ func _init(owner: Node2D) -> void:
 
 func handle(event: InputEvent, modal_open: bool) -> bool:
 	if modal_open:
+		cancel_interaction()
 		return false
 	if event is InputEventMagnifyGesture:
 		var magnify := event as InputEventMagnifyGesture
@@ -24,7 +25,12 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		return false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if _screen_in_drag_blockers(mouse_event.position):
+		if not mouse_event.pressed and not _has_pointer_capture():
+			return false
+		if (
+			_screen_in_drag_blockers(mouse_event.position)
+			and (mouse_event.pressed or not _has_pointer_capture())
+		):
 			return false
 		if (
 			host._tray_area().has_point(mouse_event.position)
@@ -51,12 +57,9 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			and mouse_event.button_index == MOUSE_BUTTON_LEFT
 			and mouse_event.double_click
 		):
-			var double_group = host._group_at_world(host._screen_to_world(mouse_event.position))
-			if double_group != null and host.randomize_piece_rotation:
-				host._rotate_group(double_group)
-			elif double_group == null:
+			if _is_empty_table(mouse_event.position):
 				host.reset_view()
-			return true
+				return true
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
 			if mouse_event.pressed:
 				_begin_drag(mouse_event.position)
@@ -66,9 +69,6 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		if host.tray_pending_group != null:
-			host._update_pending_tray_drag(motion.position, motion.relative)
-			return true
 		if host.tray_panning:
 			host._pan_tray(motion.relative.x)
 			return true
@@ -85,7 +85,15 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			return true
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
-		if _screen_in_drag_blockers(touch.position):
+		if touch.canceled:
+			cancel_interaction()
+			return true
+		if not touch.pressed and not _has_pointer_capture():
+			return false
+		if (
+			_screen_in_drag_blockers(touch.position)
+			and (touch.pressed or not _has_pointer_capture())
+		):
 			return false
 		if touch.pressed:
 			host._stop_tray_inertia()
@@ -93,15 +101,11 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			if host.active_touches.size() >= 2:
 				host._begin_pinch()
 				return true
-			if touch.double_tap:
-				var double_group = host._group_at_world(host._screen_to_world(touch.position))
-				if double_group != null and host.randomize_piece_rotation:
-					host._rotate_group(double_group)
-				elif double_group == null:
-					host.reset_view()
-			else:
-				host.active_touch_index = touch.index
-				_begin_drag(touch.position)
+			if touch.double_tap and _is_empty_table(touch.position):
+				host.reset_view()
+				return true
+			host.active_touch_index = touch.index
+			_begin_drag(touch.position)
 			return true
 		host.active_touches.erase(touch.index)
 		if touch.index == host.active_touch_index:
@@ -116,10 +120,9 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		return true
 	elif event is InputEventScreenDrag:
 		var drag_event := event as InputEventScreenDrag
+		if not host.active_touches.has(drag_event.index):
+			return false
 		host.active_touches[drag_event.index] = drag_event.position
-		if host.tray_pending_group != null and drag_event.index == host.active_touch_index:
-			host._update_pending_tray_drag(drag_event.position, drag_event.relative)
-			return true
 		if host.tray_panning and drag_event.index == host.active_touch_index:
 			host._pan_tray(drag_event.relative.x)
 			return true
@@ -148,6 +151,66 @@ func _screen_in_drag_blockers(screen_pos: Vector2) -> bool:
 	return false
 
 
+func _has_pointer_capture() -> bool:
+	return (
+		host.dragging != null
+		or host.swap_dragging != null
+		or host.tray_panning
+		or host.panning
+		or host.pinch_active
+		or not host.active_touches.is_empty()
+	)
+
+
+func _is_empty_table(screen_pos: Vector2) -> bool:
+	if host._tray_area().has_point(screen_pos):
+		return false
+	var world_pos: Vector2 = host._screen_to_world(screen_pos)
+	if host.current_mode == "swap":
+		return host.swap_controller._swap_tile_at_world(world_pos) == null
+	return host._group_at_world(world_pos) == null
+
+
+func cancel_interaction(clear_touches := true) -> void:
+	host.tray_controller.grab_gesture.reset()
+	if host.tray_drag_offset_tween != null and host.tray_drag_offset_tween.is_valid():
+		host.tray_drag_offset_tween.kill()
+	host.tray_drag_offset_tween = null
+	if host.dragging != null:
+		var group = host.dragging
+		host.PieceVisualFactoryScript.set_group_lifted(group, false, host, false)
+		if host.dragging_from_tray:
+			host._return_group_to_tray(group)
+		host.dragging = null
+	if host.swap_dragging != null:
+		var tile = host.swap_dragging
+		host.swap_controller._set_swap_tile_lifted(tile, false)
+		host.swap_controller._animate_swap_tile_to(
+			tile,
+			host._swap_slot_position(
+				host.swap_drag_start_slot, host._swap_cols(), host._swap_rows()
+			)
+		)
+		host.swap_dragging = null
+	if host.tray_pending_group != null:
+		host._end_tray_piece_press()
+	host._clear_snap_preview()
+	host._clear_swap_target_preview()
+	host._stop_tray_inertia()
+	host.tray_panning = false
+	host._end_pan()
+	host.pinch_active = false
+	host.dragging_from_tray = false
+	host.dragging_tray_index = -1
+	host.swap_drag_start_slot = -1
+	host.tray_drag_screen_offset = Vector2.ZERO
+	host.tray_drag_target_screen_offset = Vector2.ZERO
+	host.tray_drag_local_grab = Vector2.ZERO
+	host.active_touch_index = -1
+	if clear_touches:
+		host.active_touches.clear()
+
+
 func _begin_drag(screen_pos: Vector2) -> void:
 	if host.current_mode == "swap":
 		host._begin_swap_drag(screen_pos)
@@ -157,11 +220,14 @@ func _begin_drag(screen_pos: Vector2) -> void:
 		host._stop_tray_inertia()
 	var tray_group = host._tray_group_at_screen(screen_pos)
 	if tray_group != null:
-		if tray_group.is_animating:
-			return
+		if tray_group.tray_tween != null and tray_group.tray_tween.is_valid():
+			tray_group.tray_tween.kill()
+		tray_group.tray_tween = null
+		tray_group.is_animating = false
 		host._begin_tray_piece_press(tray_group, screen_pos)
 		return
 	if host._tray_area().has_point(screen_pos):
+		host._clear_hint_highlights()
 		host.tray_panning = true
 		return
 	var world_pos: Vector2 = host._screen_to_world(screen_pos)
@@ -196,7 +262,13 @@ func _end_drag() -> void:
 	var released_group = host.dragging
 	var released_members: Array = released_group.members.duplicate()
 	host._clear_snap_preview()
-	var snapped: bool = host._try_snap_chain(host.dragging)
+	var allow_inertia: bool = (
+		host.dragging_from_tray and not host.tray_controller.grab_gesture.scroll_locked
+	)
+	var inside_tray: bool = host._tray_area().has_point(host.last_drag_screen_pos)
+	var snapped: bool = false
+	if not host.dragging_from_tray or not inside_tray:
+		snapped = host._try_snap_chain(host.dragging)
 	if host.dragging_from_tray and not snapped:
 		host._return_group_to_tray(released_group)
 	elif snapped:
@@ -218,4 +290,7 @@ func _end_drag() -> void:
 	host.tray_drag_offset_tween = null
 	host.tray_drag_local_grab = Vector2.ZERO
 	host.last_drag_screen_pos = Vector2.ZERO
+	host.tray_controller.grab_gesture.reset()
+	if allow_inertia:
+		host.tray_controller._start_tray_inertia()
 	host._notify_state_changed(true)

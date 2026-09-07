@@ -144,9 +144,7 @@ func _group_bounds_at(group, target_position: Vector2) -> Rect2:
 		var visual_position: Vector2 = member["visual"].position
 		for bounds_points in _member_bounds_points_list(member):
 			for point in bounds_points:
-				var global_point: Vector2 = (
-					target_position + (visual_position + point).rotated(group.node.rotation)
-				)
+				var global_point: Vector2 = target_position + visual_position + point
 				min_point = min_point.min(global_point)
 				max_point = max_point.max(global_point)
 				has_point = true

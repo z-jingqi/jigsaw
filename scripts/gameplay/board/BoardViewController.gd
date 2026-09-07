@@ -134,7 +134,7 @@ func _end_pan() -> void:
 
 
 func _begin_pinch() -> void:
-	host._end_drag()
+	host.input_controller.cancel_interaction(false)
 	_end_pan()
 	var points: Array[Vector2] = _active_touch_points()
 	if points.size() < 2:

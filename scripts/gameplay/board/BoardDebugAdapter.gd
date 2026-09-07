@@ -70,9 +70,7 @@ func debug_scroll_tray_left() -> void:
 
 
 func debug_scroll_tray_right() -> void:
-	host.tray_scroll_offset = maxf(
-		0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING
-	)
+	host.tray_scroll_offset = maxf(0.0, host.tray_content_width - host._tray_area().size.x)
 	host.tray_scroll_velocity = 0.0
 	host._layout_tray(true)
 
@@ -129,9 +127,7 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 	var tray_wait_started := Time.get_ticks_msec()
 	while _debug_tray_animation_active() and Time.get_ticks_msec() - tray_wait_started < 1200:
 		await host.get_tree().create_timer(0.02).timeout
-	var max_scroll := maxf(
-		0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING
-	)
+	var max_scroll := maxf(0.0, host.tray_content_width - host._tray_area().size.x)
 	debug_scroll_tray_left()
 	if max_scroll > 1.0 and not host.tray_groups.is_empty():
 		var scroll_start: Vector2 = host.tray_groups[0].tray_slot.get_center()

@@ -37,12 +37,21 @@ func apply_card(
 	var origin_x := _origin_x(viewport_size, scale)
 	var extra_height := _extra_height(viewport_size, scale)
 	var card_size := Vector2(976.0, 1301.0) * scale
+	var inset := 8.0 * scale
+	if image_rect.texture != null:
+		var texture_size := image_rect.texture.get_size()
+		var available := card_size - Vector2.ONE * inset * 2.0
+		var fit := minf(available.x / texture_size.x, available.y / texture_size.y)
+		card_size = texture_size * fit + Vector2.ONE * inset * 2.0
 
-	card_stage.position = Vector2(origin_x + 115.0 * scale, _y(388.0, scale, extra_height))
+	card_stage.position = Vector2(
+		origin_x + (DESIGN_SIZE.x * scale - card_size.x) * 0.5,
+		_y(388.0, scale, extra_height) + (1301.0 * scale - card_size.y) * 0.5
+	)
 	card_stage.size = card_size
 	card_stage.pivot_offset = card_size * 0.5
 	_apply_card_style(card_frame, scale)
-	var inset := 8.0 * scale
+	image_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	image_rect.position = Vector2.ONE * inset
 	image_rect.size = card_size - Vector2.ONE * inset * 2.0
 	var shader_material := image_rect.material as ShaderMaterial

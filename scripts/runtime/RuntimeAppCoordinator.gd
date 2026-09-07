@@ -67,7 +67,7 @@ func start() -> void:
 	_board.completed.connect(_on_board_completed)
 	_board.state_changed.connect(_on_board_state_changed)
 	_apply_feedback_preferences()
-	_game.get_viewport().size_changed.connect(_refresh_board_blockers)
+	_game.get_viewport().size_changed.connect(_refresh_gameplay_layout, CONNECT_DEFERRED)
 	_current_theme_id = _services.initial_home_theme_id()
 	show_home(_current_theme_id)
 
@@ -225,7 +225,6 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		media.get("image"),
 		media.get("source_size", Vector2.ZERO),
 		screen.top_reserved_height(),
-		false,
 		{},
 		screen.bottom_reserved_height(),
 		screen.tray_rect()
@@ -365,6 +364,11 @@ func shift_swap_rows(up: bool) -> void:
 		_board.shift_swap_rows_down()
 
 
+func shift_swap_columns(direction: int) -> void:
+	if is_instance_valid(_board):
+		_board.shift_swap_columns(direction)
+
+
 func debug_board(method: StringName) -> void:
 	if is_instance_valid(_board) and _board.has_method(method):
 		_board.call(method)
@@ -421,6 +425,8 @@ func _bind_gameplay(screen: GameplayScreen) -> void:
 	screen.hint_requested.connect(trigger_hint)
 	screen.move_swap_up_requested.connect(shift_swap_rows.bind(true))
 	screen.move_swap_down_requested.connect(shift_swap_rows.bind(false))
+	screen.move_swap_left_requested.connect(shift_swap_columns.bind(-1))
+	screen.move_swap_right_requested.connect(shift_swap_columns.bind(1))
 
 
 func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:
@@ -612,6 +618,13 @@ func _refresh_board_blockers() -> void:
 	var screen := _navigator.current_screen_view() as GameplayScreen
 	if is_instance_valid(_board) and screen != null:
 		_board.set_drag_blockers(screen.board_reserved_rects())
+
+
+func _refresh_gameplay_layout() -> void:
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen == null:
+		return
+	preload("res://scripts/gameplay/board/BoardViewportLayout.gd").refresh(_board, screen)
 
 
 func _apply_feedback_preferences() -> void:

@@ -432,15 +432,6 @@ func _auto_swap_grid() -> Dictionary:
 func _create_group(piece: Dictionary, locked_seed := false) -> void:
 	var group_node := Node2D.new()
 	group_node.name = piece["id"]
-	group_node.rotation_degrees = (
-		0.0
-		if locked_seed
-		else (
-			[0, 90, 180, 270][int(host.rng.randi_range(0, 3))]
-			if host.randomize_piece_rotation
-			else 0.0
-		)
-	)
 	group_node.z_index = host.groups.size() * host.GROUP_Z_STEP
 	host.world_root.add_child(group_node)
 	var visual: Node2D = host.PieceVisualFactoryScript.create_piece_visual(

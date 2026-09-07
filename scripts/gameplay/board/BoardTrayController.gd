@@ -4,6 +4,10 @@ class_name BoardTrayController
 const TRAY_HIT_PADDING := 18.0
 
 var host: Node2D
+var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
+var grid_cells: Dictionary = {}
+var scroll_physics := preload("res://scripts/gameplay/board/TrayScrollPhysics.gd").new()
+var grab_gesture := preload("res://scripts/gameplay/board/TrayGrabGesture.gd").new()
 
 
 func _init(owner: Node2D) -> void:
@@ -28,7 +32,7 @@ func _ensure_tray_top_border() -> void:
 		host.tray_background.z_index = -20
 		host.tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var initial_background_style := StyleBoxFlat.new()
-		initial_background_style.bg_color = Color(0.93, 0.78, 0.58, 0.45)
+		initial_background_style.bg_color = Color(0.94, 0.88, 0.77, 0.94)
 		host.tray_background.add_theme_stylebox_override("panel", initial_background_style)
 		host.tray_root.add_child(host.tray_background)
 	if host.tray_top_border == null or not is_instance_valid(host.tray_top_border):
@@ -62,53 +66,49 @@ func _layout_tray(instant := false) -> void:
 
 
 func _layout_tray_items(instant := false) -> void:
-	var area: Rect2 = _tray_area()
-	var cursor_x: float = area.position.x + host.TRAY_PADDING - host.tray_scroll_offset
-	var content_end: float = area.position.x + host.TRAY_PADDING
-	for index in host.tray_groups.size():
-		var group = host.tray_groups[index]
+	var items: Array = []
+	var visible_groups: Array = []
+	for group in host.tray_groups:
 		if group == null or not is_instance_valid(group.node):
 			continue
-		if not group.in_tray:
-			if group == host.dragging and host.dragging_from_tray:
-				var slot_width := maxf(group.tray_slot.size.x, host.TRAY_GAP)
-				cursor_x += slot_width + host.TRAY_GAP
-				content_end = maxf(content_end, cursor_x + host.tray_scroll_offset)
+		if not group.in_tray and not (group == host.dragging and host.dragging_from_tray):
 			continue
-		_move_group_to_tray(group, index, instant, cursor_x)
-		cursor_x = group.tray_slot.end.x + host.TRAY_GAP
-		content_end = maxf(content_end, cursor_x + host.tray_scroll_offset)
-	host.tray_content_width = maxf(0.0, content_end - area.position.x)
+		items.append({"id": group.node.get_instance_id(), "bounds": _group_local_bounds(group)})
+		visible_groups.append(group)
+	var result: Dictionary = grid_layout.arrange(
+		items, _tray_area(), host.tray_scroll_offset, _tray_original_screen_scale()
+	)
+	host.tray_scroll_offset = result.offset
+	host.tray_content_width = result.width
+	grid_cells.clear()
+	for index in visible_groups.size():
+		var group = visible_groups[index]
+		grid_cells[group.node.get_instance_id()] = result.cells[index]
+		if group.in_tray:
+			_move_group_to_tray(group, index, instant)
 
 
 func _clamp_tray_scroll() -> void:
 	var area: Rect2 = _tray_area()
 	host.tray_scroll_offset = clampf(
-		host.tray_scroll_offset,
-		0.0,
-		maxf(0.0, host.tray_content_width - area.size.x + host.TRAY_PADDING)
+		host.tray_scroll_offset, 0.0, maxf(0.0, host.tray_content_width - area.size.x)
 	)
 
 
 func _pan_tray(delta_x: float, record_velocity := true) -> void:
 	if not host.hint_highlighted_groups.is_empty():
 		host._clear_hint_highlights()
-	var now := Time.get_ticks_msec()
-	if record_velocity:
-		var elapsed := (
-			maxf(0.001, float(now - host.tray_last_pan_msec) / 1000.0)
-			if host.tray_last_pan_msec > 0
-			else 0.016
-		)
-		host.tray_scroll_velocity = -delta_x / elapsed
-		host.tray_last_pan_msec = now
+	var previous: float = host.tray_scroll_offset
 	host.tray_scroll_offset -= delta_x
 	_clamp_tray_scroll()
+	if record_velocity:
+		scroll_physics.record(host.tray_scroll_offset - previous)
 	_layout_tray(true)
 	host._notify_state_changed()
 
 
 func _start_tray_inertia() -> void:
+	host.tray_scroll_velocity = scroll_physics.release_velocity()
 	if absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED:
 		_stop_tray_inertia()
 		return
@@ -116,9 +116,24 @@ func _start_tray_inertia() -> void:
 
 
 func _stop_tray_inertia() -> void:
+	scroll_physics.reset()
 	host.tray_inertia_active = false
 	host.tray_scroll_velocity = 0.0
 	host.tray_last_pan_msec = 0
+
+
+func process_scroll(delta: float) -> void:
+	if not host.tray_inertia_active:
+		return
+	var motion: Vector2 = scroll_physics.step(host.tray_scroll_velocity, delta)
+	var previous: float = host.tray_scroll_offset
+	_pan_tray(-motion.x, false)
+	host.tray_scroll_velocity = motion.y
+	if (
+		is_equal_approx(previous, host.tray_scroll_offset)
+		or absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED
+	):
+		_stop_tray_inertia()
 
 
 func _release_tray_pan() -> void:
@@ -131,7 +146,7 @@ func _tray_original_screen_scale() -> float:
 	return maxf(0.001, scale)
 
 
-func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -> void:
+func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
 	if group.tray_tween != null and group.tray_tween.is_valid():
@@ -149,24 +164,19 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	group.tray_index = index
 	group.node.rotation_degrees = 0.0
 	var bounds: Rect2 = _group_local_bounds(group)
-	var area: Rect2 = _tray_area()
-	var target_height: float = maxf(24.0, area.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0)
-	var original_screen_scale: float = _tray_original_screen_scale()
-	var original_screen_size: Vector2 = bounds.size * original_screen_scale
-	var scale: float = original_screen_scale
-	if original_screen_size.y > target_height + 1.0:
-		scale = original_screen_scale * (target_height / maxf(1.0, original_screen_size.y))
+	var cell: Dictionary = grid_cells.get(group.node.get_instance_id(), {})
+	if cell.is_empty():
+		# Construction and restore call this before the final shared layout pass.
+		_layout_tray_items(true)
+		return
+	var scale: float = cell.scale
 	group.tray_scale = scale
-	var scaled_size: Vector2 = bounds.size * scale
-	var x: float = (
-		forced_x
-		if not is_nan(forced_x)
-		else area.position.x + host.TRAY_PADDING + float(index) * (scaled_size.x + host.TRAY_GAP)
-	)
-	var top_left: Vector2 = Vector2(x, area.position.y + (area.size.y - scaled_size.y) * 0.5)
-	group.tray_slot = Rect2(top_left, scaled_size)
+	var top_left: Vector2 = cell.top_left
+	group.tray_slot = cell.slot
+
 	var target_position: Vector2 = top_left - bounds.position * scale
-	group.node.z_index = index * host.GROUP_Z_STEP
+	group.node.z_as_relative = false
+	group.node.z_index = host.TRAY_Z_INDEX + 1
 	if instant:
 		group.is_animating = false
 		group.node.scale = Vector2.ONE * scale
@@ -190,34 +200,34 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	)
 
 
-func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := TRAY_HIT_PADDING):
+func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := TRAY_HIT_PADDING):
 	for i in range(host.tray_groups.size() - 1, -1, -1):
 		var group = host.tray_groups[i]
 		if group == exclude:
 			continue
-		if (
-			group != null
-			and group.in_tray
-			and group.tray_slot.grow(hit_padding).has_point(screen_pos)
-		):
+		if group == null or not group.in_tray:
+			continue
+		var hit_rect: Rect2 = group.tray_slot
+		if group.is_animating:
+			var bounds := _group_local_bounds(group)
+			hit_rect = (
+				Rect2(
+					group.node.position + bounds.position * group.node.scale.x,
+					bounds.size * group.node.scale.x
+				)
+				. grow(TRAY_HIT_PADDING)
+			)
+		if _tray_area().has_point(screen_pos) and hit_rect.has_point(screen_pos):
 			return group
 	return null
 
 
-func _begin_tray_piece_press(group, _screen_pos: Vector2) -> void:
-	host.tray_pending_group = group
-	host.tray_pending_total_delta = Vector2.ZERO
-	group.node.z_index = host.TRAY_DRAG_Z_INDEX
-	host.PieceVisualFactoryScript.set_group_lifted(group, true, host, not host.reduced_motion)
+func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:
+	_start_tray_world_drag(group, screen_pos)
 
 
 func _end_tray_piece_press() -> void:
-	var group = host.tray_pending_group
-	host.tray_pending_group = null
-	host.tray_pending_total_delta = Vector2.ZERO
-	if group != null and is_instance_valid(group.node):
-		host.PieceVisualFactoryScript.set_group_lifted(group, false, host, not host.reduced_motion)
-	_layout_tray(false)
+	grab_gesture.reset()
 
 
 func _group_local_bounds(group) -> Rect2:
@@ -248,41 +258,9 @@ func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) ->
 	host._bring_to_front(group)
 
 
-func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
-	if host.tray_pending_group == null:
-		return
-	host.tray_pending_total_delta += relative
-	var left_tray: bool = screen_pos.y < _tray_area().position.y - host.TRAY_EXIT_THRESHOLD
-	if (
-		host.tray_pending_total_delta.length() < host.TRAY_GESTURE_DECIDE_THRESHOLD
-		and not left_tray
-	):
-		return
-	if (
-		not left_tray
-		and absf(host.tray_pending_total_delta.x) > absf(host.tray_pending_total_delta.y)
-	):
-		_start_tray_scroll_from_pending(screen_pos)
-		return
-	_start_tray_world_drag(host.tray_pending_group, screen_pos)
-
-
-func _start_tray_scroll_from_pending(_screen_pos: Vector2) -> void:
-	host._clear_hint_highlights()
-	var group = host.tray_pending_group
-	var accumulated_x: float = host.tray_pending_total_delta.x
-	host.tray_pending_group = null
-	host.tray_pending_total_delta = Vector2.ZERO
-	if group != null and is_instance_valid(group.node):
-		host.PieceVisualFactoryScript.set_group_lifted(group, false, host, not host.reduced_motion)
-	host.tray_panning = true
-	_pan_tray(accumulated_x)
-
-
 func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	if group == null:
 		return
-	host._clear_hint_highlights()
 	_stop_tray_inertia()
 	host.tray_pending_group = null
 	host.tray_pending_total_delta = Vector2.ZERO
@@ -297,9 +275,15 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	var tray_node_screen_position: Vector2 = group.node.position
 	var tray_node_screen_scale: float = maxf(0.001, group.node.scale.x)
 	host.tray_drag_local_grab = (screen_pos - tray_node_screen_position) / tray_node_screen_scale
-	_send_group_to_world(group, host._screen_to_world(tray_node_screen_position), 1.0)
+	grab_gesture.begin(screen_pos)
+	_send_group_to_world(
+		group,
+		host._screen_to_world(tray_node_screen_position),
+		tray_node_screen_scale / maxf(0.001, host.view_scale)
+	)
+	host._clear_hint_highlights()
+	group.node.z_as_relative = false
 	group.node.z_index = host.TRAY_DRAG_Z_INDEX
-	_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
 	_place_dragging_from_screen(screen_pos)
 	host.drag_offset = Vector2.ZERO
 	host._notify_state_changed()
@@ -308,13 +292,23 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 func _update_drag_position(screen_pos: Vector2) -> void:
 	host.last_drag_screen_pos = screen_pos
 	if host.dragging_from_tray:
-		_set_tray_drag_target_offset(_tray_drag_target_for_screen(screen_pos))
+		var motion: Dictionary = grab_gesture.advance(screen_pos, _tray_area())
+		if motion.changed:
+			_stop_tray_inertia()
+		if not grab_gesture.scroll_locked:
+			_pan_tray(motion.delta_x)
+		var screen_scale: float = host.dragging.tray_scale
+		host.dragging.node.scale = (
+			Vector2.ONE
+			* (1.0 if grab_gesture.scroll_locked else screen_scale / maxf(0.001, host.view_scale))
+		)
 		_place_dragging_from_screen(screen_pos)
 		if _tray_area().has_point(screen_pos):
 			host._clear_snap_preview()
 		else:
 			host._update_snap_preview(host.dragging)
 		return
+
 	host._move_group_to(host.dragging, host._screen_to_world(screen_pos) + host.drag_offset)
 	host._update_snap_preview(host.dragging)
 
@@ -322,38 +316,8 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 func _place_dragging_from_screen(screen_pos: Vector2) -> void:
 	if host.dragging == null or not is_instance_valid(host.dragging.node):
 		return
-	var pointer_world: Vector2 = host._screen_to_world(screen_pos + host.tray_drag_screen_offset)
+	var pointer_world: Vector2 = host._screen_to_world(screen_pos)
 	host.dragging.node.position = (
 		pointer_world - host.tray_drag_local_grab * host.dragging.node.scale.x
 	)
 	host.dragging.node.z_index = host.TRAY_DRAG_Z_INDEX
-
-
-func _tray_drag_target_for_screen(screen_pos: Vector2) -> Vector2:
-	if host.dragging == null or _tray_area().has_point(screen_pos):
-		return Vector2.ZERO
-	var bounds: Rect2 = _group_local_bounds(host.dragging)
-	var bottom_at_pointer: float = bounds.end.y * host.view_scale
-	return Vector2(
-		0.0, minf(-host.TRAY_DRAG_LIFT_MARGIN, -host.TRAY_DRAG_LIFT_MARGIN - bottom_at_pointer)
-	)
-
-
-func _set_tray_drag_target_offset(target: Vector2) -> void:
-	if host.tray_drag_target_screen_offset.is_equal_approx(target):
-		return
-	host.tray_drag_target_screen_offset = target
-	if host.tray_drag_offset_tween != null and host.tray_drag_offset_tween.is_valid():
-		host.tray_drag_offset_tween.kill()
-	var start: Vector2 = host.tray_drag_screen_offset
-	host.tray_drag_offset_tween = host.create_tween()
-	host.tray_drag_offset_tween.set_ease(Tween.EASE_OUT)
-	host.tray_drag_offset_tween.set_trans(Tween.TRANS_CUBIC)
-	host.tray_drag_offset_tween.tween_method(
-		func(t: float) -> void:
-			host.tray_drag_screen_offset = start.lerp(host.tray_drag_target_screen_offset, t)
-			_place_dragging_from_screen(host.last_drag_screen_pos),
-		0.0,
-		1.0,
-		host._motion_duration(0.12)
-	)

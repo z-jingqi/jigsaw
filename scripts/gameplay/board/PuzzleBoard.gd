@@ -5,7 +5,6 @@ signal completed
 signal state_changed(state: Dictionary)
 
 const SNAP_TOLERANCE := 22.0
-const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
 const VIEW_MIN_RATIO := 0.90
@@ -17,7 +16,6 @@ const BOARD_SCREEN_EDGE_GAP := 62.0
 const SWAP_BOARD_SCREEN_EDGE_GAP := 60.0
 const SWAP_VIEW_FIT_PADDING := 60.0
 const BOARD_LINE_FRAME_WIDTH := 1
-const BOARD_TARGET_BACKGROUND_ALPHA := 0.22
 const VIEW_HINT_PADDING := 58.0
 const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
 const HINT_OUTLINE_SCREEN_WIDTH := 5.0
@@ -32,7 +30,6 @@ const HINT_TRAY_SCROLL_TIME := 0.3
 const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.0
-const SNAP_PREVIEW_PULL := 0.10
 const SNAP_PREVIEW_COLOR := Color(0.16, 0.70, 0.62, 0.92)
 const SNAP_PREVIEW_SCREEN_WIDTH := 3.0
 const SEAM_SCREEN_WIDTH := 1.6
@@ -51,7 +48,7 @@ const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
 const GROUP_Z_STEP := 64
-const TRAY_HEIGHT_RATIO := 1.0 / 6.0
+const TRAY_HEIGHT_RATIO := 1.0 / 5.0
 const TRAY_MIN_HEIGHT := 132.0
 const TRAY_PADDING := 14.0
 const TRAY_VERTICAL_SAFE_GAP := 50.0
@@ -150,7 +147,6 @@ var hud_top_reserved_height := 56.0
 var hud_bottom_reserved_height := 0.0
 var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
-var randomize_piece_rotation := false
 var hint_highlight_token := 0
 var active_hint_key := ""
 var hint_expires_at_msec := 0
@@ -203,6 +199,12 @@ func board_screen_edge_gap() -> float:
 	return SWAP_BOARD_SCREEN_EDGE_GAP if current_mode == "swap" else BOARD_SCREEN_EDGE_GAP
 
 
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		if input_controller != null:
+			input_controller.cancel_interaction()
+
+
 func _exit_tree() -> void:
 	# Composition helpers are RefCounted; break their back-references so the
 	# board and helpers cannot keep each other alive after a test or scene exit.
@@ -232,6 +234,9 @@ func _exit_tree() -> void:
 
 
 func _cancel_runtime_animations() -> void:
+	if tray_controller != null:
+		tray_controller.grab_gesture.reset()
+		tray_controller._stop_tray_inertia()
 	for group in groups:
 		if group == null:
 			continue
@@ -262,20 +267,7 @@ func _process(delta: float) -> void:
 		_update_hint_line_width(swap_target_preview_line)
 	if debug_bounds_overlay_enabled:
 		_refresh_debug_bounds_overlay()
-	if not tray_inertia_active:
-		return
-	var previous := tray_scroll_offset
-	tray_scroll_offset += tray_scroll_velocity * delta
-	_clamp_tray_scroll()
-	_layout_tray(true)
-	if is_equal_approx(previous, tray_scroll_offset):
-		_stop_tray_inertia()
-		return
-	var decay := maxf(0.0, 1.0 - TRAY_INERTIA_FRICTION * delta)
-	tray_scroll_velocity *= decay
-	if absf(tray_scroll_velocity) < TRAY_INERTIA_MIN_SPEED:
-		_stop_tray_inertia()
-	_notify_state_changed()
+	tray_controller.process_scroll(delta)
 
 
 func set_feedback_preferences(
@@ -362,7 +354,6 @@ func start(
 	image: Image,
 	image_size: Vector2,
 	top_reserved_height: float,
-	random_rotation_enabled := false,
 	restore_state := {},
 	bottom_reserved_height := 0.0,
 	tray_bounds := Rect2()
@@ -377,7 +368,6 @@ func start(
 	hud_top_reserved_height = top_reserved_height
 	hud_bottom_reserved_height = maxf(0.0, bottom_reserved_height)
 	tray_bounds_override = tray_bounds
-	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
 	world_root = get_node_or_null("WorldRoot") as Node2D
@@ -467,7 +457,6 @@ func clear() -> void:
 	view_offset = Vector2.ZERO
 	view_tween = null
 	completion_emitted = false
-	randomize_piece_rotation = false
 	state_emit_pending = false
 	last_state_emit_msec = 0
 
@@ -732,10 +721,6 @@ func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) ->
 	tray_controller._send_group_to_world(group, world_position, local_scale)
 
 
-func _update_pending_tray_drag(screen_pos: Vector2, relative: Vector2) -> void:
-	tray_controller._update_pending_tray_drag(screen_pos, relative)
-
-
 func _update_drag_position(screen_pos: Vector2) -> void:
 	tray_controller._update_drag_position(screen_pos)
 
@@ -822,6 +807,10 @@ func shift_swap_rows_down() -> void:
 	swap_controller.shift_rows(1)
 
 
+func shift_swap_columns(direction: int) -> void:
+	swap_controller.shift_columns(direction)
+
+
 func _show_swap_hint() -> void:
 	swap_controller._show_swap_hint()
 
@@ -840,10 +829,6 @@ func _swap_cols() -> int:
 
 func _swap_rows() -> int:
 	return swap_controller._swap_rows()
-
-
-func _rotate_group(group) -> void:
-	snap_controller._rotate_group(group)
 
 
 func _bring_to_front(group) -> void:
