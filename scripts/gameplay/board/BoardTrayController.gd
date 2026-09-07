@@ -205,12 +205,19 @@ func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := 
 		var group = host.tray_groups[i]
 		if group == exclude:
 			continue
-		if (
-			group != null
-			and group.in_tray
-			and _tray_area().has_point(screen_pos)
-			and group.tray_slot.has_point(screen_pos)
-		):
+		if group == null or not group.in_tray:
+			continue
+		var hit_rect: Rect2 = group.tray_slot
+		if group.is_animating:
+			var bounds := _group_local_bounds(group)
+			hit_rect = (
+				Rect2(
+					group.node.position + bounds.position * group.node.scale.x,
+					bounds.size * group.node.scale.x
+				)
+				. grow(TRAY_HIT_PADDING)
+			)
+		if _tray_area().has_point(screen_pos) and hit_rect.has_point(screen_pos):
 			return group
 	return null
 
@@ -254,7 +261,6 @@ func _send_group_to_world(group, world_position: Vector2, local_scale := 1.0) ->
 func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	if group == null:
 		return
-	host._clear_hint_highlights()
 	_stop_tray_inertia()
 	host.tray_pending_group = null
 	host.tray_pending_total_delta = Vector2.ZERO
@@ -275,6 +281,7 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 		host._screen_to_world(tray_node_screen_position),
 		tray_node_screen_scale / maxf(0.001, host.view_scale)
 	)
+	host._clear_hint_highlights()
 	group.node.z_as_relative = false
 	group.node.z_index = host.TRAY_DRAG_Z_INDEX
 	_place_dragging_from_screen(screen_pos)

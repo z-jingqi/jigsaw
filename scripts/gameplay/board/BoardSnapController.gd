@@ -20,7 +20,14 @@ func _bring_to_front(group) -> void:
 
 func _refresh_group_z_indices() -> void:
 	for index in host.groups.size():
-		host.groups[index].node.z_index = index * host.GROUP_Z_STEP
+		var group = host.groups[index]
+		group.node.z_as_relative = false
+		if group == host.dragging and host.dragging_from_tray:
+			group.node.z_index = host.TRAY_DRAG_Z_INDEX
+		elif group.in_tray:
+			group.node.z_index = host.TRAY_Z_INDEX + 1
+		else:
+			group.node.z_index = index * host.GROUP_Z_STEP
 
 
 func _update_snap_preview(active) -> void:

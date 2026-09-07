@@ -206,6 +206,7 @@ func _begin_drag(screen_pos: Vector2) -> void:
 		host._begin_tray_piece_press(tray_group, screen_pos)
 		return
 	if host._tray_area().has_point(screen_pos):
+		host._clear_hint_highlights()
 		host.tray_panning = true
 		return
 	var world_pos: Vector2 = host._screen_to_world(screen_pos)

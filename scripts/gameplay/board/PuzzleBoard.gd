@@ -235,6 +235,9 @@ func _exit_tree() -> void:
 
 
 func _cancel_runtime_animations() -> void:
+	if tray_controller != null:
+		tray_controller.grab_gesture.reset()
+		tray_controller._stop_tray_inertia()
 	for group in groups:
 		if group == null:
 			continue

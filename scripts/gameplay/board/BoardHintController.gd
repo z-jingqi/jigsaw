@@ -50,9 +50,7 @@ func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
 	elif group.tray_slot.end.x > area.end.x:
 		target_offset += group.tray_slot.end.x - area.end.x
 	target_offset = clampf(
-		target_offset,
-		0.0,
-		maxf(0.0, host.tray_content_width - host._tray_area().size.x + host.TRAY_PADDING)
+		target_offset, 0.0, maxf(0.0, host.tray_content_width - host._tray_area().size.x)
 	)
 	if absf(target_offset - host.tray_scroll_offset) < 1.0:
 		on_done.call()
