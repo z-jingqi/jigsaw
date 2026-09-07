@@ -25,7 +25,12 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		return false
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event.pressed and _screen_in_drag_blockers(mouse_event.position):
+		if not mouse_event.pressed and not _has_pointer_capture():
+			return false
+		if (
+			_screen_in_drag_blockers(mouse_event.position)
+			and (mouse_event.pressed or not _has_pointer_capture())
+		):
 			return false
 		if (
 			host._tray_area().has_point(mouse_event.position)
@@ -83,7 +88,12 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 		if touch.canceled:
 			cancel_interaction()
 			return true
-		if touch.pressed and _screen_in_drag_blockers(touch.position):
+		if not touch.pressed and not _has_pointer_capture():
+			return false
+		if (
+			_screen_in_drag_blockers(touch.position)
+			and (touch.pressed or not _has_pointer_capture())
+		):
 			return false
 		if touch.pressed:
 			host._stop_tray_inertia()
@@ -139,6 +149,17 @@ func _screen_in_drag_blockers(screen_pos: Vector2) -> bool:
 		if blocker.has_point(screen_pos):
 			return true
 	return false
+
+
+func _has_pointer_capture() -> bool:
+	return (
+		host.dragging != null
+		or host.swap_dragging != null
+		or host.tray_panning
+		or host.panning
+		or host.pinch_active
+		or not host.active_touches.is_empty()
+	)
 
 
 func _is_empty_table(screen_pos: Vector2) -> bool:
