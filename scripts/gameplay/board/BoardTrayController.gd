@@ -4,6 +4,8 @@ class_name BoardTrayController
 const TRAY_HIT_PADDING := 18.0
 
 var host: Node2D
+var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
+var grid_cells: Dictionary = {}
 
 
 func _init(owner: Node2D) -> void:
@@ -62,31 +64,32 @@ func _layout_tray(instant := false) -> void:
 
 
 func _layout_tray_items(instant := false) -> void:
-	var area: Rect2 = _tray_area()
-	var cursor_x: float = area.position.x + host.TRAY_PADDING - host.tray_scroll_offset
-	var content_end: float = area.position.x + host.TRAY_PADDING
-	for index in host.tray_groups.size():
-		var group = host.tray_groups[index]
+	var items: Array = []
+	var visible_groups: Array = []
+	for group in host.tray_groups:
 		if group == null or not is_instance_valid(group.node):
 			continue
-		if not group.in_tray:
-			if group == host.dragging and host.dragging_from_tray:
-				var slot_width := maxf(group.tray_slot.size.x, host.TRAY_GAP)
-				cursor_x += slot_width + host.TRAY_GAP
-				content_end = maxf(content_end, cursor_x + host.tray_scroll_offset)
+		if not group.in_tray and not (group == host.dragging and host.dragging_from_tray):
 			continue
-		_move_group_to_tray(group, index, instant, cursor_x)
-		cursor_x = group.tray_slot.end.x + host.TRAY_GAP
-		content_end = maxf(content_end, cursor_x + host.tray_scroll_offset)
-	host.tray_content_width = maxf(0.0, content_end - area.position.x)
+		items.append({"id": group.node.get_instance_id(), "bounds": _group_local_bounds(group)})
+		visible_groups.append(group)
+	var result: Dictionary = grid_layout.arrange(
+		items, _tray_area(), host.tray_scroll_offset, _tray_original_screen_scale()
+	)
+	host.tray_scroll_offset = result.offset
+	host.tray_content_width = result.width
+	grid_cells.clear()
+	for index in visible_groups.size():
+		var group = visible_groups[index]
+		grid_cells[group.node.get_instance_id()] = result.cells[index]
+		if group.in_tray:
+			_move_group_to_tray(group, index, instant)
 
 
 func _clamp_tray_scroll() -> void:
 	var area: Rect2 = _tray_area()
 	host.tray_scroll_offset = clampf(
-		host.tray_scroll_offset,
-		0.0,
-		maxf(0.0, host.tray_content_width - area.size.x + host.TRAY_PADDING)
+		host.tray_scroll_offset, 0.0, maxf(0.0, host.tray_content_width - area.size.x)
 	)
 
 
@@ -131,7 +134,7 @@ func _tray_original_screen_scale() -> float:
 	return maxf(0.001, scale)
 
 
-func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -> void:
+func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) -> void:
 	if group == null or not is_instance_valid(group.node):
 		return
 	if group.tray_tween != null and group.tray_tween.is_valid():
@@ -149,22 +152,16 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	group.tray_index = index
 	group.node.rotation_degrees = 0.0
 	var bounds: Rect2 = _group_local_bounds(group)
-	var area: Rect2 = _tray_area()
-	var target_height: float = maxf(24.0, area.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0)
-	var original_screen_scale: float = _tray_original_screen_scale()
-	var original_screen_size: Vector2 = bounds.size * original_screen_scale
-	var scale: float = original_screen_scale
-	if original_screen_size.y > target_height + 1.0:
-		scale = original_screen_scale * (target_height / maxf(1.0, original_screen_size.y))
+	var cell: Dictionary = grid_cells.get(group.node.get_instance_id(), {})
+	if cell.is_empty():
+		# Construction and restore call this before the final shared layout pass.
+		_layout_tray_items(true)
+		return
+	var scale: float = cell.scale
 	group.tray_scale = scale
-	var scaled_size: Vector2 = bounds.size * scale
-	var x: float = (
-		forced_x
-		if not is_nan(forced_x)
-		else area.position.x + host.TRAY_PADDING + float(index) * (scaled_size.x + host.TRAY_GAP)
-	)
-	var top_left: Vector2 = Vector2(x, area.position.y + (area.size.y - scaled_size.y) * 0.5)
-	group.tray_slot = Rect2(top_left, scaled_size)
+	var top_left: Vector2 = cell.top_left
+	group.tray_slot = cell.slot
+
 	var target_position: Vector2 = top_left - bounds.position * scale
 	group.node.z_index = index * host.GROUP_Z_STEP
 	if instant:
@@ -190,7 +187,7 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	)
 
 
-func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := TRAY_HIT_PADDING):
+func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := TRAY_HIT_PADDING):
 	for i in range(host.tray_groups.size() - 1, -1, -1):
 		var group = host.tray_groups[i]
 		if group == exclude:
@@ -198,7 +195,8 @@ func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := T
 		if (
 			group != null
 			and group.in_tray
-			and group.tray_slot.grow(hit_padding).has_point(screen_pos)
+			and _tray_area().has_point(screen_pos)
+			and group.tray_slot.has_point(screen_pos)
 		):
 			return group
 	return null
