@@ -265,6 +265,7 @@ func _start_swap_session() -> bool:
 	var layout: Dictionary = _mobile_board_layout()
 	host.source_scale = layout["source_scale"]
 	host.board_origin = layout["board_origin"]
+	host._add_board_outline_shadow()
 	var order: Array = _swap_shuffled_order(cols, rows)
 	for slot_index in range(order.size()):
 		_create_swap_tile(int(order[slot_index]), slot_index, cols, rows)

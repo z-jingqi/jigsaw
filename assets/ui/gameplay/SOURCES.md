@@ -34,3 +34,15 @@ alpha-bound crop, Lanczos resize, center with transparent padding and WebP
 quality 93. Runtime sizes: base 384x384, arrow 256x256. Both final images have
 border alpha maximum 0 and no opaque blue pixels; the original sources remain
 outside runtime assets. Existing Godot-owned button shadows are retained.
+
+## Quiet gameplay tabletop (2026-09-07)
+
+`tabletop-calm.webp`: generated with the built-in imagegen tool using
+`assets/ui/shared/tabletop-desk.webp` as the edit target. Prompt: preserve the
+portrait composition, honey wood, top-left woven cloth, bottom-left rope and
+notebook, bottom-right leaves; replace harsh diagonal sunlight with even
+soft diffuse light, reduce grain contrast, keep the center empty; no UI,
+text, new objects, frame, or transparency. Python Pillow converts to RGB,
+Lanczos fits to 1206x2622, and encodes WebP quality 88 / method 6.
+Source: `.artifacts/gameplay-visual-refinement/source/tabletop-source.png`.
+This asset is selected only while the underlying screen is gameplay.
