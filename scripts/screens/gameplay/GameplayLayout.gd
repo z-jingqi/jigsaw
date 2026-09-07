@@ -56,6 +56,14 @@ func apply(
 	swap_action_bar.configure_layout(scale)
 
 
+func apply_reference(viewport_size: Vector2, hud: Control, button: Button, unit: float) -> void:
+	button.custom_minimum_size = Vector2(280.0, 104.0) * unit
+	button.size = button.custom_minimum_size
+	button.position = Vector2((viewport_size.x - button.size.x) * 0.5, 226.0 * unit)
+	button.add_theme_font_size_override("font_size", roundi(36.0 * unit))
+	hud.offset_bottom = maxf(hud.offset_bottom, button.position.y + button.size.y + 24.0 * unit)
+
+
 func _layout_scale(viewport_size: Vector2) -> float:
 	return maxf(
 		0.5,

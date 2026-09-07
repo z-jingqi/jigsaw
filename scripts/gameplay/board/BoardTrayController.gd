@@ -32,7 +32,7 @@ func _ensure_tray_top_border() -> void:
 		host.tray_background.z_index = -20
 		host.tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var initial_background_style := StyleBoxFlat.new()
-		initial_background_style.bg_color = Color(0.93, 0.78, 0.58, 0.45)
+		initial_background_style.bg_color = Color(0.94, 0.88, 0.77, 0.94)
 		host.tray_background.add_theme_stylebox_override("panel", initial_background_style)
 		host.tray_root.add_child(host.tray_background)
 	if host.tray_top_border == null or not is_instance_valid(host.tray_top_border):

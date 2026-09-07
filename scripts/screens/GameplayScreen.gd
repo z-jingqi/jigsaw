@@ -3,6 +3,7 @@ extends Control
 
 signal back_requested
 signal hint_requested
+signal reference_requested
 signal move_swap_up_requested
 signal move_swap_down_requested
 signal move_swap_left_requested
@@ -13,6 +14,7 @@ const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLa
 @onready var back_button: ActionButton = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title
 @onready var hint_button: ActionButton = $Hud/HintButton
+@onready var reference_button: ActionButton = $Hud/ReferenceButton
 @onready var back_shadow: TextureRect = $Hud/BackShadow
 @onready var hint_shadow: TextureRect = $Hud/HintShadow
 @onready var tray_view: Control = $BottomHost/TrayView
@@ -27,6 +29,7 @@ var _layout := GameplayLayoutScript.new()
 func _ready() -> void:
 	back_button.pressed.connect(back_requested.emit)
 	hint_button.pressed.connect(hint_requested.emit)
+	reference_button.pressed.connect(reference_requested.emit)
 	swap_action_bar.move_up_requested.connect(move_swap_up_requested.emit)
 	swap_action_bar.move_down_requested.connect(move_swap_down_requested.emit)
 	swap_action_bar.move_left_requested.connect(move_swap_left_requested.emit)
@@ -70,6 +73,7 @@ func set_reduced_motion(enabled: bool) -> void:
 	# interactions themselves remain deterministic regardless of this preference.
 	back_button.set_reduced_motion(enabled)
 	hint_button.set_reduced_motion(enabled)
+	reference_button.set_reduced_motion(enabled)
 	swap_action_bar.set_reduced_motion(enabled)
 
 
@@ -79,7 +83,7 @@ func mark_board_live() -> void:
 
 func board_reserved_rects() -> Array[Rect2]:
 	var result: Array[Rect2] = []
-	for control in [back_button, hint_button]:
+	for control in [back_button, hint_button, reference_button]:
 		if control.visible:
 			result.append(Rect2($Hud.position + control.position, control.size))
 	if swap_action_bar.visible:
@@ -118,6 +122,7 @@ func _apply_current_layout() -> void:
 			_layout_scale,
 		)
 	)
+	_layout.apply_reference(size, $Hud, reference_button, back_button.size.x / 148.0)
 
 
 func bottom_reserved_height() -> float:
@@ -134,6 +139,7 @@ func _set_input_live(enabled: bool) -> void:
 	_input_live = enabled
 	back_button.disabled = not enabled
 	hint_button.disabled = not enabled
+	reference_button.disabled = not enabled
 	swap_action_bar.set_actions_enabled(enabled)
 
 

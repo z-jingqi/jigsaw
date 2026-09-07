@@ -115,11 +115,11 @@ func _add_board_line_frame() -> void:
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	var surface := Color("#7A5538")
-	surface.a = host.BOARD_TARGET_BACKGROUND_ALPHA
+	var surface := Color("#EEE3CE")
+	surface.a = 0.94
 	style.bg_color = surface
 	var outline := Color("#5B3922")
-	outline.a = 0.24
+	outline.a = 0.16
 	style.border_color = outline
 	style.border_width_left = host.BOARD_LINE_FRAME_WIDTH
 	style.border_width_top = host.BOARD_LINE_FRAME_WIDTH

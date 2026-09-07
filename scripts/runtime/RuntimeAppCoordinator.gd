@@ -17,6 +17,7 @@ const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 const ModeSelectScene := preload("res://scenes/modals/ModeSelectModal.tscn")
 const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
+const ReferenceScene := preload("res://scenes/modals/ReferenceImageModal.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
 const ModeTutorialScene := preload("res://scenes/modals/ModeTutorialModal.tscn")
@@ -355,6 +356,19 @@ func trigger_hint() -> void:
 		_board.show_hint()
 
 
+func show_reference() -> void:
+	if _screen_name() != "gameplay" or not is_instance_valid(_board):
+		return
+	_board.input_controller.cancel_interaction()
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	var result := _navigator.show_modal(
+		&"reference", {"texture": _board.texture, "title": screen.title_label.text}
+	)
+	if bool(result.get("ok", false)):
+		var modal := _navigator.current_route_view() as ReferenceImageModal
+		modal.close_requested.connect(_dismiss_modal)
+
+
 func shift_swap_rows(up: bool) -> void:
 	if not is_instance_valid(_board):
 		return
@@ -392,6 +406,7 @@ func _bind_routes() -> void:
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
 		&"settings": SettingsScene,
+		&"reference": ReferenceScene,
 		&"home_guide": HomeGuideScene,
 		&"mode_tutorial": ModeTutorialScene,
 		&"completion": CompletionScene
@@ -423,6 +438,7 @@ func _bind_gameplay(screen: GameplayScreen) -> void:
 		return
 	screen.back_requested.connect(_return_to_levels)
 	screen.hint_requested.connect(trigger_hint)
+	screen.reference_requested.connect(show_reference)
 	screen.move_swap_up_requested.connect(shift_swap_rows.bind(true))
 	screen.move_swap_down_requested.connect(shift_swap_rows.bind(false))
 	screen.move_swap_left_requested.connect(shift_swap_columns.bind(-1))

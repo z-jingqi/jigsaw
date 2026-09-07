@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/GameplayScreen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/IconButton.tscn" id="2_icon"]
@@ -7,6 +7,7 @@
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="5_font"]
 [ext_resource type="Texture2D" path="res://assets/ui/icons/back-arrow-primary.webp" id="6_back"]
 [ext_resource type="Texture2D" path="res://assets/ui/gameplay/hint-bulb-primary.webp" id="7_hint"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/PillButton.tscn" id="8_pill"]
 
 [node name="GameplayScreen" type="Control"]
 layout_mode = 3
@@ -91,6 +92,13 @@ mouse_default_cursor_shape = 2
 icon = ExtResource("7_hint")
 expand_icon = true
 accessibility_label = "Hint"
+
+[node name="ReferenceButton" parent="Hud" instance=ExtResource("8_pill")]
+layout_mode = 0
+theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_fonts/font = ExtResource("5_font")
+text = "查看原图"
+accessibility_label = "查看完整原图"
 
 [node name="BottomHost" type="Control" parent="."]
 layout_mode = 1
