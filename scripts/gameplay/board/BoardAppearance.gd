@@ -108,31 +108,35 @@ func _add_board_outline_shadow() -> void:
 
 
 func _add_board_line_frame() -> void:
+	# Rebuilds can occur before the previous frame's queued deletion is flushed.
+	var previous := host.world_root.get_node_or_null("board_line_frame") as Control
+	if previous != null and previous.is_queued_for_deletion():
+		host.world_root.remove_child(previous)
 	var frame := Panel.new()
 	frame.name = "board_line_frame"
-	frame.position = host.board_origin
-	frame.size = host.source_size * host.source_scale
+	var artwork_size: Vector2 = host.source_size * host.source_scale
+	var rim := maxf(4.0, minf(artwork_size.x, artwork_size.y) * 0.0085)
+	frame.position = host.board_origin - Vector2.ONE * rim
+	frame.size = artwork_size + Vector2.ONE * rim * 2.0
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
 	var surface := Color("#EEE3CE")
 	surface.a = 0.94
 	style.bg_color = surface
-	var outline := Color("#5B3922")
-	outline.a = 0.16
-	style.border_color = outline
-	style.border_width_left = host.BOARD_LINE_FRAME_WIDTH
-	style.border_width_top = host.BOARD_LINE_FRAME_WIDTH
-	style.border_width_right = host.BOARD_LINE_FRAME_WIDTH
-	style.border_width_bottom = host.BOARD_LINE_FRAME_WIDTH
-	var radius := maxi(10, int(minf(frame.size.x, frame.size.y) * 0.018))
+	style.border_color = Color("#F7E8CB")
+	style.border_width_left = roundi(rim)
+	style.border_width_top = roundi(rim)
+	style.border_width_right = roundi(rim)
+	style.border_width_bottom = roundi(rim)
+	var radius := roundi(rim * 1.5)
 	style.corner_radius_top_left = radius
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
-	style.shadow_color = Color(0.24, 0.12, 0.055, 0.24)
-	style.shadow_size = maxi(8, roundi(minf(frame.size.x, frame.size.y) * 0.012))
-	style.shadow_offset = Vector2(0.0, maxf(7.0, frame.size.y * 0.007))
+	style.shadow_color = Color(0.24, 0.12, 0.055, 0.16)
+	style.shadow_size = maxi(2, roundi(rim * 0.5))
+	style.shadow_offset = Vector2(0.0, rim * 0.5)
 	style.anti_aliasing = true
 	frame.add_theme_stylebox_override("panel", style)
 	host.world_root.add_child(frame)

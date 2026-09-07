@@ -223,6 +223,10 @@ func _clamped_board_view_offset(offset: Vector2, scale: float) -> Vector2:
 func _board_outline_world_rect() -> Rect2:
 	if host.source_size.x <= 0.0 or host.source_size.y <= 0.0:
 		return Rect2(host.board_origin, Vector2.ZERO)
+	if host.world_root != null:
+		var frame := host.world_root.get_node_or_null("board_line_frame") as Control
+		if frame != null:
+			return frame.get_rect()
 	return Rect2(host.board_origin, host.source_size * host.source_scale).grow(
 		float(host.BOARD_LINE_FRAME_WIDTH)
 	)

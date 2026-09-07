@@ -1,17 +1,18 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene format=3 uid="uid://0lptw55yfgrq"]
 
-[ext_resource type="Script" path="res://scripts/navigation/AppNavigator.gd" id="1_navigator"]
-[ext_resource type="Script" path="res://scripts/navigation/TransitionHost.gd" id="2_transition"]
-[ext_resource type="Script" path="res://scripts/app/Game.gd" id="3_game"]
-[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="4_tabletop"]
+[ext_resource type="Script" uid="uid://cyejw101610f2" path="res://scripts/navigation/AppNavigator.gd" id="1_navigator"]
+[ext_resource type="Script" uid="uid://bsngcpu6finig" path="res://scripts/navigation/TransitionHost.gd" id="2_transition"]
+[ext_resource type="Script" uid="uid://ucji8nhjwru0" path="res://scripts/screens/gameplay/TabletopPresentation.gd" id="3_clw2w"]
+[ext_resource type="Script" uid="uid://b6f5rjhx1ydpr" path="res://scripts/app/Game.gd" id="3_game"]
+[ext_resource type="Texture2D" uid="uid://qy603jmxdjyq" path="res://assets/ui/shared/tabletop-desk.webp" id="4_tabletop"]
 
-[node name="Game" type="Node2D"]
+[node name="Game" type="Node2D" unique_id=205443668]
 script = ExtResource("3_game")
 
-[node name="TabletopLayer" type="CanvasLayer" parent="."]
+[node name="TabletopLayer" type="CanvasLayer" parent="." unique_id=1007875349]
 layer = -10
 
-[node name="Background" type="TextureRect" parent="TabletopLayer"]
+[node name="Background" type="TextureRect" parent="TabletopLayer" unique_id=2054972217]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -21,19 +22,22 @@ mouse_filter = 2
 texture = ExtResource("4_tabletop")
 expand_mode = 1
 stretch_mode = 6
+script = ExtResource("3_clw2w")
 
-[node name="AppNavigator" type="Node" parent="."]
+navigator_path = NodePath("../../AppNavigator")
+
+[node name="AppNavigator" type="Node" parent="." unique_id=251366157]
 script = ExtResource("1_navigator")
 screen_host_path = NodePath("../UiLayer/ScreenHost")
 modal_host_path = NodePath("../UiLayer/ModalHost")
 transition_host_path = NodePath("../UiLayer/TransitionHost")
 
-[node name="WorldHost" type="Node2D" parent="."]
+[node name="WorldHost" type="Node2D" parent="." unique_id=930635399]
 
-[node name="UiLayer" type="CanvasLayer" parent="."]
+[node name="UiLayer" type="CanvasLayer" parent="." unique_id=760980856]
 layer = 10
 
-[node name="ScreenHost" type="Control" parent="UiLayer"]
+[node name="ScreenHost" type="Control" parent="UiLayer" unique_id=150794537]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -42,7 +46,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="TransitionHost" type="Control" parent="UiLayer"]
+[node name="TransitionHost" type="Control" parent="UiLayer" unique_id=1520014744]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -52,7 +56,7 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("2_transition")
 
-[node name="ModalHost" type="Control" parent="UiLayer"]
+[node name="ModalHost" type="Control" parent="UiLayer" unique_id=1532827623]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
