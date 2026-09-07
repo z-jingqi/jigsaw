@@ -225,7 +225,6 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		media.get("image"),
 		media.get("source_size", Vector2.ZERO),
 		screen.top_reserved_height(),
-		false,
 		{},
 		screen.bottom_reserved_height(),
 		screen.tray_rect()

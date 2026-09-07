@@ -52,9 +52,7 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 			and mouse_event.double_click
 		):
 			var double_group = host._group_at_world(host._screen_to_world(mouse_event.position))
-			if double_group != null and host.randomize_piece_rotation:
-				host._rotate_group(double_group)
-			elif double_group == null:
+			if double_group == null:
 				host.reset_view()
 			return true
 		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
@@ -95,9 +93,7 @@ func handle(event: InputEvent, modal_open: bool) -> bool:
 				return true
 			if touch.double_tap:
 				var double_group = host._group_at_world(host._screen_to_world(touch.position))
-				if double_group != null and host.randomize_piece_rotation:
-					host._rotate_group(double_group)
-				elif double_group == null:
+				if double_group == null:
 					host.reset_view()
 			else:
 				host.active_touch_index = touch.index

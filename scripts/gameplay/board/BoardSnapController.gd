@@ -11,27 +11,6 @@ func _init(owner: Node2D) -> void:
 	host = owner
 
 
-func _rotate_group(group) -> void:
-	if not host.randomize_piece_rotation or group == null or group.is_animating:
-		return
-	group.is_animating = true
-	var target: float = snappedf(group.node.rotation_degrees + 90.0, 90.0)
-	var tween := host.create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_property(group.node, "rotation_degrees", target, host._motion_duration(0.16))
-	tween.finished.connect(
-		func() -> void:
-			if not host.groups.has(group) or not is_instance_valid(group.node):
-				return
-			group.is_animating = false
-			if _try_snap_chain(group):
-				_lock_group(group)
-			_check_complete()
-			host._notify_state_changed(true)
-	)
-
-
 func _bring_to_front(group) -> void:
 	host.groups.erase(group)
 	host.groups.append(group)
@@ -142,7 +121,7 @@ func _try_snap_chain(active) -> bool:
 
 func _snap_match_data(active) -> Dictionary:
 	return host.SnapSolverScript.find_match_data(
-		active, _locked_snap_targets(active), _snap_tolerance(), host.ROTATION_TOLERANCE
+		active, _locked_snap_targets(active), _snap_tolerance()
 	)
 
 

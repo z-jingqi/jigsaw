@@ -5,7 +5,6 @@ signal completed
 signal state_changed(state: Dictionary)
 
 const SNAP_TOLERANCE := 22.0
-const ROTATION_TOLERANCE := 3.0
 const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
 const VIEW_MIN_RATIO := 0.90
@@ -150,7 +149,6 @@ var hud_top_reserved_height := 56.0
 var hud_bottom_reserved_height := 0.0
 var drag_blockers: Array[Rect2] = []
 var completion_emitted := false
-var randomize_piece_rotation := false
 var hint_highlight_token := 0
 var active_hint_key := ""
 var hint_expires_at_msec := 0
@@ -362,7 +360,6 @@ func start(
 	image: Image,
 	image_size: Vector2,
 	top_reserved_height: float,
-	random_rotation_enabled := false,
 	restore_state := {},
 	bottom_reserved_height := 0.0,
 	tray_bounds := Rect2()
@@ -377,7 +374,6 @@ func start(
 	hud_top_reserved_height = top_reserved_height
 	hud_bottom_reserved_height = maxf(0.0, bottom_reserved_height)
 	tray_bounds_override = tray_bounds
-	randomize_piece_rotation = random_rotation_enabled and current_mode != "swap"
 	completion_emitted = false
 	_add_level_background(active_level_config)
 	world_root = get_node_or_null("WorldRoot") as Node2D
@@ -467,7 +463,6 @@ func clear() -> void:
 	view_offset = Vector2.ZERO
 	view_tween = null
 	completion_emitted = false
-	randomize_piece_rotation = false
 	state_emit_pending = false
 	last_state_emit_msec = 0
 
@@ -840,10 +835,6 @@ func _swap_cols() -> int:
 
 func _swap_rows() -> int:
 	return swap_controller._swap_rows()
-
-
-func _rotate_group(group) -> void:
-	snap_controller._rotate_group(group)
 
 
 func _bring_to_front(group) -> void:

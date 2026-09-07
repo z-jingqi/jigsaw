@@ -68,7 +68,6 @@ func snapshot() -> Dictionary:
 					{
 						"members": ids,
 						"position": board._vector_to_json(group.node.position),
-						"rotation": float(group.node.rotation_degrees),
 						"z": int(group.node.z_index),
 						"locked": bool(group.locked),
 						"seed": bool(group.is_seed),
@@ -222,6 +221,7 @@ func restore_group_state(snapshot: Dictionary) -> void:
 				for member in active.members:
 					piece_to_group[str(member["id"])] = active
 		active.node.position = active.anchor_home
+		# Legacy snapshots may contain rotation; only restore positive, unrotated pieces.
 		active.node.rotation_degrees = 0.0
 		active.locked = true
 		active.in_tray = false
