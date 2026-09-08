@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/screens/home/ThemeDeck.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="5"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6"]
 [node name="HomeScreen" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -42,13 +43,18 @@ theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
 theme_override_fonts/font = ExtResource("4")
 horizontal_alignment = 1
 vertical_alignment = 1
-[node name="Subtitle" type="Label" parent="."]
+[node name="TitleCloudLeft" type="TextureRect" parent="."]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
-theme_override_fonts/font = ExtResource("4")
-horizontal_alignment = 1
-vertical_alignment = 1
+texture = ExtResource("6")
+expand_mode = 1
+stretch_mode = 5
+[node name="TitleCloudRight" type="TextureRect" parent="."]
+layout_mode = 0
+mouse_filter = 2
+texture = ExtResource("6")
+expand_mode = 1
+stretch_mode = 5
 [node name="MenuButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")

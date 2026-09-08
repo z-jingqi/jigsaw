@@ -3,6 +3,7 @@ signal close_requested
 signal theme_selected(theme_id: String)
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleFont := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
+const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 var _themes: Array = []
 var _scroll_position := 0
 
@@ -41,6 +42,7 @@ func _build() -> void:
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
 		tile.disabled = not model.playable
+		tile.tooltip_text = "敬请期待" if not model.playable else str(model.title)
 		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 			var box := StyleBoxFlat.new()
 			box.bg_color = Color.TRANSPARENT
@@ -69,13 +71,6 @@ func _build() -> void:
 		label.add_theme_color_override("font_color", Color("194F47"))
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(label)
-		var note := Label.new()
-		note.name = "Note"
-		note.text = "敬请期待" if not model.playable else ""
-		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		note.add_theme_color_override("font_color", Color("7C917B"))
-		note.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tile.add_child(note)
 		tile.pressed.connect(func() -> void: theme_selected.emit(str(model.theme_id)))
 		$Scroll/Grid.add_child(tile)
 
@@ -84,8 +79,8 @@ func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
 	$CloseButton.position = Vector2(size.x - 68 * u, 27 * u)
 	$CloseButton.size = Vector2.ONE * 46 * u
-	$Title.position = Vector2(24, 27) * u
-	$Title.size = Vector2(size.x - 110 * u, 46 * u)
+	$Title.position = Vector2(76 * u, 27 * u)
+	$Title.size = Vector2(size.x - 152 * u, 46 * u)
 	$Title.add_theme_font_size_override("font_size", int(28 * u))
 	$Scroll.position = Vector2(24, 100) * u
 	$Scroll.size = size - Vector2(48, 118) * u
@@ -95,15 +90,12 @@ func _layout() -> void:
 	grid.add_theme_constant_override("v_separation", int(22 * u))
 	var width: float = ($Scroll.size.x - 14 * u - (grid.columns - 1) * 18 * u) / grid.columns
 	for tile in grid.get_children():
-		tile.custom_minimum_size = Vector2(width, width * 1.5 + 63 * u)
+		tile.custom_minimum_size = Vector2(width, width * 1.5 + 47 * u)
 		var cover := tile.get_node("Cover") as TextureRect
 		cover.position = Vector2.ONE * 5 * u
 		cover.size = Vector2(width - 10 * u, (width - 10 * u) * 1.5)
 		var title := tile.get_node("Title") as Label
 		title.position = Vector2(0, width * 1.5 + 3 * u)
-		title.size = Vector2(width, 29 * u)
-		title.add_theme_font_size_override("font_size", int(20 * u))
-		var note := tile.get_node("Note") as Label
-		note.position = Vector2(0, width * 1.5 + 32 * u)
-		note.size = Vector2(width, 23 * u)
-		note.add_theme_font_size_override("font_size", int(12 * u))
+		title.size = Vector2(width, 42 * u)
+		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		TitleLayout.fit(title, title.size, maxi(1, int(20 * u)), maxi(1, int(12 * u)))

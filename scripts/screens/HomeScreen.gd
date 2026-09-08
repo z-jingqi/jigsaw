@@ -77,12 +77,14 @@ func _update_information() -> void:
 		start_button.disabled = true
 		return
 	var model: Variant = _themes[_selected_index]
+	$ThemeName.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	$ThemeName.max_lines_visible = 2
 	$ThemeName.text = model.title
-	$Subtitle.text = model.subtitle
 	start_button.text = "进入主题" if model.playable else "敬请期待"
 	start_button.disabled = not model.playable
 	$UndoButton.disabled = deck.history.is_empty()
 	$UndoButton.queue_redraw()
+	Layout.apply(self)
 
 
 func _on_enter_pressed() -> void:
