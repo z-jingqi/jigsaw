@@ -5,7 +5,9 @@ extends RefCounted
 static func configure(
 	tween: Tween, source: Control, target: Control, context: Dictionary, duration: float
 ) -> void:
-	var returning := str(context.get("reason", "")) == "pop"
+	var returning := (
+		str(context.get("reason", "")) == "pop" and not bool(source.get_meta("dismiss_down", false))
+	)
 	var distance := maxf(source.size.y, target.size.y) * 1.12
 	var lift := minf(source.size.y * 0.012, 32.0)
 	var front := target if returning else source

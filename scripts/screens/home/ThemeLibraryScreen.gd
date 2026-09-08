@@ -4,7 +4,6 @@ signal theme_selected(theme_id: String)
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleFont := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
 var _themes: Array = []
-var _selected_id := ""
 var _scroll_position := 0
 
 
@@ -15,7 +14,6 @@ func _ready() -> void:
 
 func navigation_enter(payload: Dictionary, _context: Dictionary) -> void:
 	_themes = payload.view_model.themes
-	_selected_id = payload.view_model.selected_theme_id
 	_scroll_position = int(payload.get("scroll_position", 0))
 	_build()
 	_layout()
@@ -41,11 +39,12 @@ func _build() -> void:
 		tile.name = str(model.theme_id)
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
-		for state in ["normal", "hover", "pressed", "focus"]:
+		tile.disabled = not model.playable
+		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 			var box := StyleBoxFlat.new()
 			box.bg_color = Color.TRANSPARENT
 			box.set_corner_radius_all(20)
-			if model.theme_id == _selected_id or state == "focus":
+			if state == "focus":
 				box.set_border_width_all(3)
 				box.border_color = Color("9BB39B")
 			tile.add_theme_stylebox_override(state, box)
@@ -71,9 +70,7 @@ func _build() -> void:
 		tile.add_child(label)
 		var note := Label.new()
 		note.name = "Note"
-		note.text = (
-			"敬请期待" if not model.playable else ("当前" if model.theme_id == _selected_id else "")
-		)
+		note.text = "敬请期待" if not model.playable else ""
 		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		note.add_theme_color_override("font_color", Color("7C917B"))
 		note.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -84,13 +81,13 @@ func _build() -> void:
 
 func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
-	$CloseButton.position = Vector2(22, 27) * u
+	$CloseButton.position = Vector2(size.x - 68 * u, 27 * u)
 	$CloseButton.size = Vector2.ONE * 46 * u
-	$Title.position = Vector2(70, 91) * u
-	$Title.size = Vector2(size.x - 140 * u, 62 * u)
-	$Title.add_theme_font_size_override("font_size", int(34 * u))
-	$Scroll.position = Vector2(24, 182) * u
-	$Scroll.size = size - Vector2(48, 200) * u
+	$Title.position = Vector2(24, 27) * u
+	$Title.size = Vector2(size.x - 110 * u, 46 * u)
+	$Title.add_theme_font_size_override("font_size", int(28 * u))
+	$Scroll.position = Vector2(24, 100) * u
+	$Scroll.size = size - Vector2(48, 118) * u
 	var grid := $Scroll/Grid as GridContainer
 	grid.columns = 2 if size.x / size.y < 0.8 else 3
 	grid.add_theme_constant_override("h_separation", int(18 * u))

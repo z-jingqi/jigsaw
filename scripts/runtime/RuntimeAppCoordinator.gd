@@ -440,8 +440,9 @@ func _show_theme_library() -> void:
 	library.theme_selected.connect(
 		func(theme_id: String) -> void:
 			_theme_library_scroll = library.scroll_position()
-			home.select_theme(theme_id)
-			_navigator.pop()
+			var entered := show_levels(theme_id, "", true)
+			if bool(entered.get("ok", false)):
+				home.select_theme(theme_id)
 	)
 
 
