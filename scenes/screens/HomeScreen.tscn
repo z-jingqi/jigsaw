@@ -1,75 +1,9 @@
-[gd_scene load_steps=16 format=3]
-
-[ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1_home"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/logo-sticker-3d.webp" id="3_logo"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="4_ornament"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/settings-clay-3d.webp" id="5_settings"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/progress-plaque-3d.webp" id="6_plaque"]
-[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="7_font"]
-[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="8_action"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/start-button-3d.webp" id="10_button"]
-[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="11_background"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_card_frame"]
-bg_color = Color(0.996078, 0.941176, 0.792157, 1)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.807843, 0.654902, 0.419608, 0.78)
-corner_radius_top_left = 52
-corner_radius_top_right = 52
-corner_radius_bottom_right = 52
-corner_radius_bottom_left = 52
-corner_detail = 16
-shadow_color = Color(0.345098, 0.184314, 0.0745098, 0.22)
-shadow_size = 10
-shadow_offset = Vector2(0, 12)
-anti_aliasing = true
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_track"]
-bg_color = Color(0.494118, 0.286275, 0.145098, 0.74)
-corner_radius_top_right = 7
-corner_radius_bottom_right = 7
-corner_radius_bottom_left = 7
-corner_radius_top_left = 7
-anti_aliasing = true
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_fill"]
-bg_color = Color(0.960784, 0.411765, 0.286275, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
-anti_aliasing = true
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_start_focus"]
-bg_color = Color(0, 0, 0, 0)
-border_width_left = 4
-border_width_top = 4
-border_width_right = 4
-border_width_bottom = 4
-border_color = Color(0.352941, 0.25098, 0.129412, 0.9)
-corner_radius_top_left = 108
-corner_radius_top_right = 108
-corner_radius_bottom_right = 108
-corner_radius_bottom_left = 108
-corner_detail = 16
-anti_aliasing = true
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_start_shadow"]
-bg_color = Color(0.301961, 0.145098, 0.054902, 0.01)
-corner_radius_top_left = 112
-corner_radius_top_right = 112
-corner_radius_bottom_right = 112
-corner_radius_bottom_left = 112
-corner_detail = 16
-shadow_color = Color(0.301961, 0.145098, 0.054902, 0.2)
-shadow_size = 12
-shadow_offset = Vector2(-8, 12)
-anti_aliasing = true
-
+[gd_scene load_steps=6 format=3]
+[ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/screens/home/ThemeDeck.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="5"]
 [node name="HomeScreen" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -77,424 +11,65 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_home")
-
+script = ExtResource("1")
 [node name="Background" type="TextureRect" parent="."]
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("11_background")
+texture = ExtResource("5")
 expand_mode = 1
-stretch_mode = 6
-
-[node name="CoverSlots" type="Control" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-clip_contents = true
-mouse_filter = 2
-
-[node name="FarPrevious" type="TextureRect" parent="CoverSlots"]
-expand_mode = 1
-stretch_mode = 6
-mouse_filter = 2
-
-[node name="CardFrame" type="Panel" parent="CoverSlots/FarPrevious"]
-show_behind_parent = true
+[node name="Deck" type="Control" parent="."]
+layout_mode = 0
+script = ExtResource("2")
+[node name="Current" type="TextureRect" parent="Deck"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_card_frame")
-
-[node name="Previous" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
-stretch_mode = 6
-mouse_filter = 2
-
-[node name="CardFrame" type="Panel" parent="CoverSlots/Previous"]
-show_behind_parent = true
+[node name="Next" type="TextureRect" parent="Deck"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_card_frame")
-
-[node name="Current" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
-stretch_mode = 6
-mouse_filter = 2
-
-[node name="CardFrame" type="Panel" parent="CoverSlots/Current"]
-show_behind_parent = true
+[node name="Third" type="TextureRect" parent="Deck"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_card_frame")
-
-[node name="Next" type="TextureRect" parent="CoverSlots"]
 expand_mode = 1
-stretch_mode = 6
-mouse_filter = 2
-
-[node name="CardFrame" type="Panel" parent="CoverSlots/Next"]
-show_behind_parent = true
+[node name="ThemeName" type="Label" parent="."]
 layout_mode = 0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_card_frame")
-
-[node name="FarNext" type="TextureRect" parent="CoverSlots"]
-expand_mode = 1
-stretch_mode = 6
-mouse_filter = 2
-
-[node name="CardFrame" type="Panel" parent="CoverSlots/FarNext"]
-show_behind_parent = true
-layout_mode = 0
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_card_frame")
-
-[node name="GestureCatcher" type="Control" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 0
-
-[node name="ThemeInfoLayer" type="Control" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="InfoLive" type="Control" parent="ThemeInfoLayer"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="TitleOrnamentLeft" type="TextureRect" parent="ThemeInfoLayer/InfoLive"]
-layout_mode = 0
-texture = ExtResource("4_ornament")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="TitleOrnamentRight" type="TextureRect" parent="ThemeInfoLayer/InfoLive"]
-layout_mode = 0
-texture = ExtResource("4_ornament")
-expand_mode = 1
-stretch_mode = 5
-flip_h = true
-mouse_filter = 2
-
-[node name="ThemeName" type="Label" parent="ThemeInfoLayer/InfoLive"]
-layout_mode = 0
-theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
-theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.64)
-theme_override_constants/shadow_offset_x = 2
-theme_override_constants/shadow_offset_y = 4
-theme_override_fonts/font = ExtResource("7_font")
-theme_override_font_sizes/font_size = 108
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("4")
 horizontal_alignment = 1
 vertical_alignment = 1
-autowrap_mode = 3
-max_lines_visible = 2
-clip_text = true
-text_overrun_behavior = 3
-mouse_filter = 2
-
-[node name="ProgressTag" type="NinePatchRect" parent="ThemeInfoLayer/InfoLive"]
+[node name="Subtitle" type="Label" parent="."]
 layout_mode = 0
-texture = ExtResource("6_plaque")
-patch_margin_left = 72
-patch_margin_top = 48
-patch_margin_right = 72
-patch_margin_bottom = 48
 mouse_filter = 2
-
-[node name="ProgressCount" type="Label" parent="ThemeInfoLayer/InfoLive/ProgressTag"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 28.0
-offset_top = 18.0
-offset_right = -28.0
-offset_bottom = 78.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
-theme_override_fonts/font = ExtResource("7_font")
-theme_override_font_sizes/font_size = 42
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("4")
 horizontal_alignment = 1
 vertical_alignment = 1
-mouse_filter = 2
-
-[node name="ProgressTrack" type="Panel" parent="ThemeInfoLayer/InfoLive/ProgressTag"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 54.0
-offset_top = 92.0
-offset_right = -54.0
-offset_bottom = 106.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_track")
-
-[node name="ProgressFill" type="Panel" parent="ThemeInfoLayer/InfoLive/ProgressTag/ProgressTrack"]
-layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-offset_left = 2.0
-offset_top = 2.0
-offset_right = -2.0
-offset_bottom = -2.0
-grow_vertical = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_fill")
-
-[node name="InfoIncoming" type="Control" parent="ThemeInfoLayer"]
-visible = false
-modulate = Color(1, 1, 1, 0)
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="TitleOrnamentLeft" type="TextureRect" parent="ThemeInfoLayer/InfoIncoming"]
+[node name="MenuButton" type="Button" parent="."]
 layout_mode = 0
-texture = ExtResource("4_ornament")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="TitleOrnamentRight" type="TextureRect" parent="ThemeInfoLayer/InfoIncoming"]
+script = ExtResource("3")
+symbol = "settings"
+tooltip_text = "设置"
+theme_override_fonts/font = ExtResource("4")
+[node name="ThemesButton" type="Button" parent="."]
 layout_mode = 0
-texture = ExtResource("4_ornament")
-expand_mode = 1
-stretch_mode = 5
-flip_h = true
-mouse_filter = 2
-
-[node name="ThemeName" type="Label" parent="ThemeInfoLayer/InfoIncoming"]
+script = ExtResource("3")
+symbol = "grid"
+tooltip_text = "全部主题"
+theme_override_fonts/font = ExtResource("4")
+[node name="UndoButton" type="Button" parent="."]
 layout_mode = 0
-theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
-theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.64)
-theme_override_constants/shadow_offset_x = 2
-theme_override_constants/shadow_offset_y = 4
-theme_override_fonts/font = ExtResource("7_font")
-theme_override_font_sizes/font_size = 108
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 3
-max_lines_visible = 2
-clip_text = true
-text_overrun_behavior = 3
-mouse_filter = 2
-
-[node name="ProgressTag" type="NinePatchRect" parent="ThemeInfoLayer/InfoIncoming"]
+script = ExtResource("3")
+symbol = "undo"
+tooltip_text = "上一张"
+theme_override_fonts/font = ExtResource("4")
+[node name="StartButton" type="Button" parent="."]
 layout_mode = 0
-texture = ExtResource("6_plaque")
-patch_margin_left = 72
-patch_margin_top = 48
-patch_margin_right = 72
-patch_margin_bottom = 48
-mouse_filter = 2
-
-[node name="ProgressCount" type="Label" parent="ThemeInfoLayer/InfoIncoming/ProgressTag"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 28.0
-offset_top = 18.0
-offset_right = -28.0
-offset_bottom = 78.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.298039, 0.176471, 0.0862745, 1)
-theme_override_fonts/font = ExtResource("7_font")
-theme_override_font_sizes/font_size = 42
-horizontal_alignment = 1
-vertical_alignment = 1
-mouse_filter = 2
-
-[node name="ProgressTrack" type="Panel" parent="ThemeInfoLayer/InfoIncoming/ProgressTag"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 54.0
-offset_top = 92.0
-offset_right = -54.0
-offset_bottom = 106.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_track")
-
-[node name="ProgressFill" type="Panel" parent="ThemeInfoLayer/InfoIncoming/ProgressTag/ProgressTrack"]
-layout_mode = 1
-anchors_preset = 9
-anchor_bottom = 1.0
-offset_left = 2.0
-offset_top = 2.0
-offset_right = -2.0
-offset_bottom = -2.0
-grow_vertical = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_fill")
-
-[node name="SafeArea" parent="." instance=ExtResource("2_safe")]
-layout_mode = 1
-mouse_filter = 2
-compact_horizontal_margin = 71.0
-compact_breakpoint = 9999.0
-
-[node name="SafeContent" type="Control" parent="SafeArea"]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Header" type="Control" parent="SafeArea/SafeContent"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 136.0
-offset_bottom = 376.0
-grow_horizontal = 2
-mouse_filter = 2
-
-[node name="LogoShadow" type="TextureRect" parent="SafeArea/SafeContent/Header"]
-layout_mode = 0
-offset_left = -10.0
-offset_top = 42.0
-offset_right = 530.0
-offset_bottom = 222.0
-modulate = Color(0.321569, 0.152941, 0.054902, 0.2)
-texture = ExtResource("3_logo")
-expand_mode = 1
-stretch_mode = 0
-mouse_filter = 2
-
-[node name="Logo" type="TextureRect" parent="SafeArea/SafeContent/Header"]
-layout_mode = 0
-offset_top = 28.0
-offset_right = 540.0
-offset_bottom = 208.0
-texture = ExtResource("3_logo")
-expand_mode = 1
-stretch_mode = 0
-mouse_filter = 2
-
-[node name="MenuShadow" type="TextureRect" parent="SafeArea/SafeContent/Header"]
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -205.0
-offset_top = 42.0
-offset_right = -35.0
-offset_bottom = 212.0
-grow_horizontal = 0
-modulate = Color(0.321569, 0.152941, 0.054902, 0.24)
-texture = ExtResource("5_settings")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="MenuButton" type="Button" parent="SafeArea/SafeContent/Header"]
-custom_minimum_size = Vector2(170, 170)
-layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -191.0
-offset_top = 26.0
-offset_right = -21.0
-offset_bottom = 196.0
-grow_horizontal = 0
-focus_mode = 0
-mouse_default_cursor_shape = 2
-icon = ExtResource("5_settings")
-flat = true
-expand_icon = true
-icon_max_width = 160
-script = ExtResource("8_action")
-kind = 2
-accessibility_label = "设置"
-
-[node name="BottomContent" type="Control" parent="SafeArea/SafeContent"]
-layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = -500.0
-grow_horizontal = 2
-grow_vertical = 0
-mouse_filter = 2
-
-[node name="StartButtonShadow" type="Panel" parent="SafeArea/SafeContent/BottomContent"]
-layout_mode = 1
-anchors_preset = 0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -315.0
-offset_top = 83.0
-offset_right = 315.0
-offset_bottom = 313.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBox_start_shadow")
-
-[node name="StartButtonBackground" type="TextureRect" parent="SafeArea/SafeContent/BottomContent"]
-layout_mode = 1
-anchors_preset = 0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -315.0
-offset_top = 83.0
-offset_right = 315.0
-offset_bottom = 313.0
-grow_horizontal = 2
-texture = ExtResource("10_button")
-expand_mode = 1
-stretch_mode = 0
-mouse_filter = 2
-
-[node name="StartButton" type="Button" parent="SafeArea/SafeContent/BottomContent"]
-layout_mode = 1
-anchors_preset = 0
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -315.0
-offset_top = 83.0
-offset_right = 315.0
-offset_bottom = 313.0
-grow_horizontal = 2
-focus_mode = 0
-mouse_default_cursor_shape = 2
-theme_override_colors/font_color = Color(1, 0.968627, 0.870588, 1)
-theme_override_colors/font_hover_color = Color(1, 0.984314, 0.921569, 1)
-theme_override_colors/font_pressed_color = Color(1, 0.941176, 0.827451, 1)
-theme_override_colors/font_shadow_color = Color(0.458824, 0.164706, 0.0980392, 0.52)
-theme_override_constants/shadow_offset_x = 3
-theme_override_constants/shadow_offset_y = 5
-theme_override_fonts/font = ExtResource("7_font")
-theme_override_font_sizes/font_size = 72
-theme_override_styles/focus = SubResource("StyleBox_start_focus")
-text = "进入"
-flat = true
-script = ExtResource("8_action")
-kind = 0
-accessibility_label = "进入主题"
+script = ExtResource("3")
+symbol = "none"
+tooltip_text = ""
+theme_override_fonts/font = ExtResource("4")

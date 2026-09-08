@@ -12,6 +12,8 @@ const CatalogPresenterScript := preload("res://scripts/runtime/presentation/Cata
 const SystemPresenterScript := preload("res://scripts/runtime/presentation/SystemPresenter.gd")
 const GameStringsScript := preload("res://scripts/app/GameStrings.gd")
 const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
+const ThemeLibraryScene := preload("res://scenes/screens/home/ThemeLibraryScreen.tscn")
+
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
@@ -31,6 +33,7 @@ var _catalog: CatalogPresenter
 var _system: SystemPresenter
 var _strings = GameStringsScript.new()
 var _board: PuzzleBoard
+var _theme_library_scroll := 0
 var _current_theme_id := ""
 var _current_level_id := ""
 var _current_mode := ""
@@ -135,7 +138,7 @@ func show_levels(
 	transition_source_texture: Texture2D = null
 ) -> Dictionary:
 	var topic := _services.content.topic_by_id(theme_id)
-	if topic.is_empty():
+	if topic.is_empty() or topic.get("levels", []).is_empty():
 		return {"ok": false, "error": "not_found"}
 	_clear_board()
 	_current_theme_id = theme_id
@@ -388,6 +391,7 @@ func preview_complete() -> Dictionary:
 func _bind_routes() -> void:
 	var routes := {
 		&"home": HomeScene,
+		&"themes": ThemeLibraryScene,
 		&"levels": LevelsScene,
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
@@ -407,7 +411,38 @@ func _bind_home(screen: HomeScreen) -> void:
 	screen.selected_theme_changed.connect(_on_home_theme_changed)
 	screen.theme_activated.connect(_on_home_theme_activated)
 	screen.menu_requested.connect(show_settings)
+	screen.themes_requested.connect(_show_theme_library)
 	_schedule_home_guide(screen)
+
+
+func _show_theme_library() -> void:
+	var home := _navigator.current_screen_view() as HomeScreen
+	if home == null:
+		return
+	var result := (
+		_navigator
+		. push(
+			&"themes",
+			{
+				"view_model": _catalog.home(_current_theme_id),
+				"scroll_position": _theme_library_scroll,
+			}
+		)
+	)
+	if not bool(result.get("ok", false)):
+		return
+	var library := _navigator.current_screen_view()
+	library.close_requested.connect(
+		func() -> void:
+			_theme_library_scroll = library.scroll_position()
+			_navigator.pop()
+	)
+	library.theme_selected.connect(
+		func(theme_id: String) -> void:
+			_theme_library_scroll = library.scroll_position()
+			home.select_theme(theme_id)
+			_navigator.pop()
+	)
 
 
 func _bind_levels(screen: RuntimeLevelListScreen) -> void:

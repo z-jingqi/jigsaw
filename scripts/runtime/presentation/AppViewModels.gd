@@ -52,6 +52,8 @@ class HomeThemeViewModel:
 	extends RefCounted
 	var theme_id: String
 	var title: String
+	var playable: bool
+	var subtitle: String
 	var cover_texture: Texture2D
 	var cover_focus: Vector2
 	var home_ui_variant: StringName
@@ -60,6 +62,8 @@ class HomeThemeViewModel:
 	func _init(data: Dictionary) -> void:
 		theme_id = str(data["theme_id"])
 		title = str(data["title"])
+		playable = bool(data.get("playable", true))
+		subtitle = str(data.get("subtitle", ""))
 		cover_texture = data["cover_texture"]
 		cover_focus = data.get("cover_focus", Vector2(0.5, 0.5))
 		home_ui_variant = StringName(data.get("home_ui_variant", "on_dark"))

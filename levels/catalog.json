@@ -24,7 +24,7 @@
 				"zh-Hans": "山海经",
 				"_": "山海经"
 			},
-			"cover": "res://levels/topic_01/cover.webp",
+			"cover": "res://assets/ui/home/library/shanhai.webp",
 			"color": "#95A584",
 			"ui_palette": {
 				"surface": "#E9E3CD",
