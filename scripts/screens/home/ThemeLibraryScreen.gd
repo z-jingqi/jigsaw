@@ -98,4 +98,4 @@ func _layout() -> void:
 		title.position = Vector2(0, width * 1.5 + 3 * u)
 		title.size = Vector2(width, 42 * u)
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		TitleLayout.fit(title, title.size, maxi(1, int(20 * u)), maxi(1, int(12 * u)))
+		TitleLayout.fit(title, title.size, maxi(1, int(20 * u)))

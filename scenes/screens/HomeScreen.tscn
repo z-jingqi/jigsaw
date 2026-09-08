@@ -55,6 +55,7 @@ mouse_filter = 2
 texture = ExtResource("6")
 expand_mode = 1
 stretch_mode = 5
+flip_h = true
 [node name="MenuButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
