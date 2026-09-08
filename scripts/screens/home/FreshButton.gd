@@ -1,7 +1,8 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
 @export_enum("none", "grid", "settings", "undo", "close") var symbol := "none"
-const GearIcon := preload("res://assets/ui/icons/settings.svg")
+const GridIcon := preload("res://assets/ui/icons/themes-grid.svg")
+const GearIcon := preload("res://assets/ui/icons/settings-gear.svg")
 const INK := Color("194F47")
 
 
@@ -39,17 +40,8 @@ func _draw() -> void:
 			draw_line(c - Vector2.ONE * r, c + Vector2.ONE * r, ink, w, true)
 			draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, w, true)
 		"grid":
-			for x in [-1, 1]:
-				for y in [-1, 1]:
-					draw_rect(
-						Rect2(
-							c + Vector2(x, y) * r * 0.62 - Vector2.ONE * r * 0.43,
-							Vector2.ONE * r * 0.86
-						),
-						ink,
-						false,
-						w
-					)
+			var icon_size := Vector2.ONE * r * 3.0
+			draw_texture_rect(GridIcon, Rect2(c - icon_size * 0.5, icon_size), false)
 		"undo":
 			draw_arc(c, r, -PI * 0.85, PI * 0.75, 32, ink, w, true)
 			var tip := c + Vector2.from_angle(-PI * 0.85) * r
