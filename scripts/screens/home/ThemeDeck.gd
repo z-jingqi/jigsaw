@@ -15,6 +15,7 @@ var _offset := Vector2.ZERO
 var _velocity := 0.0
 var _last_time := 0
 var _card_size := Vector2.ZERO
+var _stack_shift := 0.0
 
 
 func _ready() -> void:
@@ -45,6 +46,7 @@ func select_theme(selected_index: int) -> void:
 
 
 func _refresh() -> void:
+	_stack_shift = 0.0
 	_card_size = Vector2(size.x * 0.9, size.y * 0.92)
 	for depth in _cards.size():
 		var card := _cards[depth]
@@ -67,11 +69,12 @@ func _pose(offset: Vector2) -> void:
 	_offset = offset
 	for depth in _cards.size():
 		var card := _cards[depth]
+		var layer := float(depth) - (_stack_shift if depth > 0 else 0.0)
 		card.position = (
 			Vector2(size.x * 0.015, size.y * 0.008)
-			+ Vector2(size.x * 0.035, size.y * 0.027) * depth
+			+ Vector2(size.x * 0.035, size.y * 0.027) * layer
 		)
-		card.rotation = deg_to_rad(1.7 * depth)
+		card.rotation = deg_to_rad(1.7 * layer)
 		card.modulate.a = 1.0
 		if depth == 0:
 			card.position += offset
@@ -159,6 +162,7 @@ func undo() -> void:
 	var previous: Dictionary = history.pop_back()
 	index = int(previous.index)
 	_refresh()
+	_stack_shift = 1.0
 	_pose(Vector2(float(previous.direction) * size.x * 1.45, size.y * 0.42))
 	selected.emit(index)
 	_animate_to(Vector2.ZERO, 0.32, func() -> void: pass)
@@ -172,12 +176,25 @@ func _animate_to(target: Vector2, duration: float, done: Callable, falling := fa
 		_tween.set_trans(Tween.TRANS_QUAD if falling else Tween.TRANS_CUBIC)
 		_tween.set_ease(Tween.EASE_IN if falling else Tween.EASE_OUT)
 		_tween.tween_method(_pose, _offset, target, duration)
+		(
+			_tween
+			. parallel()
+			. tween_method(_set_stack_shift, _stack_shift, 1.0 if falling else 0.0, duration)
+			. set_trans(Tween.TRANS_CUBIC)
+			. set_ease(Tween.EASE_OUT)
+		)
 	_tween.finished.connect(
 		func() -> void:
 			_tween = null
+			_stack_shift = 0.0
 			_pose(Vector2.ZERO)
 			done.call()
 	)
+
+
+func _set_stack_shift(value: float) -> void:
+	_stack_shift = value
+	_pose(_offset)
 
 
 func cancel() -> void:
@@ -186,6 +203,7 @@ func cancel() -> void:
 		_tween = null
 	_dragging = false
 	_pointer = -2
+	_stack_shift = 0.0
 	_pose(Vector2.ZERO)
 
 
