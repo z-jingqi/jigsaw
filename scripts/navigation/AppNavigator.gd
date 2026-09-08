@@ -352,6 +352,7 @@ func _set_entry_transition_background(entry: Dictionary) -> void:
 	var view := entry.get("view") as Control
 	if not is_instance_valid(view):
 		return
+	_invoke(view, &"navigation_prepare_transition", [])
 	view.visible = true
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	view.set_process(false)
