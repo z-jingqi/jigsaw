@@ -16,7 +16,7 @@ const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 @onready var title_right_ornament: TextureRect = $SafeArea/Content/Header/TitleRightOrnament
 @onready var progress: Control = $SafeArea/Content/Header/Progress
 @onready var progress_count: Label = $SafeArea/Content/Header/Progress/Count
-@onready var scroll: ScrollContainer = $SafeArea/Content/Scroll
+@onready var scroll: NaturalScrollContainer = $SafeArea/Content/Scroll
 @onready var grid_content: Control = $SafeArea/Content/Scroll/GridContent
 @onready var focus_overlay: LevelFocusOverlay = $LevelFocusOverlay
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
@@ -50,6 +50,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	scroll.set_interaction_enabled(false)
 	focus_overlay.reset_immediately()
 	_unlock_sequence.clear()
 	if _grid != null:
@@ -68,6 +69,7 @@ func _exit_tree() -> void:
 func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
+	scroll.set_interaction_enabled(is_active and not focus_overlay.is_active())
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -128,7 +130,11 @@ func open_level_focus(level_id: String) -> bool:
 	if card == null or card.disabled or card_view_model == null:
 		return false
 	_unlock_sequence.clear()
-	return focus_overlay.open(card, card_view_model, _grid.visible_cards(), scroll)
+	scroll.set_interaction_enabled(false)
+	var opened := focus_overlay.open(card, card_view_model, _grid.visible_cards(), scroll)
+	if not opened:
+		scroll.set_interaction_enabled(true)
+	return opened
 
 
 func close_level_focus() -> void:
@@ -259,6 +265,7 @@ func _on_back_pressed() -> void:
 
 
 func _on_focus_closed() -> void:
+	scroll.set_interaction_enabled(true)
 	if _view_model != null and _grid != null:
 		_grid.refresh_items(_view_model.levels)
 

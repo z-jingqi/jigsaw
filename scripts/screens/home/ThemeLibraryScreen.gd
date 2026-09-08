@@ -27,6 +27,7 @@ func _restore_scroll() -> void:
 func navigation_set_active(enabled: bool) -> void:
 	visible = enabled
 	mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+	$Scroll.set_interaction_enabled(enabled)
 
 
 func scroll_position() -> int:

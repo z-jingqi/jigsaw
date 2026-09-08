@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 [ext_resource type="Script" path="res://scripts/screens/home/ThemeLibraryScreen.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="2"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="3"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4"]
+[ext_resource type="Script" path="res://scripts/ui/scrolling/NaturalScrollContainer.gd" id="5_scroll"]
 [node name="ThemeLibrary" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -34,7 +35,8 @@ theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
 layout_mode = 0
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 1
-scroll_deadzone = 12
+script = ExtResource("5_scroll")
+navigator_path = NodePath("../../../../AppNavigator")
 [node name="Grid" type="GridContainer" parent="Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3

@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/LevelListScreen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="7_leaf"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/progress-plaque-3d.webp" id="8_plaque"]
 [ext_resource type="PackedScene" path="res://scenes/screens/levels/LevelFocusOverlay.tscn" id="9_focus"]
+[ext_resource type="Script" path="res://scripts/ui/scrolling/NaturalScrollContainer.gd" id="10_natural_scroll"]
 
 [sub_resource type="Animation" id="Animation_reset"]
 resource_name = "RESET"
@@ -182,6 +183,8 @@ grow_horizontal = 2
 grow_vertical = 2
 horizontal_scroll_mode = 0
 vertical_scroll_mode = 3
+script = ExtResource("10_natural_scroll")
+navigator_path = NodePath("../../../../../../AppNavigator")
 
 [node name="GridContent" type="Control" parent="SafeArea/Content/Scroll"]
 layout_mode = 2
