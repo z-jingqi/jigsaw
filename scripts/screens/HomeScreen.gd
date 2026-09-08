@@ -73,6 +73,10 @@ func _on_selected(index: int) -> void:
 
 
 func _update_information() -> void:
+	var can_undo: bool = not deck.history.is_empty()
+	$UndoButton.visible = can_undo
+	$UndoButton.disabled = not can_undo
+	$UndoButton.queue_redraw()
 	if _themes.is_empty():
 		start_button.disabled = true
 		return
@@ -83,8 +87,6 @@ func _update_information() -> void:
 	$ThemeName.text = model.title
 	start_button.text = "进入主题" if model.playable else "敬请期待"
 	start_button.disabled = not model.playable
-	$UndoButton.disabled = deck.history.is_empty()
-	$UndoButton.queue_redraw()
 	Layout.apply(self)
 
 
