@@ -3,11 +3,11 @@ extends Control
 
 signal transition_settled(committed: bool)
 
-const NORMAL_DURATION := 0.50
+const CardMotion := preload("res://scripts/navigation/CardPageMotion.gd")
+const NORMAL_DURATION := 0.40
 const HOME_TO_LEVELS_DURATION := 0.56
 const LEVELS_TO_HOME_DURATION := 0.42
 const REDUCED_MOTION_DURATION := 0.12
-const TARGET_OVERLAP_DELAY := 0.07
 
 var _active_tween: Tween
 var _active_sequence := 0
@@ -114,62 +114,19 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 			_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
 		return true
 	if kind in [&"home_to_levels", &"levels_to_home", &"screen"]:
-		return _configure_tabletop_slide(kind, duration)
+		if is_instance_valid(_source_view):
+			CardMotion.configure(
+				_active_tween, _source_view, _target_view, _active_context, duration
+			)
+			return true
+		_target_view.modulate.a = 0.0
+		_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration)
+		return true
 	_target_view.modulate.a = 0.0
 	_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration)
 	if is_instance_valid(_source_view):
 		_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
 	return true
-
-
-func _configure_tabletop_slide(kind: StringName, duration: float) -> bool:
-	if not is_instance_valid(_source_view):
-		_target_view.modulate.a = 0.0
-		_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration * 0.65)
-		return true
-	var backward := kind == &"levels_to_home" or str(_active_context.get("reason", "")) == "pop"
-	var exit_direction := 1.0 if backward else -1.0
-	var travel := maxf(size.x, get_viewport_rect().size.x) * 1.08
-	var source_target := _source_view.position + Vector2(travel * exit_direction, 0.0)
-	var target_final := _target_view.position
-	_target_view.position = target_final - Vector2(travel * exit_direction, 0.0)
-	(
-		_active_tween
-		. tween_property(_source_view, "position", source_target, duration * 0.82)
-		. set_trans(Tween.TRANS_QUART)
-		. set_ease(Tween.EASE_IN)
-	)
-	(
-		_active_tween
-		. tween_property(_target_view, "position", target_final, duration * 0.86)
-		. set_delay(TARGET_OVERLAP_DELAY)
-		. set_trans(Tween.TRANS_CUBIC)
-		. set_ease(Tween.EASE_OUT)
-	)
-	_animate_companion(_source_companion, travel * exit_direction, duration * 0.82, 0.0, true)
-	_animate_companion(
-		_target_companion, -travel * exit_direction, duration * 0.86, TARGET_OVERLAP_DELAY, false
-	)
-	return true
-
-
-func _animate_companion(
-	companion: Node2D, start_or_target_x: float, duration: float, delay: float, outgoing: bool
-) -> void:
-	if not is_instance_valid(companion):
-		return
-	var final_position := companion.position
-	if outgoing:
-		final_position.x += start_or_target_x
-	else:
-		companion.position.x += start_or_target_x
-	(
-		_active_tween
-		. tween_property(companion, "position", final_position, duration)
-		. set_delay(delay)
-		. set_trans(Tween.TRANS_QUART if outgoing else Tween.TRANS_CUBIC)
-		. set_ease(Tween.EASE_IN if outgoing else Tween.EASE_OUT)
-	)
 
 
 func _capture_view_states() -> void:
@@ -187,6 +144,8 @@ func _capture_view_state(view: Control) -> Dictionary:
 		"scale": view.scale,
 		"modulate": view.modulate,
 		"pivot_offset": view.pivot_offset,
+		"rotation": view.rotation,
+		"z_index": view.z_index,
 	}
 
 
@@ -212,6 +171,8 @@ func _restore_view_state(view: Control, state: Dictionary) -> void:
 	view.scale = state.scale
 	view.modulate = state.modulate
 	view.pivot_offset = state.pivot_offset
+	view.rotation = state.rotation
+	view.z_index = state.z_index
 
 
 func _capture_companion_state(companion: Node2D) -> Dictionary:
@@ -230,10 +191,3 @@ func _restore_companion_state(companion: Node2D, state: Dictionary) -> void:
 	companion.position = state.position
 	companion.scale = state.scale
 	companion.modulate = state.modulate
-
-
-func _prepare_center_pivots() -> void:
-	if is_instance_valid(_source_view):
-		_source_view.pivot_offset = _source_view.size * 0.5
-	if is_instance_valid(_target_view):
-		_target_view.pivot_offset = _target_view.size * 0.5

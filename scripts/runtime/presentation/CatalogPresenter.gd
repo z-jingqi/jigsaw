@@ -36,6 +36,13 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 					"theme_id": topic["id"],
 					"title": topic["name"],
 					"cover_texture": _content.topic_cover(topic),
+					"playable": not topic.get("levels", []).is_empty(),
+					"subtitle":
+					(
+						str(topic["levels"][0].get("title", ""))
+						if not topic.get("levels", []).is_empty()
+						else "新主题 · 敬请期待"
+					),
 					"cover_focus": Vector2(0.5, 0.5),
 					"home_ui_variant": "on_dark",
 					"progress": theme_progress(topic),

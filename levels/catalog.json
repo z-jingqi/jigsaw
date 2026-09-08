@@ -24,7 +24,7 @@
 				"zh-Hans": "山海经",
 				"_": "山海经"
 			},
-			"cover": "res://levels/topic_01/cover.webp",
+			"cover": "res://assets/ui/home/library/shanhai.webp",
 			"color": "#95A584",
 			"ui_palette": {
 				"surface": "#E9E3CD",
@@ -617,6 +617,58 @@
 					"path": "res://levels/topic_04/dog_03/level.json"
 				}
 			]
+		},
+		{
+			"id": "theme_flowers",
+			"name": "花间集",
+			"name_i18n": {
+				"zh": "花间集",
+				"zh-Hans": "花间集",
+				"_": "花间集"
+			},
+			"cover": "res://assets/ui/home/library/flowers.webp",
+			"color": "#BDC8AA",
+			"sort_order": 4,
+			"levels": []
+		},
+		{
+			"id": "theme_ocean",
+			"name": "海之境",
+			"name_i18n": {
+				"zh": "海之境",
+				"zh-Hans": "海之境",
+				"_": "海之境"
+			},
+			"cover": "res://assets/ui/home/library/ocean.webp",
+			"color": "#9CBFCB",
+			"sort_order": 5,
+			"levels": []
+		},
+		{
+			"id": "theme_birds",
+			"name": "飞羽",
+			"name_i18n": {
+				"zh": "飞羽",
+				"zh-Hans": "飞羽",
+				"_": "飞羽"
+			},
+			"cover": "res://assets/ui/home/library/birds.webp",
+			"color": "#DCC9A2",
+			"sort_order": 6,
+			"levels": []
+		},
+		{
+			"id": "theme_forest",
+			"name": "林间",
+			"name_i18n": {
+				"zh": "林间",
+				"zh-Hans": "林间",
+				"_": "林间"
+			},
+			"cover": "res://assets/ui/home/library/forest.webp",
+			"color": "#A7B18C",
+			"sort_order": 7,
+			"levels": []
 		}
 	]
 }

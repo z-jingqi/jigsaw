@@ -51,6 +51,9 @@ func contracts() -> Array[StringName]:
 
 func _register_runtime_contracts() -> void:
 	register_definition(
+		RouteDefinitionScript.new(&"themes", RouteDefinitionScript.Presentation.SCREEN)
+	)
+	register_definition(
 		RouteDefinitionScript.new(
 			&"home", RouteDefinitionScript.Presentation.ROOT, {}, {"theme_id": ""}
 		)
