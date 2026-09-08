@@ -79,7 +79,7 @@ func _update_information() -> void:
 	var model: Variant = _themes[_selected_index]
 	$ThemeName.text = model.title
 	$Subtitle.text = model.subtitle
-	start_button.text = "开始拼图" if model.playable else "敬请期待"
+	start_button.text = "进入主题" if model.playable else "敬请期待"
 	start_button.disabled = not model.playable
 	$UndoButton.disabled = deck.history.is_empty()
 	$UndoButton.queue_redraw()

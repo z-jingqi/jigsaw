@@ -1,6 +1,7 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
 @export_enum("none", "grid", "settings", "undo", "close") var symbol := "none"
+const GearIcon := preload("res://assets/ui/icons/settings.svg")
 const INK := Color("194F47")
 
 
@@ -59,8 +60,5 @@ func _draw() -> void:
 				true
 			)
 		"settings":
-			draw_arc(c, r * 0.72, 0, TAU, 36, ink, w, true)
-			draw_arc(c, r * 0.25, 0, TAU, 24, ink, w, true)
-			for i in 8:
-				var v := Vector2.from_angle(i * TAU / 8.0)
-				draw_line(c + v * r * 0.72, c + v * r * 1.08, ink, w * 1.6, true)
+			var icon_size := Vector2.ONE * r * 2.5
+			draw_texture_rect(GearIcon, Rect2(c - icon_size * 0.5, icon_size), false)
