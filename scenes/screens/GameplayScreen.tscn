@@ -1,12 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/GameplayScreen.gd" id="1_screen"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/IconButton.tscn" id="2_icon"]
+[ext_resource type="Script" path="res://scripts/screens/gameplay/GameplayHudButton.gd" id="2_hud_button"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/TrayView.tscn" id="3_tray"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/SwapActionBar.tscn" id="4_swap"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="5_font"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/back-arrow-primary.webp" id="6_back"]
-[ext_resource type="Texture2D" path="res://assets/ui/gameplay/hint-bulb-primary.webp" id="7_hint"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6_cloud"]
 
 [node name="GameplayScreen" type="Control"]
 layout_mode = 3
@@ -26,19 +25,7 @@ offset_bottom = 64.0
 grow_horizontal = 2
 mouse_filter = 0
 
-[node name="BackShadow" type="TextureRect" parent="Hud"]
-layout_mode = 0
-offset_left = 75.0
-offset_top = 80.0
-offset_right = 223.0
-offset_bottom = 228.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.2)
-texture = ExtResource("6_back")
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
-[node name="BackButton" parent="Hud" instance=ExtResource("2_icon")]
+[node name="BackButton" type="Button" parent="Hud"]
 layout_mode = 0
 offset_left = 68.0
 offset_top = 70.0
@@ -46,9 +33,11 @@ offset_right = 216.0
 offset_bottom = 218.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
-icon = ExtResource("6_back")
-expand_icon = true
-accessibility_label = "Back to levels"
+flat = true
+script = ExtResource("2_hud_button")
+kind = 2
+symbol = "pause"
+accessibility_label = "暂停并返回关卡"
 
 [node name="Title" type="Label" parent="Hud"]
 layout_mode = 0
@@ -56,10 +45,7 @@ offset_left = 253.0
 offset_top = 70.0
 offset_right = 953.0
 offset_bottom = 218.0
-theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
-theme_override_colors/font_shadow_color = Color(1, 0.941176, 0.776471, 0.52)
-theme_override_constants/shadow_offset_x = 2
-theme_override_constants/shadow_offset_y = 4
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
 theme_override_fonts/font = ExtResource("5_font")
 theme_override_font_sizes/font_size = 74
 horizontal_alignment = 1
@@ -68,19 +54,22 @@ clip_text = true
 text_overrun_behavior = 3
 mouse_filter = 2
 
-[node name="HintShadow" type="TextureRect" parent="Hud"]
+[node name="TitleCloudLeft" type="TextureRect" parent="Hud"]
 layout_mode = 0
-offset_left = 997.0
-offset_top = 80.0
-offset_right = 1145.0
-offset_bottom = 228.0
-modulate = Color(0.301961, 0.145098, 0.054902, 0.2)
-texture = ExtResource("7_hint")
+texture = ExtResource("6_cloud")
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
 
-[node name="HintButton" parent="Hud" instance=ExtResource("2_icon")]
+[node name="TitleCloudRight" type="TextureRect" parent="Hud"]
+layout_mode = 0
+texture = ExtResource("6_cloud")
+expand_mode = 1
+stretch_mode = 5
+flip_h = true
+mouse_filter = 2
+
+[node name="HintButton" type="Button" parent="Hud"]
 layout_mode = 0
 offset_left = 990.0
 offset_top = 70.0
@@ -88,9 +77,11 @@ offset_right = 1138.0
 offset_bottom = 218.0
 focus_mode = 0
 mouse_default_cursor_shape = 2
-icon = ExtResource("7_hint")
-expand_icon = true
-accessibility_label = "Hint"
+flat = true
+script = ExtResource("2_hud_button")
+kind = 2
+symbol = "hint"
+accessibility_label = "提示"
 
 [node name="BottomHost" type="Control" parent="."]
 layout_mode = 1

@@ -1,0 +1,62 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/modals/GameplayPausePanel.gd" id="1_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/ModalShell.tscn" id="2_shell"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="3_font"]
+
+[node name="GameplayPausePanel" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_panel")
+
+[node name="ModalShell" parent="." instance=ExtResource("2_shell")]
+layout_mode = 1
+
+[node name="Title" type="Label" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 112)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 56
+text = "暂停"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Description" type="Label" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.223529, 0.4, 0.360784, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 24
+text = "拼图已暂停"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Spacer" type="Control" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Resume" type="Button" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.976471, 0.92549, 1)
+theme_override_colors/font_hover_color = Color(1, 0.976471, 0.92549, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.976471, 0.92549, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 30
+text = "继续拼图"
+
+[node name="Exit" type="Button" parent="ModalShell/Panel/Content"]
+custom_minimum_size = Vector2(0, 88)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_hover_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_pressed_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_fonts/font = ExtResource("3_font")
+theme_override_font_sizes/font_size = 30
+text = "返回关卡"

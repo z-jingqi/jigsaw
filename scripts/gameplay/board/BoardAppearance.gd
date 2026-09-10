@@ -121,22 +121,23 @@ func _add_board_line_frame() -> void:
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	var surface := Color("#EEE3CE")
-	surface.a = 0.94
+	var surface := _topic_ui_color("board_surface", Color("#FAF7ED"))
+	surface.a = 0.96
 	style.bg_color = surface
-	style.border_color = Color("#F7E8CB")
-	style.border_width_left = roundi(rim)
-	style.border_width_top = roundi(rim)
-	style.border_width_right = roundi(rim)
-	style.border_width_bottom = roundi(rim)
-	var radius := roundi(rim * 1.5)
+	var border := _topic_ui_color("board_border", Color("#718A80"))
+	border.a = 0.44
+	style.border_color = border
+	var line_width := maxi(1, roundi(host.view_scale))
+	style.border_width_left = line_width
+	style.border_width_top = line_width
+	style.border_width_right = line_width
+	style.border_width_bottom = line_width
+	var radius := maxi(3, roundi(rim * 0.5))
 	style.corner_radius_top_left = radius
 	style.corner_radius_top_right = radius
 	style.corner_radius_bottom_left = radius
 	style.corner_radius_bottom_right = radius
-	style.shadow_color = Color(0.24, 0.12, 0.055, 0.16)
-	style.shadow_size = maxi(2, roundi(rim * 0.5))
-	style.shadow_offset = Vector2(0.0, rim * 0.5)
+	style.shadow_size = 0
 	style.anti_aliasing = true
 	frame.add_theme_stylebox_override("panel", style)
 	host.world_root.add_child(frame)

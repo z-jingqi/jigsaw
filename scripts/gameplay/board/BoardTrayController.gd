@@ -2,6 +2,11 @@ extends RefCounted
 class_name BoardTrayController
 
 const TRAY_HIT_PADDING := 18.0
+const TrayGlassShader := preload("res://shaders/ui/tray_frosted_glass.gdshader")
+const CalmBackground := preload("res://assets/ui/gameplay/tabletop-calm.webp")
+const ShanhaiBackground := preload("res://assets/ui/gameplay/shanhai-landscape.webp")
+const TRAY_GLASS_TINT := Color("#E2E8DBD1")
+const TRAY_BORDER_COLOR := Color(0.34, 0.46, 0.40, 0.42)
 
 var host: Node2D
 var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
@@ -32,28 +37,55 @@ func _ensure_tray_top_border() -> void:
 		host.tray_background.z_index = -20
 		host.tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var initial_background_style := StyleBoxFlat.new()
-		initial_background_style.bg_color = Color(0.94, 0.88, 0.77, 0.94)
+		initial_background_style.bg_color = Color.WHITE
 		host.tray_background.add_theme_stylebox_override("panel", initial_background_style)
+		var glass_material := ShaderMaterial.new()
+		glass_material.shader = TrayGlassShader
+		glass_material.set_shader_parameter("tint_color", TRAY_GLASS_TINT)
+		_configure_glass_background(glass_material)
+		host.tray_background.material = glass_material
 		host.tray_root.add_child(host.tray_background)
 	if host.tray_top_border == null or not is_instance_valid(host.tray_top_border):
 		host.tray_top_border = ColorRect.new()
 		host.tray_top_border.name = "tray_top_border"
-		host.tray_top_border.color = host.TRAY_TOP_BORDER_COLOR
+		host.tray_top_border.color = TRAY_BORDER_COLOR
 		host.tray_top_border.z_index = -10
 		host.tray_top_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		host.tray_root.add_child(host.tray_top_border)
 	var area: Rect2 = _tray_area()
 	var layout_scale := maxf(1.0, area.size.y / 400.0)
+	var glass_material := host.tray_background.material as ShaderMaterial
+	if glass_material != null:
+		_refresh_glass_viewport(glass_material)
 	var background_style := host.tray_background.get_theme_stylebox("panel") as StyleBoxFlat
 	background_style.corner_radius_top_left = 0
 	background_style.corner_radius_top_right = 0
 	background_style.corner_radius_bottom_left = 0
 	background_style.corner_radius_bottom_right = 0
 	background_style.border_width_top = 0
+	background_style.border_width_left = 0
+	background_style.border_width_right = 0
+	background_style.border_width_bottom = 0
 	host.tray_background.position = area.position
 	host.tray_background.size = area.size
 	host.tray_top_border.position = area.position
 	host.tray_top_border.size = Vector2(area.size.x, host.TRAY_TOP_BORDER_HEIGHT * layout_scale)
+
+
+func _configure_glass_background(material: ShaderMaterial) -> void:
+	var shanhai := str(host.active_level_config.get("topic_id", "")) == "topic_01"
+	var background: Texture2D = ShanhaiBackground if shanhai else CalmBackground
+	material.set_shader_parameter("background_texture", background)
+	material.set_shader_parameter(
+		"texture_aspect", float(background.get_width()) / maxf(1.0, background.get_height())
+	)
+	material.set_shader_parameter("top_aligned", shanhai)
+	_refresh_glass_viewport(material)
+
+
+func _refresh_glass_viewport(material: ShaderMaterial) -> void:
+	var viewport_size: Vector2 = host.get_viewport_rect().size
+	material.set_shader_parameter("viewport_aspect", viewport_size.x / maxf(1.0, viewport_size.y))
 
 
 func _layout_tray(instant := false) -> void:
