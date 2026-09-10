@@ -46,3 +46,21 @@ text, new objects, frame, or transparency. Python Pillow converts to RGB,
 Lanczos fits to 1206x2622, and encodes WebP quality 88 / method 6.
 Source: `.artifacts/gameplay-visual-refinement/source/tabletop-source.png`.
 This asset is selected only while the underlying screen is gameplay.
+
+## Shanhai landscape gameplay background (2026-09-10)
+
+`shanhai-landscape.webp`: generated with the built-in imagegen tool from the
+approved Shanhai gameplay mockup. Prompt: extract only the refined traditional
+Chinese shan-shui background; keep the top 0-12% clear warm ivory for HUD
+readability; place pale blue-green mountains, sparse edge pines, mist and a
+muted peach sun below that safe area; preserve a large empty center and quiet
+bottom clouds; exclude text, HUD icons, frames, boards, puzzle pieces, trays,
+buttons, animals, shadows and watermarks. A focused edit moved the upper
+landscape below the 12% safe area while retaining the blank center and bottom
+scenery. Source: `.artifacts/gameplay-landscape-style/source/shanhai-landscape-source.png`
+(`exec-df7f6f82-130f-4500-8723-1d2b6fe38adb.png` in the Codex generated_images
+archive). Python Pillow converts to opaque RGB, Lanczos resizes to 1206x2622,
+derives the warm paper field from the empty center, keeps the exact top 12% HUD
+zone clear, then uses a smoothstep blend from 12-15% to restore the original
+upper landscape. This avoids a horizontal cut through the left pine branch.
+The final opaque RGB asset is encoded as WebP quality 88 / method 6.
