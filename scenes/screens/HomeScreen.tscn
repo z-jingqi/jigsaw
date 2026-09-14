@@ -36,7 +36,19 @@ expand_mode = 1
 layout_mode = 0
 mouse_filter = 2
 expand_mode = 1
+[node name="Fourth" type="TextureRect" parent="Deck"]
+layout_mode = 0
+mouse_filter = 2
+expand_mode = 1
 [node name="ThemeName" type="Label" parent="."]
+layout_mode = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("4")
+horizontal_alignment = 1
+vertical_alignment = 1
+[node name="IncomingThemeName" type="Label" parent="."]
+modulate = Color(1, 1, 1, 0)
 layout_mode = 0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)

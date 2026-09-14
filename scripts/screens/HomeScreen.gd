@@ -7,20 +7,29 @@ signal menu_requested
 signal themes_requested
 
 const Layout := preload("res://scripts/screens/home/HomeLayout.gd")
+const ThemeTitleMotion := preload("res://scripts/screens/home/ThemeTitleMotion.gd")
 @onready var deck := $Deck
 @onready var menu_button: Button = $MenuButton
 @onready var start_button: Button = $StartButton
 var _themes: Array = []
 var _selected_index := 0
+var _title_motion: RefCounted
 
 
 func _ready() -> void:
+	_title_motion = ThemeTitleMotion.new(
+		$ThemeName,
+		$IncomingThemeName,
+		[$TitleCloudLeft as Control, $TitleCloudRight as Control],
+		func() -> void: Layout.apply(self)
+	)
 	deck.selected.connect(_on_selected)
+	deck.browse_motion.connect(_on_browse_motion)
 	menu_button.pressed.connect(menu_requested.emit)
 	$ThemesButton.pressed.connect(themes_requested.emit)
 	$UndoButton.pressed.connect(deck.undo)
 	start_button.pressed.connect(_on_enter_pressed)
-	resized.connect(func() -> void: Layout.apply(self))
+	resized.connect(_on_resized)
 	Layout.apply(self)
 
 
@@ -84,10 +93,34 @@ func _update_information() -> void:
 	$ThemeName.autowrap_mode = TextServer.AUTOWRAP_OFF
 	$ThemeName.max_lines_visible = 1
 	$ThemeName.clip_text = true
-	$ThemeName.text = model.title
 	start_button.text = "进入主题" if model.playable else "敬请期待"
 	start_button.disabled = not model.playable
-	Layout.apply(self)
+	var next_model: Variant = _themes[posmod(_selected_index + 1, _themes.size())]
+	_title_motion.set_current(str(model.title), str(next_model.title))
+
+
+func _on_browse_motion(
+	current_index: int,
+	next_index: int,
+	outgoing_progress: float,
+	incoming_progress: float,
+	committed: bool
+) -> void:
+	if (
+		current_index < 0
+		or current_index >= _themes.size()
+		or next_index < 0
+		or next_index >= _themes.size()
+	):
+		return
+	_title_motion.apply_progress(
+		str(_themes[current_index].title),
+		str(_themes[next_index].title),
+		outgoing_progress,
+		incoming_progress,
+		committed,
+		bool(get_meta("reduced_motion", false))
+	)
 
 
 func _on_enter_pressed() -> void:
@@ -111,12 +144,16 @@ func active_motion_count() -> int:
 	return deck.active_motion_count()
 
 
+func _on_resized() -> void:
+	_title_motion.relayout()
+
+
 func debug_state_snapshot() -> Dictionary:
 	return {
 		"selected_index": _selected_index,
 		"theme_id": str(_themes[_selected_index].theme_id) if not _themes.is_empty() else "",
 		"active_motion_count": active_motion_count(),
-		"cover_pool_size": 3,
+		"cover_pool_size": 4,
 		"visible_cover_count": mini(3, _themes.size()),
 		"undo_count": deck.history.size(),
 		"playable": not start_button.disabled,

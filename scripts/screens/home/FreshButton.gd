@@ -1,6 +1,6 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
-@export_enum("none", "grid", "settings", "undo", "close") var symbol := "none"
+@export_enum("none", "back", "grid", "settings", "undo", "close") var symbol := "none"
 const GridIcon := preload("res://assets/ui/icons/themes-grid.svg")
 const GearIcon := preload("res://assets/ui/icons/settings-gear.svg")
 const INK := Color("194F47")
@@ -36,6 +36,19 @@ func _draw() -> void:
 	var w := maxf(1.5, r * 0.13)
 	var ink := Color("94A28F") if disabled else INK
 	match symbol:
+		"back":
+			draw_polyline(
+				PackedVector2Array(
+					[
+						c + Vector2(r * 0.45, -r * 0.9),
+						c + Vector2(-r * 0.45, 0.0),
+						c + Vector2(r * 0.45, r * 0.9),
+					]
+				),
+				ink,
+				w,
+				true
+			)
 		"close":
 			draw_line(c - Vector2.ONE * r, c + Vector2.ONE * r, ink, w, true)
 			draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, w, true)

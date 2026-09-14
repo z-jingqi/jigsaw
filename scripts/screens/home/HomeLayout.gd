@@ -51,6 +51,26 @@ static func apply(host: Control) -> void:
 	right_cloud.rotation = 0.0
 	right_cloud.flip_h = true
 	_place(title, Vector2(group_left + cloud_size.x + cloud_gap, title_top), title_size)
+	var incoming_title := host.get_node("IncomingThemeName") as Label
+	incoming_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	incoming_title.max_lines_visible = 1
+	var incoming_font := incoming_title.get_theme_font("font")
+	var incoming_font_size := TitleLayout.fit(incoming_title, title_bounds, largest_font_size)
+	var incoming_width := minf(
+		maximum_title_width,
+		(
+			incoming_font
+			. get_string_size(
+				incoming_title.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, incoming_font_size
+			)
+			. x
+		)
+	)
+	_place(
+		incoming_title,
+		Vector2((s.x - incoming_width) * 0.5, title_top),
+		Vector2(incoming_width, title_height)
+	)
 	var deck := host.get_node("Deck") as Control
 	var deck_h := minf(s.y - 340.0 * u, width * 1.42)
 	_place(deck, Vector2(left, 195.0 * u), Vector2(width, deck_h))

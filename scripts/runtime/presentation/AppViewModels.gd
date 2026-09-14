@@ -99,6 +99,7 @@ class LevelCardViewModel:
 	var level_id: String
 	var title: String
 	var thumbnail: Texture2D
+	var thumbnail_path: String
 	var locked: bool
 	var recommended: bool
 	var newly_unlocked: bool
@@ -107,7 +108,8 @@ class LevelCardViewModel:
 	func _init(data: Dictionary) -> void:
 		level_id = str(data["level_id"])
 		title = str(data["title"])
-		thumbnail = data["thumbnail"]
+		thumbnail = data.get("thumbnail") as Texture2D
+		thumbnail_path = str(data.get("thumbnail_path", ""))
 		locked = bool(data["locked"])
 		recommended = bool(data["recommended"])
 		newly_unlocked = bool(data.get("newly_unlocked", false))

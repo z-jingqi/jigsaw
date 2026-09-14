@@ -1,7 +1,15 @@
 extends Control
 ## Owns the bounded card pool and its pointer-following, dismissal and recall.
 signal selected(index: int)
+signal browse_motion(
+	current_index: int,
+	next_index: int,
+	outgoing_progress: float,
+	incoming_progress: float,
+	committed: bool
+)
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
+const VISIBLE_CARD_COUNT := 3
 var themes: Array = []
 var index := 0
 var history: Array[Dictionary] = []
@@ -16,6 +24,7 @@ var _velocity := 0.0
 var _last_time := 0
 var _card_size := Vector2.ZERO
 var _stack_shift := 0.0
+var _committing := false
 
 
 func _ready() -> void:
@@ -75,10 +84,11 @@ func _pose(offset: Vector2) -> void:
 			+ Vector2(size.x * 0.035, size.y * 0.027) * layer
 		)
 		card.rotation = deg_to_rad(1.7 * layer)
-		card.modulate.a = 1.0
+		card.modulate.a = (1.0 if depth < VISIBLE_CARD_COUNT else clampf(_stack_shift, 0.0, 1.0))
 		if depth == 0:
 			card.position += offset
 			card.rotation = 0.0 if reduced_motion else offset.x / maxf(1.0, size.x) * 0.19
+	_emit_browse_motion()
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -144,12 +154,15 @@ func end() -> void:
 func _dismiss(direction: float) -> void:
 	var previous := index
 	var target := Vector2(direction * size.x * 1.45, size.y * 0.42)
+	_committing = true
+	_emit_browse_motion()
 	_animate_to(
 		target,
 		0.28,
 		func() -> void:
 			history.append({"index": previous, "direction": direction})
 			index = posmod(index + 1, themes.size())
+			_committing = false
 			_refresh()
 			selected.emit(index),
 		true
@@ -186,9 +199,12 @@ func _animate_to(target: Vector2, duration: float, done: Callable, falling := fa
 	_tween.finished.connect(
 		func() -> void:
 			_tween = null
-			_stack_shift = 0.0
-			_pose(Vector2.ZERO)
-			done.call()
+			if falling:
+				done.call()
+			else:
+				_stack_shift = 0.0
+				_pose(Vector2.ZERO)
+				done.call()
 	)
 
 
@@ -203,8 +219,23 @@ func cancel() -> void:
 		_tween = null
 	_dragging = false
 	_pointer = -2
+	_committing = false
 	_stack_shift = 0.0
 	_pose(Vector2.ZERO)
+
+
+func _emit_browse_motion() -> void:
+	if themes.is_empty():
+		return
+	var next_index := posmod(index + 1, themes.size())
+	var outgoing_progress := clampf(absf(_offset.x) / maxf(1.0, size.x), 0.0, 1.0)
+	browse_motion.emit(
+		index,
+		next_index,
+		outgoing_progress,
+		clampf(_stack_shift, 0.0, 1.0) if _committing else 0.0,
+		_committing
+	)
 
 
 func _resize() -> void:

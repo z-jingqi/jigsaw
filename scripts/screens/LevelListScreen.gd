@@ -3,7 +3,6 @@ extends Control
 
 signal back_requested
 signal level_selected(level_id: String)
-signal mode_selected(level_id: String, mode: StringName, start_policy: StringName)
 
 const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
@@ -18,7 +17,6 @@ const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 @onready var progress_count: Label = $SafeArea/Content/Header/Progress/Count
 @onready var scroll: NaturalScrollContainer = $SafeArea/Content/Scroll
 @onready var grid_content: Control = $SafeArea/Content/Scroll/GridContent
-@onready var focus_overlay: LevelFocusOverlay = $LevelFocusOverlay
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 
 var _view_model: Variant
@@ -34,8 +32,6 @@ func _ready() -> void:
 	_grid.card_visible.connect(_on_card_visible)
 	_grid.card_hidden.connect(_unlock_sequence.cancel)
 	back_button.pressed.connect(_on_back_pressed)
-	focus_overlay.mode_selected.connect(mode_selected.emit)
-	focus_overlay.closed.connect(_on_focus_closed)
 	resized.connect(_apply_layout)
 	header.resized.connect(_apply_header_layout)
 	animation_player.play(&"RESET")
@@ -51,7 +47,6 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 func navigation_exit(_context: Dictionary) -> void:
 	scroll.set_interaction_enabled(false)
-	focus_overlay.reset_immediately()
 	_unlock_sequence.clear()
 	if _grid != null:
 		_grid.clear()
@@ -59,8 +54,6 @@ func navigation_exit(_context: Dictionary) -> void:
 
 
 func _exit_tree() -> void:
-	if is_instance_valid(focus_overlay):
-		focus_overlay.reset_immediately()
 	_unlock_sequence.clear()
 	if _grid != null:
 		_grid.clear()
@@ -69,13 +62,14 @@ func _exit_tree() -> void:
 func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
-	scroll.set_interaction_enabled(is_active and not focus_overlay.is_active())
+	scroll.set_interaction_enabled(is_active)
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
-	if is_instance_valid(focus_overlay):
-		focus_overlay.set_reduced_motion(enabled)
+	if _grid != null:
+		for card in _grid.visible_cards():
+			card.set_reduced_motion(enabled)
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -89,7 +83,7 @@ func set_view_model(view_model: Variant) -> void:
 	call_deferred("_apply_layout")
 
 
-func refresh_view_model(view_model: Variant, preserve_focus := false) -> void:
+func refresh_view_model(view_model: Variant) -> void:
 	_view_model = view_model
 	theme_title.text = str(view_model.theme_title)
 	progress_count.text = (
@@ -97,21 +91,11 @@ func refresh_view_model(view_model: Variant, preserve_focus := false) -> void:
 		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
 	)
 	_apply_header_layout()
-	if preserve_focus and focus_overlay.is_active():
-		var focused_model: Variant = _level_view_model(focus_overlay.focused_level_id())
-		if focused_model != null:
-			focus_overlay.refresh_view_model(focused_model)
-		return
-	focus_overlay.reset_immediately()
 	_grid.refresh_items(view_model.levels)
 
 
 func active_motion_count() -> int:
-	return (
-		(1 if animation_player.is_playing() else 0)
-		+ _unlock_sequence.active_count()
-		+ focus_overlay.active_motion_count()
-	)
+	return (1 if animation_player.is_playing() else 0) + _unlock_sequence.active_count()
 
 
 func debug_grid_column_count() -> int:
@@ -120,29 +104,6 @@ func debug_grid_column_count() -> int:
 
 func debug_active_card_count() -> int:
 	return _grid.active_card_count() if _grid != null else 0
-
-
-func open_level_focus(level_id: String) -> bool:
-	if _grid == null or focus_overlay.is_active():
-		return false
-	var card := _grid.card_for_level_id(level_id) as LevelCard
-	var card_view_model: Variant = _level_view_model(level_id)
-	if card == null or card.disabled or card_view_model == null:
-		return false
-	_unlock_sequence.clear()
-	scroll.set_interaction_enabled(false)
-	var opened := focus_overlay.open(card, card_view_model, _grid.visible_cards(), scroll)
-	if not opened:
-		scroll.set_interaction_enabled(true)
-	return opened
-
-
-func close_level_focus() -> void:
-	focus_overlay.request_close()
-
-
-func debug_focus_snapshot() -> Dictionary:
-	return focus_overlay.debug_snapshot()
 
 
 func debug_scroll_position() -> int:
@@ -169,16 +130,14 @@ func play_enter() -> void:
 func _apply_layout() -> void:
 	if _view_model == null or _grid == null:
 		return
-	if focus_overlay.is_active():
-		return
 	var available_width := maxf(1.0, scroll.size.x)
 	var columns := grid_column_count_for_width(available_width)
 	var regular := columns == 3
-	var horizontal_gap := 30.0 if regular else 48.0
-	var vertical_gap := 40.0
+	var horizontal_gap := 22.0 if regular else 28.0
+	var vertical_gap := 30.0
 	var card_width := (available_width - horizontal_gap * float(columns - 1)) / float(columns)
-	var card_size := Vector2(card_width, maxf(420.0, card_width * 1.34))
-	var background_reveal_space := clampf(size.y * 0.09, 180.0, 280.0)
+	var card_size := Vector2(card_width, card_width * 4.0 / 3.0 + 72.0)
+	var background_reveal_space := clampf(size.y * 0.07, 140.0, 220.0)
 	_grid.configure(
 		_view_model.levels,
 		columns,
@@ -194,55 +153,61 @@ func _apply_header_layout() -> void:
 	if not is_node_ready() or header.size.x <= 0.0:
 		return
 	var available_width := header.size.x
-	back_button.position = Vector2(8.0, 16.0)
-	back_button.size = Vector2(112.0, 112.0)
-	progress.size = Vector2(266.0, 110.0)
-	progress.position = Vector2(available_width - progress.size.x + 28.0, 20.0)
-	var reserved_side := maxf(back_button.position.x + back_button.size.x, progress.size.x + 4.0)
-	var group_width := maxf(360.0, available_width - reserved_side * 2.0 - 20.0)
+	back_button.position = Vector2(4.0, 12.0)
+	back_button.size = Vector2(92.0, 92.0)
+	progress.size = Vector2(232.0, 82.0)
+	progress.position = Vector2(available_width - progress.size.x - 4.0, 18.0)
+	var reserved_side := maxf(
+		back_button.position.x + back_button.size.x, available_width - progress.position.x
+	)
+	var group_width := maxf(320.0, available_width - reserved_side * 2.0 - 20.0)
 	var font := theme_title.get_theme_font("font")
-	var font_size := 68
-	var ornament_gap := 12.0
-	var ornament_width := 116.0
+	var font_size := 58
+	var ornament_gap := 10.0
+	var ornament_width := 104.0
 	var measured_width := (
 		font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 	)
-	while font_size > 42 and (group_width - measured_width) * 0.5 - ornament_gap < 60.0:
+	while font_size > 36 and (group_width - measured_width) * 0.5 - ornament_gap < 52.0:
 		font_size -= 2
 		measured_width = (
 			font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 		)
-	var multiline := measured_width + 2.0 * (60.0 + ornament_gap) > group_width
-	var title_height := 120.0
-	var title_top := 12.0
+	var multiline := measured_width + 2.0 * (52.0 + ornament_gap) > group_width
+	var title_height := 104.0
+	var title_top := 6.0
 	if multiline:
-		font_size = 32
+		font_size = 30
 		ornament_gap = 8.0
-		ornament_width = 40.0
+		ornament_width = 36.0
 		measured_width = group_width - 2.0 * (ornament_width + ornament_gap)
-		title_height = 140.0
+		title_height = 112.0
 		title_top = 0.0
 		theme_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		theme_title.max_lines_visible = 2
 	else:
-		ornament_width = clampf((group_width - measured_width) * 0.5 - ornament_gap, 60.0, 116.0)
+		ornament_width = clampf((group_width - measured_width) * 0.5 - ornament_gap, 52.0, 104.0)
 		theme_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		theme_title.max_lines_visible = 1
 	theme_title.add_theme_font_size_override("font_size", font_size)
-	var ornament_size := Vector2(ornament_width, 70.0)
+	var ornament_size := Vector2(ornament_width, ornament_width * 0.36)
 	var actual_group_width := measured_width + (ornament_size.x + ornament_gap) * 2.0
 	var group_left := (available_width - actual_group_width) * 0.5
-	title_left_ornament.position = Vector2(group_left, 38.0)
+	title_left_ornament.position = Vector2(
+		group_left, title_top + (title_height - ornament_size.y) * 0.5
+	)
 	title_left_ornament.size = ornament_size
 	theme_title.position = Vector2(group_left + ornament_size.x + ornament_gap, title_top)
 	theme_title.size = Vector2(measured_width, title_height)
 	title_right_ornament.position = Vector2(
-		theme_title.position.x + theme_title.size.x + ornament_gap, 38.0
+		theme_title.position.x + theme_title.size.x + ornament_gap,
+		title_top + (title_height - ornament_size.y) * 0.5
 	)
 	title_right_ornament.size = ornament_size
 
 
 func _on_card_visible(card: Control, view_model: Variant) -> void:
+	card.set_reduced_motion(_reduced_motion)
 	if not bool(view_model.newly_unlocked):
 		return
 	var level_id := str(view_model.level_id)
@@ -254,33 +219,7 @@ func _on_card_visible(card: Control, view_model: Variant) -> void:
 
 func _on_level_selected(level_id: String) -> void:
 	level_selected.emit(level_id)
-	open_level_focus(level_id)
 
 
 func _on_back_pressed() -> void:
-	if focus_overlay.is_active():
-		focus_overlay.request_close()
-		return
 	back_requested.emit()
-
-
-func _on_focus_closed() -> void:
-	scroll.set_interaction_enabled(true)
-	if _view_model != null and _grid != null:
-		_grid.refresh_items(_view_model.levels)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if not focus_overlay.is_active() or not event.is_action_pressed(&"ui_cancel"):
-		return
-	focus_overlay.request_close()
-	get_viewport().set_input_as_handled()
-
-
-func _level_view_model(level_id: String) -> Variant:
-	if _view_model == null:
-		return null
-	for level in _view_model.levels:
-		if str(level.level_id) == level_id:
-			return level
-	return null

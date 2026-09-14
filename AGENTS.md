@@ -70,13 +70,14 @@ For interactive inspection, wait briefly for the scene to render, then inspect t
 
 ## Generated image assets
 
-- Never ask image generation tools for a transparent background. Generated
-  "transparent" images can contain a baked checkerboard or another fake
-  background even when the preview looks transparent.
-- When a runtime asset needs transparency, generate it on a perfectly flat,
-  high-contrast solid-color background that does not occur in the subject.
-  Remove that background with the repository Python image tools, trim excess
-  transparent margins, then resize and encode the final runtime format.
+- Transparent-background generation is allowed, but treat the preview as
+  unverified. Inspect the saved file's alpha channel and edge pixels before it
+  enters the runtime asset path.
+- If a generated file lacks real alpha or contains a baked checkerboard or
+  other fake background, regenerate it on a perfectly flat, high-contrast
+  solid-color background that does not occur in the subject. Remove that
+  background with the repository Python image tools, trim excess transparent
+  margins, then resize and encode the final runtime format.
 - Before importing the asset into Godot, inspect the actual alpha channel and
   edge pixels. A preview or filename is not evidence that the image has real
   transparency.

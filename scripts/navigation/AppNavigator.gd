@@ -438,12 +438,16 @@ func _navigation_context(reason: String) -> Dictionary:
 
 func _transition_kind(route: StringName) -> StringName:
 	var source := String(current_screen_entry().get("route", StringName()))
+	if source == "home" and route == &"themes":
+		return &"home_to_themes"
 	if source == "home" and route == &"levels":
 		return &"home_to_levels"
 	return &"screen"
 
 
 func _pop_transition_kind(source: StringName, target: StringName) -> StringName:
+	if source == &"themes" and target == &"home":
+		return &"themes_to_home"
 	if source == &"levels" and target == &"home":
 		return &"levels_to_home"
 	return &"screen"

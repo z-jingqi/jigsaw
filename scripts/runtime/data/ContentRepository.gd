@@ -50,6 +50,11 @@ func level_thumbnail(level: Dictionary) -> Texture2D:
 	return _repository.level_thumbnail(level)
 
 
+func level_thumbnail_path(level: Dictionary) -> String:
+	var config: Dictionary = _repository.load_level_config(level)
+	return _repository.level_thumbnail_source_path(config)
+
+
 func stable_piece_ids(level: Dictionary, mode: String) -> Array[String]:
 	var config: Dictionary = _repository.load_level_config(level)
 	var mode_data: Dictionary = _repository.mode_config(config, mode)
