@@ -48,22 +48,7 @@ const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
 const TABLE_EXTRA_MIN := 180.0
 const TABLE_EXTRA_MAX := 620.0
 const GROUP_Z_STEP := 16
-const TRAY_HEIGHT_RATIO := 1.0 / 5.0
-const TRAY_MIN_HEIGHT := 132.0
-const TRAY_PADDING := 14.0
-const TRAY_VERTICAL_SAFE_GAP := 50.0
-const TRAY_GAP := 32.0
-const TRAY_ANIMATION_TIME := 0.20
-const TRAY_Z_INDEX := 4090
-const TRAY_HIT_PADDING := 18.0
-const TRAY_EXIT_THRESHOLD := 18.0
-const TRAY_GESTURE_DECIDE_THRESHOLD := 12.0
-const TRAY_DRAG_LIFT_MARGIN := 28.0
-const TRAY_DRAG_Z_INDEX := 4095
-const TRAY_INERTIA_MIN_SPEED := 90.0
-const TRAY_INERTIA_FRICTION := 9.0
-const TRAY_TOP_BORDER_HEIGHT := 3.0
-const TRAY_TOP_BORDER_COLOR := Color(0.32, 0.19, 0.10, 0.30)
+const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
 const BoardLayoutScript := preload("res://scripts/gameplay/board/BoardLayout.gd")
 const BoardStateControllerScript := preload("res://scripts/gameplay/board/BoardStateController.gd")
 const BoardViewControllerScript := preload("res://scripts/gameplay/board/BoardViewController.gd")
@@ -84,6 +69,7 @@ const PieceVisualFactoryScript := preload("res://scripts/gameplay/board/PieceVis
 const SnapSolverScript := preload("res://scripts/gameplay/board/SnapSolver.gd")
 
 var texture: Texture2D
+var tray_config: Dictionary = PuzzleRulesScript.tray_layout()
 var source_image: Image
 var source_size := Vector2.ZERO
 var source_scale := 1.0
@@ -375,7 +361,7 @@ func start(
 	if world_root == null or tray_root == null:
 		push_error("PuzzleBoard requires WorldRoot and TrayRoot scene hosts.")
 		return false
-	tray_root.z_index = TRAY_Z_INDEX
+	tray_root.z_index = int(tray_config["z_index"])
 	tray_root.z_as_relative = false
 	_reset_view_transform()
 	var loaded := _start_play_session(current_mode)
@@ -701,8 +687,11 @@ func _move_group_to_tray(group, index: int, instant := false, forced_x := NAN) -
 	tray_controller._move_group_to_tray(group, index, instant, forced_x)
 
 
-func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := TRAY_HIT_PADDING):
-	return tray_controller._tray_group_at_screen(screen_pos, exclude, hit_padding)
+func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := -1.0):
+	var resolved_padding := hit_padding
+	if resolved_padding < 0.0:
+		resolved_padding = float(tray_config["piece_hit_padding"])
+	return tray_controller._tray_group_at_screen(screen_pos, exclude, resolved_padding)
 
 
 func _begin_tray_piece_press(group, screen_pos: Vector2) -> void:

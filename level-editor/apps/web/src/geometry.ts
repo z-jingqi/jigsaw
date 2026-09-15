@@ -1,6 +1,7 @@
 import { Delaunay } from "d3-delaunay";
 import polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
+import puzzleRules from "../../../../config/puzzle_rules.json";
 import type { LevelPiece, Point } from "./types";
 
 type CellPiece = LevelPiece & { cells: string[] };
@@ -12,20 +13,23 @@ export type PieceSizeRange = {
   maxHeight: number;
 };
 
+const polygonGeneration = puzzleRules.polygon_generation;
+const dimensionRange = polygonGeneration.dimension_range;
+
 export const PIECE_DIMENSION_RULE = {
-  version: 4,
-  referenceAxis: "image_width",
-  minWidthFactor: 0.1,
-  maxWidthFactor: 0.32,
-  minHeightFactor: 0.085,
-  maxHeightFactor: 0.17,
+  version: polygonGeneration.version,
+  referenceAxis: dimensionRange.reference_axis,
+  minWidthFactor: dimensionRange.min_width_factor,
+  maxWidthFactor: dimensionRange.max_width_factor,
+  minHeightFactor: dimensionRange.min_height_factor,
+  maxHeightFactor: dimensionRange.max_height_factor,
 } as const;
-const GENERATION_ATTEMPTS = 12;
-const MAX_REPAIR_STEPS_FACTOR = 5;
-const VORONOI_VERTICAL_SCALE = 2.6;
-const CURVE_STEPS = 5;
-const CURVED_EDGE_TARGET_PER_PIECE = 0.58;
-const MAX_CURVED_EDGES_PER_PIECE = 2;
+const GENERATION_ATTEMPTS = polygonGeneration.generation_attempts;
+const MAX_REPAIR_STEPS_FACTOR = polygonGeneration.max_repair_steps_factor;
+const VORONOI_VERTICAL_SCALE = polygonGeneration.voronoi_vertical_scale;
+const CURVE_STEPS = polygonGeneration.curve_steps;
+const CURVED_EDGE_TARGET_PER_PIECE = polygonGeneration.curved_edge_target_per_piece;
+const MAX_CURVED_EDGES_PER_PIECE = polygonGeneration.max_curved_edges_per_piece;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));

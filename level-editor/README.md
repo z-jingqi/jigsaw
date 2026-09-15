@@ -14,6 +14,7 @@ pnpm dev
 
 ## 数据规则
 
+- 拼图尺寸、生成策略与托盘布局统一配置在 `config/puzzle_rules.json`；修改 polygon 生成参数后必须重新运行批量生成脚本覆盖关卡数据。
 - 关卡结构：主题 -> 分组 -> 关卡。
 - 主题配置包含封面、主题色和 icon，封面支持 JPG / PNG / WebP，icon 支持 SVG / PNG。
 - 分组配置包含颜色。

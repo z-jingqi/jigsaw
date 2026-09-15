@@ -10,6 +10,8 @@ func _init(owner: Node2D) -> void:
 
 func debug_runtime_metrics() -> Dictionary:
 	var area: Rect2 = host._tray_area()
+	var layout: Dictionary = host.tray_controller.tray_layout_metrics()
+	var content_rect: Rect2 = layout["content_rect"]
 	var pieces: Array = []
 	for group in host.tray_groups:
 		if group == null or not is_instance_valid(group.node):
@@ -36,8 +38,11 @@ func debug_runtime_metrics() -> Dictionary:
 		"tray":
 		{
 			"height": area.size.y,
-			"usable_height": maxf(24.0, area.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0),
-			"vertical_gap": host.TRAY_VERTICAL_SAFE_GAP,
+			"usable_height": content_rect.size.y,
+			"padding": layout["padding"],
+			"row_count": layout["row_count"],
+			"row_gap": layout["row_gap"],
+			"row_height": layout["row_height"],
 			"scroll": host.tray_scroll_offset,
 			"content_width": host.tray_content_width,
 			"velocity": host.tray_scroll_velocity,
@@ -527,10 +532,7 @@ func _refresh_debug_bounds_overlay() -> void:
 		child.free()
 	var tray: Rect2 = host._tray_area()
 	_debug_add_rect_outline(host.debug_bounds_overlay, tray, Color(1.0, 0.74, 0.20, 0.88), 4.0)
-	var usable := Rect2(
-		Vector2(tray.position.x, tray.position.y + host.TRAY_VERTICAL_SAFE_GAP),
-		Vector2(tray.size.x, maxf(1.0, tray.size.y - host.TRAY_VERTICAL_SAFE_GAP * 2.0))
-	)
+	var usable: Rect2 = host.tray_controller.tray_layout_metrics()["content_rect"]
 	_debug_add_rect_outline(host.debug_bounds_overlay, usable, Color(0.25, 0.85, 1.0, 0.72), 3.0)
 	for group in host.groups:
 		if group == null or not is_instance_valid(group.node):

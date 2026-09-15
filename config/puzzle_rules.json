@@ -1,0 +1,57 @@
+{
+	"gameplay_layout": {
+		"design_size": [1206.0, 2622.0],
+		"minimum_scale": 0.5,
+		"header": {
+			"top": 70.0,
+			"height": 220.0,
+			"control_size": 148.0,
+			"side_margin": 68.0,
+			"title_max_width": 700.0,
+			"title_max_font_size": 74,
+			"cloud_width": 112.0,
+			"cloud_gap": 20.0,
+			"title_side_gap": 32.0
+		},
+		"tray": {
+			"height": 760.0,
+			"reference_width": 402.0,
+			"rows": 2,
+			"padding_units": 5.0,
+			"row_gap_units": 6.0,
+			"minimum_cell_width_units": 44.0,
+			"hint_padding": 14.0,
+			"piece_animation_time": 0.2,
+			"piece_hit_padding": 18.0,
+			"scroll_lock_distance_units": 24.0,
+			"scroll_unlock_distance_units": 12.0,
+			"inertia_sample_window_ms": 100,
+			"inertia_stationary_ms": 80,
+			"inertia_min_speed": 90.0,
+			"inertia_friction": 9.0,
+			"z_index": 4090,
+			"drag_z_index": 4095,
+			"visual_reference_height": 400.0,
+			"top_border_height": 3.0,
+			"glass_tint": "#E2E8DBD1",
+			"border_color": "#5775666B"
+		},
+		"swap_action_height": 400.0
+	},
+	"polygon_generation": {
+		"version": 4,
+		"dimension_range": {
+			"reference_axis": "image_width",
+			"min_width_factor": 0.1,
+			"max_width_factor": 0.32,
+			"min_height_factor": 0.085,
+			"max_height_factor": 0.17
+		},
+		"generation_attempts": 12,
+		"max_repair_steps_factor": 5,
+		"voronoi_vertical_scale": 2.6,
+		"curve_steps": 5,
+		"curved_edge_target_per_piece": 0.58,
+		"max_curved_edges_per_piece": 2
+	}
+}

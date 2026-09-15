@@ -1,17 +1,11 @@
 extends RefCounted
 class_name GameplayLayout
 
-const DESIGN_SIZE := Vector2(1206.0, 2622.0)
-const HEADER_TOP := 70.0
-const HEADER_HEIGHT := 220.0
-const HEADER_CONTROL_SIZE := 148.0
-const HEADER_SIDE_MARGIN := 68.0
-const HEADER_TITLE_MAX_WIDTH := 700.0
-const HEADER_TITLE_MAX_FONT_SIZE := 74
-const HEADER_CLOUD_WIDTH := 112.0
-const HEADER_CLOUD_GAP := 20.0
-const TRAY_HEIGHT := 520.0
-const SWAP_ACTION_HEIGHT := 400.0
+const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
+
+var _layout_config: Dictionary = PuzzleRulesScript.gameplay_layout()
+var _header_config: Dictionary = _layout_config["header"]
+var _tray_config: Dictionary = _layout_config["tray"]
 
 
 func apply(
@@ -27,13 +21,13 @@ func apply(
 	requested_scale := 1.0,
 ) -> void:
 	var scale := _layout_scale(viewport_size) * maxf(1.0, requested_scale)
-	var control_size := HEADER_CONTROL_SIZE * scale
-	var control_top := HEADER_TOP * scale
-	var side_margin := HEADER_SIDE_MARGIN * scale
+	var control_size := float(_header_config["control_size"]) * scale
+	var control_top := float(_header_config["top"]) * scale
+	var side_margin := float(_header_config["side_margin"]) * scale
 	hud.offset_left = 0.0
 	hud.offset_top = 0.0
 	hud.offset_right = 0.0
-	hud.offset_bottom = control_top + HEADER_HEIGHT * scale
+	hud.offset_bottom = control_top + float(_header_config["height"]) * scale
 	_apply_header_control(back_button, Vector2(side_margin, control_top), control_size)
 	_apply_header_control(
 		hint_button,
@@ -41,10 +35,15 @@ func apply(
 		control_size,
 	)
 	var title_area_width := minf(
-		HEADER_TITLE_MAX_WIDTH * scale,
+		float(_header_config["title_max_width"]) * scale,
 		maxf(
 			1.0,
-			hint_button.position.x - back_button.position.x - back_button.size.x - 32.0 * scale,
+			(
+				hint_button.position.x
+				- back_button.position.x
+				- back_button.size.x
+				- float(_header_config["title_side_gap"]) * scale
+			),
 		),
 	)
 	_layout_title(
@@ -57,16 +56,13 @@ func apply(
 		title_cloud_right,
 		scale,
 	)
-	_configure_bottom_panel(tray_view, TRAY_HEIGHT * scale)
-	_configure_bottom_panel(swap_action_bar, SWAP_ACTION_HEIGHT * scale)
+	_configure_bottom_panel(tray_view, float(_tray_config["height"]) * scale)
+	_configure_bottom_panel(swap_action_bar, float(_layout_config["swap_action_height"]) * scale)
 	swap_action_bar.configure_layout(scale)
 
 
 func _layout_scale(viewport_size: Vector2) -> float:
-	return maxf(
-		0.5,
-		minf(viewport_size.x / DESIGN_SIZE.x, viewport_size.y / DESIGN_SIZE.y),
-	)
+	return PuzzleRulesScript.gameplay_scale(viewport_size)
 
 
 func _apply_header_control(button: Button, position: Vector2, size: float) -> void:
@@ -85,15 +81,15 @@ func _layout_title(
 	right_cloud: TextureRect,
 	scale: float,
 ) -> void:
-	var cloud_width := HEADER_CLOUD_WIDTH * scale
+	var cloud_width := float(_header_config["cloud_width"]) * scale
 	var cloud_texture_size := left_cloud.texture.get_size()
 	var cloud_size := Vector2(
 		cloud_width, cloud_width * cloud_texture_size.y / cloud_texture_size.x
 	)
-	var gap := HEADER_CLOUD_GAP * scale
+	var gap := float(_header_config["cloud_gap"]) * scale
 	var text_limit := maxf(1.0, area_width - 2.0 * (cloud_width + gap))
 	var font := label.get_theme_font("font")
-	var font_size := roundi(HEADER_TITLE_MAX_FONT_SIZE * scale)
+	var font_size := roundi(float(_header_config["title_max_font_size"]) * scale)
 	while (
 		font_size > 1
 		and (

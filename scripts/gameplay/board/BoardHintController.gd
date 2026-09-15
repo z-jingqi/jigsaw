@@ -43,7 +43,7 @@ func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
 	if group == null or not group.in_tray:
 		on_done.call()
 		return
-	var area: Rect2 = host._tray_area().grow(-host.TRAY_PADDING)
+	var area: Rect2 = host._tray_area().grow(-float(host.tray_config["hint_padding"]))
 	var target_offset: float = host.tray_scroll_offset
 	if group.tray_slot.position.x < area.position.x:
 		target_offset -= area.position.x - group.tray_slot.position.x
@@ -106,7 +106,7 @@ func _bring_hint_group_to_front(group) -> void:
 		return
 	if group.in_tray:
 		group.node.z_as_relative = false
-		group.node.z_index = host.TRAY_Z_INDEX + 2
+		group.node.z_index = int(host.tray_config["z_index"]) + 2
 		return
 	host._bring_to_front(group)
 	group.node.z_index = host.HINT_GROUP_Z_INDEX
