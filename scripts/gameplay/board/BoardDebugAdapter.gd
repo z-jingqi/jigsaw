@@ -22,7 +22,7 @@ func debug_runtime_metrics() -> Dictionary:
 					"id": _debug_group_id(group),
 					"in_tray": group.in_tray,
 					"screen_height": bounds.size.y * host._tray_original_screen_scale(),
-					"scale": group.tray_scale,
+					"scale": group.node.scale.x,
 					"slot_x": group.tray_slot.position.x,
 					"slot_w": group.tray_slot.size.x,
 				}
@@ -83,12 +83,19 @@ func debug_toggle_bounds_overlay() -> void:
 	_refresh_debug_bounds_overlay()
 
 
+func _debug_group_screen_scale(group) -> float:
+	var scale: float = group.node.scale.x
+	if group.node.get_parent() == host.world_root:
+		scale *= host.view_scale
+	return scale
+
+
 func debug_run_interaction_smoke() -> Dictionary:
 	var result := {
 		"mode": host.current_mode,
 		"tray_scroll": true,
 		"pickup_drop": false,
-		"tray_drag_scale": true,
+		"tray_drag_size": true,
 		"hint": false,
 		"hint_timeout": true,
 		"hint_stops_on_drag": true,
@@ -107,7 +114,7 @@ func debug_run_interaction_smoke() -> Dictionary:
 	for key in [
 		"tray_scroll",
 		"pickup_drop",
-		"tray_drag_scale",
+		"tray_drag_size",
 		"hint",
 		"hint_timeout",
 		"hint_stops_on_drag",
@@ -141,54 +148,46 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 	debug_scroll_tray_left()
 	if not host.tray_groups.is_empty():
 		var picked = host.tray_groups[0]
-		var original_screen_scale: float = host._tray_original_screen_scale()
-		for candidate in host.tray_groups:
-			if candidate.tray_scale < original_screen_scale * 0.98:
-				picked = candidate
-				break
-		var started_scaled_down: bool = picked.tray_scale < original_screen_scale * 0.98
+		var initial_screen_scale := _debug_group_screen_scale(picked)
 		var center: Vector2 = picked.tray_slot.get_center()
 		var lift_position := Vector2(center.x, host._tray_area().position.y - 72.0)
 		var reentered_position := Vector2(center.x, host._tray_area().position.y + 48.0)
 		host.handle_input(_debug_mouse_button(center, true), false)
 		host.handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
-		var lifted_at_original_scale: bool = (
+		var lifted_at_same_size: bool = (
 			host.dragging == picked
 			and not picked.in_tray
-			and picked.node.scale.is_equal_approx(Vector2.ONE)
+			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
 		)
 		host.handle_input(
 			_debug_mouse_motion(reentered_position, reentered_position - lift_position), false
 		)
-		var reentered_at_original_scale: bool = (
-			host.dragging == picked and picked.node.scale.is_equal_approx(Vector2.ONE)
+		var reentered_at_same_size: bool = (
+			host.dragging == picked
+			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
 		)
 		host.handle_input(_debug_mouse_button(reentered_position, false), false)
 		if picked.tray_tween != null and picked.tray_tween.is_valid():
 			await picked.tray_tween.finished
 		await host.get_tree().process_frame
-		var returned_scaled_down: bool = (
+		var returned_at_same_size: bool = (
 			picked.in_tray
 			and picked.node.get_parent() == host.tray_root
-			and is_equal_approx(picked.node.scale.x, picked.tray_scale)
+			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
 		)
-		result["tray_drag_scale"] = (
-			lifted_at_original_scale and reentered_at_original_scale and returned_scaled_down
+		result["tray_drag_size"] = (
+			lifted_at_same_size and reentered_at_same_size and returned_at_same_size
 		)
-		result["tray_drag_scale_details"] = {
-			"started_scaled_down": started_scaled_down,
-			"lifted_at_original_scale": lifted_at_original_scale,
-			"reentered_at_original_scale": reentered_at_original_scale,
-			"returned_scaled_down": returned_scaled_down,
-			"tray_scale": picked.tray_scale,
+		result["tray_drag_size_details"] = {
+			"initial_screen_scale": initial_screen_scale,
+			"lifted_at_same_size": lifted_at_same_size,
+			"reentered_at_same_size": reentered_at_same_size,
+			"returned_at_same_size": returned_at_same_size,
 			"node_scale": picked.node.scale.x,
 			"in_tray": picked.in_tray,
 			"parent": picked.node.get_parent().name if picked.node.get_parent() != null else "",
-			"original_screen_scale": original_screen_scale,
 		}
-		result["pickup_drop"] = (
-			lifted_at_original_scale and picked.in_tray and host.dragging == null
-		)
+		result["pickup_drop"] = (lifted_at_same_size and picked.in_tray and host.dragging == null)
 	host.show_hint()
 	var hint_wait_started := Time.get_ticks_msec()
 	while host.hint_pending and Time.get_ticks_msec() - hint_wait_started < 1200:

@@ -201,17 +201,16 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 		# Construction and restore call this before the final shared layout pass.
 		_layout_tray_items(true)
 		return
-	var scale: float = cell.scale
-	group.tray_scale = scale
+	var scale := _tray_original_screen_scale()
 	var top_left: Vector2 = cell.top_left
 	group.tray_slot = cell.slot
 
 	var target_position: Vector2 = top_left - bounds.position * scale
 	group.node.z_as_relative = false
 	group.node.z_index = host.TRAY_Z_INDEX + 1
+	group.node.scale = Vector2.ONE * scale
 	if instant:
 		group.is_animating = false
-		group.node.scale = Vector2.ONE * scale
 		group.node.position = target_position
 		host._refresh_hint_line_widths()
 		return
@@ -222,7 +221,6 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 	tween.set_trans(Tween.TRANS_CUBIC)
 	var duration: float = host._motion_duration(host.TRAY_ANIMATION_TIME)
 	tween.parallel().tween_property(group.node, "position", target_position, duration)
-	tween.parallel().tween_property(group.node, "scale", Vector2.ONE * scale, duration)
 	tween.finished.connect(
 		func(g = group) -> void:
 			if is_instance_valid(g.node):
@@ -329,11 +327,6 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 			_stop_tray_inertia()
 		if not grab_gesture.scroll_locked:
 			_pan_tray(motion.delta_x)
-		var screen_scale: float = host.dragging.tray_scale
-		host.dragging.node.scale = (
-			Vector2.ONE
-			* (1.0 if grab_gesture.scroll_locked else screen_scale / maxf(0.001, host.view_scale))
-		)
 		_place_dragging_from_screen(screen_pos)
 		if _tray_area().has_point(screen_pos):
 			host._clear_snap_preview()

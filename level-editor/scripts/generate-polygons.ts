@@ -2,19 +2,23 @@
  * Batch-generate `modes.polygon` for levels that do not have polygon pieces yet,
  * using the same generator as the level editor web app.
  *
- * Usage: apps/api/node_modules/.bin/tsx scripts/generate-polygons.ts [--force]
+ * Usage: apps/api/node_modules/.bin/tsx scripts/generate-polygons.ts [--force] [--dry-run]
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { generatePieces, type ShapeKind, type ShapeRequest } from "../apps/web/src/geometry";
+import {
+  boundsFor,
+  generatePieces,
+  PIECE_DIMENSION_RULE,
+  pieceSizeRange,
+} from "../apps/web/src/geometry";
 import type { LevelPiece } from "../apps/web/src/types";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const levelsRoot = path.resolve(scriptDir, "../../levels");
 const force = process.argv.includes("--force");
-
-const SHAPE_POOL: ShapeKind[] = ["circle", "heart", "star", "hexagon", "blob", "crescent", "triangle", "sector"];
+const dryRun = process.argv.includes("--dry-run");
 
 function fnv1a(text: string) {
   let hash = 2166136261;
@@ -35,17 +39,6 @@ async function findLevelFiles(dir: string): Promise<string[]> {
   return found;
 }
 
-function shapeRequestsFor(hash: number): ShapeRequest[] {
-  // roughly half of the levels get 1-2 special shapes for variety
-  const roll = (hash >>> 4) % 10;
-  const count = roll < 3 ? 1 : roll < 5 ? 2 : 0;
-  const requests: ShapeRequest[] = [];
-  for (let i = 0; i < count; i++) {
-    requests.push({ kind: SHAPE_POOL[(hash >>> (8 + i * 4)) % SHAPE_POOL.length], count: 1 });
-  }
-  return requests;
-}
-
 function polygonAreaAbs(points: Array<[number, number]>) {
   let area = 0;
   for (let i = 0; i < points.length; i++) {
@@ -56,13 +49,26 @@ function polygonAreaAbs(points: Array<[number, number]>) {
   return Math.abs(area / 2);
 }
 
-function validate(pieces: LevelPiece[], width: number, height: number, label: string) {
+function validate(pieces: LevelPiece[], width: number, height: number, targetCount: number, label: string) {
   const problems: string[] = [];
-  if (pieces.length < 20) problems.push(`only ${pieces.length} pieces`);
+  const minExpectedCount = Math.floor(targetCount * 0.85);
+  if (pieces.length < minExpectedCount) {
+    problems.push(
+      `${pieces.length} pieces, expected at least ${minExpectedCount} from ${targetCount} random seeds`,
+    );
+  }
+  const sizeRange = pieceSizeRange(width, height, targetCount);
   let total = 0;
   for (const piece of pieces) {
     if (piece.points.length < 3) problems.push(`piece ${piece.id} has ${piece.points.length} points`);
     if (!piece.neighbors.length && pieces.length > 1) problems.push(`piece ${piece.id} has no neighbors`);
+    const bounds = boundsFor(piece.points);
+    if (bounds.width < sizeRange.minWidth || bounds.width > sizeRange.maxWidth) {
+      problems.push(`piece ${piece.id} width ${bounds.width.toFixed(1)} outside ${sizeRange.minWidth.toFixed(1)}-${sizeRange.maxWidth.toFixed(1)}`);
+    }
+    if (bounds.height < sizeRange.minHeight || bounds.height > sizeRange.maxHeight) {
+      problems.push(`piece ${piece.id} height ${bounds.height.toFixed(1)} outside ${sizeRange.minHeight.toFixed(1)}-${sizeRange.maxHeight.toFixed(1)}`);
+    }
     total += polygonAreaAbs(piece.points as Array<[number, number]>);
   }
   const coverage = total / (width * height);
@@ -90,22 +96,45 @@ async function main() {
       continue;
     }
     const hash = fnv1a(label);
-    const targetCount = 33 + (hash % 8);
-    const shapes = shapeRequestsFor(hash);
-    const pieces = generatePieces(width, height, targetCount, shapes, []);
-    const { coverage, problems } = validate(pieces, width, height, label);
+    const configuredTarget = Number(data?.modes?.polygon?.generator?.target_count || 0);
+    const targetCount = configuredTarget > 0 ? Math.round(configuredTarget) : 33 + (hash % 8);
+    const pieces = generatePieces(width, height, targetCount);
+    const { coverage, problems } = validate(pieces, width, height, targetCount, label);
     allProblems.push(...problems);
+    const validPieceIds = new Set(pieces.map((piece) => piece.id));
+    const existingAssist = data?.modes?.polygon?.assist;
+    const requestedSeedIds = Array.isArray(existingAssist?.seed?.piece_ids) ? existingAssist.seed.piece_ids : [];
+    const validSeedIds = requestedSeedIds.filter((id: unknown): id is string => typeof id === "string" && validPieceIds.has(id));
+    const seedMode = existingAssist?.seed?.mode === "manual" && validSeedIds.length ? "manual" : "auto";
     data.modes = {
       polygon: {
         pieces,
-        generator: { target_count: targetCount, shapes, manual_shapes: [] },
-        assist: { outline: true, seed: { mode: "auto", count: 1, piece_ids: [] } },
+        generator: {
+          version: PIECE_DIMENSION_RULE.version,
+          target_count: targetCount,
+          actual_count: pieces.length,
+          dimension_range: {
+            reference_axis: PIECE_DIMENSION_RULE.referenceAxis,
+            min_width_factor: PIECE_DIMENSION_RULE.minWidthFactor,
+            max_width_factor: PIECE_DIMENSION_RULE.maxWidthFactor,
+            min_height_factor: PIECE_DIMENSION_RULE.minHeightFactor,
+            max_height_factor: PIECE_DIMENSION_RULE.maxHeightFactor,
+          },
+        },
+        assist: {
+          outline: existingAssist?.outline !== false,
+          seed: {
+            mode: seedMode,
+            count: Math.max(0, Math.round(Number(existingAssist?.seed?.count ?? 1))),
+            piece_ids: seedMode === "manual" ? validSeedIds : [],
+          },
+        },
       },
       ...Object.fromEntries(Object.entries(data.modes || {}).filter(([key]) => key !== "polygon")),
     };
-    await fs.writeFile(file, `${JSON.stringify(data, null, "\t")}\n`);
+    if (!dryRun) await fs.writeFile(file, `${JSON.stringify(data, null, "\t")}\n`);
     generated += 1;
-    console.log(`OK ${label}: ${pieces.length} pieces (target ${targetCount}, shapes [${shapes.map((s) => s.kind).join(", ")}], coverage ${(coverage * 100).toFixed(2)}%)`);
+    console.log(`${dryRun ? "DRY" : "OK"} ${label}: ${pieces.length} pieces (target ${targetCount}, coverage ${(coverage * 100).toFixed(2)}%)`);
   }
   console.log(`\nDone. generated=${generated} skipped=${skipped}`);
   if (allProblems.length) {

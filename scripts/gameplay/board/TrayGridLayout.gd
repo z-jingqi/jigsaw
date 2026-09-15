@@ -21,16 +21,9 @@ func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dic
 			if index >= items.size():
 				break
 			var bounds: Rect2 = items[index].bounds
-			var scale := minf(
-				base_scale,
-				minf(
-					(row_height - gap) / maxf(1.0, bounds.size.y),
-					row_height * 1.3 / maxf(1.0, bounds.size.x)
-				)
-			)
-			var size := bounds.size * scale
+			var size := bounds.size * base_scale
 			width = maxf(width, size.x)
-			pair.append({"id": items[index].id, "scale": scale, "size": size, "row": row})
+			pair.append({"id": items[index].id, "size": size, "row": row})
 		for cell in pair:
 			cell.slot = Rect2(
 				Vector2(cursor, padding + cell.row * (row_height + gap)), Vector2(width, row_height)
