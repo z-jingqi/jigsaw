@@ -4,9 +4,12 @@ extends Control
 signal transition_settled(committed: bool)
 
 const CardMotion := preload("res://scripts/navigation/CardPageMotion.gd")
+const ThemeLibraryMotion := preload("res://scripts/navigation/ThemeLibraryMotion.gd")
 const NORMAL_DURATION := 0.40
 const HOME_TO_LEVELS_DURATION := 0.56
 const LEVELS_TO_HOME_DURATION := 0.42
+const THEME_LIBRARY_OPEN_DURATION := 0.44
+const THEME_LIBRARY_CLOSE_DURATION := 0.32
 const REDUCED_MOTION_DURATION := 0.12
 
 var _active_tween: Tween
@@ -83,6 +86,10 @@ func _duration_for(kind: StringName, reduced_motion: bool) -> float:
 			return HOME_TO_LEVELS_DURATION
 		&"levels_to_home":
 			return LEVELS_TO_HOME_DURATION
+		&"home_to_themes":
+			return THEME_LIBRARY_OPEN_DURATION
+		&"themes_to_home":
+			return THEME_LIBRARY_CLOSE_DURATION
 		_:
 			return NORMAL_DURATION
 
@@ -107,6 +114,11 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 	if not is_instance_valid(_target_view):
 		return false
 	var reduced := bool(_active_context.get("reduced_motion", false))
+	if kind in [&"home_to_themes", &"themes_to_home"] and is_instance_valid(_source_view):
+		ThemeLibraryMotion.configure(
+			_active_tween, _source_view, _target_view, _active_context, duration, reduced
+		)
+		return true
 	if reduced:
 		_target_view.modulate.a = 0.0
 		_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration)

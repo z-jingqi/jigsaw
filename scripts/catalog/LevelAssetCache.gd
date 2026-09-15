@@ -10,6 +10,11 @@ func cached_texture(path: String) -> Texture2D:
 		return null
 	if texture_cache.has(path):
 		return texture_cache[path]
+	if path.begins_with("res://") and ResourceLoader.exists(path):
+		var resource_texture := load(path) as Texture2D
+		if resource_texture != null:
+			texture_cache[path] = resource_texture
+			return resource_texture
 	var extension := path.get_extension().to_lower()
 	if ["png", "jpg", "jpeg", "webp"].has(extension):
 		var direct_image := Image.load_from_file(image_file_path(path))
@@ -17,15 +22,6 @@ func cached_texture(path: String) -> Texture2D:
 			var direct_texture := ImageTexture.create_from_image(direct_image)
 			texture_cache[path] = direct_texture
 			return direct_texture
-	var loaded: Texture2D = load(path)
-	if loaded != null:
-		texture_cache[path] = loaded
-		return loaded
-	var fallback_image := Image.load_from_file(image_file_path(path))
-	if fallback_image != null and not fallback_image.is_empty():
-		var fallback_texture := ImageTexture.create_from_image(fallback_image)
-		texture_cache[path] = fallback_texture
-		return fallback_texture
 	return null
 
 

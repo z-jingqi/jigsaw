@@ -4,20 +4,25 @@ extends Control
 signal close_requested
 signal mode_selected(mode: StringName, start_policy: StringName)
 
-const ModeStatusIconScene := preload("res://scenes/ui/foundation/ModeStatusIcon.tscn")
+const ModeCard := preload("res://scripts/modals/ModeSelectCard.gd")
+const Layout := preload("res://scripts/modals/ModeSelectLayout.gd")
+const DebugPreview := preload("res://scripts/modals/ModeSelectPreview.gd")
 
 @onready var background: TextureRect = $Background
 @onready var content: Control = $SafeArea/Content
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
 @onready var title_label: Label = $SafeArea/Content/Header/Title
 @onready var preview: TextureRect = $SafeArea/Content/Preview
-@onready var options: HBoxContainer = $SafeArea/Content/Options
+@onready var options: Control = $SafeArea/Content/Options
 @onready var start_button: ActionButton = $SafeArea/Content/StartButton
 @onready var start_label: Label = $SafeArea/Content/StartButton/Label
 
 var _view_model: Variant
 var _selected_option: Variant
 var _reduced_motion := false
+var _launching := false
+var _active := true
+var _preview_only := false
 
 
 func _ready() -> void:
@@ -31,16 +36,25 @@ func _ready() -> void:
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
 	if payload.has("view_model"):
-		set_view_model(payload["view_model"])
+		var preview_model: Variant = DebugPreview.consume(payload["view_model"])
+		_preview_only = preview_model != null
+		set_view_model(preview_model if _preview_only else payload["view_model"])
+	_active = true
+	opening()
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	_active = false
+	_launching = false
 	for child in options.get_children():
 		child.cancel_motion()
 	start_button.cancel_motion()
 
 
 func navigation_set_active(is_active: bool) -> void:
+	_active = is_active
+	if not is_active:
+		navigation_exit({})
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 
@@ -53,10 +67,10 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func set_view_model(view_model: Variant) -> void:
+	_launching = false
 	_view_model = view_model
 	if not is_node_ready():
 		return
-	background.texture = _read("background_texture") as Texture2D
 	preview.texture = _read("preview_texture") as Texture2D
 	title_label.text = str(_read("level_title", ""))
 	_reconcile_options()
@@ -64,10 +78,12 @@ func set_view_model(view_model: Variant) -> void:
 
 
 func opening() -> void:
-	pass
+	for index in options.get_child_count():
+		options.get_child(index).enter_motion(index)
 
 
 func request_close() -> void:
+	navigation_exit({})
 	close_requested.emit()
 
 
@@ -80,16 +96,15 @@ func active_motion_count() -> int:
 
 func _reconcile_options() -> void:
 	for child in options.get_children():
+		child.cancel_motion()
 		options.remove_child(child)
 		child.queue_free()
 	var available: Array = []
 	for option_model in _read("options", []):
 		if not bool(_read_from(option_model, "enabled", false)):
 			continue
-		var option := ModeStatusIconScene.instantiate() as ModeStatusIcon
+		var option := ModeCard.new()
 		options.add_child(option)
-		option.set_variant(&"selector")
-		option.set_interactive(true)
 		option.set_reduced_motion(_reduced_motion)
 		option.set_view_model(option_model)
 		option.selection_requested.connect(_on_option_selected)
@@ -107,62 +122,59 @@ func _default_option(available: Array) -> Variant:
 
 
 func _on_option_selected(mode: StringName, _policy: StringName) -> void:
+	if _launching or not _active:
+		return
+	if StringName(_read_from(_selected_option, "mode", &"")) == mode:
+		return
 	for option_model in _read("options", []):
 		if StringName(_read_from(option_model, "mode", &"")) == mode:
 			_selected_option = option_model
 			break
-	_refresh_selection()
+	_refresh_selection(true)
 
 
-func _refresh_selection() -> void:
+func _refresh_selection(user_change := false) -> void:
 	var selected_mode := StringName(_read_from(_selected_option, "mode", &""))
 	for child in options.get_children():
-		child.set_selected(child.mode() == selected_mode)
-	start_button.disabled = selected_mode.is_empty()
+		child.set_selected(child.mode() == selected_mode, user_change)
+	start_button.disabled = selected_mode.is_empty() or _preview_only
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
-	start_label.text = action_text if not action_text.is_empty() else "开始拼图"
+	start_label.text = (
+		"开始拼图"
+		if StringName(_read_from(_selected_option, "action", &"start")) == &"start"
+		else action_text
+	)
+	start_button.accessibility_name = start_label.text
+	if _preview_only:
+		start_label.text = "临时预览 · 返回退出"
+		start_button.accessibility_name = start_label.text
 
 
 func _on_start_pressed() -> void:
-	if _selected_option == null or start_button.disabled:
+	if _selected_option == null or start_button.disabled or _launching or not _active:
 		return
-	mode_selected.emit(
-		StringName(_read_from(_selected_option, "mode", &"")),
-		StringName(_read_from(_selected_option, "action", &"start"))
-	)
+	_launching = true
+	start_button.disabled = true
+	var mode := StringName(_read_from(_selected_option, "mode", &""))
+	var policy := StringName(_read_from(_selected_option, "action", &"start"))
+	for child in options.get_children():
+		child.cancel_motion()
+		if child.mode() == mode:
+			child.launch_motion(_finish_start.bind(mode, policy))
+
+
+func _finish_start(mode: StringName, policy: StringName) -> void:
+	if not _launching or not _active:
+		return
+	_launching = false
+	mode_selected.emit(mode, policy)
 
 
 func _apply_layout() -> void:
-	if not is_node_ready() or content.size.x <= 0.0 or content.size.y <= 0.0:
-		return
-	var available := content.size
-	$SafeArea/Content/Header.size = Vector2(available.x, 180.0)
-	back_button.position = Vector2(8.0, 16.0)
-	back_button.size = Vector2(116.0, 116.0)
-	title_label.offset_left = 150.0
-	title_label.offset_top = 8.0
-	title_label.offset_right = -150.0
-	title_label.offset_bottom = 140.0
-	var top := 300.0
-	var preview_width := minf(1040.0, available.x - 24.0)
-	var preview_height := preview_width
-	preview.size = Vector2(preview_width, preview_height)
-	preview.position = Vector2((available.x - preview_width) * 0.5, top)
-	var options_width := minf(900.0, available.x - 80.0)
-	options.size = Vector2(options_width, 316.0)
-	options.position = Vector2(
-		(available.x - options_width) * 0.5, preview.position.y + preview_height + 72.0
-	)
-	var button_width := minf(760.0, available.x - 240.0)
-	start_button.size = Vector2(button_width, 184.0)
-	start_button.position = Vector2(
-		(available.x - button_width) * 0.5,
-		minf(available.y - 232.0, options.position.y + options.size.y + 450.0)
-	)
-	var shader_material := preview.material as ShaderMaterial
-	if shader_material != null and preview_height > 0.0:
-		shader_material.set_shader_parameter("rect_aspect", 1.0)
-		shader_material.set_shader_parameter("rect_size", preview.size)
+	if is_node_ready() and content.size.x > 0 and content.size.y > 0:
+		Layout.apply(self)
+		if _preview_only:
+			start_label.add_theme_font_size_override("font_size", int(start_button.size.y * 0.3))
 
 
 func _read(field: String, fallback: Variant = null) -> Variant:

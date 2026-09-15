@@ -1,144 +1,94 @@
-[gd_scene load_steps=12 format=3]
-
-[ext_resource type="Script" path="res://scripts/modals/ModeSelectModal.gd" id="1_modal"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/IconButton.tscn" id="3_icon"]
-[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="4_action"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/start-button-3d.webp" id="5_start"]
-[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="6_font"]
-[ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="7_shader"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/back-arrow-primary.webp" id="8_back"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_preview"]
+[gd_scene load_steps=10 format=3]
+[ext_resource type="Script" path="res://scripts/modals/ModeSelectModal.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="4"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="5"]
+[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="6"]
+[ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="7"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="8"]
+[sub_resource type="ShaderMaterial" id="PreviewMaterial"]
 resource_local_to_scene = true
-shader = ExtResource("7_shader")
-shader_parameter/corner_radius = 0.075
+shader = ExtResource("7")
+shader_parameter/corner_radius = 0.035
 shader_parameter/rect_aspect = 0.75
-
-[sub_resource type="StyleBoxEmpty" id="StyleBox_empty"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBox_focus"]
-
 [node name="ModeSelectModal" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("1_modal")
-
+script = ExtResource("1")
 [node name="Background" type="TextureRect" parent="."]
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 mouse_filter = 2
+texture = ExtResource("5")
 expand_mode = 1
-stretch_mode = 6
-
-[node name="SafeArea" parent="." instance=ExtResource("2_safe")]
+[node name="SafeArea" parent="." instance=ExtResource("2")]
 layout_mode = 1
-compact_horizontal_margin = 64.0
-compact_breakpoint = 9999.0
-
+compact_horizontal_margin = 0.0
+compact_breakpoint = 99999.0
 [node name="Content" type="Control" parent="SafeArea"]
 layout_mode = 2
-
 [node name="Header" type="Control" parent="SafeArea/Content"]
 layout_mode = 0
-offset_right = 603.0
-offset_bottom = 72.0
-
-[node name="BackButton" parent="SafeArea/Content/Header" instance=ExtResource("3_icon")]
-layout_mode = 1
-offset_left = 8.0
-offset_top = 2.0
-offset_right = 64.0
-offset_bottom = 64.0
-theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
-theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
-icon = ExtResource("8_back")
-expand_icon = true
-icon_max_width = 100
-accessibility_label = "Back to levels"
-
+[node name="BackButton" type="Button" parent="SafeArea/Content/Header"]
+layout_mode = 0
+script = ExtResource("3")
+symbol = "back"
+tooltip_text = "返回关卡列表"
+accessibility_name = "返回关卡列表"
 [node name="Title" type="Label" parent="SafeArea/Content/Header"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 78.0
-offset_right = -78.0
-offset_bottom = 66.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
-theme_override_fonts/font = ExtResource("6_font")
-theme_override_font_sizes/font_size = 62
+layout_mode = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("6")
 horizontal_alignment = 1
 vertical_alignment = 1
+text_overrun_behavior = 3
 clip_text = true
-
+[node name="CloudLeft" type="TextureRect" parent="SafeArea/Content/Header"]
+layout_mode = 0
+mouse_filter = 2
+texture = ExtResource("8")
+expand_mode = 1
+stretch_mode = 5
+[node name="CloudRight" type="TextureRect" parent="SafeArea/Content/Header"]
+layout_mode = 0
+mouse_filter = 2
+texture = ExtResource("8")
+expand_mode = 1
+stretch_mode = 5
+flip_h = true
 [node name="Preview" type="TextureRect" parent="SafeArea/Content"]
-material = SubResource("ShaderMaterial_preview")
+material = SubResource("PreviewMaterial")
 layout_mode = 0
-offset_left = 92.0
-offset_top = 86.0
-offset_right = 511.0
-offset_bottom = 645.0
 mouse_filter = 2
 expand_mode = 1
-stretch_mode = 6
-
-[node name="Options" type="HBoxContainer" parent="SafeArea/Content"]
+stretch_mode = 5
+[node name="ModeHeading" type="Label" parent="SafeArea/Content"]
 layout_mode = 0
-offset_left = 52.0
-offset_top = 670.0
-offset_right = 551.0
-offset_bottom = 828.0
-theme_override_constants/separation = 28
-alignment = 1
-
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("6")
+text = "选择模式"
+horizontal_alignment = 1
+vertical_alignment = 1
+[node name="Options" type="Control" parent="SafeArea/Content"]
+layout_mode = 0
 [node name="StartButton" type="Button" parent="SafeArea/Content"]
-custom_minimum_size = Vector2(360, 92)
 layout_mode = 0
-offset_left = 121.0
-offset_top = 852.0
-offset_right = 481.0
-offset_bottom = 944.0
-theme_override_styles/normal = SubResource("StyleBox_empty")
-theme_override_styles/hover = SubResource("StyleBox_empty")
-theme_override_styles/pressed = SubResource("StyleBox_empty")
-theme_override_styles/disabled = SubResource("StyleBox_empty")
-theme_override_styles/focus = SubResource("StyleBox_focus")
-flat = true
-script = ExtResource("4_action")
-
-[node name="Background" type="TextureRect" parent="SafeArea/Content/StartButton"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-texture = ExtResource("5_start")
-expand_mode = 1
-stretch_mode = 6
-
+script = ExtResource("4")
 [node name="Label" type="Label" parent="SafeArea/Content/StartButton"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(1, 0.976471, 0.917647, 1)
-theme_override_fonts/font = ExtResource("6_font")
-theme_override_font_sizes/font_size = 60
+theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_fonts/font = ExtResource("6")
 text = "开始拼图"
 horizontal_alignment = 1
 vertical_alignment = 1

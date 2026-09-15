@@ -82,13 +82,17 @@ func _layout() -> void:
 	$Title.position = Vector2(76 * u, 27 * u)
 	$Title.size = Vector2(size.x - 152 * u, 46 * u)
 	$Title.add_theme_font_size_override("font_size", int(28 * u))
-	$Scroll.position = Vector2(24, 100) * u
-	$Scroll.size = size - Vector2(48, 118) * u
+	var horizontal_margin := 14.0 * u
+	$Scroll.position = Vector2(horizontal_margin, 100 * u)
+	$Scroll.size = size - Vector2(horizontal_margin * 2.0, 118 * u)
 	var grid := $Scroll/Grid as GridContainer
 	grid.columns = 2 if size.x / size.y < 0.8 else 3
-	grid.add_theme_constant_override("h_separation", int(18 * u))
+	var horizontal_gap := 14.0 * u
+	grid.add_theme_constant_override("h_separation", int(horizontal_gap))
 	grid.add_theme_constant_override("v_separation", int(22 * u))
-	var width: float = ($Scroll.size.x - 14 * u - (grid.columns - 1) * 18 * u) / grid.columns
+	var width: float = (
+		($Scroll.size.x - float(grid.columns - 1) * horizontal_gap) / float(grid.columns)
+	)
 	for tile in grid.get_children():
 		tile.custom_minimum_size = Vector2(width, width * 1.5 + 47 * u)
 		var cover := tile.get_node("Cover") as TextureRect

@@ -1,15 +1,19 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/LevelListScreen.gd" id="1_screen"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SafeAreaContainer.tscn" id="2_safe"]
-[ext_resource type="PackedScene" path="res://scenes/ui/foundation/IconButton.tscn" id="3_icon"]
-[ext_resource type="Texture2D" path="res://assets/ui/shared/tabletop-desk.webp" id="4_desk"]
+[ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3_fresh"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="4_page"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="5_font"]
-[ext_resource type="Texture2D" path="res://assets/ui/icons/back-arrow-primary.webp" id="6_back"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/title-leaf-ornament-3d.webp" id="7_leaf"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/progress-plaque-3d.webp" id="8_plaque"]
-[ext_resource type="PackedScene" path="res://scenes/screens/levels/LevelFocusOverlay.tscn" id="9_focus"]
+[ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6_cloud"]
 [ext_resource type="Script" path="res://scripts/ui/scrolling/NaturalScrollContainer.gd" id="10_natural_scroll"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_progress"]
+bg_color = Color(0.866667, 0.890196, 0.811765, 0.96)
+corner_radius_top_left = 100
+corner_radius_top_right = 100
+corner_radius_bottom_right = 100
+corner_radius_bottom_left = 100
 
 [sub_resource type="Animation" id="Animation_reset"]
 resource_name = "RESET"
@@ -53,7 +57,6 @@ grow_vertical = 2
 script = ExtResource("1_screen")
 
 [node name="Background" type="TextureRect" parent="."]
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -61,13 +64,12 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("4_desk")
+texture = ExtResource("4_page")
 expand_mode = 1
-stretch_mode = 6
 
 [node name="SafeArea" parent="." instance=ExtResource("2_safe")]
 layout_mode = 1
-compact_horizontal_margin = 82.0
+compact_horizontal_margin = 52.0
 compact_breakpoint = 9999.0
 
 [node name="Content" type="Control" parent="SafeArea"]
@@ -77,31 +79,28 @@ layout_mode = 2
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = 60.0
-offset_bottom = 264.0
+offset_top = 44.0
+offset_bottom = 232.0
 grow_horizontal = 2
 
-[node name="BackButton" parent="SafeArea/Content/Header" instance=ExtResource("3_icon")]
+[node name="BackButton" type="Button" parent="SafeArea/Content/Header"]
 layout_mode = 1
-offset_left = 8.0
-offset_top = 16.0
-offset_right = 120.0
-offset_bottom = 128.0
-theme_override_colors/font_color = Color(1, 0.34902, 0.184314, 1)
-theme_override_colors/font_hover_color = Color(1, 0.431373, 0.270588, 1)
-icon = ExtResource("6_back")
-expand_icon = true
-icon_max_width = 100
-accessibility_label = "Back"
+offset_left = 4.0
+offset_top = 12.0
+offset_right = 96.0
+offset_bottom = 104.0
+script = ExtResource("3_fresh")
+symbol = "back"
+tooltip_text = "返回主题"
 
 [node name="TitleLeftOrnament" type="TextureRect" parent="SafeArea/Content/Header"]
 layout_mode = 0
 offset_left = 290.0
 offset_top = 32.0
-offset_right = 408.0
-offset_bottom = 100.0
+offset_right = 398.0
+offset_bottom = 92.0
 mouse_filter = 2
-texture = ExtResource("7_leaf")
+texture = ExtResource("6_cloud")
 expand_mode = 1
 stretch_mode = 5
 
@@ -111,9 +110,9 @@ offset_left = 420.0
 offset_top = 12.0
 offset_right = 786.0
 offset_bottom = 132.0
-theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
 theme_override_fonts/font = ExtResource("5_font")
-theme_override_font_sizes/font_size = 68
+theme_override_font_sizes/font_size = 58
 horizontal_alignment = 1
 vertical_alignment = 1
 clip_text = true
@@ -123,37 +122,26 @@ text_overrun_behavior = 3
 layout_mode = 0
 offset_left = 798.0
 offset_top = 32.0
-offset_right = 916.0
-offset_bottom = 100.0
+offset_right = 906.0
+offset_bottom = 92.0
 mouse_filter = 2
-texture = ExtResource("7_leaf")
+texture = ExtResource("6_cloud")
 expand_mode = 1
 stretch_mode = 5
 flip_h = true
 
-[node name="Progress" type="Control" parent="SafeArea/Content/Header"]
+[node name="Progress" type="Panel" parent="SafeArea/Content/Header"]
 layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -330.0
-offset_top = 20.0
+offset_left = -236.0
+offset_top = 18.0
 offset_right = -4.0
-offset_bottom = 132.0
+offset_bottom = 100.0
 grow_horizontal = 0
 mouse_filter = 2
-
-[node name="Plaque" type="TextureRect" parent="SafeArea/Content/Header/Progress"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-texture = ExtResource("8_plaque")
-expand_mode = 1
-stretch_mode = 6
+theme_override_styles/panel = SubResource("StyleBox_progress")
 
 [node name="Count" type="Label" parent="SafeArea/Content/Header/Progress"]
 layout_mode = 1
@@ -164,9 +152,9 @@ offset_top = -2.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
 theme_override_fonts/font = ExtResource("5_font")
-theme_override_font_sizes/font_size = 42
+theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -176,9 +164,9 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 0.0
-offset_top = 286.0
+offset_top = 242.0
 offset_right = 0.0
-offset_bottom = -20.0
+offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 2
 horizontal_scroll_mode = 0
@@ -189,7 +177,6 @@ navigator_path = NodePath("../../../../../../AppNavigator")
 [node name="GridContent" type="Control" parent="SafeArea/Content/Scroll"]
 layout_mode = 2
 
-[node name="LevelFocusOverlay" parent="." instance=ExtResource("9_focus")]
 layout_mode = 1
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]

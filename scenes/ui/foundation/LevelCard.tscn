@@ -1,9 +1,9 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/foundation/LevelCard.gd" id="1_card"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="3_font"]
-[ext_resource type="Texture2D" path="res://assets/ui/levels/completion-paw-primary.webp" id="4_paw"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/CompletedModeStickers.gd" id="4_stickers"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="5_shader"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_thumbnail"]
@@ -13,69 +13,37 @@ shader_parameter/corner_radius = 0.055
 shader_parameter/rect_aspect = 1.333
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_card"]
-bg_color = Color(0.992157, 0.945098, 0.827451, 1)
-border_width_left = 7
-border_width_top = 7
-border_width_right = 7
-border_width_bottom = 7
-border_color = Color(1, 0.980392, 0.901961, 1)
-corner_radius_top_left = 32
-corner_radius_top_right = 32
-corner_radius_bottom_right = 32
-corner_radius_bottom_left = 32
-shadow_color = Color(0.286275, 0.145098, 0.0509804, 0.24)
-shadow_size = 9
-shadow_offset = Vector2(-4, 9)
+bg_color = Color(1, 1, 1, 0)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_hover"]
-bg_color = Color(1, 0.968627, 0.870588, 1)
-border_width_left = 7
-border_width_top = 7
-border_width_right = 7
-border_width_bottom = 7
-border_color = Color(1, 0.992157, 0.941176, 1)
-corner_radius_top_left = 32
-corner_radius_top_right = 32
-corner_radius_bottom_right = 32
-corner_radius_bottom_left = 32
-shadow_color = Color(0.286275, 0.145098, 0.0509804, 0.2)
-shadow_size = 8
-shadow_offset = Vector2(-3, 8)
+bg_color = Color(0.866667, 0.890196, 0.811765, 0.16)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_pressed"]
-bg_color = Color(0.964706, 0.858824, 0.690196, 1)
-border_width_left = 7
-border_width_top = 7
-border_width_right = 7
-border_width_bottom = 7
-border_color = Color(1, 0.960784, 0.866667, 1)
-corner_radius_top_left = 32
-corner_radius_top_right = 32
-corner_radius_bottom_right = 32
-corner_radius_bottom_left = 32
-shadow_color = Color(0.286275, 0.145098, 0.0509804, 0.16)
-shadow_size = 5
-shadow_offset = Vector2(-2, 5)
+bg_color = Color(0.737255, 0.803922, 0.686275, 0.24)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_disabled"]
-bg_color = Color(0.960784, 0.92549, 0.854902, 1)
-border_width_left = 7
-border_width_top = 7
-border_width_right = 7
-border_width_bottom = 7
-border_color = Color(0.984314, 0.956863, 0.882353, 1)
-corner_radius_top_left = 32
-corner_radius_top_right = 32
-corner_radius_bottom_right = 32
-corner_radius_bottom_left = 32
-shadow_color = Color(0.286275, 0.145098, 0.0509804, 0.16)
-shadow_size = 8
-shadow_offset = Vector2(-4, 8)
+bg_color = Color(1, 1, 1, 0)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
 
 [sub_resource type="StyleBoxEmpty" id="StyleBox_focus"]
 
 [node name="LevelCard" type="Button"]
-custom_minimum_size = Vector2(300, 368)
+custom_minimum_size = Vector2(300, 450)
 theme = ExtResource("2_theme")
 theme_override_styles/normal = SubResource("StyleBox_card")
 theme_override_styles/hover = SubResource("StyleBox_hover")
@@ -100,7 +68,7 @@ offset_top = 118.0
 offset_right = 150.0
 offset_bottom = 150.0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.294118, 0.184314, 0.113725, 1)
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 40
 horizontal_alignment = 1
@@ -110,23 +78,12 @@ max_lines_visible = 2
 clip_text = true
 text_overrun_behavior = 3
 
-[node name="ModeRow" type="HBoxContainer" parent="."]
+[node name="CompletedModes" type="HBoxContainer" parent="."]
 layout_mode = 0
 offset_top = 150.0
 offset_right = 150.0
 offset_bottom = 184.0
 mouse_filter = 2
-theme_override_constants/separation = 2
-alignment = 1
-
-[node name="CompletionPaw" type="TextureRect" parent="."]
-visible = false
-layout_mode = 0
-offset_left = 104.0
-offset_top = 12.0
-offset_right = 142.0
-offset_bottom = 47.0
-mouse_filter = 2
-texture = ExtResource("4_paw")
-expand_mode = 1
-stretch_mode = 5
+theme_override_constants/separation = 8
+alignment = 2
+script = ExtResource("4_stickers")

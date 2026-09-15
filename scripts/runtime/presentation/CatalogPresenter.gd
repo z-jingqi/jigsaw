@@ -11,6 +11,8 @@ var _progress: Variant
 var _session: Variant
 var _strings: Variant
 var _revision := 0
+var _home_models_revision := -1
+var _home_models: Array = []
 
 
 func _init(content: Variant, progress: Variant, session: Variant, strings: Variant) -> void:
@@ -25,31 +27,10 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 	var themes: Array[Dictionary] = _content.topics()
 	var resolved_id := _resolve_theme_id(themes, selected_theme_id)
 	var models: Array[AppViewModels.HomeThemeViewModel] = []
+	models.assign(_cached_home_models(themes))
 	var selected_index := 0
-	for index in themes.size():
-		var topic: Dictionary = themes[index]
-		var model := (
-			ViewModelsScript
-			. HomeThemeViewModel
-			. new(
-				{
-					"theme_id": topic["id"],
-					"title": topic["name"],
-					"cover_texture": _content.topic_cover(topic),
-					"playable": not topic.get("levels", []).is_empty(),
-					"subtitle":
-					(
-						str(topic["levels"][0].get("title", ""))
-						if not topic.get("levels", []).is_empty()
-						else "新主题 · 敬请期待"
-					),
-					"cover_focus": Vector2(0.5, 0.5),
-					"home_ui_variant": "on_dark",
-					"progress": theme_progress(topic),
-				}
-			)
-		)
-		models.append(model)
+	for index in models.size():
+		var model: AppViewModels.HomeThemeViewModel = models[index]
 		if model.theme_id == resolved_id:
 			selected_index = index
 	return (
@@ -96,7 +77,8 @@ func level_list(
 						{
 							"level_id": level["id"],
 							"title": level["title"],
-							"thumbnail": _content.level_thumbnail(level),
+							"thumbnail": null,
+							"thumbnail_path": _content.level_thumbnail_path(level),
 							"locked": locked,
 							"recommended": is_recommended,
 							"modes": modes,
@@ -212,8 +194,9 @@ func _mode_statuses(
 	topic: Dictionary, level: Dictionary
 ) -> Array[AppViewModels.ModeStatusViewModel]:
 	var result: Array[AppViewModels.ModeStatusViewModel] = []
+	var available_modes: Array[String] = _content.available_modes(level)
 	for mode in ["polygon", "knob", "swap"]:
-		var available: bool = _content.available_modes(level).has(mode)
+		var available: bool = available_modes.has(mode)
 		var completed: bool = (
 			available
 			and _progress.is_mode_completed(
@@ -299,3 +282,39 @@ func _resolve_theme_id(themes: Array[Dictionary], requested_id: String) -> Strin
 
 func _on_source_changed(_snapshot: Dictionary, _source_revision: int) -> void:
 	_revision += 1
+	_home_models_revision = -1
+
+
+func _cached_home_models(themes: Array[Dictionary]) -> Array:
+	if _home_models_revision == _revision:
+		return _home_models
+	_home_models.clear()
+	for topic in themes:
+		(
+			_home_models
+			. append(
+				(
+					ViewModelsScript
+					. HomeThemeViewModel
+					. new(
+						{
+							"theme_id": topic["id"],
+							"title": topic["name"],
+							"cover_texture": _content.topic_cover(topic),
+							"playable": not topic.get("levels", []).is_empty(),
+							"subtitle":
+							(
+								str(topic["levels"][0].get("title", ""))
+								if not topic.get("levels", []).is_empty()
+								else "新主题 · 敬请期待"
+							),
+							"cover_focus": Vector2(0.5, 0.5),
+							"home_ui_variant": "on_dark",
+							"progress": theme_progress(topic),
+						}
+					)
+				)
+			)
+		)
+	_home_models_revision = _revision
+	return _home_models

@@ -34,7 +34,7 @@ theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
 [node name="Scroll" type="ScrollContainer" parent="."]
 layout_mode = 0
 horizontal_scroll_mode = 0
-vertical_scroll_mode = 1
+vertical_scroll_mode = 3
 script = ExtResource("5_scroll")
 navigator_path = NodePath("../../../../AppNavigator")
 [node name="Grid" type="GridContainer" parent="Scroll"]

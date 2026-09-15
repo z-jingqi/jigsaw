@@ -10,13 +10,22 @@ var texture_cache: Dictionary = asset_cache.texture_cache
 var source_image_cache: Dictionary = asset_cache.source_image_cache
 var config_cache: Dictionary = {}
 var locale := "en"
+var _catalog_cache: Array[Dictionary] = []
+var _catalog_cached := false
 
 
 func set_locale(next_locale: String) -> void:
-	locale = normalize_locale(next_locale)
+	var normalized := normalize_locale(next_locale)
+	if locale == normalized:
+		return
+	locale = normalized
+	_catalog_cache.clear()
+	_catalog_cached = false
 
 
 func build_catalog() -> Array[Dictionary]:
+	if _catalog_cached:
+		return _catalog_cache
 	var catalog := load_config_path(LEVEL_CATALOG_PATH)
 	if catalog.has("topics") and typeof(catalog["topics"]) == TYPE_ARRAY:
 		var next_topics: Array[Dictionary] = []
@@ -88,8 +97,12 @@ func build_catalog() -> Array[Dictionary]:
 					}
 				)
 			)
-		return next_topics
-	return []
+		_catalog_cache = next_topics
+		_catalog_cached = true
+		return _catalog_cache
+	_catalog_cache.clear()
+	_catalog_cached = true
+	return _catalog_cache
 
 
 func _catalog_level_entry(level_data) -> Dictionary:

@@ -454,7 +454,6 @@ func _bind_levels(screen: RuntimeLevelListScreen) -> void:
 		return
 	screen.back_requested.connect(_navigator.pop)
 	screen.level_selected.connect(_on_level_focused)
-	screen.mode_selected.connect(_on_level_focus_mode_selected)
 
 
 func _bind_gameplay(screen: GameplayScreen) -> void:
@@ -548,10 +547,7 @@ func _on_level_focused(level_id: String) -> void:
 	_current_level_id = level_id
 	_current_mode = ""
 	_services.session.set_current(_current_theme_id, level_id)
-
-
-func _on_level_focus_mode_selected(level_id: String, mode: StringName, policy: StringName) -> void:
-	enter_level(_current_theme_id, level_id, String(mode), String(policy))
+	show_mode_select(_current_theme_id, level_id)
 
 
 func _on_setting_changed(key: StringName, enabled: bool) -> void:
@@ -756,7 +752,7 @@ func _on_route_changed(route: StringName, payload: Dictionary) -> void:
 		_current_mode = ""
 		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
 		if levels != null:
-			levels.refresh_view_model(_catalog.level_list(_current_theme_id, focus), true)
+			levels.refresh_view_model(_catalog.level_list(_current_theme_id, focus))
 	if (
 		not _pending_after_modal.is_valid()
 		or not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty()
