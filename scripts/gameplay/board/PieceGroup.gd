@@ -9,7 +9,6 @@ var locked := false
 var is_seed := false
 var in_tray := false
 var tray_index := -1
-var tray_scale := 1.0
 var tray_slot := Rect2()
 var tray_tween: Tween
 

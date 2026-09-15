@@ -7,7 +7,6 @@ const CUT_LINE_COLOR := Color(0.26, 0.20, 0.14, 0.70)
 const CUT_LINE_LIFT_COLOR := Color(0.72, 0.43, 0.18, 0.78)
 const SHADOW_COLOR := Color(0.40, 0.24, 0.10, 0.12)
 const SHADOW_OFFSET := Vector2(5.0, 7.0)
-const LIFTED_SCALE := Vector2(1.008, 1.008)
 const SEAM_LINE_COLOR := Color(0.0, 0.0, 0.0, 0.22)
 
 
@@ -83,17 +82,15 @@ static func set_visual_lifted(
 		previous.kill()
 	if visual.has_meta("lift_tween"):
 		visual.remove_meta("lift_tween")
-	var target_scale := LIFTED_SCALE if lifted else Vector2.ONE
+	visual.scale = Vector2.ONE
 	var shadow := visual.get_node_or_null("piece_lift_shadow")
 	if not animate:
-		visual.scale = target_scale
 		if shadow != null:
 			shadow.modulate.a = 1.0 if lifted else 0.0
 		return
 	var tween := tween_owner.create_tween().bind_node(visual)
 	visual.set_meta("lift_tween", tween)
 	tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
-	tween.parallel().tween_property(visual, "scale", target_scale, 0.10)
 	if shadow != null:
 		tween.parallel().tween_property(shadow, "modulate:a", 1.0 if lifted else 0.0, 0.10)
 

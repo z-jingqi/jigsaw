@@ -91,6 +91,9 @@ func _register_runtime_contracts() -> void:
 		RouteDefinitionScript.new(&"settings", RouteDefinitionScript.Presentation.MODAL)
 	)
 	register_definition(
+		RouteDefinitionScript.new(&"gameplay_pause", RouteDefinitionScript.Presentation.MODAL)
+	)
+	register_definition(
 		RouteDefinitionScript.new(
 			&"home_guide", RouteDefinitionScript.Presentation.OVERLAY, {}, {"initial_step": "swipe"}
 		)

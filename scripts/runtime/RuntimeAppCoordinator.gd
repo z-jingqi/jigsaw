@@ -19,6 +19,7 @@ const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 const ModeSelectScene := preload("res://scenes/modals/ModeSelectModal.tscn")
 const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
+const GameplayPauseScene := preload("res://scenes/modals/GameplayPausePanel.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
 const ModeTutorialScene := preload("res://scenes/modals/ModeTutorialModal.tscn")
@@ -43,6 +44,7 @@ var _pending_after_modal: Callable
 var _home_guide_timer: SceneTreeTimer
 var _dev_panel: Control
 var _returning_to_levels := false
+var _gameplay_paused := false
 
 
 func _init(game: Node2D) -> void:
@@ -396,6 +398,7 @@ func _bind_routes() -> void:
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
 		&"settings": SettingsScene,
+		&"gameplay_pause": GameplayPauseScene,
 		&"home_guide": HomeGuideScene,
 		&"mode_tutorial": ModeTutorialScene,
 		&"completion": CompletionScene
@@ -457,12 +460,42 @@ func _bind_levels(screen: RuntimeLevelListScreen) -> void:
 func _bind_gameplay(screen: GameplayScreen) -> void:
 	if screen == null:
 		return
-	screen.back_requested.connect(_return_to_levels)
+	screen.pause_requested.connect(_show_gameplay_pause)
 	screen.hint_requested.connect(trigger_hint)
 	screen.move_swap_up_requested.connect(shift_swap_rows.bind(true))
 	screen.move_swap_down_requested.connect(shift_swap_rows.bind(false))
 	screen.move_swap_left_requested.connect(shift_swap_columns.bind(-1))
 	screen.move_swap_right_requested.connect(shift_swap_columns.bind(1))
+
+
+func _show_gameplay_pause() -> void:
+	if _screen_name() != "gameplay" or _gameplay_paused:
+		return
+	var result := _navigator.show_modal(&"gameplay_pause")
+	if not bool(result.get("ok", false)):
+		return
+	_set_gameplay_paused(true)
+	var panel := _navigator.current_route_view() as GameplayPausePanel
+	if panel != null:
+		panel.resume_requested.connect(_resume_gameplay)
+		panel.exit_requested.connect(_exit_paused_gameplay)
+
+
+func _resume_gameplay() -> void:
+	close_modal()
+
+
+func _exit_paused_gameplay() -> void:
+	_pending_after_modal = _return_to_levels
+	close_modal()
+
+
+func _set_gameplay_paused(enabled: bool) -> void:
+	_gameplay_paused = enabled
+	if is_instance_valid(_world_host):
+		_world_host.process_mode = (
+			Node.PROCESS_MODE_DISABLED if enabled else Node.PROCESS_MODE_INHERIT
+		)
 
 
 func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:
@@ -714,6 +747,8 @@ func _cancel_home_guide_timer() -> void:
 
 func _on_route_changed(route: StringName, payload: Dictionary) -> void:
 	_state.update(route, payload)
+	if _gameplay_paused and route != &"gameplay_pause":
+		_set_gameplay_paused(false)
 	if route == &"levels" and _returning_to_levels:
 		_returning_to_levels = false
 		var focus := _current_level_id

@@ -23,9 +23,9 @@ func _refresh_group_z_indices() -> void:
 		var group = host.groups[index]
 		group.node.z_as_relative = false
 		if group == host.dragging and host.dragging_from_tray:
-			group.node.z_index = host.TRAY_DRAG_Z_INDEX
+			group.node.z_index = int(host.tray_config["drag_z_index"])
 		elif group.in_tray:
-			group.node.z_index = host.TRAY_Z_INDEX + 1
+			group.node.z_index = int(host.tray_config["z_index"]) + 1
 		else:
 			group.node.z_index = index * host.GROUP_Z_STEP
 

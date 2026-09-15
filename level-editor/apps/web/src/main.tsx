@@ -47,7 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import { fillCoverageGaps, generatePieces, manualShapePolygon, mergePieces, sequentialId, withNeighbors, zhI18n, type ManualShape, type ShapeKind, type ShapeRequest } from "./geometry";
+import { fillCoverageGaps, generatePieces, mergePieces, PIECE_DIMENSION_RULE, sequentialId, withNeighbors, zhI18n } from "./geometry";
 import { cn } from "./lib/utils";
 import { findTinyPieceIds } from "./tiny-piece";
 import { useEditorDirtyState } from "./hooks/use-editor-dirty-state";
@@ -78,19 +78,6 @@ const DEFAULT_GROUP_COLOR = "#F6EBD4";
 const FLAT_GROUP_ID = "levels";
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const LINE_COLOR_OPTIONS = ["#FFF6E6", "#5A3A22", "#D9933F", "#2f7667", "#38BDF8", "#FFFFFF", "#111827"];
-const SHAPE_OPTIONS: Array<{ kind: ShapeKind; label: string }> = [
-  { kind: "circle", label: "圆形" },
-  { kind: "square", label: "正方形" },
-  { kind: "heart", label: "心形" },
-  { kind: "triangle", label: "三角形" },
-  { kind: "star", label: "五角星" },
-  { kind: "sector", label: "扇形" },
-  { kind: "crescent", label: "月牙" },
-  { kind: "hexagon", label: "六边形" },
-  { kind: "blob", label: "不规则块" },
-  { kind: "shard", label: "碎片块" },
-];
-
 type DeleteTarget =
   | { kind: "topic"; topic: CatalogTopic }
   | { kind: "group"; topic: CatalogTopic; group: CatalogGroup }
@@ -1983,47 +1970,8 @@ function KnobSeedGrid(props: {
   );
 }
 
-function shapeRequests(counts: Record<ShapeKind, number>): ShapeRequest[] {
-  return SHAPE_OPTIONS.map((option) => ({
-    kind: option.kind,
-    count: counts[option.kind] || 0,
-  })).filter((shape) => shape.count > 0);
-}
-
-function manualShapesFromGenerator(generator: unknown): ManualShape[] {
-  if (!generator || typeof generator !== "object" || !("manual_shapes" in generator) || !Array.isArray((generator as { manual_shapes?: unknown }).manual_shapes)) return [];
-  return (generator as { manual_shapes: unknown[] }).manual_shapes
-    .map((shape, index) => normalizeManualShape(shape, `manual_shape_${index + 1}`))
-    .filter((shape): shape is ManualShape => Boolean(shape));
-}
-
-function normalizeManualShape(input: unknown, fallbackId: string): ManualShape | null {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as Partial<ManualShape>;
-  const kind = raw.kind;
-  if (!kind || !SHAPE_OPTIONS.some((option) => option.kind === kind)) return null;
-  const center = Array.isArray(raw.center) && raw.center.length >= 2 ? raw.center : [0, 0];
-  const radius = Number(raw.radius || 0);
-  return {
-    id: String(raw.id || fallbackId),
-    kind,
-    center: [Number(center[0]) || 0, Number(center[1]) || 0],
-    radius: Number.isFinite(radius) && radius > 0 ? radius : 120,
-    rotation: Number(raw.rotation || 0),
-  };
-}
-
-function nextManualShapeId(shapes: ManualShape[]) {
-  const used = new Set(shapes.map((shape) => shape.id));
-  let index = shapes.length + 1;
-  while (used.has(`manual_shape_${index}`)) index += 1;
-  return `manual_shape_${index}`;
-}
-
 type PolygonEditorSnapshot = {
   pieces: LevelPiece[];
-  manualShapes: ManualShape[];
-  shapeCounts: Record<ShapeKind, number>;
   polygonAssist: SeedAssist;
   targetCount: number;
 };
@@ -2039,13 +1987,6 @@ function clonePiece(piece: LevelPiece): LevelPiece {
     home: clonePoint(piece.home),
     neighbors: [...(piece.neighbors || [])],
     visible_bounds: [...(piece.visible_bounds || [0, 0, 0, 0])] as [number, number, number, number],
-  };
-}
-
-function cloneManualShape(shape: ManualShape): ManualShape {
-  return {
-    ...shape,
-    center: clonePoint(shape.center),
   };
 }
 
@@ -2071,18 +2012,9 @@ function seedAssistSignature(assist: SeedAssist) {
   };
 }
 
-function cloneShapeCounts(counts: Record<ShapeKind, number>): Record<ShapeKind, number> {
-  return SHAPE_OPTIONS.reduce(
-    (acc, option) => ({ ...acc, [option.kind]: counts[option.kind] || 0 }),
-    {} as Record<ShapeKind, number>,
-  );
-}
-
 function clonePolygonSnapshot(snapshot: PolygonEditorSnapshot): PolygonEditorSnapshot {
   return {
     pieces: snapshot.pieces.map(clonePiece),
-    manualShapes: snapshot.manualShapes.map(cloneManualShape),
-    shapeCounts: cloneShapeCounts(snapshot.shapeCounts),
     polygonAssist: cloneSeedAssist(snapshot.polygonAssist),
     targetCount: snapshot.targetCount,
   };
@@ -2098,8 +2030,6 @@ function polygonEditorSignature(snapshot: PolygonEditorSnapshot) {
       visible_bounds: piece.visible_bounds || null,
       cells: piece.cells || [],
     })),
-    manualShapes: snapshot.manualShapes,
-    shapeCounts: cloneShapeCounts(snapshot.shapeCounts),
     polygonAssist: seedAssistSignature(snapshot.polygonAssist),
     targetCount: snapshot.targetCount,
   });
@@ -2148,48 +2078,6 @@ function distanceToPolygon(point: Point, polygon: Point[]) {
   return closest;
 }
 
-function polygonEdges(points: Point[]): Array<[Point, Point]> {
-  return points.map((point, index) => [point, points[(index + 1) % points.length]]);
-}
-
-function segmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | null {
-  const r: Point = [a2[0] - a1[0], a2[1] - a1[1]];
-  const s: Point = [b2[0] - b1[0], b2[1] - b1[1]];
-  const denominator = cross(r, s);
-  if (Math.abs(denominator) < 0.000001) return null;
-  const delta: Point = [b1[0] - a1[0], b1[1] - a1[1]];
-  const t = cross(delta, s) / denominator;
-  const u = cross(delta, r) / denominator;
-  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
-  return [a1[0] + r[0] * t, a1[1] + r[1] * t];
-}
-
-function cross(a: Point, b: Point) {
-  return a[0] * b[1] - a[1] * b[0];
-}
-
-function intersectionMarkers(shapePoints: Point[], pieces: LevelPiece[], width: number, height: number) {
-  const shapeEdges = polygonEdges(shapePoints);
-  const boundaryEdges: Array<[Point, Point]> = [
-    [[0, 0], [width, 0]],
-    [[width, 0], [width, height]],
-    [[width, height], [0, height]],
-    [[0, height], [0, 0]],
-  ];
-  pieces.forEach((piece) => boundaryEdges.push(...polygonEdges(piece.points)));
-  const points: Point[] = [];
-  for (const shapeEdge of shapeEdges) {
-    for (const boundaryEdge of boundaryEdges) {
-      const point = segmentIntersection(shapeEdge[0], shapeEdge[1], boundaryEdge[0], boundaryEdge[1]);
-      if (!point) continue;
-      if (points.some((candidate) => Math.hypot(candidate[0] - point[0], candidate[1] - point[1]) < 5)) continue;
-      points.push(point);
-      if (points.length >= 80) return points;
-    }
-  }
-  return points;
-}
-
 function pointSegmentDistance(point: Point, start: Point, end: Point) {
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
@@ -2197,27 +2085,6 @@ function pointSegmentDistance(point: Point, start: Point, end: Point) {
   if (lengthSq <= 0) return Math.hypot(point[0] - start[0], point[1] - start[1]);
   const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSq));
   return Math.hypot(point[0] - (start[0] + dx * t), point[1] - (start[1] + dy * t));
-}
-
-function ShapeIcon(props: { kind: ShapeKind }) {
-  const common = { fill: "rgba(217, 147, 63, 0.16)", stroke: "currentColor", strokeWidth: 2.4, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
-  const paths: Record<ShapeKind, React.ReactNode> = {
-    circle: <circle cx="18" cy="18" r="10" {...common} />,
-    square: <rect x="9" y="9" width="18" height="18" rx="2" transform="rotate(12 18 18)" {...common} />,
-    heart: <path d="M18 28 C8 21 6 12 12 9 C15 7 17 9 18 12 C19 9 21 7 24 9 C30 12 28 21 18 28 Z" {...common} />,
-    triangle: <path d="M18 7 L29 27 L7 27 Z" {...common} />,
-    star: <path d="M18 6 L21.4 13.6 L29.6 14.4 L23.4 19.8 L25.2 28 L18 23.8 L10.8 28 L12.6 19.8 L6.4 14.4 L14.6 13.6 Z" {...common} />,
-    sector: <path d="M10 27 L18 8 C25 10 29 16 28 24 Z" {...common} />,
-    crescent: <path d="M24.5 7.5 C18 9.4 14.2 14.2 14.2 19.2 C14.2 23.4 17 26.6 21.2 28.2 C13.4 29.2 7 24.2 7 17.4 C7 10.8 14.2 5.6 24.5 7.5 Z" {...common} />,
-    hexagon: <path d="M18 6 L28 12 L28 24 L18 30 L8 24 L8 12 Z" {...common} />,
-    blob: <path d="M18 7 C24 6 29 11 28 17 C31 23 24 30 17 28 C11 31 6 24 8 18 C5 12 11 7 18 7 Z" {...common} />,
-    shard: <path d="M18 5 L28 13 L25 24 L15 30 L7 20 L10 10 Z" {...common} />,
-  };
-  return (
-    <svg className="h-9 w-9 text-primary" viewBox="0 0 36 36" aria-hidden="true">
-      {paths[props.kind]}
-    </svg>
-  );
 }
 
 function KnobEditor(props: {
@@ -2443,39 +2310,23 @@ function PolygonEditor(props: {
     normalizeAssist(level.modes.polygon?.assist, DEFAULT_POLYGON_SEED_COUNT, new Set((level.modes.polygon?.pieces || []).map((piece) => piece.id))),
   );
   const [seedPicking, setSeedPicking] = React.useState(false);
-  const [targetCount, setTargetCount] = React.useState(Math.max(DEFAULT_POLYGON_TARGET_COUNT, level.modes.polygon?.pieces?.length || DEFAULT_POLYGON_TARGET_COUNT));
-  const [lineColor, setLineColor] = React.useState("#FFF6E6");
-  const [manualShapes, setManualShapes] = React.useState<ManualShape[]>(() => manualShapesFromGenerator(level.modes.polygon?.generator));
-  const [selectedManualShapeId, setSelectedManualShapeId] = React.useState<string | null>(null);
-  const [shapeCounts, setShapeCounts] = React.useState<Record<ShapeKind, number>>(() => {
-    const raw = level.modes.polygon?.generator;
-    const shapes = raw && typeof raw === "object" && "shapes" in raw && Array.isArray((raw as { shapes?: unknown }).shapes) ? (raw as { shapes: ShapeRequest[] }).shapes : [];
-    return SHAPE_OPTIONS.reduce(
-      (acc, option) => ({
-        ...acc,
-        [option.kind]: shapes.find((shape) => shape.kind === option.kind)?.count || 0,
-      }),
-      {} as Record<ShapeKind, number>,
-    );
+  const [targetCount, setTargetCount] = React.useState(() => {
+    const generator = level.modes.polygon?.generator as { target_count?: unknown } | undefined;
+    const configured = Number(generator?.target_count || 0);
+    if (Number.isFinite(configured) && configured >= 4) return Math.round(configured);
+    return level.modes.polygon?.pieces?.length || DEFAULT_POLYGON_TARGET_COUNT;
   });
+  const [lineColor, setLineColor] = React.useState("#FFF6E6");
   const [drag, setDrag] = React.useState<{ pieceId: string; pointIndex: number; before: PolygonEditorSnapshot; moved: boolean } | null>(null);
-  const [shapeDrag, setShapeDrag] = React.useState<
-    | { id: string; mode: "move"; startPoint: Point; startShape: ManualShape; before: PolygonEditorSnapshot; moved: boolean }
-    | { id: string; mode: "resize"; startPoint: Point; startShape: ManualShape; before: PolygonEditorSnapshot; moved: boolean }
-    | null
-  >(null);
   const svgRef = React.useRef<SVGSVGElement | null>(null);
   const currentSnapshotRef = React.useRef<PolygonEditorSnapshot | null>(null);
   const pastRef = React.useRef<PolygonEditorSnapshot[]>([]);
   const futureRef = React.useRef<PolygonEditorSnapshot[]>([]);
-  const selectedManualShapeIdRef = React.useRef<string | null>(null);
   const initialSignatureRef = React.useRef("");
 
   function snapshotEditorState(): PolygonEditorSnapshot {
     return clonePolygonSnapshot({
       pieces,
-      manualShapes,
-      shapeCounts,
       polygonAssist,
       targetCount,
     });
@@ -2485,13 +2336,9 @@ function PolygonEditor(props: {
     const cloned = clonePolygonSnapshot(snapshot);
     currentSnapshotRef.current = cloned;
     setPieces(cloned.pieces);
-    setManualShapes(cloned.manualShapes);
-    setShapeCounts(cloned.shapeCounts);
     setPolygonAssist(cloned.polygonAssist);
     setTargetCount(cloned.targetCount);
     setSelectedIds([]);
-    selectedManualShapeIdRef.current = null;
-    setSelectedManualShapeId(null);
     setSeedPicking(false);
   }
 
@@ -2518,7 +2365,6 @@ function PolygonEditor(props: {
     currentSnapshotRef.current = snapshotEditorState();
     pastRef.current = past;
     futureRef.current = future;
-    selectedManualShapeIdRef.current = selectedManualShapeId;
   });
 
   function clientToSvgPoint(clientX: number, clientY: number): Point {
@@ -2575,8 +2421,6 @@ function PolygonEditor(props: {
       toggleSeedPiece(piece.id);
       return;
     }
-    selectedManualShapeIdRef.current = null;
-    setSelectedManualShapeId(null);
     selectPiece(piece.id, additive);
   }
 
@@ -2625,64 +2469,6 @@ function PolygonEditor(props: {
     setDrag(null);
   }
 
-  function addManualShape(kind: ShapeKind, center: Point) {
-    const before = snapshotEditorState();
-    const radius = Math.sqrt((width * height) / Math.max(4, targetCount)) * 0.72;
-    const shape: ManualShape = {
-      id: nextManualShapeId(manualShapes),
-      kind,
-      center,
-      radius,
-      rotation: Math.random() * Math.PI * 2,
-    };
-    recordHistory(before);
-    setManualShapes((current) => [...current, shape]);
-    selectedManualShapeIdRef.current = shape.id;
-    setSelectedManualShapeId(shape.id);
-    svgRef.current?.focus();
-  }
-
-  function updateManualShape(id: string, patch: Partial<ManualShape>) {
-    setManualShapes((current) => current.map((shape) => (shape.id === id ? { ...shape, ...patch } : shape)));
-  }
-
-  function removeManualShape(id: string, before = snapshotEditorState()) {
-    recordHistory(before);
-    setManualShapes((current) => current.filter((shape) => shape.id !== id));
-    if (selectedManualShapeIdRef.current === id || selectedManualShapeId === id) {
-      selectedManualShapeIdRef.current = null;
-      setSelectedManualShapeId(null);
-    }
-  }
-
-  function deleteSelectedManualShape() {
-    const id = selectedManualShapeIdRef.current || selectedManualShapeId;
-    if (!id) return false;
-    removeManualShape(id, currentSnapshot());
-    return true;
-  }
-
-  function moveManualShape(point: Point) {
-    if (!shapeDrag) return;
-    setShapeDrag({ ...shapeDrag, moved: true });
-    if (shapeDrag.mode === "move") {
-      const dx = point[0] - shapeDrag.startPoint[0];
-      const dy = point[1] - shapeDrag.startPoint[1];
-      updateManualShape(shapeDrag.id, { center: [shapeDrag.startShape.center[0] + dx, shapeDrag.startShape.center[1] + dy] });
-      return;
-    }
-    const radius = Math.max(28, Math.hypot(point[0] - shapeDrag.startShape.center[0], point[1] - shapeDrag.startShape.center[1]));
-    const rotation = Math.atan2(point[1] - shapeDrag.startShape.center[1], point[0] - shapeDrag.startShape.center[0]);
-    updateManualShape(shapeDrag.id, { radius, rotation });
-  }
-
-  function finishShapeDrag() {
-    if (shapeDrag) {
-      recordHistory(shapeDrag.before);
-    }
-    setShapeDrag(null);
-  }
-
   function undo() {
     const stack = pastRef.current;
     if (!stack.length) return;
@@ -2703,14 +2489,11 @@ function PolygonEditor(props: {
 
   async function save() {
     if (!hasChanges) return;
-    const shapes = shapeRequests(shapeCounts);
     const savedPieces = normalizedPieces(pieces);
     const validPolygonIds = new Set(savedPieces.map((piece) => piece.id));
     const savedAssist = filterAssistPieceIds(polygonAssist, validPolygonIds);
     const savedSnapshot = clonePolygonSnapshot({
       pieces: savedPieces,
-      manualShapes,
-      shapeCounts,
       polygonAssist: savedAssist,
       targetCount,
     });
@@ -2719,7 +2502,22 @@ function PolygonEditor(props: {
       ...level,
       modes: {
         ...level.modes,
-        polygon: { pieces: savedPieces, generator: { target_count: targetCount, shapes, manual_shapes: manualShapes }, assist: savedAssist },
+        polygon: {
+          pieces: savedPieces,
+          generator: {
+            version: PIECE_DIMENSION_RULE.version,
+            target_count: targetCount,
+            actual_count: savedPieces.length,
+            dimension_range: {
+              reference_axis: PIECE_DIMENSION_RULE.referenceAxis,
+              min_width_factor: PIECE_DIMENSION_RULE.minWidthFactor,
+              max_width_factor: PIECE_DIMENSION_RULE.maxWidthFactor,
+              min_height_factor: PIECE_DIMENSION_RULE.minHeightFactor,
+              max_height_factor: PIECE_DIMENSION_RULE.maxHeightFactor,
+            },
+          },
+          assist: savedAssist,
+        },
         knob: {
           auto: true as const,
           cols: knob.cols || DEFAULT_KNOB_COLS,
@@ -2737,20 +2535,19 @@ function PolygonEditor(props: {
     initialSignatureRef.current = polygonEditorSignature(savedSnapshot);
   }
 
-  function updateShape(kind: ShapeKind, delta: number) {
-    recordHistory();
-    setShapeCounts((current) => ({ ...current, [kind]: Math.max(0, Math.min(12, (current[kind] || 0) + delta)) }));
-  }
-
   function updateTargetCount(value: number) {
     recordHistory();
     setTargetCount(value);
   }
 
   function generate() {
-    const nextPieces = generatePieces(width, height, targetCount, shapeRequests(shapeCounts), manualShapes);
-    commitPieces(nextPieces);
-    setSelectedIds([]);
+    try {
+      const nextPieces = generatePieces(width, height, targetCount);
+      commitPieces(nextPieces);
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "碎片生成失败");
+    }
   }
 
   const effectiveLineColor = HEX_COLOR_RE.test(lineColor) ? lineColor : "#FFF6E6";
@@ -2776,10 +2573,6 @@ function PolygonEditor(props: {
         event.preventDefault();
         redo();
         return;
-      }
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedManualShapeIdRef.current) {
-        event.preventDefault();
-        deleteSelectedManualShape();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -2816,16 +2609,7 @@ function PolygonEditor(props: {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
         <div className="min-h-0 overflow-auto bg-secondary p-4">
-          <div
-            className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white"
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              const kind = event.dataTransfer.getData("application/x-jigcat-shape") as ShapeKind;
-              if (!SHAPE_OPTIONS.some((option) => option.kind === kind)) return;
-              addManualShape(kind, clientToSvgPoint(event.clientX, event.clientY));
-            }}
-          >
+          <div className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white">
             <img className="absolute inset-0 h-full w-full object-contain" src={sourceUrl(target)} alt="" draggable={false} />
             <svg
               ref={svgRef}
@@ -2837,84 +2621,11 @@ function PolygonEditor(props: {
                 selectPieceAtPoint(svgPoint(event), event.metaKey || event.ctrlKey);
               }}
               onPointerMove={(event) => {
-                if (shapeDrag) moveManualShape(svgPoint(event));
-                else if (drag) movePoint(svgPoint(event));
+                if (drag) movePoint(svgPoint(event));
               }}
-              onPointerUp={() => {
-                finishShapeDrag();
-                finishDrag();
-              }}
-              onPointerLeave={() => {
-                finishShapeDrag();
-                finishDrag();
-              }}
+              onPointerUp={finishDrag}
+              onPointerLeave={finishDrag}
             >
-              {manualShapes.map((shape) => {
-                const shapeSelected = shape.id === selectedManualShapeId;
-                const polygon = manualShapePolygon(shape, width, height);
-                const markers = shapeDrag?.id === shape.id ? intersectionMarkers(polygon, pieces, width, height) : [];
-                const handle: Point = [
-                  shape.center[0] + Math.cos(shape.rotation) * shape.radius,
-                  shape.center[1] + Math.sin(shape.rotation) * shape.radius,
-                ];
-                return (
-                  <g key={shape.id}>
-                    <polygon
-                      points={polygon.map((point) => point.join(",")).join(" ")}
-                      fill={shapeSelected ? "rgba(217,147,63,0.20)" : "rgba(47,118,103,0.15)"}
-                      stroke={effectiveLineColor}
-                      strokeWidth={shapeSelected ? 7 : 4}
-                      strokeDasharray="16 10"
-                      pointerEvents="stroke"
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        svgRef.current?.focus();
-                        selectedManualShapeIdRef.current = shape.id;
-                        setSelectedManualShapeId(shape.id);
-                        setShapeDrag({ id: shape.id, mode: "move", startPoint: svgPoint(event), startShape: shape, before: snapshotEditorState(), moved: false });
-                      }}
-                    />
-                    <circle
-                      cx={shape.center[0]}
-                      cy={shape.center[1]}
-                      r={16}
-                      fill="#FFF6E6"
-                      stroke={effectiveLineColor}
-                      strokeWidth={6}
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        svgRef.current?.focus();
-                        selectedManualShapeIdRef.current = shape.id;
-                        setSelectedManualShapeId(shape.id);
-                        setShapeDrag({ id: shape.id, mode: "move", startPoint: svgPoint(event), startShape: shape, before: snapshotEditorState(), moved: false });
-                      }}
-                    />
-                    {shapeSelected && (
-                      <>
-                        <line x1={shape.center[0]} y1={shape.center[1]} x2={handle[0]} y2={handle[1]} stroke={effectiveLineColor} strokeWidth={4} strokeDasharray="10 8" />
-                        <circle
-                          cx={handle[0]}
-                          cy={handle[1]}
-                          r={18}
-                          fill="#FFF6E6"
-                          stroke={effectiveLineColor}
-                          strokeWidth={7}
-                          onPointerDown={(event) => {
-                            event.stopPropagation();
-                            setShapeDrag({ id: shape.id, mode: "resize", startPoint: svgPoint(event), startShape: shape, before: snapshotEditorState(), moved: false });
-                          }}
-                        />
-                      </>
-                    )}
-                    {markers.map((point, markerIndex) => (
-                      <g key={`intersection-${markerIndex}`} pointerEvents="none">
-                        <circle cx={point[0]} cy={point[1]} r={10} fill="#38BDF8" stroke="#FFF6E6" strokeWidth={4} />
-                        <circle cx={point[0]} cy={point[1]} r={3} fill="#0F766E" />
-                      </g>
-                    ))}
-                  </g>
-                );
-              })}
               {pieces.map((piece, index) => {
                 const selected = selectedIds.includes(piece.id);
                 const seedSelected = polygonAssist.seed.mode === "manual" && polygonAssist.seed.piece_ids.includes(piece.id);
@@ -2965,34 +2676,7 @@ function PolygonEditor(props: {
           <div className="mb-2 text-sm font-semibold text-foreground">编辑说明</div>
           <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Cmd/Ctrl 可多选并合并。选中碎片后拖动圆点微调轮廓。</p>
           <PolygonPieceLegend tinyPieceCount={tinyPieceIds.size} />
-          <div className="mb-4 border-y border-border py-3">
-            <div className="mb-2 text-sm font-semibold text-foreground">指定形状</div>
-            <div className="grid grid-cols-2 gap-2">
-              {SHAPE_OPTIONS.map((option) => (
-                <div
-                  key={option.kind}
-                  className="cursor-grab rounded-md border border-border bg-background p-2 active:cursor-grabbing"
-                  draggable
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData("application/x-jigcat-shape", option.kind);
-                    event.dataTransfer.effectAllowed = "copy";
-                  }}
-                >
-                  <div className="mb-1 grid place-items-center">
-                    <ShapeIcon kind={option.kind} />
-                    <span className="mt-1 text-xs text-foreground">{option.label}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, -1)}>-</Button>
-                    <span className="min-w-6 flex-1 text-center tabular-nums">{shapeCounts[option.kind] || 0}</span>
-                    <Button size="icon" variant="outline" className="h-7 w-7" onClick={() => updateShape(option.kind, 1)}>+</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">拖拽形状到图片上可手动指定位置；下方数量仍会随机生成。</p>
-          </div>
-          <div className="mb-4 border-b border-border pb-4">
+          <div className="mb-4 border-y border-border py-4">
             <div className="mb-2 text-sm font-semibold text-foreground">线条颜色</div>
             <div className="flex flex-wrap gap-2">
               {LINE_COLOR_OPTIONS.map((color) => (

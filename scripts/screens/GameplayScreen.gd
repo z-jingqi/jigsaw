@@ -2,6 +2,7 @@ class_name GameplayScreen
 extends Control
 
 signal back_requested
+signal pause_requested
 signal hint_requested
 signal move_swap_up_requested
 signal move_swap_down_requested
@@ -13,8 +14,8 @@ const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLa
 @onready var back_button: ActionButton = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title
 @onready var hint_button: ActionButton = $Hud/HintButton
-@onready var back_shadow: TextureRect = $Hud/BackShadow
-@onready var hint_shadow: TextureRect = $Hud/HintShadow
+@onready var title_cloud_left: TextureRect = $Hud/TitleCloudLeft
+@onready var title_cloud_right: TextureRect = $Hud/TitleCloudRight
 @onready var tray_view: Control = $BottomHost/TrayView
 @onready var swap_action_bar: SwapActionBarView = $BottomHost/SwapActionBar
 
@@ -25,7 +26,7 @@ var _layout := GameplayLayoutScript.new()
 
 
 func _ready() -> void:
-	back_button.pressed.connect(back_requested.emit)
+	back_button.pressed.connect(pause_requested.emit)
 	hint_button.pressed.connect(hint_requested.emit)
 	swap_action_bar.move_up_requested.connect(move_swap_up_requested.emit)
 	swap_action_bar.move_down_requested.connect(move_swap_down_requested.emit)
@@ -62,7 +63,6 @@ func set_view_model(view_model: Variant) -> void:
 	swap_action_bar.visible = mode == "swap"
 	_apply_layout_scale(float(_read("ui_scale", 1.0)))
 	hint_button.visible = true
-	hint_shadow.visible = true
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -108,10 +108,10 @@ func _apply_current_layout() -> void:
 		. apply(
 			size,
 			$Hud,
-			back_shadow,
 			back_button,
 			title_label,
-			hint_shadow,
+			title_cloud_left,
+			title_cloud_right,
 			hint_button,
 			tray_view,
 			swap_action_bar,

@@ -1,21 +1,35 @@
 import { Delaunay } from "d3-delaunay";
 import polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
+import puzzleRules from "../../../../config/puzzle_rules.json";
 import type { LevelPiece, Point } from "./types";
 
 type CellPiece = LevelPiece & { cells: string[] };
-export type ShapeKind = "circle" | "square" | "heart" | "triangle" | "star" | "sector" | "crescent" | "hexagon" | "blob" | "shard";
-export type ShapeRequest = {
-  kind: ShapeKind;
-  count: number;
+
+export type PieceSizeRange = {
+  minWidth: number;
+  maxWidth: number;
+  minHeight: number;
+  maxHeight: number;
 };
-export type ManualShape = {
-  id: string;
-  kind: ShapeKind;
-  center: Point;
-  radius: number;
-  rotation: number;
-};
+
+const polygonGeneration = puzzleRules.polygon_generation;
+const dimensionRange = polygonGeneration.dimension_range;
+
+export const PIECE_DIMENSION_RULE = {
+  version: polygonGeneration.version,
+  referenceAxis: dimensionRange.reference_axis,
+  minWidthFactor: dimensionRange.min_width_factor,
+  maxWidthFactor: dimensionRange.max_width_factor,
+  minHeightFactor: dimensionRange.min_height_factor,
+  maxHeightFactor: dimensionRange.max_height_factor,
+} as const;
+const GENERATION_ATTEMPTS = polygonGeneration.generation_attempts;
+const MAX_REPAIR_STEPS_FACTOR = polygonGeneration.max_repair_steps_factor;
+const VORONOI_VERTICAL_SCALE = polygonGeneration.voronoi_vertical_scale;
+const CURVE_STEPS = polygonGeneration.curve_steps;
+const CURVED_EDGE_TARGET_PER_PIECE = polygonGeneration.curved_edge_target_per_piece;
+const MAX_CURVED_EDGES_PER_PIECE = polygonGeneration.max_curved_edges_per_piece;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -44,21 +58,13 @@ export function sequentialId(prefix: string, existingIds: string[]) {
   }
 }
 
-export function chooseGrid(target: number, imageWidth: number, imageHeight: number) {
-  const goal = clamp(Math.round(target), 4, 80);
-  let best = { cols: 3, rows: 4, score: Number.POSITIVE_INFINITY };
-  for (let rows = 2; rows <= 14; rows++) {
-    for (let cols = 2; cols <= 14; cols++) {
-      const count = cols * rows;
-      const cellW = imageWidth / cols;
-      const cellH = imageHeight / rows;
-      const squareError = Math.abs(cellW - cellH) / Math.max(cellW, cellH);
-      const countError = Math.abs(count - goal) / goal;
-      const score = squareError * 1.8 + countError;
-      if (score < best.score) best = { cols, rows, score };
-    }
-  }
-  return best;
+export function pieceSizeRange(imageWidth: number, _imageHeight: number, _targetCount: number): PieceSizeRange {
+  return {
+    minWidth: imageWidth * PIECE_DIMENSION_RULE.minWidthFactor,
+    maxWidth: imageWidth * PIECE_DIMENSION_RULE.maxWidthFactor,
+    minHeight: imageWidth * PIECE_DIMENSION_RULE.minHeightFactor,
+    maxHeight: imageWidth * PIECE_DIMENSION_RULE.maxHeightFactor,
+  };
 }
 
 function random(seed: number) {
@@ -69,47 +75,396 @@ function random(seed: number) {
   };
 }
 
-export function generatePieces(imageWidth: number, imageHeight: number, targetCount: number, shapeRequests: ShapeRequest[] = [], manualShapes: ManualShape[] = []): LevelPiece[] {
-  const rng = random(Math.round(imageWidth * 13 + imageHeight * 17 + targetCount * 31 + shapeRequests.length * 43 + manualShapes.length * 59));
-  const pieces: CellPiece[] = [];
-  const shapePolygons: Point[][] = [];
-  let shapeIndex = 1;
-  for (const shape of manualShapes) {
-    const polygon = manualShapePolygon(shape, imageWidth, imageHeight);
-    if (polygon.length >= 3 && polygonAreaAbs(polygon) > 8) {
-      shapePolygons.push(polygon);
-      pieces.push(pieceFromPolygon(`shape_${shape.kind}_${shapeIndex}`, polygon, [`shape:${shape.kind}:${shapeIndex}`]));
-      shapeIndex += 1;
+export function generatePieces(imageWidth: number, imageHeight: number, targetCount: number): LevelPiece[] {
+  const count = clamp(Math.round(targetCount), 4, 80);
+  const seedCount = count;
+  const sizeRange = pieceSizeRange(imageWidth, imageHeight, targetCount);
+  const baseSeed = Math.round(imageWidth * 13 + imageHeight * 17 + count * 31 + seedCount * 43);
+  let best: LevelPiece[] = [];
+  let bestEvaluation = { score: Number.POSITIVE_INFINITY, violations: Number.POSITIVE_INFINITY };
+  let bestCurved: LevelPiece[] = [];
+  let bestCountDrift = Number.POSITIVE_INFINITY;
+
+  for (let attempt = 0; attempt < GENERATION_ATTEMPTS; attempt += 1) {
+    const attemptSeed = (baseSeed + Math.imul(attempt + 1, 2654435761)) >>> 0;
+    const initial = generateVoronoiPartition(imageWidth, imageHeight, seedCount, attemptSeed);
+    const repaired = repairPieceSizes(initial, sizeRange, imageWidth, imageHeight, count);
+    const evaluation = evaluatePieces(repaired, sizeRange, count);
+    if (evaluation.score < bestEvaluation.score) {
+      best = repaired;
+      bestEvaluation = evaluation;
     }
-  }
-  for (const request of shapeRequests) {
-    for (let index = 0; index < request.count; index++) {
-      const polygon = placeShape(request.kind, imageWidth, imageHeight, targetCount, shapePolygons, rng);
-      if (polygon.length >= 3) {
-        shapePolygons.push(polygon);
-        pieces.push(pieceFromPolygon(`shape_${request.kind}_${shapeIndex}`, polygon, [`shape:${request.kind}:${shapeIndex}`]));
+    if (evaluation.violations !== 0) continue;
+
+    for (const curveFactor of [1, 0.72, 0.5, 0.32]) {
+      const curved = curveSharedEdges(repaired, sizeRange, imageWidth, imageHeight, attemptSeed, curveFactor);
+      if (!curved.curvedEdges) continue;
+      if (!curved.pieces.every((piece) => isSimplePolygon(piece.points))) continue;
+      if (evaluatePieces(curved.pieces, sizeRange, count).violations !== 0) continue;
+      const coverage = curved.pieces.reduce((total, piece) => total + polygonAreaAbs(piece.points), 0) / (imageWidth * imageHeight);
+      if (Math.abs(coverage - 1) > 0.0005) continue;
+      const countDrift = Math.abs(curved.pieces.length - count);
+      if (countDrift < bestCountDrift) {
+        bestCurved = curved.pieces;
+        bestCountDrift = countDrift;
       }
-      shapeIndex += 1;
+      if (countDrift === 0) return renumberPieces(curved.pieces);
+      break;
     }
   }
 
-  const randomPoints = generateVoronoiPoints(imageWidth, imageHeight, Math.max(4, targetCount - pieces.length), shapePolygons, rng);
-  const delaunay = Delaunay.from(randomPoints);
-  const voronoi = delaunay.voronoi([0, 0, imageWidth, imageHeight]);
-  const shapeClips = shapePolygons.map((polygon) => [closedRing(polygon)] as Polygon);
+  if (bestCurved.length) return renumberPieces(bestCurved);
 
-  for (let index = 0; index < randomPoints.length; index++) {
-    const cell = Array.from(voronoi.cellPolygon(index) || []) as Point[];
-    const ring = cleanRing(cell);
-    if (ring.length < 3) continue;
-    const clipped = shapeClips.length ? polygonClipping.difference([closedRing(ring)], ...shapeClips) : ([[closedRing(ring)]] as MultiPolygon);
+  const details = sizeViolationDetails(best, sizeRange).slice(0, 3).join("；");
+  throw new Error(`无法生成全部符合宽高范围的不规则碎片${details ? `：${details}` : ""}。请调整目标块数后重试`);
+}
+
+function generateVoronoiPartition(
+  imageWidth: number,
+  imageHeight: number,
+  count: number,
+  seed: number,
+): LevelPiece[] {
+  const rng = random(seed);
+  const points = generateRandomPoints(imageWidth, imageHeight, count, rng);
+  return voronoiPolygons(points, imageWidth, imageHeight).map((polygon, index) =>
+    pieceFromPolygon(`seed_${index + 1}`, polygon),
+  );
+}
+
+function generateRandomPoints(
+  imageWidth: number,
+  imageHeight: number,
+  count: number,
+  rng: () => number,
+): Point[] {
+  return Array.from({ length: count }, () => [rng() * imageWidth, rng() * imageHeight] as Point);
+}
+
+function voronoiPolygons(points: Point[], imageWidth: number, imageHeight: number) {
+  const transformed = points.map(([x, y]) => [x, y * VORONOI_VERTICAL_SCALE] as Point);
+  const voronoi = Delaunay.from(transformed).voronoi([
+    0,
+    0,
+    imageWidth,
+    imageHeight * VORONOI_VERTICAL_SCALE,
+  ]);
+  return points.map((_, index) =>
+    cleanRing(
+      (Array.from(voronoi.cellPolygon(index) || []) as Point[]).map(([x, y]) => [
+        x,
+        y / VORONOI_VERTICAL_SCALE,
+      ]),
+    ),
+  );
+}
+
+function repairPieceSizes(source: LevelPiece[], range: PieceSizeRange, imageWidth: number, imageHeight: number, targetCount: number) {
+  let pieces = source;
+  const seen = new Set<string>();
+  const maxSteps = targetCount * MAX_REPAIR_STEPS_FACTOR;
+  for (let step = 0; step < maxSteps; step += 1) {
+    const fingerprint = geometryFingerprint(pieces);
+    if (seen.has(fingerprint)) break;
+    seen.add(fingerprint);
+    const current = evaluatePieces(pieces, range, targetCount);
+    if (current.violations === 0) return pieces;
+
+    const offenders = pieces
+      .map((piece, index) => ({ index, issue: pieceSizeIssue(piece, range) }))
+      .filter((item) => item.issue.penalty > 0)
+      .sort((a, b) => b.issue.penalty - a.issue.penalty)
+      .slice(0, 8);
+    let bestCandidate: { pieces: LevelPiece[]; evaluation: ReturnType<typeof evaluatePieces> } | null = null;
+
+    for (const offender of offenders) {
+      if (offender.issue.oversized) {
+        for (const fragments of splitCandidates(pieces[offender.index], imageWidth, imageHeight, step)) {
+          const candidate = [...pieces.slice(0, offender.index), ...fragments, ...pieces.slice(offender.index + 1)];
+          bestCandidate = betterRepairCandidate(bestCandidate, candidate, range, targetCount);
+        }
+      }
+      if (offender.issue.undersized) {
+        for (let neighborIndex = 0; neighborIndex < pieces.length; neighborIndex += 1) {
+          if (neighborIndex === offender.index) continue;
+          const merged = mergeAdjacentPiecesStrict(pieces[offender.index], pieces[neighborIndex], step);
+          if (!merged) continue;
+          const next = pieces.filter((_, index) => index !== offender.index && index !== neighborIndex);
+          next.push(merged);
+          bestCandidate = betterRepairCandidate(bestCandidate, next, range, targetCount);
+        }
+      }
+    }
+    if (!bestCandidate || bestCandidate.evaluation.score >= current.score - 0.000001) break;
+    pieces = bestCandidate.pieces;
+  }
+  return pieces;
+}
+
+function betterRepairCandidate(
+  current: { pieces: LevelPiece[]; evaluation: ReturnType<typeof evaluatePieces> } | null,
+  pieces: LevelPiece[],
+  range: PieceSizeRange,
+  targetCount: number,
+) {
+  const evaluation = evaluatePieces(pieces, range, targetCount);
+  return !current || evaluation.score < current.evaluation.score ? { pieces, evaluation } : current;
+}
+
+function evaluatePieces(pieces: LevelPiece[], range: PieceSizeRange, targetCount: number) {
+  let penalty = 0;
+  let violations = 0;
+  for (const piece of pieces) {
+    const issue = pieceSizeIssue(piece, range);
+    penalty += issue.penalty;
+    if (issue.penalty > 0) violations += 1;
+  }
+  return {
+    violations,
+    score: penalty * 100 + violations * 4 + Math.abs(pieces.length - targetCount) * 0.18,
+  };
+}
+
+function pieceSizeIssue(piece: LevelPiece, range: PieceSizeRange) {
+  const bounds = boundsFor(piece.points);
+  const widthPenalty = dimensionPenalty(bounds.width, range.minWidth, range.maxWidth);
+  const heightPenalty = dimensionPenalty(bounds.height, range.minHeight, range.maxHeight);
+  return {
+    oversized: bounds.width > range.maxWidth || bounds.height > range.maxHeight,
+    undersized: bounds.width < range.minWidth || bounds.height < range.minHeight,
+    penalty: widthPenalty * widthPenalty + heightPenalty * heightPenalty,
+  };
+}
+
+function dimensionPenalty(value: number, min: number, max: number) {
+  if (value < min) return (min - value) / min;
+  if (value > max) return (value - max) / max;
+  return 0;
+}
+
+function splitCandidates(piece: LevelPiece, imageWidth: number, imageHeight: number, step: number) {
+  const bounds = boundsFor(piece.points);
+  const axes: Array<"x" | "y"> = bounds.width / imageWidth >= bounds.height / imageHeight ? ["x", "y"] : ["y", "x"];
+  const candidates: LevelPiece[][] = [];
+  for (const axis of axes) {
+    const start = axis === "x" ? bounds.x : bounds.y;
+    const length = axis === "x" ? bounds.width : bounds.height;
+    for (const ratio of [0.5, 0.44, 0.56, 0.38, 0.62]) {
+      const fragments = clipPieceAt(piece, axis, start + length * ratio, imageWidth, imageHeight, step);
+      if (fragments.length === 2) candidates.push(fragments);
+    }
+  }
+  return candidates;
+}
+
+function clipPieceAt(piece: LevelPiece, axis: "x" | "y", cut: number, imageWidth: number, imageHeight: number, step: number) {
+  const padding = Math.max(imageWidth, imageHeight) + 1;
+  const rectangles: Point[][] = axis === "x"
+    ? [
+        [[-padding, -padding], [cut, -padding], [cut, imageHeight + padding], [-padding, imageHeight + padding]],
+        [[cut, -padding], [imageWidth + padding, -padding], [imageWidth + padding, imageHeight + padding], [cut, imageHeight + padding]],
+      ]
+    : [
+        [[-padding, -padding], [imageWidth + padding, -padding], [imageWidth + padding, cut], [-padding, cut]],
+        [[-padding, cut], [imageWidth + padding, cut], [imageWidth + padding, imageHeight + padding], [-padding, imageHeight + padding]],
+      ];
+  const fragments: LevelPiece[] = [];
+  for (let side = 0; side < rectangles.length; side += 1) {
+    let clipped: MultiPolygon;
+    try {
+      clipped = polygonClipping.intersection([closedRing(piece.points)], [closedRing(rectangles[side])]) as MultiPolygon;
+    } catch {
+      return [];
+    }
     for (const polygon of clipped) {
-      const outer = cleanRing(polygon[0] as Point[]);
-      if (outer.length < 3 || polygonAreaAbs(outer) < (imageWidth * imageHeight) / Math.max(240, targetCount * 10)) continue;
-      pieces.push(pieceFromPolygon(`piece_${pieces.length + 1}`, outer, [`voronoi:${index}`]));
+      const points = cleanRing(polygon[0] as Point[]);
+      if (points.length >= 3 && polygonAreaAbs(points) > 4) {
+        fragments.push(pieceFromPolygon(`${piece.id}_split_${step}_${side}`, points));
+      }
     }
   }
-  return withNeighbors(fillCoverageGaps(pieces, imageWidth, imageHeight));
+  const area = fragments.reduce((total, fragment) => total + polygonAreaAbs(fragment.points), 0);
+  return Math.abs(area - polygonAreaAbs(piece.points)) <= Math.max(2, area * 0.001) ? fragments : [];
+}
+
+function mergeAdjacentPiecesStrict(a: LevelPiece, b: LevelPiece, step: number) {
+  let union: MultiPolygon;
+  try {
+    union = polygonClipping.union([closedRing(a.points)], [closedRing(b.points)]) as MultiPolygon;
+  } catch {
+    return null;
+  }
+  if (union.length !== 1) return null;
+  const points = cleanRing(union[0][0] as Point[]);
+  if (points.length < 3) return null;
+  const sourceArea = polygonAreaAbs(a.points) + polygonAreaAbs(b.points);
+  if (Math.abs(polygonAreaAbs(points) - sourceArea) > Math.max(2, sourceArea * 0.001)) return null;
+  return pieceFromPolygon(`${a.id}_${b.id}_merge_${step}`, points);
+}
+
+function curveSharedEdges(
+  source: LevelPiece[],
+  range: PieceSizeRange,
+  imageWidth: number,
+  imageHeight: number,
+  seed: number,
+  factor: number,
+) {
+  const edgeUses = new Map<string, Array<{ pieceIndex: number; edgeIndex: number; forward: boolean }>>();
+  const canonicalEdges = new Map<string, [Point, Point]>();
+  source.forEach((piece, pieceIndex) => {
+    piece.points.forEach((start, edgeIndex) => {
+      const end = piece.points[(edgeIndex + 1) % piece.points.length];
+      const startKey = pointKey(start);
+      const endKey = pointKey(end);
+      const forward = startKey < endKey;
+      const key = forward ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
+      if (!edgeUses.has(key)) edgeUses.set(key, []);
+      edgeUses.get(key)!.push({ pieceIndex, edgeIndex, forward });
+      if (!canonicalEdges.has(key)) canonicalEdges.set(key, forward ? [start, end] : [end, start]);
+    });
+  });
+
+  const replacements = new Map<string, Point[]>();
+  const nominalSize = Math.sqrt((imageWidth * imageHeight) / Math.max(1, source.length));
+  const candidates: Array<{
+    key: string;
+    uses: Array<{ pieceIndex: number; edgeIndex: number; forward: boolean }>;
+    edge: [Point, Point];
+    length: number;
+    order: number;
+  }> = [];
+  for (const [key, uses] of edgeUses) {
+    if (uses.length !== 2) continue;
+    const edge = canonicalEdges.get(key)!;
+    const length = distance(edge[0], edge[1]);
+    if (length < nominalSize * 0.16) continue;
+    candidates.push({ key, uses, edge, length, order: hashText(`${seed}:${key}`) });
+  }
+  candidates.sort((a, b) => a.order - b.order);
+
+  const selected = new Set<string>();
+  const pieceCurveCounts = Array.from({ length: source.length }, () => 0);
+  const targetCurvedEdges = Math.min(
+    candidates.length,
+    Math.max(1, Math.ceil(source.length * CURVED_EDGE_TARGET_PER_PIECE)),
+  );
+  const selectCandidate = (candidate: (typeof candidates)[number]) => {
+    if (selected.has(candidate.key)) return false;
+    if (candidate.uses.some((use) => pieceCurveCounts[use.pieceIndex] >= MAX_CURVED_EDGES_PER_PIECE)) return false;
+    selected.add(candidate.key);
+    candidate.uses.forEach((use) => {
+      pieceCurveCounts[use.pieceIndex] += 1;
+    });
+    return true;
+  };
+
+  for (const candidate of candidates) {
+    if (selected.size >= targetCurvedEdges) break;
+    if (candidate.uses.every((use) => pieceCurveCounts[use.pieceIndex] === 0)) selectCandidate(candidate);
+  }
+  for (const candidate of candidates) {
+    if (selected.size >= targetCurvedEdges) break;
+    if (candidate.uses.some((use) => pieceCurveCounts[use.pieceIndex] === 0)) selectCandidate(candidate);
+  }
+  for (const candidate of candidates) {
+    if (selected.size >= targetCurvedEdges) break;
+    selectCandidate(candidate);
+  }
+
+  let curvedEdges = 0;
+  for (const { key, uses, edge, length } of candidates) {
+    if (!selected.has(key)) continue;
+    const edgeRng = random((seed ^ hashText(key)) >>> 0);
+    const amplitude = Math.min(length * 0.115, nominalSize * 0.105) * factor * (0.72 + edgeRng() * 0.28);
+    const phase = edgeRng() * Math.PI * 2;
+    const preferredAmplitude = amplitude * (edgeRng() < 0.5 ? -1 : 1);
+    let path = curvedEdge(edge[0], edge[1], preferredAmplitude, phase);
+    if (!pathWithinImage(path, imageWidth, imageHeight)) path = curvedEdge(edge[0], edge[1], -preferredAmplitude, phase);
+    if (!pathWithinImage(path, imageWidth, imageHeight)) continue;
+    for (const use of uses) replacements.set(`${use.pieceIndex}:${use.edgeIndex}`, use.forward ? path : [...path].reverse());
+    curvedEdges += 1;
+  }
+
+  const pieces = source.map((piece, pieceIndex) => {
+    const points: Point[] = [];
+    piece.points.forEach((start, edgeIndex) => {
+      const replacement = replacements.get(`${pieceIndex}:${edgeIndex}`) || [start, piece.points[(edgeIndex + 1) % piece.points.length]];
+      points.push(...(points.length ? replacement.slice(1) : replacement));
+    });
+    return pieceFromPolygon(piece.id, cleanRing(points), piece.cells || []);
+  });
+  const validBounds = evaluatePieces(pieces, range, source.length).violations === 0;
+  return { pieces: validBounds ? pieces : source, curvedEdges: validBounds ? curvedEdges : 0 };
+}
+
+function curvedEdge(start: Point, end: Point, amplitude: number, phase: number) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.max(0.001, Math.hypot(dx, dy));
+  const normal: Point = [-dy / length, dx / length];
+  return Array.from({ length: CURVE_STEPS + 1 }, (_, index) => {
+    const t = index / CURVE_STEPS;
+    const envelope = Math.sin(Math.PI * t);
+    const irregularity = 0.82 + Math.sin(Math.PI * 2 * t + phase) * 0.18;
+    const offset = amplitude * envelope * irregularity;
+    return [start[0] + dx * t + normal[0] * offset, start[1] + dy * t + normal[1] * offset] as Point;
+  });
+}
+
+function pathWithinImage(points: Point[], imageWidth: number, imageHeight: number) {
+  return points.every((point) => point[0] >= -0.001 && point[0] <= imageWidth + 0.001 && point[1] >= -0.001 && point[1] <= imageHeight + 0.001);
+}
+
+function pointKey(point: Point) {
+  return `${point[0].toFixed(4)},${point[1].toFixed(4)}`;
+}
+
+function hashText(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+function geometryFingerprint(pieces: LevelPiece[]) {
+  return pieces
+    .map((piece) => {
+      const bounds = boundsFor(piece.points);
+      return `${bounds.x.toFixed(1)},${bounds.y.toFixed(1)},${bounds.width.toFixed(1)},${bounds.height.toFixed(1)},${polygonAreaAbs(piece.points).toFixed(1)}`;
+    })
+    .sort()
+    .join("|");
+}
+
+function sizeViolationDetails(pieces: LevelPiece[], range: PieceSizeRange) {
+  return pieces.flatMap((piece) => {
+    const bounds = boundsFor(piece.points);
+    const details: string[] = [];
+    if (bounds.width < range.minWidth || bounds.width > range.maxWidth) details.push(`${piece.id} 宽 ${bounds.width.toFixed(1)}`);
+    if (bounds.height < range.minHeight || bounds.height > range.maxHeight) details.push(`${piece.id} 高 ${bounds.height.toFixed(1)}`);
+    return details;
+  });
+}
+
+function renumberPieces(pieces: LevelPiece[]) {
+  return withNeighbors(pieces.map((piece, index) => pieceFromPolygon(`piece_${index + 1}`, cleanRing(piece.points))));
+}
+
+function isSimplePolygon(points: Point[]) {
+  if (points.length < 3 || polygonAreaAbs(points) < 4) return false;
+  for (let first = 0; first < points.length; first += 1) {
+    const firstEnd = (first + 1) % points.length;
+    for (let second = first + 1; second < points.length; second += 1) {
+      const secondEnd = (second + 1) % points.length;
+      if (first === second || firstEnd === second || secondEnd === first) continue;
+      if (first === 0 && secondEnd === 0) continue;
+      if (segmentsIntersect(points[first], points[firstEnd], points[second], points[secondEnd])) return false;
+    }
+  }
+  return true;
 }
 
 export function fillCoverageGaps(sourcePieces: LevelPiece[], imageWidth: number, imageHeight: number): LevelPiece[] {
@@ -145,192 +500,6 @@ export function fillCoverageGaps(sourcePieces: LevelPiece[], imageWidth: number,
   return gapPieces.length ? [...sourcePieces, ...gapPieces] : sourcePieces;
 }
 
-export function manualShapePolygon(shape: ManualShape, imageWidth: number, imageHeight: number): Point[] {
-  const maxRadius = Math.max(8, Math.min(imageWidth, imageHeight) * 0.42);
-  const radius = clamp(shape.radius, 8, maxRadius);
-  const center: Point = [
-    clamp(shape.center[0], radius * 0.35, imageWidth - radius * 0.35),
-    clamp(shape.center[1], radius * 0.35, imageHeight - radius * 0.35),
-  ];
-  return shapePolygon(shape.kind, center, radius, shape.rotation, () => 0.5);
-}
-
-function generateVoronoiPoints(imageWidth: number, imageHeight: number, count: number, blocked: Point[][], rng: () => number): Point[] {
-  const points: Point[] = [];
-  const minDistance = Math.sqrt((imageWidth * imageHeight) / Math.max(1, count)) * 0.34;
-  for (let attempt = 0; attempt < count * 80 && points.length < count; attempt++) {
-    const marginX = imageWidth * 0.035;
-    const marginY = imageHeight * 0.035;
-    const point: Point = [
-      marginX + rng() * (imageWidth - marginX * 2),
-      marginY + rng() * (imageHeight - marginY * 2),
-    ];
-    if (blocked.some((polygon) => pointInPolygon(point, polygon))) continue;
-    if (points.some((candidate) => distance(candidate, point) < minDistance * (0.75 + rng() * 0.25))) continue;
-    points.push(point);
-  }
-  while (points.length < count) {
-    points.push([rng() * imageWidth, rng() * imageHeight]);
-  }
-  return points;
-}
-
-function placeShape(kind: ShapeKind, imageWidth: number, imageHeight: number, targetCount: number, existing: Point[][], rng: () => number): Point[] {
-  const averageSize = Math.sqrt((imageWidth * imageHeight) / Math.max(4, targetCount));
-  const baseRadius = averageSize * shapeRadiusFactor(kind);
-  for (let attempt = 0; attempt < 180; attempt++) {
-    const radius = baseRadius * randomAreaRadiusScale(kind, rng);
-    const angle = rng() * Math.PI * 2;
-    const center: Point = [
-      radius * 1.5 + rng() * (imageWidth - radius * 3),
-      radius * 1.5 + rng() * (imageHeight - radius * 3),
-    ];
-    const polygon = shapePolygon(kind, center, radius, angle, rng);
-    if (existing.some((other) => polygonsOverlapRough(polygon, other))) continue;
-    return polygon;
-  }
-  return [];
-}
-
-function randomAreaRadiusScale(kind: ShapeKind, rng: () => number) {
-  const range = shapeAreaScaleRange(kind);
-  const areaScale = range.min + rng() * (range.max - range.min);
-  return Math.sqrt(areaScale);
-}
-
-function shapeAreaScaleRange(kind: ShapeKind) {
-  if (kind === "sector" || kind === "crescent") return { min: 0.62, max: 1.55 };
-  if (kind === "star" || kind === "shard") return { min: 0.7, max: 1.45 };
-  return { min: 0.55, max: 1.65 };
-}
-
-function shapeRadiusFactor(kind: ShapeKind) {
-  if (kind === "heart") return 0.78;
-  if (kind === "square") return 0.68;
-  if (kind === "sector") return 0.86;
-  if (kind === "crescent") return 0.82;
-  if (kind === "shard") return 0.76;
-  return 0.72;
-}
-
-function shapePolygon(kind: ShapeKind, center: Point, radius: number, rotation: number, rng: () => number): Point[] {
-  if (kind === "square") {
-    return [
-      [-1, -1],
-      [1, -1],
-      [1, 1],
-      [-1, 1],
-    ].map(([x, y]) => rotatePoint([center[0] + x * radius, center[1] + y * radius], center, rotation));
-  }
-  if (kind === "triangle") {
-    return [0, 1, 2].map((index) => {
-      const angle = rotation - Math.PI / 2 + index * (Math.PI * 2 / 3);
-      return [center[0] + Math.cos(angle) * radius * 1.25, center[1] + Math.sin(angle) * radius * 1.25];
-    });
-  }
-  if (kind === "star") {
-    const points: Point[] = [];
-    for (let i = 0; i < 10; i++) {
-      const angle = rotation - Math.PI / 2 + (Math.PI * 2 * i) / 10;
-      const r = i % 2 === 0 ? radius * 1.15 : radius * 0.5;
-      points.push([center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r]);
-    }
-    return points;
-  }
-  if (kind === "sector") {
-    const points: Point[] = [center];
-    const spread = Math.PI * (0.46 + rng() * 0.18);
-    const arcSteps = arcStepCount(radius, 24, 96);
-    for (let i = 0; i <= arcSteps; i++) {
-      const angle = rotation - spread / 2 + (spread * i) / arcSteps;
-      points.push([center[0] + Math.cos(angle) * radius * 1.35, center[1] + Math.sin(angle) * radius * 1.35]);
-    }
-    return points;
-  }
-  if (kind === "crescent") {
-    const points: Point[] = [];
-    const arcSteps = arcStepCount(radius, 32, 112);
-    const tipX = radius * 0.28;
-    const tipY = radius * 0.96;
-    const outerRadius = radius;
-    const outerTipAngle = Math.atan2(tipY, tipX);
-    for (let i = 0; i <= arcSteps; i++) {
-      const angle = -outerTipAngle - ((Math.PI * 2 - outerTipAngle * 2) * i) / arcSteps;
-      points.push(rotatePoint([center[0] + Math.cos(angle) * outerRadius, center[1] + Math.sin(angle) * outerRadius], center, rotation));
-    }
-    const innerCenter: Point = [center[0] + radius * 0.68, center[1]];
-    const innerRadius = Math.hypot(innerCenter[0] - (center[0] + tipX), tipY);
-    const innerStart = Math.atan2(tipY, center[0] + tipX - innerCenter[0]);
-    const innerEnd = Math.PI * 2 - innerStart;
-    for (let i = 0; i <= arcSteps; i++) {
-      const angle = innerStart + ((innerEnd - innerStart) * i) / arcSteps;
-      points.push(rotatePoint([innerCenter[0] + Math.cos(angle) * innerRadius, innerCenter[1] + Math.sin(angle) * innerRadius], center, rotation));
-    }
-    return points;
-  }
-  if (kind === "hexagon") {
-    return Array.from({ length: 6 }, (_, index) => {
-      const angle = rotation + Math.PI / 6 + (Math.PI * 2 * index) / 6;
-      return [center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius] as Point;
-    });
-  }
-  if (kind === "blob") {
-    const anchors = Array.from({ length: 12 }, () => 0.72 + rng() * 0.46);
-    const steps = arcStepCount(radius, 48, 128);
-    return Array.from({ length: steps }, (_, index) => {
-      const position = (index / steps) * anchors.length;
-      const anchorIndex = Math.floor(position) % anchors.length;
-      const nextIndex = (anchorIndex + 1) % anchors.length;
-      const t = position - Math.floor(position);
-      const eased = t * t * (3 - 2 * t);
-      const r = radius * (anchors[anchorIndex] * (1 - eased) + anchors[nextIndex] * eased);
-      const angle = rotation + (Math.PI * 2 * index) / steps;
-      return [center[0] + Math.cos(angle) * r, center[1] + Math.sin(angle) * r] as Point;
-    });
-  }
-  if (kind === "shard") {
-    return [
-      [0, -1.22],
-      [0.78, -0.52],
-      [1.05, 0.26],
-      [0.28, 0.92],
-      [-0.62, 0.7],
-      [-1.08, -0.18],
-    ].map(([x, y]) => rotatePoint([center[0] + x * radius, center[1] + y * radius], center, rotation));
-  }
-  if (kind === "heart") {
-    const points: Point[] = [];
-    const steps = arcStepCount(radius, 56, 144);
-    for (let i = 0; i < steps; i++) {
-      const t = (Math.PI * 2 * i) / steps;
-      const x = 16 * Math.pow(Math.sin(t), 3);
-      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-      points.push(rotatePoint([center[0] + (x / 18) * radius, center[1] + (y / 18) * radius], center, rotation));
-    }
-    return points;
-  }
-  const points: Point[] = [];
-  const steps = arcStepCount(radius, 48, 144);
-  for (let i = 0; i < steps; i++) {
-    const angle = rotation + (Math.PI * 2 * i) / steps;
-    points.push([center[0] + Math.cos(angle) * radius, center[1] + Math.sin(angle) * radius]);
-  }
-  return points;
-}
-
-function arcStepCount(radius: number, min: number, max: number) {
-  return Math.round(clamp(radius * 0.22, min, max));
-}
-
-function rotatePoint(point: Point, center: Point, angle: number): Point {
-  const dx = point[0] - center[0];
-  const dy = point[1] - center[1];
-  return [
-    center[0] + dx * Math.cos(angle) - dy * Math.sin(angle),
-    center[1] + dx * Math.sin(angle) + dy * Math.cos(angle),
-  ];
-}
-
 function cleanRing(points: Point[]) {
   const cleaned = points
     .map((point) => [Number(point[0]), Number(point[1])] as Point)
@@ -359,29 +528,6 @@ function signedArea(points: Point[]) {
     area += a[0] * b[1] - b[0] * a[1];
   }
   return area / 2;
-}
-
-function pointInPolygon(point: Point, polygon: Point[]) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i];
-    const b = polygon[j];
-    const intersects = a[1] > point[1] !== b[1] > point[1] && point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1] || 1) + a[0];
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonsOverlapRough(a: Point[], b: Point[]) {
-  const boundsA = boundsFor(a);
-  const boundsB = boundsFor(b);
-  const separated =
-    boundsA.x + boundsA.width < boundsB.x ||
-    boundsB.x + boundsB.width < boundsA.x ||
-    boundsA.y + boundsA.height < boundsB.y ||
-    boundsB.y + boundsB.height < boundsA.y;
-  if (separated) return false;
-  return a.some((point) => pointInPolygon(point, b)) || b.some((point) => pointInPolygon(point, a));
 }
 
 export function pieceFromPolygon(id: string, points: Point[], cells: string[] = []): CellPiece {

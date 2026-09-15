@@ -1,7 +1,10 @@
 extends RefCounted
 class_name BoardTrayController
 
-const TRAY_HIT_PADDING := 18.0
+const TrayGlassShader := preload("res://shaders/ui/tray_frosted_glass.gdshader")
+const CalmBackground := preload("res://assets/ui/gameplay/tabletop-calm.webp")
+const ShanhaiBackground := preload("res://assets/ui/gameplay/shanhai-landscape.webp")
+const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
 
 var host: Node2D
 var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
@@ -18,9 +21,15 @@ func _tray_area() -> Rect2:
 	if host.tray_bounds_override.size.x > 0.0 and host.tray_bounds_override.size.y > 0.0:
 		return host.tray_bounds_override
 	var viewport: Vector2 = host.get_viewport_rect().size
-	var height: float = maxf(host.TRAY_MIN_HEIGHT, viewport.y * host.TRAY_HEIGHT_RATIO)
+	var height: float = (
+		float(host.tray_config["height"]) * PuzzleRulesScript.gameplay_scale(viewport)
+	)
 	var bottom: float = maxf(0.0, viewport.y - host.hud_bottom_reserved_height)
 	return Rect2(Vector2(0, maxf(0.0, bottom - height)), Vector2(viewport.x, height))
+
+
+func tray_layout_metrics() -> Dictionary:
+	return grid_layout.metrics(_tray_area())
 
 
 func _ensure_tray_top_border() -> void:
@@ -32,28 +41,59 @@ func _ensure_tray_top_border() -> void:
 		host.tray_background.z_index = -20
 		host.tray_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var initial_background_style := StyleBoxFlat.new()
-		initial_background_style.bg_color = Color(0.94, 0.88, 0.77, 0.94)
+		initial_background_style.bg_color = Color.WHITE
 		host.tray_background.add_theme_stylebox_override("panel", initial_background_style)
+		var glass_material := ShaderMaterial.new()
+		glass_material.shader = TrayGlassShader
+		glass_material.set_shader_parameter(
+			"tint_color", Color(str(host.tray_config["glass_tint"]))
+		)
+		_configure_glass_background(glass_material)
+		host.tray_background.material = glass_material
 		host.tray_root.add_child(host.tray_background)
 	if host.tray_top_border == null or not is_instance_valid(host.tray_top_border):
 		host.tray_top_border = ColorRect.new()
 		host.tray_top_border.name = "tray_top_border"
-		host.tray_top_border.color = host.TRAY_TOP_BORDER_COLOR
+		host.tray_top_border.color = Color(str(host.tray_config["border_color"]))
 		host.tray_top_border.z_index = -10
 		host.tray_top_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		host.tray_root.add_child(host.tray_top_border)
 	var area: Rect2 = _tray_area()
-	var layout_scale := maxf(1.0, area.size.y / 400.0)
+	var layout_scale := maxf(1.0, area.size.y / float(host.tray_config["visual_reference_height"]))
+	var glass_material := host.tray_background.material as ShaderMaterial
+	if glass_material != null:
+		_refresh_glass_viewport(glass_material)
 	var background_style := host.tray_background.get_theme_stylebox("panel") as StyleBoxFlat
 	background_style.corner_radius_top_left = 0
 	background_style.corner_radius_top_right = 0
 	background_style.corner_radius_bottom_left = 0
 	background_style.corner_radius_bottom_right = 0
 	background_style.border_width_top = 0
+	background_style.border_width_left = 0
+	background_style.border_width_right = 0
+	background_style.border_width_bottom = 0
 	host.tray_background.position = area.position
 	host.tray_background.size = area.size
 	host.tray_top_border.position = area.position
-	host.tray_top_border.size = Vector2(area.size.x, host.TRAY_TOP_BORDER_HEIGHT * layout_scale)
+	host.tray_top_border.size = Vector2(
+		area.size.x, float(host.tray_config["top_border_height"]) * layout_scale
+	)
+
+
+func _configure_glass_background(material: ShaderMaterial) -> void:
+	var shanhai := str(host.active_level_config.get("topic_id", "")) == "topic_01"
+	var background: Texture2D = ShanhaiBackground if shanhai else CalmBackground
+	material.set_shader_parameter("background_texture", background)
+	material.set_shader_parameter(
+		"texture_aspect", float(background.get_width()) / maxf(1.0, background.get_height())
+	)
+	material.set_shader_parameter("top_aligned", shanhai)
+	_refresh_glass_viewport(material)
+
+
+func _refresh_glass_viewport(material: ShaderMaterial) -> void:
+	var viewport_size: Vector2 = host.get_viewport_rect().size
+	material.set_shader_parameter("viewport_aspect", viewport_size.x / maxf(1.0, viewport_size.y))
 
 
 func _layout_tray(instant := false) -> void:
@@ -109,7 +149,7 @@ func _pan_tray(delta_x: float, record_velocity := true) -> void:
 
 func _start_tray_inertia() -> void:
 	host.tray_scroll_velocity = scroll_physics.release_velocity()
-	if absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED:
+	if absf(host.tray_scroll_velocity) < float(host.tray_config["inertia_min_speed"]):
 		_stop_tray_inertia()
 		return
 	host.tray_inertia_active = true
@@ -131,7 +171,7 @@ func process_scroll(delta: float) -> void:
 	host.tray_scroll_velocity = motion.y
 	if (
 		is_equal_approx(previous, host.tray_scroll_offset)
-		or absf(host.tray_scroll_velocity) < host.TRAY_INERTIA_MIN_SPEED
+		or absf(host.tray_scroll_velocity) < float(host.tray_config["inertia_min_speed"])
 	):
 		_stop_tray_inertia()
 
@@ -169,17 +209,16 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 		# Construction and restore call this before the final shared layout pass.
 		_layout_tray_items(true)
 		return
-	var scale: float = cell.scale
-	group.tray_scale = scale
+	var scale := _tray_original_screen_scale()
 	var top_left: Vector2 = cell.top_left
 	group.tray_slot = cell.slot
 
 	var target_position: Vector2 = top_left - bounds.position * scale
 	group.node.z_as_relative = false
-	group.node.z_index = host.TRAY_Z_INDEX + 1
+	group.node.z_index = int(host.tray_config["z_index"]) + 1
+	group.node.scale = Vector2.ONE * scale
 	if instant:
 		group.is_animating = false
-		group.node.scale = Vector2.ONE * scale
 		group.node.position = target_position
 		host._refresh_hint_line_widths()
 		return
@@ -188,9 +227,8 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 	group.tray_tween = tween
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	var duration: float = host._motion_duration(host.TRAY_ANIMATION_TIME)
+	var duration: float = host._motion_duration(float(host.tray_config["piece_animation_time"]))
 	tween.parallel().tween_property(group.node, "position", target_position, duration)
-	tween.parallel().tween_property(group.node, "scale", Vector2.ONE * scale, duration)
 	tween.finished.connect(
 		func(g = group) -> void:
 			if is_instance_valid(g.node):
@@ -200,7 +238,7 @@ func _move_group_to_tray(group, index: int, instant := false, _forced_x := NAN) 
 	)
 
 
-func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := TRAY_HIT_PADDING):
+func _tray_group_at_screen(screen_pos: Vector2, exclude = null, hit_padding := 0.0):
 	for i in range(host.tray_groups.size() - 1, -1, -1):
 		var group = host.tray_groups[i]
 		if group == exclude:
@@ -215,7 +253,7 @@ func _tray_group_at_screen(screen_pos: Vector2, exclude = null, _hit_padding := 
 					group.node.position + bounds.position * group.node.scale.x,
 					bounds.size * group.node.scale.x
 				)
-				. grow(TRAY_HIT_PADDING)
+				. grow(hit_padding)
 			)
 		if _tray_area().has_point(screen_pos) and hit_rect.has_point(screen_pos):
 			return group
@@ -283,7 +321,7 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 	)
 	host._clear_hint_highlights()
 	group.node.z_as_relative = false
-	group.node.z_index = host.TRAY_DRAG_Z_INDEX
+	group.node.z_index = int(host.tray_config["drag_z_index"])
 	_place_dragging_from_screen(screen_pos)
 	host.drag_offset = Vector2.ZERO
 	host._notify_state_changed()
@@ -297,11 +335,6 @@ func _update_drag_position(screen_pos: Vector2) -> void:
 			_stop_tray_inertia()
 		if not grab_gesture.scroll_locked:
 			_pan_tray(motion.delta_x)
-		var screen_scale: float = host.dragging.tray_scale
-		host.dragging.node.scale = (
-			Vector2.ONE
-			* (1.0 if grab_gesture.scroll_locked else screen_scale / maxf(0.001, host.view_scale))
-		)
 		_place_dragging_from_screen(screen_pos)
 		if _tray_area().has_point(screen_pos):
 			host._clear_snap_preview()
@@ -320,4 +353,4 @@ func _place_dragging_from_screen(screen_pos: Vector2) -> void:
 	host.dragging.node.position = (
 		pointer_world - host.tray_drag_local_grab * host.dragging.node.scale.x
 	)
-	host.dragging.node.z_index = host.TRAY_DRAG_Z_INDEX
+	host.dragging.node.z_index = int(host.tray_config["drag_z_index"])
