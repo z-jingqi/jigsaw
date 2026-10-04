@@ -45,6 +45,13 @@ Godot.exe --path <resolved-repository-root>
 
 For interactive inspection, wait briefly for the scene to render, then inspect the displayed game window. To reach a specific state without replaying a manual input sequence, drive `Game.debug_execute()` from a validation script instead. For a quick smoke run, start the window, wait about 2 seconds, then terminate the process. On macOS desktop runs, the warning `Orientation not supported by this display server` is expected and does not block launch.
 
+## Android device connection safety
+
+- Preserve the physical phone's existing ADB connection during development and real-device validation. Start diagnosis with read-only checks such as `adb devices -l`, Windows PnP device status, ADB process details, and existing logs.
+- Do not run `adb kill-server`, kill the ADB process, or restart the ADB server as a routine troubleshooting step. These actions can require unplugging and reconnecting the phone.
+- Avoid other transport resets, including `adb reconnect offline`, restarting or disabling the ADB/USB device, and changing USB debugging state. If a reset is unavoidable after non-resetting options have been exhausted, explain why, confirm that the user can physically access and reconnect the phone, and obtain explicit authorization before proceeding.
+- An absent or `offline` device is not permission to reset the connection automatically.
+
 ## Git and pull request integration
 
 - `main` is the always-runnable integration baseline. It must never contain an incomplete feature, an unreachable intermediate architecture, or code that has not passed its required validation.
