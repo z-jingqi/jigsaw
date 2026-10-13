@@ -5,10 +5,6 @@ extends Node
 	set(value):
 		reveal = value
 		_redraw()
-@export var status_progress := 1.0:
-	set(value):
-		status_progress = value
-		_redraw()
 @export var lift := 0.0:
 	set(value):
 		lift = value
@@ -33,7 +29,6 @@ func cancel_selection() -> void:
 	if _selection != null and _selection.is_valid():
 		_selection.kill()
 	_selection = null
-	status_progress = 1.0
 	if is_instance_valid(_icon):
 		_icon.modulate.a = 1.0
 		_icon.scale = Vector2.ONE
@@ -45,12 +40,10 @@ func select() -> void:
 		return
 	_icon.modulate.a = 0.45
 	_icon.scale = Vector2.ONE * 0.88
-	status_progress = 0.0
 	_selection = create_tween().set_parallel(true)
 	_selection.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_selection.tween_property(_icon, "modulate:a", 1.0, 0.28)
 	_selection.tween_property(_icon, "scale", Vector2.ONE, 0.28)
-	_selection.tween_property(self, "status_progress", 1.0, 0.4)
 
 
 func bind(card: Control) -> void:
@@ -102,7 +95,6 @@ func cancel() -> void:
 	_launch = null
 	_completion = Callable()
 	reveal = 1.0
-	status_progress = 1.0
 	lift = 0.0
 	if is_instance_valid(_card):
 		_card.scale = Vector2.ONE

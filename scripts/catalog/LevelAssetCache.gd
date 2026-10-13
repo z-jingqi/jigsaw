@@ -1,26 +1,32 @@
 extends RefCounted
 class_name LevelAssetCache
 
+const TEXTURE_CACHE_LIMIT := 12
+const SOURCE_IMAGE_CACHE_LIMIT := 3
+
 var texture_cache: Dictionary = {}
 var source_image_cache: Dictionary = {}
+var _texture_order: Array[String] = []
+var _source_order: Array[String] = []
 
 
 func cached_texture(path: String) -> Texture2D:
 	if path.is_empty():
 		return null
 	if texture_cache.has(path):
+		_touch(_texture_order, path)
 		return texture_cache[path]
 	if path.begins_with("res://") and ResourceLoader.exists(path):
 		var resource_texture := load(path) as Texture2D
 		if resource_texture != null:
-			texture_cache[path] = resource_texture
+			_remember(texture_cache, _texture_order, path, resource_texture, TEXTURE_CACHE_LIMIT)
 			return resource_texture
 	var extension := path.get_extension().to_lower()
 	if ["png", "jpg", "jpeg", "webp"].has(extension):
 		var direct_image := Image.load_from_file(image_file_path(path))
 		if direct_image != null and not direct_image.is_empty():
 			var direct_texture := ImageTexture.create_from_image(direct_image)
-			texture_cache[path] = direct_texture
+			_remember(texture_cache, _texture_order, path, direct_texture, TEXTURE_CACHE_LIMIT)
 			return direct_texture
 	return null
 
@@ -74,8 +80,23 @@ func placeholder_texture() -> Texture2D:
 
 func cached_source_image(path: String, source_texture: Texture2D) -> Image:
 	if not path.is_empty() and source_image_cache.has(path):
+		_touch(_source_order, path)
 		return source_image_cache[path]
 	var image := source_texture.get_image()
 	if not path.is_empty():
-		source_image_cache[path] = image
+		_remember(source_image_cache, _source_order, path, image, SOURCE_IMAGE_CACHE_LIMIT)
 	return image
+
+
+func _touch(order: Array[String], path: String) -> void:
+	order.erase(path)
+	order.append(path)
+
+
+func _remember(
+	cache: Dictionary, order: Array[String], path: String, value: Variant, limit: int
+) -> void:
+	cache[path] = value
+	_touch(order, path)
+	while order.size() > limit:
+		cache.erase(order.pop_front())

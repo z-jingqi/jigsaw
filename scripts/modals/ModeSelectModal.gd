@@ -3,6 +3,7 @@ extends Control
 
 signal close_requested
 signal mode_selected(mode: StringName, start_policy: StringName)
+signal selection_changed(mode: StringName, start_policy: StringName)
 
 const ModeCard := preload("res://scripts/modals/ModeSelectCard.gd")
 const Layout := preload("res://scripts/modals/ModeSelectLayout.gd")
@@ -26,6 +27,7 @@ var _preview_only := false
 
 
 func _ready() -> void:
+	$SafeArea/Content/ModeHeading.text = "选择模式"
 	back_button.pressed.connect(request_close)
 	start_button.pressed.connect(_on_start_pressed)
 	resized.connect(_apply_layout)
@@ -55,8 +57,25 @@ func navigation_set_active(is_active: bool) -> void:
 	_active = is_active
 	if not is_active:
 		navigation_exit({})
+	else:
+		back_button.disabled = false
+		for child in options.get_children():
+			child.disabled = false
+		_refresh_selection()
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
+
+
+func navigation_prepare_transition() -> void:
+	_active = false
+	_launching = false
+	start_button.disabled = true
+	back_button.disabled = true
+	# Keep its existing press feedback visible while a very fast confirmation
+	# finishes an in-flight board. The page motion takes over once ready.
+	for child in options.get_children():
+		child.disabled = true
+		child.cancel_motion()
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -92,6 +111,15 @@ func active_motion_count() -> int:
 	for child in options.get_children():
 		count += child.active_motion_count()
 	return count
+
+
+func preparation_selection() -> Dictionary:
+	if _preview_only or _selected_option == null:
+		return {}
+	return {
+		"mode": StringName(_read_from(_selected_option, "mode", &"")),
+		"start_policy": StringName(_read_from(_selected_option, "action", &"start")),
+	}
 
 
 func _reconcile_options() -> void:
@@ -131,6 +159,7 @@ func _on_option_selected(mode: StringName, _policy: StringName) -> void:
 			_selected_option = option_model
 			break
 	_refresh_selection(true)
+	selection_changed.emit(mode, StringName(_read_from(_selected_option, "action", &"start")))
 
 
 func _refresh_selection(user_change := false) -> void:
@@ -159,14 +188,6 @@ func _on_start_pressed() -> void:
 	var policy := StringName(_read_from(_selected_option, "action", &"start"))
 	for child in options.get_children():
 		child.cancel_motion()
-		if child.mode() == mode:
-			child.launch_motion(_finish_start.bind(mode, policy))
-
-
-func _finish_start(mode: StringName, policy: StringName) -> void:
-	if not _launching or not _active:
-		return
-	_launching = false
 	mode_selected.emit(mode, policy)
 
 

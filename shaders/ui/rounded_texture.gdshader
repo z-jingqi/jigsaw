@@ -7,10 +7,12 @@ uniform float opacity : hint_range(0.0, 1.0) = 1.0;
 uniform vec2 rect_size = vec2(1.0);
 
 varying vec2 local_position;
+varying vec4 vertex_tint;
 
 
 void vertex() {
 	local_position = VERTEX;
+	vertex_tint = COLOR;
 }
 
 
@@ -29,5 +31,5 @@ void fragment() {
 	float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));
 	color.rgb = mix(vec3(luminance), color.rgb, saturation);
 	color.a *= opacity * (1.0 - smoothstep(-antialias, 0.0, distance));
-	COLOR = color;
+	COLOR = color * vertex_tint;
 }

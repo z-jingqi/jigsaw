@@ -1,8 +1,10 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
-@export_enum("none", "back", "grid", "settings", "undo", "close") var symbol := "none"
+@export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album")
+var symbol := "none"
 const GridIcon := preload("res://assets/ui/icons/themes-grid.svg")
 const GearIcon := preload("res://assets/ui/icons/settings-gear.svg")
+const AlbumIcon := preload("res://assets/ui/icons/album.svg")
 const INK := Color("194F47")
 
 
@@ -36,13 +38,14 @@ func _draw() -> void:
 	var w := maxf(1.5, r * 0.13)
 	var ink := Color("94A28F") if disabled else INK
 	match symbol:
-		"back":
+		"back", "forward":
+			var direction := -1.0 if symbol == "forward" else 1.0
 			draw_polyline(
 				PackedVector2Array(
 					[
-						c + Vector2(r * 0.45, -r * 0.9),
-						c + Vector2(-r * 0.45, 0.0),
-						c + Vector2(r * 0.45, r * 0.9),
+						c + Vector2(r * 0.45 * direction, -r * 0.9),
+						c + Vector2(-r * 0.45 * direction, 0.0),
+						c + Vector2(r * 0.45 * direction, r * 0.9),
 					]
 				),
 				ink,
@@ -55,6 +58,9 @@ func _draw() -> void:
 		"grid":
 			var icon_size := Vector2.ONE * r * 3.0
 			draw_texture_rect(GridIcon, Rect2(c - icon_size * 0.5, icon_size), false)
+		"album":
+			var icon_size := Vector2.ONE * r * 3.0
+			draw_texture_rect(AlbumIcon, Rect2(c - icon_size * 0.5, icon_size), false)
 		"undo":
 			draw_arc(c, r, -PI * 0.85, PI * 0.75, 32, ink, w, true)
 			var tip := c + Vector2.from_angle(-PI * 0.85) * r

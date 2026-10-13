@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <!-- One paper silhouette around the joined honeycomb, without a cast shadow. -->
+  <path d="M48 10 67.05 21V43L86.1 54V76L67.05 87 48 76 28.95 87 9.9 76V54L28.95 43V21Z"
+        fill="#FFFCF3" stroke="#6C7C71" stroke-width="13.5" stroke-linejoin="round"/>
+  <path d="M48 10 67.05 21V43L86.1 54V76L67.05 87 48 76 28.95 87 9.9 76V54L28.95 43V21Z"
+        fill="#FFFCF3" stroke="#FFFCF3" stroke-width="11.5" stroke-linejoin="round"/>
+  <g stroke="#FFFCF3" stroke-width="2.6" stroke-linejoin="round">
+    <path d="M48 10 67.05 21V43L48 54 28.95 43V21Z" fill="#D0A153"/>
+    <path d="M28.95 43 48 54V76L28.95 87 9.9 76V54Z" fill="#669483"/>
+    <path d="M67.05 43 86.1 54V76L67.05 87 48 76V54Z" fill="#669483"/>
+  </g>
+</svg>

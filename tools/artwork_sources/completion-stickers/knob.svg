@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <path id="piece" d="M24 24H40C35 18 40 10 48 10C56 10 61 18 56 24H72V40C78 35 86 40 86 48C86 56 78 61 72 56V72H56C61 66 56 58 48 58C40 58 35 66 40 72H24V56C30 61 38 56 38 48C38 40 30 35 24 40Z"/>
+  </defs>
+  <g transform="translate(48 48) scale(1.05) translate(-55 -41)" stroke-linejoin="round">
+    <use href="#piece" fill="#FFFCF3" stroke="#6C7C71" stroke-width="14.5"/>
+    <use href="#piece" fill="#FFFCF3" stroke="#FFFCF3" stroke-width="12.5"/>
+    <use href="#piece" fill="#C47D66" stroke="#FFFCF3" stroke-width="2.4"/>
+  </g>
+</svg>

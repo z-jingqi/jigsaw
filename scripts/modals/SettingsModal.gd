@@ -4,12 +4,15 @@ extends Control
 signal setting_changed(key: StringName, enabled: bool)
 signal close_requested
 
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
+
 @onready var shell: AnimatedModalShell = $ModalShell
 @onready var title_label: Label = $ModalShell/Panel/Content/Header/Title
 @onready var close_button: Button = $ModalShell/Panel/Content/Header/Close
 @onready var music_row: SettingsRow = $ModalShell/Panel/Content/Rows/Music
 @onready var sound_effects_row: SettingsRow = $ModalShell/Panel/Content/Rows/SoundEffects
 @onready var haptics_row: SettingsRow = $ModalShell/Panel/Content/Rows/Haptics
+@onready var snap_preview_row: SettingsRow = $ModalShell/Panel/Content/Rows/SnapPreview
 @onready var reduced_motion_row: SettingsRow = $ModalShell/Panel/Content/Rows/ReducedMotion
 @onready var error_label: Label = $ModalShell/Panel/Content/Error
 
@@ -24,10 +27,12 @@ func _ready() -> void:
 	music_row.value_changed.connect(_on_value_changed)
 	sound_effects_row.value_changed.connect(_on_value_changed)
 	haptics_row.value_changed.connect(_on_value_changed)
+	snap_preview_row.value_changed.connect(_on_value_changed)
 	reduced_motion_row.value_changed.connect(_on_value_changed)
 	shell.shade.gui_input.connect(_on_shade_input)
 	shell.closed.connect(_on_shell_closed)
 	resized.connect(_configure_panel)
+	(title_label.get_parent() as Control).resized.connect(_layout_navigation)
 	_style_close_button()
 	reduced_motion_row.set_divider_visible(false)
 	_configure_panel()
@@ -50,6 +55,11 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	)
 	haptics_row.configure(
 		&"haptics_enabled", str(labels.get("haptics", "Haptics")), _view_model.haptics_enabled
+	)
+	snap_preview_row.configure(
+		&"snap_preview_enabled",
+		str(labels.get("snap_preview", "Snap preview")),
+		_view_model.snap_preview_enabled
 	)
 	reduced_motion_row.configure(
 		&"reduced_motion_enabled",
@@ -81,6 +91,12 @@ func render_view_model(view_model: AppViewModels.SettingsViewModel, animate := t
 	)
 	haptics_row.configure(
 		&"haptics_enabled", haptics_row.label.text, _view_model.haptics_enabled, animate
+	)
+	snap_preview_row.configure(
+		&"snap_preview_enabled",
+		snap_preview_row.label.text,
+		_view_model.snap_preview_enabled,
+		animate
 	)
 	reduced_motion_row.configure(
 		&"reduced_motion_enabled",
@@ -119,7 +135,7 @@ func active_motion_count() -> int:
 func _open() -> void:
 	_closing = false
 	close_button.disabled = false
-	shell.configure_shade(Color(0.31, 0.16, 0.08, 0.18))
+	shell.configure_shade(Color(0.05, 0.16, 0.14, 0.28))
 	shell.play_open(_reduced_motion)
 
 
@@ -172,52 +188,43 @@ func _stop_error_motion() -> void:
 func _configure_panel() -> void:
 	if not is_instance_valid(shell):
 		return
-	var horizontal_margin := maxf(84.0, size.x * 0.09)
-	var vertical_margin := maxf(120.0, size.y * 0.08)
-	var panel_size := Vector2(
-		minf(960.0, maxf(720.0, size.x - horizontal_margin * 2.0)),
-		minf(1080.0, maxf(940.0, size.y - vertical_margin * 2.0)),
+	var portrait := size.x < size.y
+	var unit := (
+		minf(size.x / 390.0, size.y / 700.0) if portrait else minf(size.x / 844.0, size.y / 390.0)
 	)
+	var panel_size := Vector2(340, 514) * unit if portrait else Vector2(660, 356) * unit
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("FFF4E2")
-	style.corner_radius_top_left = 58
-	style.corner_radius_top_right = 58
-	style.corner_radius_bottom_left = 58
-	style.corner_radius_bottom_right = 58
+	style.bg_color = Color("F5F0E3")
+	style.set_corner_radius_all(roundi(24 * unit))
 	style.corner_detail = 20
 	style.anti_aliasing = true
-	style.shadow_color = Color(0.30, 0.14, 0.06, 0.22)
-	style.shadow_size = 20
-	style.shadow_offset = Vector2(10, 14)
-	shell.configure_panel(panel_size, style, Vector4(72, 54, 72, 46))
+	shell.configure_panel(panel_size, style, Vector4(24, 20, 24, 20) * unit)
+	var header := title_label.get_parent() as Control
+	header.custom_minimum_size.y = 64 * unit
+	title_label.add_theme_font_size_override("font_size", roundi(26 * unit))
+	_layout_navigation.call_deferred()
+	var rows := music_row.get_parent() as GridContainer
+	rows.columns = 1 if portrait else 2
+	rows.add_theme_constant_override("h_separation", roundi(24 * unit))
+	rows.add_theme_constant_override("v_separation", roundi(8 * unit))
+	for row in _settings_rows():
+		row.set_visual_scale(unit)
+		row.set_divider_visible(portrait and row != reduced_motion_row)
+
+
+func _layout_navigation() -> void:
+	if not is_node_ready():
+		return
+	Buttons.place_navigation(close_button, shell.panel, true, 0, size)
+	var header := title_label.get_parent() as Control
+	var title_shift := close_button.position.y + close_button.size.y * 0.5 - header.size.y * 0.5
+	title_label.offset_top = title_shift
+	title_label.offset_bottom = title_shift
 
 
 func _style_close_button() -> void:
-	var normal := _close_style(Color("D35929"), Color(0.30, 0.14, 0.06, 0.26), 8)
-	var hover := _close_style(Color("D9683C"), Color(0.30, 0.14, 0.06, 0.28), 9)
-	var pressed := _close_style(Color("C94C20"), Color(0.30, 0.14, 0.06, 0.18), 4)
-	var disabled := _close_style(Color("D8A084"), Color(0.30, 0.14, 0.06, 0.10), 4)
-	close_button.add_theme_stylebox_override("normal", normal)
-	close_button.add_theme_stylebox_override("hover", hover)
-	close_button.add_theme_stylebox_override("pressed", pressed)
-	close_button.add_theme_stylebox_override("focus", normal.duplicate())
-	close_button.add_theme_stylebox_override("disabled", disabled)
-
-
-func _close_style(fill: Color, shadow: Color, shadow_size: int) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.corner_radius_top_left = 34
-	style.corner_radius_top_right = 34
-	style.corner_radius_bottom_left = 34
-	style.corner_radius_bottom_right = 34
-	style.corner_detail = 16
-	style.anti_aliasing = true
-	style.shadow_color = shadow
-	style.shadow_size = shadow_size
-	style.shadow_offset = Vector2(4, 7)
-	return style
+	close_button.text = ""
 
 
 func _settings_rows() -> Array[SettingsRow]:
-	return [music_row, sound_effects_row, haptics_row, reduced_motion_row]
+	return [music_row, sound_effects_row, haptics_row, snap_preview_row, reduced_motion_row]

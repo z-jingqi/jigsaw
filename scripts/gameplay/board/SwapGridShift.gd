@@ -3,13 +3,7 @@ extends RefCounted
 
 
 static func can_shift(host: Node2D, horizontal: bool) -> bool:
-	if (
-		host.current_mode != "swap"
-		or host.swap_tiles.is_empty()
-		or host.swap_dragging != null
-		or host.panning
-		or host.pinch_active
-	):
+	if host.current_mode != "swap" or host.swap_tiles.is_empty() or host.swap_dragging != null:
 		return false
 	if (host._swap_cols() if horizontal else host._swap_rows()) <= 1:
 		return false

@@ -2,8 +2,10 @@ class_name TransitionHost
 extends Control
 
 signal transition_settled(committed: bool)
+signal motion_started(kind: StringName)
 
 const CardMotion := preload("res://scripts/navigation/CardPageMotion.gd")
+const GameplayMotion := preload("res://scripts/navigation/GameplayPageMotion.gd")
 const ThemeLibraryMotion := preload("res://scripts/navigation/ThemeLibraryMotion.gd")
 const NORMAL_DURATION := 0.40
 const HOME_TO_LEVELS_DURATION := 0.56
@@ -47,13 +49,35 @@ func play(kind: StringName, context: Dictionary = {}) -> Dictionary:
 	_source_companion = context.get("source_companion") as Node2D
 	_target_companion = context.get("target_companion") as Node2D
 	_capture_view_states()
+	if bool(context.get("prepare_before_motion", false)):
+		_motion_phase = &"preparing"
+		_active_tween = create_tween()
+		_active_tween.tween_interval(duration)
+		_active_tween.pause()
+	else:
+		_start_motion(kind, duration)
+	return snapshot()
+
+
+func reveal_prepared_view(view: Control) -> void:
+	if _motion_phase != &"preparing" or view != _target_view:
+		return
+	_active_tween.kill()
+	_motion_phase = &"running"
+	_start_motion(
+		_active_kind,
+		_duration_for(_active_kind, bool(_active_context.get("reduced_motion", false)))
+	)
+
+
+func _start_motion(kind: StringName, duration: float) -> void:
 	_active_tween = create_tween().set_parallel(true)
 	_active_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	var animated := _configure_motion(kind, duration)
 	if not animated:
 		_active_tween.tween_interval(duration)
 	_active_tween.finished.connect(_settle.bind(_active_sequence, true))
-	return snapshot()
+	motion_started.emit(kind)
 
 
 func finish_active_to_target() -> void:
@@ -80,6 +104,15 @@ func snapshot() -> Dictionary:
 
 func _duration_for(kind: StringName, reduced_motion: bool) -> float:
 	if reduced_motion:
+		if kind == &"gameplay_page":
+			if (
+				_active_context.get("reason") == "pop"
+				and _active_context.get("source_view") is CompletionModal
+			):
+				# Show the end state immediately, but absorb the return button's
+				# second tap before the exposed level cards accept input.
+				return REDUCED_MOTION_DURATION
+			return 0.001
 		return REDUCED_MOTION_DURATION
 	match kind:
 		&"home_to_levels":
@@ -99,7 +132,7 @@ func _settle(sequence: int, committed: bool) -> void:
 		return
 	var tween := _active_tween
 	_active_tween = null
-	if is_instance_valid(tween) and tween.is_running():
+	if is_instance_valid(tween):
 		tween.kill()
 	_restore_view_states()
 	_motion_phase = &"idle"
@@ -120,12 +153,26 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 		)
 		return true
 	if reduced:
+		if kind == &"gameplay_page":
+			_target_view.modulate.a = 1.0
+			if is_instance_valid(_source_view):
+				_source_view.modulate.a = 0.0
+			return false
 		_target_view.modulate.a = 0.0
 		_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration)
 		if is_instance_valid(_source_view):
 			_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
 		return true
-	if kind in [&"home_to_levels", &"levels_to_home", &"screen"]:
+	if (
+		kind == &"gameplay_page"
+		and _active_context.get("reason") in ["pop", "push_from_modal"]
+		and is_instance_valid(_source_view)
+	):
+		# A mode page lives on the higher modal canvas. Move that page out so
+		# the already prepared game is revealed throughout the entrance.
+		GameplayMotion.configure(_active_tween, _source_view, _target_view, duration)
+		return true
+	if kind in [&"home_to_levels", &"levels_to_home", &"screen", &"gameplay_page"]:
 		if is_instance_valid(_source_view):
 			CardMotion.configure(
 				_active_tween, _source_view, _target_view, _active_context, duration

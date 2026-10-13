@@ -2,6 +2,7 @@ extends RefCounted
 class_name GameplayLayout
 
 const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 var _layout_config: Dictionary = PuzzleRulesScript.gameplay_layout()
 var _header_config: Dictionary = _layout_config["header"]
@@ -11,54 +12,91 @@ var _tray_config: Dictionary = _layout_config["tray"]
 func apply(
 	viewport_size: Vector2,
 	hud: Control,
-	back_button: Button,
+	header_buttons: Array[Button],
 	title_label: Label,
 	title_cloud_left: TextureRect,
 	title_cloud_right: TextureRect,
-	hint_button: Button,
 	tray_view: Control,
 	swap_action_bar: SwapActionBarView,
 	requested_scale := 1.0,
 ) -> void:
+	var back_button := header_buttons[0]
+	var hint_button := header_buttons[1]
 	var scale := _layout_scale(viewport_size) * maxf(1.0, requested_scale)
-	var control_size := float(_header_config["control_size"]) * scale
+	var control_size := Buttons.icon_size(viewport_size).x
+	var title_height := float(_header_config["control_size"]) * scale
 	var control_top := float(_header_config["top"]) * scale
 	var side_margin := float(_header_config["side_margin"]) * scale
 	hud.offset_left = 0.0
 	hud.offset_top = 0.0
 	hud.offset_right = 0.0
 	hud.offset_bottom = control_top + float(_header_config["height"]) * scale
-	_apply_header_control(back_button, Vector2(side_margin, control_top), control_size)
+	_apply_header_control(back_button, Buttons.navigation_position(viewport_size), control_size)
 	_apply_header_control(
 		hint_button,
-		Vector2(viewport_size.x - side_margin - control_size, control_top),
+		Buttons.navigation_position(viewport_size, true),
 		control_size,
 	)
+	var center := viewport_size.x * 0.5
+	var title_gap := float(_header_config["title_side_gap"]) * scale
 	var title_area_width := minf(
 		float(_header_config["title_max_width"]) * scale,
 		maxf(
 			1.0,
 			(
-				hint_button.position.x
-				- back_button.position.x
-				- back_button.size.x
-				- float(_header_config["title_side_gap"]) * scale
+				2.0
+				* minf(
+					center - back_button.position.x - back_button.size.x - title_gap,
+					hint_button.position.x - title_gap - center,
+				)
 			),
 		),
 	)
+	var title_top := Buttons.header_center_y(viewport_size) - title_height * 0.5
+	var ornaments_width := 2.0 * float(_header_config["cloud_width"] + _header_config["cloud_gap"])
+	var minimum_font := maxi(12, roundi(float(_header_config["title_min_font_size"]) * scale))
+	if (
+		(
+			title_label
+			. get_theme_font("font")
+			. get_string_size(title_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, minimum_font)
+			. x
+		)
+		> title_area_width - ornaments_width * scale
+	):
+		# Long names use the full-width title row rather than colliding with actions.
+		title_top = control_top + title_height + float(_header_config["title_row_gap"]) * scale
+		title_area_width = viewport_size.x - side_margin * 2.0
 	_layout_title(
 		viewport_size.x,
-		control_top,
-		control_size,
+		title_top,
+		title_height,
 		title_area_width,
 		title_label,
 		title_cloud_left,
 		title_cloud_right,
 		scale,
 	)
-	_configure_bottom_panel(tray_view, float(_tray_config["height"]) * scale)
-	_configure_bottom_panel(swap_action_bar, float(_layout_config["swap_action_height"]) * scale)
+	hud.offset_bottom = maxf(
+		hud.offset_bottom, title_top + title_height + board_gap(viewport_size, requested_scale)
+	)
+	var bottom := float(_layout_config["bottom_margin"]) * scale
+	# Preserve the upper edge and use the previously empty bottom margin for pieces.
+	_configure_bottom_panel(
+		tray_view, float(_tray_config["height"]) * scale + bottom, 0.0, side_margin
+	)
+	_configure_bottom_panel(
+		swap_action_bar, float(_layout_config["swap_action_height"]) * scale, bottom, 0.0
+	)
 	swap_action_bar.configure_layout(scale)
+
+
+func board_gap(viewport_size: Vector2, requested_scale := 1.0) -> float:
+	return (
+		float(_layout_config["board_gap"])
+		* _layout_scale(viewport_size)
+		* maxf(1.0, requested_scale)
+	)
 
 
 func _layout_scale(viewport_size: Vector2) -> float:
@@ -66,9 +104,9 @@ func _layout_scale(viewport_size: Vector2) -> float:
 
 
 func _apply_header_control(button: Button, position: Vector2, size: float) -> void:
+	button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	button.position = position
-	button.size = Vector2.ONE * size
-	button.custom_minimum_size = Vector2.ONE * size
+	Buttons.apply_size(button, Vector2.ONE * size)
 
 
 func _layout_title(
@@ -114,9 +152,9 @@ func _layout_title(
 	right_cloud.size = cloud_size
 
 
-func _configure_bottom_panel(panel: Control, height: float) -> void:
-	panel.offset_left = 0.0
-	panel.offset_top = -height
-	panel.offset_right = 0.0
-	panel.offset_bottom = 0.0
+func _configure_bottom_panel(panel: Control, height: float, bottom: float, margin: float) -> void:
+	panel.offset_left = margin
+	panel.offset_top = -height - bottom
+	panel.offset_right = -margin
+	panel.offset_bottom = -bottom
 	panel.custom_minimum_size.y = height

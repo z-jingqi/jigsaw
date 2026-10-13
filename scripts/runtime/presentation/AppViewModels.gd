@@ -101,6 +101,7 @@ class LevelCardViewModel:
 	var thumbnail: Texture2D
 	var thumbnail_path: String
 	var locked: bool
+	var preview_revealed: bool
 	var recommended: bool
 	var newly_unlocked: bool
 	var modes: Array[ModeStatusViewModel]
@@ -111,6 +112,7 @@ class LevelCardViewModel:
 		thumbnail = data.get("thumbnail") as Texture2D
 		thumbnail_path = str(data.get("thumbnail_path", ""))
 		locked = bool(data["locked"])
+		preview_revealed = bool(data.get("preview_revealed", not locked))
 		recommended = bool(data["recommended"])
 		newly_unlocked = bool(data.get("newly_unlocked", false))
 		modes.assign(data["modes"])
@@ -182,6 +184,7 @@ class SettingsViewModel:
 	var haptics_enabled: bool
 	var music_enabled: bool
 	var sound_effects_enabled: bool
+	var snap_preview_enabled: bool
 	var reduced_motion_enabled: bool
 	var pending: Dictionary
 	var error_text: Dictionary
@@ -191,25 +194,10 @@ class SettingsViewModel:
 		haptics_enabled = bool(data["haptics_enabled"])
 		music_enabled = bool(data["music_enabled"])
 		sound_effects_enabled = bool(data["sound_effects_enabled"])
+		snap_preview_enabled = bool(data.get("snap_preview_enabled", true))
 		reduced_motion_enabled = bool(data["reduced_motion_enabled"])
 		pending = data.get("pending", {}).duplicate(true)
 		error_text = data.get("error_text", {}).duplicate(true)
-
-
-class GuideViewModel:
-	extends RefCounted
-	var revision: int
-	var step: StringName
-	var description: String
-	var can_skip: bool
-	var reduced_motion: bool
-
-	func _init(data: Dictionary) -> void:
-		revision = int(data["revision"])
-		step = StringName(data["step"])
-		description = str(data["description"])
-		can_skip = bool(data["can_skip"])
-		reduced_motion = bool(data["reduced_motion"])
 
 
 class CompletionViewModel:
@@ -219,12 +207,13 @@ class CompletionViewModel:
 	var level_id: String
 	var mode: StringName
 	var completion_event_id: String
-	var title: String
 	var level_title: String
-	var description: String
+	var level_description: String
 	var completed_texture: Texture2D
+	var source_rect: Rect2
 	var primary_action_text: String
-	var modes: Array[ModeStatusViewModel]
+	var secondary_action_text: String
+	var has_next_level: bool
 
 	func _init(data: Dictionary) -> void:
 		revision = int(data["revision"])
@@ -232,9 +221,10 @@ class CompletionViewModel:
 		level_id = str(data["level_id"])
 		mode = StringName(data["mode"])
 		completion_event_id = str(data["completion_event_id"])
-		title = str(data["title"])
 		level_title = str(data["level_title"])
-		description = str(data["description"])
+		level_description = str(data.get("level_description", ""))
 		completed_texture = data["completed_texture"]
+		source_rect = data.get("source_rect", Rect2())
 		primary_action_text = str(data["primary_action_text"])
-		modes.assign(data.get("modes", []))
+		secondary_action_text = str(data.get("secondary_action_text", ""))
+		has_next_level = bool(data.get("has_next_level", false))

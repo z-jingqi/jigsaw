@@ -3,45 +3,29 @@ class_name PuzzleBoard
 
 signal completed
 signal state_changed(state: Dictionary)
+signal feedback_requested(kind: StringName)
 
 const SNAP_TOLERANCE := 22.0
 const HIT_ALPHA_RADIUS := 2
 const PIECE_DRAG_PADDING := 8.0
-const VIEW_MIN_RATIO := 0.90
-const VIEW_MAX_RATIO := 2.40
-const TRACKPAD_MAGNIFY_MIN := 0.86
-const TRACKPAD_MAGNIFY_MAX := 1.16
 const VIEW_FIT_PADDING := 36.0
 const BOARD_SCREEN_EDGE_GAP := 62.0
 const SWAP_BOARD_SCREEN_EDGE_GAP := 60.0
 const SWAP_VIEW_FIT_PADDING := 60.0
 const BOARD_LINE_FRAME_WIDTH := 1
 const VIEW_HINT_PADDING := 58.0
-const HINT_OUTLINE_COLOR := Color(0.20, 0.78, 1.0, 0.98)
-const HINT_OUTLINE_SCREEN_WIDTH := 5.0
-const HINT_TARGET_COLOR := Color(0.20, 0.78, 1.0, 0.95)
-const HINT_TARGET_SCREEN_WIDTH := 5.0
-const HINT_TARGET_DASH_LENGTH := 11.0
-const HINT_TARGET_DASH_GAP := 7.0
 const HINT_DURATION := 6.0
-const HINT_BREATHE_SCALE := 1.14
-const HINT_BREATHE_CYCLE := 1.5
 const HINT_TRAY_SCROLL_TIME := 0.3
-const HINT_TARGET_Z_INDEX := 4086
 const HINT_GROUP_Z_INDEX := 4088
 const SNAP_VISUAL_GAP := 0.0
 const SNAP_PREVIEW_COLOR := Color(0.16, 0.70, 0.62, 0.92)
 const SNAP_PREVIEW_SCREEN_WIDTH := 3.0
-const SEAM_SCREEN_WIDTH := 1.6
 const SHIMMER_DURATION := 0.7
 const SWAP_FALLBACK_COLS := 5
 const SWAP_FALLBACK_ROWS := 7
 const SWAP_ANIMATION_TIME := 0.20
 const SWAP_ROW_SHIFT_ANIMATION_TIME := 0.34
 const SWAP_HINT_DURATION := 5.0
-const SWAP_HINT_SCREEN_WIDTH := 9.0
-const SWAP_HINT_BREATHE_ALPHA := 0.48
-const SWAP_HINT_BREATHE_CYCLE := 1.0
 const SWAP_TARGET_PREVIEW_COLOR := Color(0.96, 0.58, 0.20, 0.96)
 const SWAP_TARGET_PREVIEW_FILL := Color(1.0, 0.72, 0.30, 0.20)
 const SWAP_TARGET_PREVIEW_SCREEN_WIDTH := 4.0
@@ -56,6 +40,12 @@ const BoardDebugAdapterScript := preload("res://scripts/gameplay/board/BoardDebu
 const BoardGeometryScript := preload("res://scripts/gameplay/board/BoardGeometry.gd")
 const BoardAppearanceScript := preload("res://scripts/gameplay/board/BoardAppearance.gd")
 const BoardSessionBuilderScript := preload("res://scripts/gameplay/board/BoardSessionBuilder.gd")
+const CompletionPresentation := preload(
+	"res://scripts/gameplay/board/BoardCompletionPresentation.gd"
+)
+const BoardSessionPreparationScript := preload(
+	"res://scripts/gameplay/board/BoardSessionPreparation.gd"
+)
 const BoardTrayControllerScript := preload("res://scripts/gameplay/board/BoardTrayController.gd")
 const BoardInputControllerScript := preload("res://scripts/gameplay/board/BoardInputController.gd")
 const BoardHintControllerScript := preload("res://scripts/gameplay/board/BoardHintController.gd")
@@ -79,8 +69,6 @@ var current_mode := "knob"
 var rng := RandomNumberGenerator.new()
 var world_root: Node2D
 var tray_root: Node2D
-var tray_background: Panel
-var tray_top_border: ColorRect
 var tray_bounds_override := Rect2()
 var view_scale := 1.0
 var view_target_scale := 1.0
@@ -104,9 +92,6 @@ var swap_tiles: Array = []
 var dragging = null
 var dragging_from_tray := false
 var dragging_tray_index := -1
-var tray_drag_screen_offset := Vector2.ZERO
-var tray_drag_target_screen_offset := Vector2.ZERO
-var tray_drag_offset_tween: Tween
 var tray_drag_local_grab := Vector2.ZERO
 var last_drag_screen_pos := Vector2.ZERO
 var swap_dragging = null
@@ -123,12 +108,6 @@ var hint_blink_tweens: Array[Tween] = []
 var active_touch_index := -1
 var active_touches := {}
 var drag_offset := Vector2.ZERO
-var panning := false
-var pan_touch_index := -1
-var pinch_active := false
-var pinch_start_distance := 0.0
-var pinch_start_scale := 1.0
-var pinch_start_world_midpoint := Vector2.ZERO
 var hud_top_reserved_height := 56.0
 var hud_bottom_reserved_height := 0.0
 var drag_blockers: Array[Rect2] = []
@@ -140,7 +119,6 @@ var hint_pending := false
 var hint_tray_scroll_tween: Tween
 var hint_clear_timer: Timer
 var hint_count := 0
-var snap_preview_lines: Array[Line2D] = []
 var snap_preview_key := ""
 var snap_ready_key := ""
 var debug_bounds_overlay_enabled := false
@@ -157,6 +135,7 @@ var debug_adapter
 var geometry
 var appearance
 var session_builder
+var session_preparation
 var tray_controller
 var input_controller
 var hint_controller
@@ -173,6 +152,7 @@ func _ready() -> void:
 	geometry = BoardGeometryScript.new(self)
 	appearance = BoardAppearanceScript.new(self)
 	session_builder = BoardSessionBuilderScript.new(self)
+	session_preparation = BoardSessionPreparationScript.new(self)
 	tray_controller = BoardTrayControllerScript.new(self)
 	input_controller = BoardInputControllerScript.new(self)
 	hint_controller = BoardHintControllerScript.new(self)
@@ -186,15 +166,21 @@ func board_screen_edge_gap() -> float:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		_release_collaborators()
 	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
 		if input_controller != null:
 			input_controller.cancel_interaction()
 
 
 func _exit_tree() -> void:
-	# Composition helpers are RefCounted; break their back-references so the
-	# board and helpers cannot keep each other alive after a test or scene exit.
 	_cancel_runtime_animations()
+
+
+func _release_collaborators() -> void:
+	# Composition helpers are RefCounted; break their back-references so the
+	# board and helpers cannot keep each other alive after deletion. Moving the
+	# persistent board between page hosts must preserve these collaborators.
 	groups.clear()
 	tray_groups.clear()
 	locked_groups.clear()
@@ -208,6 +194,7 @@ func _exit_tree() -> void:
 		geometry,
 		appearance,
 		session_builder,
+		session_preparation,
 		tray_controller,
 		input_controller,
 		hint_controller,
@@ -221,7 +208,7 @@ func _exit_tree() -> void:
 
 func _cancel_runtime_animations() -> void:
 	if tray_controller != null:
-		tray_controller.grab_gesture.reset()
+		tray_controller.finish_drag()
 		tray_controller._stop_tray_inertia()
 	for group in groups:
 		if group == null:
@@ -229,9 +216,7 @@ func _cancel_runtime_animations() -> void:
 		if group.tray_tween != null and group.tray_tween.is_valid():
 			group.tray_tween.kill()
 		group.tray_tween = null
-	for tween in [
-		view_tween, tray_drag_offset_tween, swap_target_preview_tween, hint_tray_scroll_tween
-	]:
+	for tween in [view_tween, swap_target_preview_tween, hint_tray_scroll_tween]:
 		if tween != null and tween.is_valid():
 			tween.kill()
 	for tween in hint_blink_tweens:
@@ -240,7 +225,6 @@ func _cancel_runtime_animations() -> void:
 	if hint_controller != null:
 		hint_controller._stop_hint_clear_timer()
 	view_tween = null
-	tray_drag_offset_tween = null
 	swap_target_preview_tween = null
 	hint_tray_scroll_tween = null
 	hint_blink_tweens.clear()
@@ -253,7 +237,7 @@ func _process(delta: float) -> void:
 		_update_hint_line_width(swap_target_preview_line)
 	if debug_bounds_overlay_enabled:
 		_refresh_debug_bounds_overlay()
-	tray_controller.process_scroll(delta)
+	tray_controller.process(delta)
 
 
 func set_feedback_preferences(
@@ -261,6 +245,8 @@ func set_feedback_preferences(
 ) -> void:
 	haptics_enabled = next_haptics_enabled
 	reduced_motion = next_reduced_motion
+	hint_controller.set_reduced_motion(reduced_motion)
+	snap_controller.set_reduced_motion(reduced_motion)
 	edge_contrast_mode = (
 		next_edge_contrast_mode
 		if ["auto", "dark", "light"].has(next_edge_contrast_mode)
@@ -273,6 +259,7 @@ func _motion_duration(duration: float) -> float:
 
 
 func _trigger_haptic(kind: String) -> void:
+	feedback_requested.emit(StringName(kind))
 	if not haptics_enabled:
 		return
 	var duration := 8
@@ -344,30 +331,55 @@ func start(
 	bottom_reserved_height := 0.0,
 	tray_bounds := Rect2()
 ) -> bool:
-	clear()
-	active_level_config = level_config
-	current_mode = _mode_key(play_mode)
-	texture = source_texture
-	source_image = image
-	source_size = image_size
-	piece_visual_style = _piece_visual_style()
-	hud_top_reserved_height = top_reserved_height
-	hud_bottom_reserved_height = maxf(0.0, bottom_reserved_height)
-	tray_bounds_override = tray_bounds
-	completion_emitted = false
-	_add_level_background(active_level_config)
-	world_root = get_node_or_null("WorldRoot") as Node2D
-	tray_root = get_node_or_null("TrayRoot") as Node2D
-	if world_root == null or tray_root == null:
-		push_error("PuzzleBoard requires WorldRoot and TrayRoot scene hosts.")
+	if not (
+		session_preparation
+		. configure(
+			{
+				"config": level_config,
+				"mode": play_mode,
+				"texture": source_texture,
+				"image": image,
+				"source_size": image_size,
+				"top": top_reserved_height,
+				"bottom": bottom_reserved_height,
+				"tray": tray_bounds,
+			}
+		)
+	):
 		return false
-	tray_root.z_index = int(tray_config["z_index"])
-	tray_root.z_as_relative = false
-	_reset_view_transform()
 	var loaded := _start_play_session(current_mode)
 	if loaded and typeof(restore_state) == TYPE_DICTIONARY and not restore_state.is_empty():
 		apply_state_snapshot(restore_state)
 	return loaded
+
+
+func start_runtime(
+	level_config: Dictionary,
+	play_mode: String,
+	source_texture: Texture2D,
+	image: Image,
+	image_size: Vector2,
+	top_reserved_height: float,
+	bottom_reserved_height: float,
+	tray_bounds: Rect2
+) -> bool:
+	if not (
+		session_preparation
+		. configure(
+			{
+				"config": level_config,
+				"mode": play_mode,
+				"texture": source_texture,
+				"image": image,
+				"source_size": image_size,
+				"top": top_reserved_height,
+				"bottom": bottom_reserved_height,
+				"tray": tray_bounds,
+			}
+		)
+	):
+		return false
+	return await session_preparation.build_progressive()
 
 
 func clear() -> void:
@@ -396,9 +408,6 @@ func clear() -> void:
 	dragging = null
 	dragging_from_tray = false
 	dragging_tray_index = -1
-	tray_drag_screen_offset = Vector2.ZERO
-	tray_drag_target_screen_offset = Vector2.ZERO
-	tray_drag_offset_tween = null
 	tray_drag_local_grab = Vector2.ZERO
 	last_drag_screen_pos = Vector2.ZERO
 	swap_dragging = null
@@ -427,13 +436,8 @@ func clear() -> void:
 	drag_blockers.clear()
 	active_touch_index = -1
 	active_touches.clear()
-	panning = false
-	pan_touch_index = -1
-	pinch_active = false
 	world_root = null
 	tray_root = null
-	tray_background = null
-	tray_top_border = null
 	tray_bounds_override = Rect2()
 	view_scale = 1.0
 	view_target_scale = 1.0
@@ -451,8 +455,16 @@ func handle_input(event: InputEvent, modal_open: bool) -> bool:
 	return input_controller.handle(event, modal_open)
 
 
+func cancel_interaction() -> void:
+	input_controller.cancel_interaction()
+
+
 func fit_view_to_pieces(animate := true) -> void:
 	view_controller.fit_view_to_pieces(animate)
+
+
+func completion_presentation() -> Dictionary:
+	return CompletionPresentation.describe(self)
 
 
 func reset_view() -> void:
@@ -487,40 +499,8 @@ func _clamped_actual_scale(scale: float) -> float:
 	return view_controller._clamped_actual_scale(scale)
 
 
-func _zoom_view_at(screen_anchor: Vector2, target_scale: float) -> void:
-	view_controller._zoom_view_at(screen_anchor, target_scale)
-
-
-func _pan_view(delta: Vector2) -> void:
-	view_controller._pan_view(delta)
-
-
-func _begin_pan(screen_pos: Vector2, touch_index: int) -> void:
-	view_controller._begin_pan(screen_pos, touch_index)
-
-
-func _end_pan() -> void:
-	view_controller._end_pan()
-
-
-func _begin_pinch() -> void:
-	view_controller._begin_pinch()
-
-
-func _update_pinch() -> void:
-	view_controller._update_pinch()
-
-
-func _clamp_view_to_table() -> void:
-	view_controller._clamp_view_to_table()
-
-
 func _world_view_screen_rect() -> Rect2:
 	return view_controller._world_view_screen_rect()
-
-
-func _focus_hint_pair(pair: Array) -> void:
-	view_controller._focus_hint_pair(pair)
 
 
 func show_hint() -> void:
@@ -836,16 +816,12 @@ func _clear_snap_preview() -> void:
 	snap_controller._clear_snap_preview()
 
 
-func _refresh_snap_preview_line_widths() -> void:
-	snap_controller._refresh_snap_preview_line_widths()
+func set_snap_preview_enabled(enabled: bool) -> void:
+	snap_controller.set_preview_enabled(enabled)
 
 
 func _try_snap_chain(active) -> bool:
 	return snap_controller._try_snap_chain(active)
-
-
-func _seam_line_width() -> float:
-	return snap_controller._seam_line_width()
 
 
 func _play_snap_shimmer(members: Array) -> void:
@@ -870,20 +846,6 @@ func _check_complete() -> void:
 
 func _has_active_hint_highlights() -> bool:
 	return hint_controller._has_active_hint_highlights()
-
-
-func _spawn_dashed_outline(
-	parent: Node2D,
-	polygons: Array,
-	local_position: Vector2,
-	z_index_value: int,
-	screen_width := 0.0,
-	color := Color.TRANSPARENT,
-	breathe := false
-) -> Node2D:
-	return hint_controller._spawn_dashed_outline(
-		parent, polygons, local_position, z_index_value, screen_width, color, breathe
-	)
 
 
 func _refresh_hint_line_widths() -> void:

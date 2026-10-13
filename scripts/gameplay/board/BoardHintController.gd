@@ -1,6 +1,9 @@
 extends RefCounted
 class_name BoardHintController
 
+const Presentation := preload("res://scripts/gameplay/board/BoardHintPresentation.gd")
+const Edge := preload("res://scripts/gameplay/board/PieceEdgeFeather.gd")
+
 var host: Node2D
 
 
@@ -9,34 +12,75 @@ func _init(owner: Node2D) -> void:
 
 
 func show_hint() -> void:
-	if _hint_in_progress():
+	if host.hint_pending:
 		return
-	host.hint_count += 1
-	host._notify_state_changed(true)
+	if _has_active_hint_highlights() and Time.get_ticks_msec() < host.hint_expires_at_msec:
+		host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.HINT_DURATION * 1000)
+		for effect in host.hint_highlighted_nodes:
+			if is_instance_valid(effect) and effect.has_method("extend"):
+				effect.extend()
+		return
 	if host.current_mode == "swap":
-		host._show_swap_hint()
+		_show_swap_when_ready()
 		return
 	var pair: Array = _find_hint_pair()
 	if pair.is_empty():
 		_clear_hint_highlights()
 		return
 	host.hint_pending = true
+	var token: int = host.hint_highlight_token
 	_animate_tray_scroll_to_group(
 		pair[0],
 		func() -> void:
-			if not host.hint_pending:
+			if not is_instance_valid(host):
+				return
+			if not host.hint_pending or token != host.hint_highlight_token:
 				return
 			host.hint_pending = false
 			_set_hint_highlights(pair)
-			_bring_hint_group_to_front(pair[0])
-			host._focus_hint_pair(pair)
+			host.feedback_requested.emit(&"hint")
+			host.hint_count += 1
+			host._notify_state_changed(true)
 	)
 
 
-func _hint_in_progress() -> bool:
-	if host.hint_pending:
-		return true
-	return _has_active_hint_highlights() and Time.get_ticks_msec() < host.hint_expires_at_msec
+func _show_swap_when_ready() -> void:
+	host.hint_pending = true
+	var token: int = host.hint_highlight_token
+	while host.swap_tiles.any(func(tile): return bool(tile.get("is_animating", false))):
+		await host.get_tree().process_frame
+		if not is_instance_valid(host):
+			return
+		if token != host.hint_highlight_token or not host.hint_pending:
+			return
+	host.hint_pending = false
+	if host.swap_dragging != null or host.completion_emitted:
+		return
+	if host.swap_controller._show_swap_hint():
+		host.feedback_requested.emit(&"hint")
+		host.hint_count += 1
+		host._notify_state_changed(true)
+
+
+func present_swap(pair: Array) -> void:
+	var effect := _new_presentation()
+	effect.show_swap(host, pair)
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	for effect in host.hint_highlighted_nodes:
+		if is_instance_valid(effect) and effect.has_method("set_reduced_motion"):
+			effect.set_reduced_motion(enabled)
+
+
+func _new_presentation() -> Node2D:
+	var effect := Presentation.new()
+	effect.name = "HintPresentation"
+	effect.z_as_relative = false
+	effect.z_index = 4094
+	host.add_child(effect)
+	host.hint_highlighted_nodes.append(effect)
+	return effect
 
 
 func _animate_tray_scroll_to_group(group, on_done: Callable) -> void:
@@ -86,8 +130,7 @@ func _set_hint_highlights(pair: Array) -> void:
 	var first = pair[0]
 	_bring_hint_group_to_front(first)
 	host.hint_highlighted_groups.append(first)
-	_add_hint_target_outline(first)
-	_add_hint_outline_to_group(first)
+	_new_presentation().show_piece(host, first)
 	_auto_clear_hint_highlights(token)
 
 
@@ -106,213 +149,11 @@ func _bring_hint_group_to_front(group) -> void:
 		return
 	if group.in_tray:
 		group.node.z_as_relative = false
-		group.node.z_index = int(host.tray_config["z_index"]) + 2
+		group.node.z_index = int(host.tray_config["z_index"])
+		group.node.get_parent().move_child(group.node, -1)
 		return
 	host._bring_to_front(group)
 	group.node.z_index = host.HINT_GROUP_Z_INDEX
-
-
-func _add_hint_outline_to_group(group) -> void:
-	if group == null or not is_instance_valid(group.node):
-		return
-	var center := _hint_outline_local_center(group)
-	var outline_root := Node2D.new()
-	outline_root.name = "hint_group_outline"
-	outline_root.position = center
-	outline_root.z_index = 31
-	group.node.add_child(outline_root)
-	host.hint_highlighted_nodes.append(outline_root)
-	for member in group.members:
-		var visual: Node2D = member["visual"]
-		var polygon: PackedVector2Array = member["polygon"]
-		var outline := PackedVector2Array()
-		for point in polygon:
-			outline.append(visual.position + point - center)
-		_add_hint_outline_line(
-			outline_root, outline, host.HINT_OUTLINE_SCREEN_WIDTH, host.HINT_OUTLINE_COLOR, 0, false
-		)
-	_hint_breathe_group(group)
-
-
-func _hint_outline_local_center(group) -> Vector2:
-	var bounds: Rect2 = host._group_local_bounds(group)
-	if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
-		return Vector2.ZERO
-	return bounds.get_center()
-
-
-func _add_hint_target_outline(group) -> void:
-	if host.world_root == null or group == null:
-		return
-	var polygons: Array = []
-	for member in group.members:
-		var visual_position: Vector2 = member["visual"].position
-		var polygon: PackedVector2Array = member["polygon"]
-		var outline := PackedVector2Array()
-		for point in polygon:
-			outline.append(visual_position + point)
-		polygons.append(outline)
-	_spawn_dashed_outline(host.world_root, polygons, group.anchor_home, host.HINT_TARGET_Z_INDEX)
-
-
-func _spawn_dashed_outline(
-	parent: Node2D,
-	polygons: Array,
-	local_position: Vector2,
-	z_index_value: int,
-	screen_width := 0.0,
-	color := Color.TRANSPARENT,
-	breathe := false
-) -> Node2D:
-	var outline_width: float = (
-		host.HINT_TARGET_SCREEN_WIDTH if screen_width <= 0.0 else screen_width
-	)
-	var outline_color: Color = host.HINT_TARGET_COLOR if color.a <= 0.0 else color
-	var root := Node2D.new()
-	root.name = "hint_dashed_outline"
-	root.position = local_position
-	root.z_index = z_index_value
-	parent.add_child(root)
-	host.hint_highlighted_nodes.append(root)
-	_redraw_dashed_outline(root, polygons, 0.0, outline_width, outline_color)
-	if host.reduced_motion:
-		return root
-	var dash_tween := host.create_tween()
-	dash_tween.bind_node(root)
-	dash_tween.set_loops()
-	dash_tween.set_trans(Tween.TRANS_LINEAR)
-	var dash_cycle: float = host.HINT_TARGET_DASH_LENGTH + host.HINT_TARGET_DASH_GAP
-	dash_tween.tween_method(
-		func(phase: float) -> void:
-			_redraw_dashed_outline(root, polygons, phase, outline_width, outline_color),
-		0.0,
-		dash_cycle,
-		0.64
-	)
-	if breathe:
-		root.modulate.a = host.SWAP_HINT_BREATHE_ALPHA
-		var breathe_tween := host.create_tween()
-		breathe_tween.bind_node(root)
-		breathe_tween.set_loops()
-		breathe_tween.set_ease(Tween.EASE_IN_OUT)
-		breathe_tween.set_trans(Tween.TRANS_SINE)
-		breathe_tween.tween_property(root, "modulate:a", 1.0, host.SWAP_HINT_BREATHE_CYCLE * 0.5)
-		breathe_tween.tween_property(
-			root, "modulate:a", host.SWAP_HINT_BREATHE_ALPHA, host.SWAP_HINT_BREATHE_CYCLE * 0.5
-		)
-		host.hint_blink_tweens.append(breathe_tween)
-	return root
-
-
-func _redraw_dashed_outline(
-	root: Node2D, polygons: Array, phase: float, screen_width: float, color: Color
-) -> void:
-	if not is_instance_valid(root):
-		return
-	for child in root.get_children():
-		child.free()
-	for polygon in polygons:
-		for dash in _dashed_polygon_segments(
-			polygon, host.HINT_TARGET_DASH_LENGTH, host.HINT_TARGET_DASH_GAP, phase
-		):
-			_add_hint_outline_line(root, dash, screen_width, color, 0, false, false)
-
-
-func _dashed_polygon_segments(
-	points: PackedVector2Array, dash_length: float, gap_length: float, phase: float
-) -> Array[PackedVector2Array]:
-	var segments: Array[PackedVector2Array] = []
-	if points.size() < 2:
-		return segments
-	var cycle := maxf(1.0, dash_length + gap_length)
-	var distance_cursor := -fposmod(phase, cycle)
-	for index in range(points.size()):
-		var start := points[index]
-		var end := points[(index + 1) % points.size()]
-		var edge := end - start
-		var edge_length := edge.length()
-		if edge_length <= 0.001:
-			continue
-		var direction := edge / edge_length
-		var local := 0.0
-		while local < edge_length:
-			var cycle_position := fposmod(distance_cursor, cycle)
-			var until_next := cycle - cycle_position
-			# fposmod can return the divisor itself due to float error, which
-			# would make the step zero and hang this loop
-			var step := maxf(0.01, minf(edge_length - local, until_next))
-			if cycle_position < dash_length:
-				var dash_remaining := dash_length - cycle_position
-				var dash_step := minf(step, dash_remaining)
-				var dash := PackedVector2Array()
-				dash.append(start + direction * local)
-				dash.append(start + direction * (local + dash_step))
-				segments.append(dash)
-			local += step
-			distance_cursor += step
-	return segments
-
-
-func _hint_breathe_group(group) -> void:
-	if group == null or not is_instance_valid(group.node):
-		return
-	if host.reduced_motion:
-		return
-	var node: Node2D = group.node
-	var base_scale: float = node.scale.x
-	var base_position: Vector2 = node.position
-	var local_center := _hint_outline_local_center(group)
-	var pinned_center := base_position + local_center * base_scale
-	var apply_factor := func(factor: float) -> void:
-		if not is_instance_valid(node):
-			return
-		node.scale = Vector2.ONE * base_scale * factor
-		node.position = pinned_center - local_center * base_scale * factor
-	var tween := host.create_tween()
-	tween.bind_node(node)
-	tween.set_loops(int(ceil(host.HINT_DURATION / host.HINT_BREATHE_CYCLE)))
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_method(apply_factor, 1.0, host.HINT_BREATHE_SCALE, host.HINT_BREATHE_CYCLE * 0.5)
-	tween.tween_method(apply_factor, host.HINT_BREATHE_SCALE, 1.0, host.HINT_BREATHE_CYCLE * 0.5)
-	tween.finished.connect(func() -> void: apply_factor.call(1.0))
-	host.hint_blink_tweens.append(tween)
-
-
-func _add_hint_outline_line(
-	visual: Node2D,
-	polygon: PackedVector2Array,
-	width: float,
-	color: Color,
-	z_index: int,
-	animate := true,
-	track := true
-) -> Line2D:
-	var line := Line2D.new()
-	line.name = "hint_highlight"
-	line.width = width
-	line.default_color = color
-	line.closed = polygon.size() > 2
-	line.joint_mode = Line2D.LINE_JOINT_ROUND
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND
-	line.antialiased = true
-	line.points = polygon
-	line.z_index = z_index
-	line.set_meta("screen_width", width)
-	visual.add_child(line)
-	_update_hint_line_width(line)
-	if track:
-		host.hint_highlighted_lines.append(line)
-	if not animate or host.reduced_motion:
-		return line
-	var tween := host.create_tween()
-	tween.set_loops(5)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_property(line, "modulate:a", 0.42, 0.30)
-	tween.tween_property(line, "modulate:a", 1.0, 0.30)
-	return line
 
 
 func _refresh_hint_line_widths() -> void:
@@ -329,9 +170,7 @@ func _update_hint_line_width(line) -> void:
 		return
 	var hint_line := line as Line2D
 	var screen_width := float(hint_line.get_meta("screen_width", hint_line.width))
-	var transform := hint_line.get_global_transform()
-	var scale := maxf(transform.x.length(), transform.y.length())
-	hint_line.width = screen_width / maxf(0.001, scale)
+	hint_line.width = screen_width / Edge.pixel_scale(hint_line)
 
 
 func _auto_clear_hint_highlights(token: int) -> void:
@@ -375,6 +214,7 @@ func _clear_hint_highlights() -> void:
 			line.queue_free()
 	for node in host.hint_highlighted_nodes:
 		if is_instance_valid(node):
+			node.visible = false
 			node.queue_free()
 	for tween in host.hint_blink_tweens:
 		if tween != null and tween.is_valid():

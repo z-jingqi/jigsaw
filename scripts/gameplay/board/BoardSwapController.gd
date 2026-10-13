@@ -15,7 +15,6 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	var world_pos: Vector2 = host._screen_to_world(screen_pos)
 	var tile = _swap_tile_at_world(world_pos)
 	if tile == null:
-		host._begin_pan(screen_pos, host.active_touch_index)
 		return
 	if bool(tile.get("is_animating", false)):
 		return
@@ -25,7 +24,7 @@ func _begin_swap_drag(screen_pos: Vector2) -> void:
 	host.swap_drag_offset = tile["node"].position - world_pos
 	_bring_swap_tile_to_front(tile)
 	_set_swap_tile_lifted(tile, true)
-	host._trigger_haptic("pickup")
+	host.feedback_requested.emit(&"pickup")
 	host._notify_state_changed()
 
 
@@ -36,6 +35,7 @@ func _end_swap_drag() -> void:
 	var target = _swap_target_for_drag(released)
 	_clear_swap_target_preview()
 	if target == null:
+		host.feedback_requested.emit(&"drop")
 		_animate_swap_tile_to(
 			released,
 			host._swap_slot_position(host.swap_drag_start_slot, _swap_cols(), _swap_rows())
@@ -119,7 +119,6 @@ func _update_swap_target_preview(tile) -> void:
 	root.add_child(line)
 	host.swap_target_preview_line = line
 	host._update_hint_line_width(line)
-	host._trigger_haptic("ready")
 	if host.reduced_motion:
 		return
 	root.modulate.a = 0.68
@@ -215,22 +214,20 @@ func shift_columns(direction: int) -> void:
 	GridShiftScript.shift(host, direction, true)
 
 
-func _show_swap_hint() -> void:
+func _show_swap_hint() -> bool:
 	var pair := _find_swap_hint_pair()
 	if pair.is_empty():
 		host._clear_hint_highlights()
-		return
-	var hint_key := "swap:%d:%d" % [int(pair[0]["correct_index"]), int(pair[1]["correct_index"])]
-	if hint_key == host.active_hint_key and host._has_active_hint_highlights():
-		host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.SWAP_HINT_DURATION * 1000.0)
-		return
+		return false
 	host._clear_hint_highlights()
 	host.hint_highlight_token += 1
-	host.active_hint_key = hint_key
+	host.active_hint_key = (
+		"swap:%d:%d" % [int(pair[0]["correct_index"]), int(pair[1]["correct_index"])]
+	)
 	host.hint_expires_at_msec = Time.get_ticks_msec() + int(host.SWAP_HINT_DURATION * 1000.0)
-	for tile in pair:
-		_add_swap_hint_outline(tile)
+	host.hint_controller.present_swap(pair)
 	host._auto_clear_hint_highlights(host.hint_highlight_token)
+	return true
 
 
 func _find_swap_hint_pair() -> Array:
@@ -246,36 +243,11 @@ func _find_swap_hint_pair() -> Array:
 		if occupant == null or int(occupant["correct_index"]) == slot:
 			continue
 		var correct_piece = by_correct.get(slot)
-		if correct_piece != null:
-			return [correct_piece, occupant]
+		if correct_piece == null:
+			continue
+		# Follow board slots left to right, top to bottom, regardless of tile draw order.
+		return [correct_piece, occupant]
 	return []
-
-
-func _add_swap_hint_outline(tile) -> void:
-	var node: Node2D = tile["node"]
-	if not is_instance_valid(node):
-		return
-	var size: Vector2 = tile["size"]
-	var rect_polygon := PackedVector2Array(
-		[
-			Vector2.ZERO,
-			Vector2(size.x, 0.0),
-			size,
-			Vector2(0.0, size.y),
-		]
-	)
-	(
-		host
-		. _spawn_dashed_outline(
-			node,
-			[rect_polygon],
-			Vector2.ZERO,
-			30,
-			host.SWAP_HINT_SCREEN_WIDTH,
-			host.HINT_TARGET_COLOR,
-			true,
-		)
-	)
 
 
 func _check_swap_complete() -> void:

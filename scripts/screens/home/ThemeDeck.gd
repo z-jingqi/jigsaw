@@ -1,6 +1,7 @@
 extends Control
 ## Owns the bounded card pool and its pointer-following, dismissal and recall.
 signal selected(index: int)
+signal theme_switch_started
 signal browse_motion(
 	current_index: int,
 	next_index: int,
@@ -92,6 +93,8 @@ func _pose(offset: Vector2) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			begin(event.position, -1)
@@ -100,13 +103,29 @@ func _gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _dragging and _pointer == -1:
 		drag(event.position)
 	elif event is InputEventScreenTouch:
-		if event.pressed:
+		if event.canceled and event.index == _pointer:
+			_cancel_gesture()
+		elif event.pressed:
 			begin(event.position, event.index)
 		elif event.index == _pointer:
 			end()
 	elif event is InputEventScreenDrag and _dragging and event.index == _pointer:
 		drag(event.position)
 	accept_event()
+
+
+func _cancel_gesture() -> void:
+	if not _dragging:
+		return
+	_dragging = false
+	_pointer = -2
+	_velocity = 0.0
+	_animate_to(Vector2.ZERO, 0.18, func() -> void: pass)
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		cancel()
 
 
 func begin(point: Vector2, pointer := -1) -> void:
@@ -156,6 +175,7 @@ func _dismiss(direction: float) -> void:
 	var target := Vector2(direction * size.x * 1.45, size.y * 0.42)
 	_committing = true
 	_emit_browse_motion()
+	theme_switch_started.emit()
 	_animate_to(
 		target,
 		0.28,
@@ -178,6 +198,7 @@ func undo() -> void:
 	_stack_shift = 1.0
 	_pose(Vector2(float(previous.direction) * size.x * 1.45, size.y * 0.42))
 	selected.emit(index)
+	theme_switch_started.emit()
 	_animate_to(Vector2.ZERO, 0.32, func() -> void: pass)
 
 

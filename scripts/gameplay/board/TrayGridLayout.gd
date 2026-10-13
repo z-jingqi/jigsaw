@@ -8,12 +8,20 @@ var previous_slots: Dictionary = {}
 var config: Dictionary = PuzzleRulesScript.tray_layout()
 
 
+func shift_slots(delta_x: float) -> void:
+	for id in previous_slots:
+		var slot: Rect2 = previous_slots[id]
+		slot.position.x += delta_x
+		previous_slots[id] = slot
+
+
 func metrics(area: Rect2) -> Dictionary:
 	var unit := area.size.x / float(config["reference_width"])
 	var padding := float(config["padding_units"]) * unit
 	var row_gap := float(config["row_gap_units"]) * unit
 	var row_count := maxi(1, int(config["rows"]))
-	var content_height := maxf(1.0, area.size.y - padding * 2.0)
+	var scroll_space := float(config["scroll_indicator_units"]) * unit
+	var content_height := maxf(1.0, area.size.y - padding * 2.0 - scroll_space)
 	var row_height := maxf(
 		1.0, (content_height - row_gap * float(row_count - 1)) / float(row_count)
 	)
@@ -38,6 +46,9 @@ func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dic
 	var padding: float = layout["padding"]
 	var row_count: int = layout["row_count"]
 	var row_height: float = layout["row_height"]
+	var maximum_piece_height := maxf(
+		1.0, row_height - float(config["piece_margin_units"]) * unit * 2.0
+	)
 	var cells: Array[Dictionary] = []
 	var ids: Array[int] = []
 	var cursor := padding
@@ -49,9 +60,10 @@ func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dic
 			if index >= items.size():
 				break
 			var bounds: Rect2 = items[index].bounds
-			var size := bounds.size * base_scale
+			var scale := minf(base_scale, maximum_piece_height / maxf(1.0, bounds.size.y))
+			var size := bounds.size * scale
 			width = maxf(width, size.x)
-			pair.append({"id": items[index].id, "size": size, "row": row})
+			pair.append({"id": items[index].id, "size": size, "scale": scale, "row": row})
 		for cell in pair:
 			cell.slot = Rect2(
 				Vector2(cursor, padding + cell.row * (row_height + gap)), Vector2(width, row_height)

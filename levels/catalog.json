@@ -1,5 +1,5 @@
 {
-	"version": 4,
+	"version": 5,
 	"default_locale": "zh-Hans",
 	"locales": [
 		"zh-Hans",
@@ -25,6 +25,7 @@
 				"_": "山海经"
 			},
 			"cover": "res://assets/ui/home/library/shanhai.webp",
+			"cover_thumbnail": "res://assets/artwork/album/topic_01-cover.webp",
 			"color": "#95A584",
 			"ui_palette": {
 				"surface": "#E9E3CD",
@@ -38,159 +39,54 @@
 			"sort_order": 0,
 			"levels": [
 				{
-					"id": "shanhai_01",
+					"id": "shanhai_v2_01",
 					"sort_order": 0,
-					"path": "res://levels/topic_01/shanhai_01/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_01/level.json"
 				},
 				{
-					"id": "shanhai_02",
+					"id": "shanhai_v2_02",
 					"sort_order": 1,
-					"path": "res://levels/topic_01/shanhai_02/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_02/level.json"
 				},
 				{
-					"id": "shanhai_03",
+					"id": "shanhai_v2_03",
 					"sort_order": 2,
-					"path": "res://levels/topic_01/shanhai_03/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_03/level.json"
 				},
 				{
-					"id": "shanhai_04",
+					"id": "shanhai_v2_04",
 					"sort_order": 3,
-					"path": "res://levels/topic_01/shanhai_04/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_04/level.json"
 				},
 				{
-					"id": "shanhai_05",
+					"id": "shanhai_v2_05",
 					"sort_order": 4,
-					"path": "res://levels/topic_01/shanhai_05/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_05/level.json"
 				},
 				{
-					"id": "shanhai_06",
+					"id": "shanhai_v2_06",
 					"sort_order": 5,
-					"path": "res://levels/topic_01/shanhai_06/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_06/level.json"
 				},
 				{
-					"id": "shanhai_07",
+					"id": "shanhai_v2_07",
 					"sort_order": 6,
-					"path": "res://levels/topic_01/shanhai_07/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_07/level.json"
 				},
 				{
-					"id": "shanhai_08",
+					"id": "shanhai_v2_08",
 					"sort_order": 7,
-					"path": "res://levels/topic_01/shanhai_08/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_08/level.json"
 				},
 				{
-					"id": "shanhai_09",
+					"id": "shanhai_v2_09",
 					"sort_order": 8,
-					"path": "res://levels/topic_01/shanhai_09/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_09/level.json"
 				},
 				{
-					"id": "shanhai_10",
+					"id": "shanhai_v2_10",
 					"sort_order": 9,
-					"path": "res://levels/topic_01/shanhai_10/level.json"
-				},
-				{
-					"id": "shanhai_11",
-					"sort_order": 10,
-					"path": "res://levels/topic_01/shanhai_11/level.json"
-				},
-				{
-					"id": "shanhai_12",
-					"sort_order": 11,
-					"path": "res://levels/topic_01/shanhai_12/level.json"
-				},
-				{
-					"id": "shanhai_13",
-					"sort_order": 12,
-					"path": "res://levels/topic_01/shanhai_13/level.json"
-				},
-				{
-					"id": "shanhai_14",
-					"sort_order": 13,
-					"path": "res://levels/topic_01/shanhai_14/level.json"
-				},
-				{
-					"id": "shanhai_15",
-					"sort_order": 14,
-					"path": "res://levels/topic_01/shanhai_15/level.json"
-				},
-				{
-					"id": "shanhai_16",
-					"sort_order": 15,
-					"path": "res://levels/topic_01/shanhai_16/level.json"
-				},
-				{
-					"id": "shanhai_17",
-					"sort_order": 16,
-					"path": "res://levels/topic_01/shanhai_17/level.json"
-				},
-				{
-					"id": "shanhai_18",
-					"sort_order": 17,
-					"path": "res://levels/topic_01/shanhai_18/level.json"
-				},
-				{
-					"id": "shanhai_19",
-					"sort_order": 18,
-					"path": "res://levels/topic_01/shanhai_19/level.json"
-				},
-				{
-					"id": "shanhai_20",
-					"sort_order": 19,
-					"path": "res://levels/topic_01/shanhai_20/level.json"
-				},
-				{
-					"id": "shanhai_21",
-					"sort_order": 20,
-					"path": "res://levels/topic_01/shanhai_21/level.json"
-				},
-				{
-					"id": "shanhai_22",
-					"sort_order": 21,
-					"path": "res://levels/topic_01/shanhai_22/level.json"
-				},
-				{
-					"id": "shanhai_23",
-					"sort_order": 22,
-					"path": "res://levels/topic_01/shanhai_23/level.json"
-				},
-				{
-					"id": "shanhai_24",
-					"sort_order": 23,
-					"path": "res://levels/topic_01/shanhai_24/level.json"
-				},
-				{
-					"id": "shanhai_25",
-					"sort_order": 24,
-					"path": "res://levels/topic_01/shanhai_25/level.json"
-				},
-				{
-					"id": "shanhai_26",
-					"sort_order": 25,
-					"path": "res://levels/topic_01/shanhai_26/level.json"
-				},
-				{
-					"id": "shanhai_27",
-					"sort_order": 26,
-					"path": "res://levels/topic_01/shanhai_27/level.json"
-				},
-				{
-					"id": "shanhai_28",
-					"sort_order": 27,
-					"path": "res://levels/topic_01/shanhai_28/level.json"
-				},
-				{
-					"id": "shanhai_29",
-					"sort_order": 28,
-					"path": "res://levels/topic_01/shanhai_29/level.json"
-				},
-				{
-					"id": "shanhai_30",
-					"sort_order": 29,
-					"path": "res://levels/topic_01/shanhai_30/level.json"
-				},
-				{
-					"id": "shanhai_31",
-					"sort_order": 30,
-					"path": "res://levels/topic_01/shanhai_31/level.json"
+					"path": "res://levels/topic_01/shanhai_v2_10/level.json"
 				}
 			]
 		},
@@ -203,6 +99,7 @@
 				"_": "希腊神话"
 			},
 			"cover": "res://levels/topic_02/cover.webp",
+			"cover_thumbnail": "res://assets/artwork/album/topic_02-cover.webp",
 			"color": "#5F8F9B",
 			"ui_palette": {
 				"surface": "#F4F0E5",
@@ -216,284 +113,54 @@
 			"sort_order": 1,
 			"levels": [
 				{
-					"id": "greek_01",
+					"id": "greek_v2_01",
 					"sort_order": 0,
-					"path": "res://levels/topic_02/greek_01/level.json"
+					"path": "res://levels/topic_02/greek_v2_01/level.json"
 				},
 				{
-					"id": "greek_02",
+					"id": "greek_v2_02",
 					"sort_order": 1,
-					"path": "res://levels/topic_02/greek_02/level.json"
+					"path": "res://levels/topic_02/greek_v2_02/level.json"
 				},
 				{
-					"id": "greek_03",
+					"id": "greek_v2_03",
 					"sort_order": 2,
-					"path": "res://levels/topic_02/greek_03/level.json"
+					"path": "res://levels/topic_02/greek_v2_03/level.json"
 				},
 				{
-					"id": "greek_04",
+					"id": "greek_v2_04",
 					"sort_order": 3,
-					"path": "res://levels/topic_02/greek_04/level.json"
+					"path": "res://levels/topic_02/greek_v2_04/level.json"
 				},
 				{
-					"id": "greek_05",
+					"id": "greek_v2_05",
 					"sort_order": 4,
-					"path": "res://levels/topic_02/greek_05/level.json"
+					"path": "res://levels/topic_02/greek_v2_05/level.json"
 				},
 				{
-					"id": "greek_06",
+					"id": "greek_v2_06",
 					"sort_order": 5,
-					"path": "res://levels/topic_02/greek_06/level.json"
+					"path": "res://levels/topic_02/greek_v2_06/level.json"
 				},
 				{
-					"id": "greek_07",
+					"id": "greek_v2_07",
 					"sort_order": 6,
-					"path": "res://levels/topic_02/greek_07/level.json"
+					"path": "res://levels/topic_02/greek_v2_07/level.json"
 				},
 				{
-					"id": "greek_08",
+					"id": "greek_v2_08",
 					"sort_order": 7,
-					"path": "res://levels/topic_02/greek_08/level.json"
+					"path": "res://levels/topic_02/greek_v2_08/level.json"
 				},
 				{
-					"id": "greek_09",
+					"id": "greek_v2_09",
 					"sort_order": 8,
-					"path": "res://levels/topic_02/greek_09/level.json"
+					"path": "res://levels/topic_02/greek_v2_09/level.json"
 				},
 				{
-					"id": "greek_10",
+					"id": "greek_v2_10",
 					"sort_order": 9,
-					"path": "res://levels/topic_02/greek_10/level.json"
-				},
-				{
-					"id": "greek_11",
-					"sort_order": 10,
-					"path": "res://levels/topic_02/greek_11/level.json"
-				},
-				{
-					"id": "greek_12",
-					"sort_order": 11,
-					"path": "res://levels/topic_02/greek_12/level.json"
-				},
-				{
-					"id": "greek_13",
-					"sort_order": 12,
-					"path": "res://levels/topic_02/greek_13/level.json"
-				},
-				{
-					"id": "greek_14",
-					"sort_order": 13,
-					"path": "res://levels/topic_02/greek_14/level.json"
-				},
-				{
-					"id": "greek_15",
-					"sort_order": 14,
-					"path": "res://levels/topic_02/greek_15/level.json"
-				},
-				{
-					"id": "greek_16",
-					"sort_order": 15,
-					"path": "res://levels/topic_02/greek_16/level.json"
-				},
-				{
-					"id": "greek_17",
-					"sort_order": 16,
-					"path": "res://levels/topic_02/greek_17/level.json"
-				},
-				{
-					"id": "greek_18",
-					"sort_order": 17,
-					"path": "res://levels/topic_02/greek_18/level.json"
-				},
-				{
-					"id": "greek_19",
-					"sort_order": 18,
-					"path": "res://levels/topic_02/greek_19/level.json"
-				},
-				{
-					"id": "greek_20",
-					"sort_order": 19,
-					"path": "res://levels/topic_02/greek_20/level.json"
-				},
-				{
-					"id": "greek_21",
-					"sort_order": 20,
-					"path": "res://levels/topic_02/greek_21/level.json"
-				},
-				{
-					"id": "greek_22",
-					"sort_order": 21,
-					"path": "res://levels/topic_02/greek_22/level.json"
-				},
-				{
-					"id": "greek_23",
-					"sort_order": 22,
-					"path": "res://levels/topic_02/greek_23/level.json"
-				},
-				{
-					"id": "greek_24",
-					"sort_order": 23,
-					"path": "res://levels/topic_02/greek_24/level.json"
-				},
-				{
-					"id": "greek_25",
-					"sort_order": 24,
-					"path": "res://levels/topic_02/greek_25/level.json"
-				},
-				{
-					"id": "greek_26",
-					"sort_order": 25,
-					"path": "res://levels/topic_02/greek_26/level.json"
-				},
-				{
-					"id": "greek_27",
-					"sort_order": 26,
-					"path": "res://levels/topic_02/greek_27/level.json"
-				},
-				{
-					"id": "greek_28",
-					"sort_order": 27,
-					"path": "res://levels/topic_02/greek_28/level.json"
-				},
-				{
-					"id": "greek_29",
-					"sort_order": 28,
-					"path": "res://levels/topic_02/greek_29/level.json"
-				},
-				{
-					"id": "greek_30",
-					"sort_order": 29,
-					"path": "res://levels/topic_02/greek_30/level.json"
-				},
-				{
-					"id": "greek_31",
-					"sort_order": 30,
-					"path": "res://levels/topic_02/greek_31/level.json"
-				},
-				{
-					"id": "greek_32",
-					"sort_order": 31,
-					"path": "res://levels/topic_02/greek_32/level.json"
-				},
-				{
-					"id": "greek_33",
-					"sort_order": 32,
-					"path": "res://levels/topic_02/greek_33/level.json"
-				},
-				{
-					"id": "greek_34",
-					"sort_order": 33,
-					"path": "res://levels/topic_02/greek_34/level.json"
-				},
-				{
-					"id": "greek_35",
-					"sort_order": 34,
-					"path": "res://levels/topic_02/greek_35/level.json"
-				},
-				{
-					"id": "greek_36",
-					"sort_order": 35,
-					"path": "res://levels/topic_02/greek_36/level.json"
-				},
-				{
-					"id": "greek_37",
-					"sort_order": 36,
-					"path": "res://levels/topic_02/greek_37/level.json"
-				},
-				{
-					"id": "greek_38",
-					"sort_order": 37,
-					"path": "res://levels/topic_02/greek_38/level.json"
-				},
-				{
-					"id": "greek_39",
-					"sort_order": 38,
-					"path": "res://levels/topic_02/greek_39/level.json"
-				},
-				{
-					"id": "greek_40",
-					"sort_order": 39,
-					"path": "res://levels/topic_02/greek_40/level.json"
-				},
-				{
-					"id": "greek_41",
-					"sort_order": 40,
-					"path": "res://levels/topic_02/greek_41/level.json"
-				},
-				{
-					"id": "greek_42",
-					"sort_order": 41,
-					"path": "res://levels/topic_02/greek_42/level.json"
-				},
-				{
-					"id": "greek_43",
-					"sort_order": 42,
-					"path": "res://levels/topic_02/greek_43/level.json"
-				},
-				{
-					"id": "greek_44",
-					"sort_order": 43,
-					"path": "res://levels/topic_02/greek_44/level.json"
-				},
-				{
-					"id": "greek_45",
-					"sort_order": 44,
-					"path": "res://levels/topic_02/greek_45/level.json"
-				},
-				{
-					"id": "greek_46",
-					"sort_order": 45,
-					"path": "res://levels/topic_02/greek_46/level.json"
-				},
-				{
-					"id": "greek_47",
-					"sort_order": 46,
-					"path": "res://levels/topic_02/greek_47/level.json"
-				},
-				{
-					"id": "greek_48",
-					"sort_order": 47,
-					"path": "res://levels/topic_02/greek_48/level.json"
-				},
-				{
-					"id": "greek_49",
-					"sort_order": 48,
-					"path": "res://levels/topic_02/greek_49/level.json"
-				},
-				{
-					"id": "greek_50",
-					"sort_order": 49,
-					"path": "res://levels/topic_02/greek_50/level.json"
-				},
-				{
-					"id": "greek_51",
-					"sort_order": 50,
-					"path": "res://levels/topic_02/greek_51/level.json"
-				},
-				{
-					"id": "greek_52",
-					"sort_order": 51,
-					"path": "res://levels/topic_02/greek_52/level.json"
-				},
-				{
-					"id": "greek_53",
-					"sort_order": 52,
-					"path": "res://levels/topic_02/greek_53/level.json"
-				},
-				{
-					"id": "greek_54",
-					"sort_order": 53,
-					"path": "res://levels/topic_02/greek_54/level.json"
-				},
-				{
-					"id": "greek_55",
-					"sort_order": 54,
-					"path": "res://levels/topic_02/greek_55/level.json"
-				},
-				{
-					"id": "greek_56",
-					"sort_order": 55,
-					"path": "res://levels/topic_02/greek_56/level.json"
+					"path": "res://levels/topic_02/greek_v2_10/level.json"
 				}
 			]
 		},
@@ -506,6 +173,7 @@
 				"_": "猫"
 			},
 			"cover": "res://levels/topic_03/cover.webp",
+			"cover_thumbnail": "res://assets/artwork/album/topic_03-cover.webp",
 			"color": "#D97843",
 			"ui_palette": {
 				"surface": "#F3DDC9",
@@ -519,64 +187,54 @@
 			"sort_order": 2,
 			"levels": [
 				{
-					"id": "cat_01",
-					"sort_order": 0,
-					"path": "res://levels/topic_03/cat_01/level.json"
-				},
-				{
 					"id": "cat_02",
-					"sort_order": 1,
+					"sort_order": 0,
 					"path": "res://levels/topic_03/cat_02/level.json"
 				},
 				{
-					"id": "cat_03",
+					"id": "cat_v2_01",
+					"sort_order": 1,
+					"path": "res://levels/topic_03/cat_v2_01/level.json"
+				},
+				{
+					"id": "cat_v2_02",
 					"sort_order": 2,
-					"path": "res://levels/topic_03/cat_03/level.json"
+					"path": "res://levels/topic_03/cat_v2_02/level.json"
 				},
 				{
-					"id": "cat_04",
+					"id": "cat_v2_03",
 					"sort_order": 3,
-					"path": "res://levels/topic_03/cat_04/level.json"
+					"path": "res://levels/topic_03/cat_v2_03/level.json"
 				},
 				{
-					"id": "cat_05",
+					"id": "cat_v2_04",
 					"sort_order": 4,
-					"path": "res://levels/topic_03/cat_05/level.json"
+					"path": "res://levels/topic_03/cat_v2_04/level.json"
 				},
 				{
-					"id": "cat_06",
+					"id": "cat_v2_05",
 					"sort_order": 5,
-					"path": "res://levels/topic_03/cat_06/level.json"
+					"path": "res://levels/topic_03/cat_v2_05/level.json"
 				},
 				{
-					"id": "cat_07",
+					"id": "cat_v2_06",
 					"sort_order": 6,
-					"path": "res://levels/topic_03/cat_07/level.json"
+					"path": "res://levels/topic_03/cat_v2_06/level.json"
 				},
 				{
-					"id": "cat_08",
+					"id": "cat_v2_07",
 					"sort_order": 7,
-					"path": "res://levels/topic_03/cat_08/level.json"
+					"path": "res://levels/topic_03/cat_v2_07/level.json"
 				},
 				{
-					"id": "cat_09",
+					"id": "cat_v2_08",
 					"sort_order": 8,
-					"path": "res://levels/topic_03/cat_09/level.json"
+					"path": "res://levels/topic_03/cat_v2_08/level.json"
 				},
 				{
-					"id": "cat_10",
+					"id": "cat_v2_09",
 					"sort_order": 9,
-					"path": "res://levels/topic_03/cat_10/level.json"
-				},
-				{
-					"id": "cat_11",
-					"sort_order": 10,
-					"path": "res://levels/topic_03/cat_11/level.json"
-				},
-				{
-					"id": "cat_12",
-					"sort_order": 11,
-					"path": "res://levels/topic_03/cat_12/level.json"
+					"path": "res://levels/topic_03/cat_v2_09/level.json"
 				}
 			]
 		},
@@ -589,6 +247,7 @@
 				"_": "狗"
 			},
 			"cover": "res://levels/topic_04/cover.webp",
+			"cover_thumbnail": "res://assets/artwork/album/topic_04-cover.webp",
 			"color": "#6F9FA8",
 			"ui_palette": {
 				"surface": "#F5EBD3",
@@ -602,19 +261,54 @@
 			"sort_order": 3,
 			"levels": [
 				{
-					"id": "dog_01",
+					"id": "dog_v2_01",
 					"sort_order": 0,
-					"path": "res://levels/topic_04/dog_01/level.json"
+					"path": "res://levels/topic_04/dog_v2_01/level.json"
 				},
 				{
-					"id": "dog_02",
+					"id": "dog_v2_02",
 					"sort_order": 1,
-					"path": "res://levels/topic_04/dog_02/level.json"
+					"path": "res://levels/topic_04/dog_v2_02/level.json"
 				},
 				{
-					"id": "dog_03",
+					"id": "dog_v2_03",
 					"sort_order": 2,
-					"path": "res://levels/topic_04/dog_03/level.json"
+					"path": "res://levels/topic_04/dog_v2_03/level.json"
+				},
+				{
+					"id": "dog_v2_04",
+					"sort_order": 3,
+					"path": "res://levels/topic_04/dog_v2_04/level.json"
+				},
+				{
+					"id": "dog_v2_05",
+					"sort_order": 4,
+					"path": "res://levels/topic_04/dog_v2_05/level.json"
+				},
+				{
+					"id": "dog_v2_06",
+					"sort_order": 5,
+					"path": "res://levels/topic_04/dog_v2_06/level.json"
+				},
+				{
+					"id": "dog_v2_07",
+					"sort_order": 6,
+					"path": "res://levels/topic_04/dog_v2_07/level.json"
+				},
+				{
+					"id": "dog_v2_08",
+					"sort_order": 7,
+					"path": "res://levels/topic_04/dog_v2_08/level.json"
+				},
+				{
+					"id": "dog_v2_09",
+					"sort_order": 8,
+					"path": "res://levels/topic_04/dog_v2_09/level.json"
+				},
+				{
+					"id": "dog_v2_10",
+					"sort_order": 9,
+					"path": "res://levels/topic_04/dog_v2_10/level.json"
 				}
 			]
 		},
@@ -627,9 +321,61 @@
 				"_": "花间集"
 			},
 			"cover": "res://assets/ui/home/library/flowers.webp",
+			"cover_thumbnail": "res://assets/artwork/album/theme_flowers-cover.webp",
 			"color": "#BDC8AA",
 			"sort_order": 4,
-			"levels": []
+			"levels": [
+				{
+					"id": "flowers_v2_01",
+					"sort_order": 0,
+					"path": "res://levels/theme_flowers/flowers_v2_01/level.json"
+				},
+				{
+					"id": "flowers_v2_02",
+					"sort_order": 1,
+					"path": "res://levels/theme_flowers/flowers_v2_02/level.json"
+				},
+				{
+					"id": "flowers_v2_03",
+					"sort_order": 2,
+					"path": "res://levels/theme_flowers/flowers_v2_03/level.json"
+				},
+				{
+					"id": "flowers_v2_04",
+					"sort_order": 3,
+					"path": "res://levels/theme_flowers/flowers_v2_04/level.json"
+				},
+				{
+					"id": "flowers_v2_05",
+					"sort_order": 4,
+					"path": "res://levels/theme_flowers/flowers_v2_05/level.json"
+				},
+				{
+					"id": "flowers_v2_06",
+					"sort_order": 5,
+					"path": "res://levels/theme_flowers/flowers_v2_06/level.json"
+				},
+				{
+					"id": "flowers_v2_07",
+					"sort_order": 6,
+					"path": "res://levels/theme_flowers/flowers_v2_07/level.json"
+				},
+				{
+					"id": "flowers_v2_08",
+					"sort_order": 7,
+					"path": "res://levels/theme_flowers/flowers_v2_08/level.json"
+				},
+				{
+					"id": "flowers_v2_09",
+					"sort_order": 8,
+					"path": "res://levels/theme_flowers/flowers_v2_09/level.json"
+				},
+				{
+					"id": "flowers_v2_10",
+					"sort_order": 9,
+					"path": "res://levels/theme_flowers/flowers_v2_10/level.json"
+				}
+			]
 		},
 		{
 			"id": "theme_ocean",
@@ -640,9 +386,61 @@
 				"_": "海之境"
 			},
 			"cover": "res://assets/ui/home/library/ocean.webp",
+			"cover_thumbnail": "res://assets/artwork/album/theme_ocean-cover.webp",
 			"color": "#9CBFCB",
 			"sort_order": 5,
-			"levels": []
+			"levels": [
+				{
+					"id": "ocean_v2_01",
+					"sort_order": 0,
+					"path": "res://levels/theme_ocean/ocean_v2_01/level.json"
+				},
+				{
+					"id": "ocean_v2_02",
+					"sort_order": 1,
+					"path": "res://levels/theme_ocean/ocean_v2_02/level.json"
+				},
+				{
+					"id": "ocean_v2_03",
+					"sort_order": 2,
+					"path": "res://levels/theme_ocean/ocean_v2_03/level.json"
+				},
+				{
+					"id": "ocean_v2_04",
+					"sort_order": 3,
+					"path": "res://levels/theme_ocean/ocean_v2_04/level.json"
+				},
+				{
+					"id": "ocean_v2_05",
+					"sort_order": 4,
+					"path": "res://levels/theme_ocean/ocean_v2_05/level.json"
+				},
+				{
+					"id": "ocean_v2_06",
+					"sort_order": 5,
+					"path": "res://levels/theme_ocean/ocean_v2_06/level.json"
+				},
+				{
+					"id": "ocean_v2_07",
+					"sort_order": 6,
+					"path": "res://levels/theme_ocean/ocean_v2_07/level.json"
+				},
+				{
+					"id": "ocean_v2_08",
+					"sort_order": 7,
+					"path": "res://levels/theme_ocean/ocean_v2_08/level.json"
+				},
+				{
+					"id": "ocean_v2_09",
+					"sort_order": 8,
+					"path": "res://levels/theme_ocean/ocean_v2_09/level.json"
+				},
+				{
+					"id": "ocean_v2_10",
+					"sort_order": 9,
+					"path": "res://levels/theme_ocean/ocean_v2_10/level.json"
+				}
+			]
 		},
 		{
 			"id": "theme_birds",
@@ -653,9 +451,61 @@
 				"_": "飞羽"
 			},
 			"cover": "res://assets/ui/home/library/birds.webp",
+			"cover_thumbnail": "res://assets/artwork/album/theme_birds-cover.webp",
 			"color": "#DCC9A2",
 			"sort_order": 6,
-			"levels": []
+			"levels": [
+				{
+					"id": "birds_v2_01",
+					"sort_order": 0,
+					"path": "res://levels/theme_birds/birds_v2_01/level.json"
+				},
+				{
+					"id": "birds_v2_02",
+					"sort_order": 1,
+					"path": "res://levels/theme_birds/birds_v2_02/level.json"
+				},
+				{
+					"id": "birds_v2_03",
+					"sort_order": 2,
+					"path": "res://levels/theme_birds/birds_v2_03/level.json"
+				},
+				{
+					"id": "birds_v2_04",
+					"sort_order": 3,
+					"path": "res://levels/theme_birds/birds_v2_04/level.json"
+				},
+				{
+					"id": "birds_v2_05",
+					"sort_order": 4,
+					"path": "res://levels/theme_birds/birds_v2_05/level.json"
+				},
+				{
+					"id": "birds_v2_06",
+					"sort_order": 5,
+					"path": "res://levels/theme_birds/birds_v2_06/level.json"
+				},
+				{
+					"id": "birds_v2_07",
+					"sort_order": 6,
+					"path": "res://levels/theme_birds/birds_v2_07/level.json"
+				},
+				{
+					"id": "birds_v2_08",
+					"sort_order": 7,
+					"path": "res://levels/theme_birds/birds_v2_08/level.json"
+				},
+				{
+					"id": "birds_v2_09",
+					"sort_order": 8,
+					"path": "res://levels/theme_birds/birds_v2_09/level.json"
+				},
+				{
+					"id": "birds_v2_10",
+					"sort_order": 9,
+					"path": "res://levels/theme_birds/birds_v2_10/level.json"
+				}
+			]
 		},
 		{
 			"id": "theme_forest",
@@ -666,9 +516,62 @@
 				"_": "林间"
 			},
 			"cover": "res://assets/ui/home/library/forest.webp",
+			"cover_thumbnail": "res://assets/artwork/album/theme_forest-cover.webp",
 			"color": "#A7B18C",
 			"sort_order": 7,
-			"levels": []
+			"levels": [
+				{
+					"id": "forest_v2_01",
+					"sort_order": 0,
+					"path": "res://levels/theme_forest/forest_v2_01/level.json"
+				},
+				{
+					"id": "forest_v2_02",
+					"sort_order": 1,
+					"path": "res://levels/theme_forest/forest_v2_02/level.json"
+				},
+				{
+					"id": "forest_v2_03",
+					"sort_order": 2,
+					"path": "res://levels/theme_forest/forest_v2_03/level.json"
+				},
+				{
+					"id": "forest_v2_04",
+					"sort_order": 3,
+					"path": "res://levels/theme_forest/forest_v2_04/level.json"
+				},
+				{
+					"id": "forest_v2_05",
+					"sort_order": 4,
+					"path": "res://levels/theme_forest/forest_v2_05/level.json"
+				},
+				{
+					"id": "forest_v2_06",
+					"sort_order": 5,
+					"path": "res://levels/theme_forest/forest_v2_06/level.json"
+				},
+				{
+					"id": "forest_v2_07",
+					"sort_order": 6,
+					"path": "res://levels/theme_forest/forest_v2_07/level.json"
+				},
+				{
+					"id": "forest_v2_08",
+					"sort_order": 7,
+					"path": "res://levels/theme_forest/forest_v2_08/level.json"
+				},
+				{
+					"id": "forest_v2_09",
+					"sort_order": 8,
+					"path": "res://levels/theme_forest/forest_v2_09/level.json"
+				},
+				{
+					"id": "forest_v2_10",
+					"sort_order": 9,
+					"path": "res://levels/theme_forest/forest_v2_10/level.json"
+				}
+			]
 		}
-	]
+	],
+	"content_revision": "2026-10-artwork-4-easier"
 }

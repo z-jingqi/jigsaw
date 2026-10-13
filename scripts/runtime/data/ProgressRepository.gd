@@ -24,6 +24,12 @@ func load() -> void:
 	changed.emit(snapshot(), _revision)
 
 
+func flush() -> Dictionary:
+	if _store.has_method(&"flush"):
+		return _store.call(&"flush")
+	return {"ok": true}
+
+
 func snapshot() -> Dictionary:
 	return _data.duplicate(true)
 
@@ -64,28 +70,51 @@ func mark_mode_completed(theme_id: String, level_id: String, mode: String) -> Di
 	return _commit(next_data)
 
 
-func tutorial_seen(kind: StringName, mode: String = "") -> bool:
+func is_level_visited(theme_id: String, level_id: String) -> bool:
+	var visited: Dictionary = _data["visited_levels"]
+	return (visited.get(theme_id, []) as Array).has(level_id)
+
+
+func mark_level_visited(theme_id: String, level_id: String) -> Dictionary:
+	if theme_id.is_empty() or level_id.is_empty():
+		return {"ok": false, "error": "invalid_argument"}
+	if is_level_visited(theme_id, level_id):
+		return {"ok": true, "changed": false}
+	return mark_level_visits([{"theme_id": theme_id, "level_id": level_id}])
+
+
+func mark_level_visits(entries: Array) -> Dictionary:
+	var next_data := _data.duplicate(true)
+	var visited: Dictionary = next_data["visited_levels"]
+	for entry in entries:
+		if not entry is Dictionary:
+			continue
+		var theme_id := str(entry.get("theme_id", ""))
+		var level_id := str(entry.get("level_id", ""))
+		if theme_id.is_empty() or level_id.is_empty():
+			continue
+		var levels: Array = visited.get(theme_id, [])
+		if not levels.has(level_id):
+			levels.append(level_id)
+			visited[theme_id] = levels
+	if next_data == _data:
+		return {"ok": true, "changed": false}
+	return _commit(next_data)
+
+
+func tutorial_seen(kind: StringName) -> bool:
 	var tutorials: Dictionary = _data["tutorials_seen"]
-	if kind == &"mode":
-		return bool((tutorials.get("modes", {}) as Dictionary).get(mode, false))
 	return bool(tutorials.get(String(kind), false))
 
 
-func mark_tutorial_seen(kind: StringName, mode: String = "") -> Dictionary:
-	if kind == &"mode" and not PLAY_MODES.has(mode):
+func mark_tutorial_seen(kind: StringName) -> Dictionary:
+	if kind not in [&"home_swipe", &"home_enter"]:
 		return {"ok": false, "error": "invalid_argument"}
 	var next_data := _data.duplicate(true)
 	var tutorials: Dictionary = next_data["tutorials_seen"]
-	if kind == &"mode":
-		var modes: Dictionary = tutorials.get("modes", {})
-		if bool(modes.get(mode, false)):
-			return {"ok": true, "changed": false}
-		modes[mode] = true
-		tutorials["modes"] = modes
-	else:
-		if bool(tutorials.get(String(kind), false)):
-			return {"ok": true, "changed": false}
-		tutorials[String(kind)] = true
+	if bool(tutorials.get(String(kind), false)):
+		return {"ok": true, "changed": false}
+	tutorials[String(kind)] = true
 	next_data["tutorials_seen"] = tutorials
 	return _commit(next_data)
 
@@ -124,18 +153,28 @@ func _validated(value: Dictionary) -> Dictionary:
 			if not levels.is_empty():
 				completed[theme_id] = levels
 		result["completed_modes"] = completed
+	if typeof(value.get("visited_levels")) == TYPE_DICTIONARY:
+		var visited: Dictionary = {}
+		for theme_id in value["visited_levels"]:
+			var source_levels: Variant = value["visited_levels"][theme_id]
+			if typeof(theme_id) != TYPE_STRING or typeof(source_levels) != TYPE_ARRAY:
+				continue
+			var levels: Array[String] = []
+			for level_id in source_levels:
+				if (
+					typeof(level_id) == TYPE_STRING
+					and not level_id.is_empty()
+					and not levels.has(level_id)
+				):
+					levels.append(level_id)
+			if not levels.is_empty():
+				visited[theme_id] = levels
+		result["visited_levels"] = visited
 	if typeof(value.get("tutorials_seen")) == TYPE_DICTIONARY:
 		var source_tutorials: Dictionary = value["tutorials_seen"]
 		var tutorials: Dictionary = result["tutorials_seen"]
 		tutorials["home_swipe"] = bool(source_tutorials.get("home_swipe", false))
 		tutorials["home_enter"] = bool(source_tutorials.get("home_enter", false))
-		var source_modes: Variant = source_tutorials.get("modes", {})
-		if typeof(source_modes) == TYPE_DICTIONARY:
-			var modes: Dictionary = {}
-			for mode in PLAY_MODES:
-				if typeof(source_modes.get(mode)) == TYPE_BOOL:
-					modes[mode] = source_modes[mode]
-			tutorials["modes"] = modes
 		result["tutorials_seen"] = tutorials
 	return result
 
@@ -144,5 +183,6 @@ func _defaults() -> Dictionary:
 	return {
 		"schema_version": SCHEMA_VERSION,
 		"completed_modes": {},
-		"tutorials_seen": {"home_swipe": false, "home_enter": false, "modes": {}},
+		"visited_levels": {},
+		"tutorials_seen": {"home_swipe": false, "home_enter": false},
 	}

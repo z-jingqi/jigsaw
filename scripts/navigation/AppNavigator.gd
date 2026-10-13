@@ -2,6 +2,7 @@ class_name AppNavigator
 extends Node
 
 signal route_changed(route: StringName, payload: Dictionary)
+signal transition_started(route: StringName, kind: StringName)
 signal navigation_failed(error: StringName, details: Dictionary)
 signal input_lock_changed(is_locked: bool)
 
@@ -20,13 +21,14 @@ var _active_transaction: Variant
 var _reduced_motion := false
 
 @onready var _screen_host: Control = get_node(screen_host_path) as Control
-@onready var _modal_host: Control = get_node(modal_host_path) as Control
+@onready var _modal_host: Node = get_node(modal_host_path)
 @onready var _transition_host = get_node(transition_host_path)
 
 
 func _ready() -> void:
 	_registry = RouteRegistryScript.new() if _registry == null else _registry
 	_transition_host.transition_settled.connect(_on_transition_settled)
+	_transition_host.motion_started.connect(_on_motion_started)
 
 
 func set_route_registry(registry: Variant) -> void:
@@ -39,6 +41,10 @@ func bind_route_scene(route: StringName, scene: PackedScene) -> Dictionary:
 
 func route_contracts() -> Array[StringName]:
 	return _registry.contracts()
+
+
+func is_input_locked() -> bool:
+	return is_instance_valid(_transition_host) and _transition_host.active_count() > 0
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -138,6 +144,77 @@ func replace(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	return _success(route)
 
 
+func push_from_modal(
+	route: StringName, payload: Dictionary = {}, prepared_view: Control = null
+) -> Dictionary:
+	if _transition_host.active_count() > 0:
+		_transition_host.finish_active_to_target()
+	if _modal_entry.is_empty():
+		return push(route, payload)
+	var built := _build_entry(route, payload, prepared_view)
+	if not bool(built.get("ok", false)):
+		return built
+	var entry: Dictionary = built.entry
+	var previous := current_screen_entry()
+	var outgoing := _modal_entry
+	_modal_entry = {}
+	_set_entry_active(previous, false)
+	_set_entry_transition_background(outgoing)
+	_add_screen_entry(entry)
+	_screen_stack.append(entry)
+	var transaction: Variant = NavigationTransactionScript.new(
+		func() -> void:
+			_free_entry(outgoing)
+			_emit_route_changed(),
+		func() -> void:
+			_screen_stack.pop_back()
+			_free_entry(entry)
+			_modal_entry = outgoing
+			_set_entry_active(outgoing, true)
+	)
+	_begin_transition(
+		transaction, _transition_kind(route), "push_from_modal", outgoing.view, entry.view, payload
+	)
+	return _success(route)
+
+
+func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	if _transition_host.active_count() > 0:
+		_transition_host.finish_active_to_target()
+	if _modal_entry.is_empty():
+		return replace(route, payload)
+	var built := _build_entry(route, payload)
+	if not bool(built.get("ok", false)):
+		return built
+	var entry: Dictionary = built.entry
+	var previous: Dictionary = _screen_stack.pop_back()
+	var outgoing := _modal_entry
+	_modal_entry = {}
+	_set_entry_active(previous, false)
+	# Release the persistent board before the replacement page mounts it.
+	_invoke(previous.view, &"navigation_exit", [_navigation_context("replace")])
+	_set_entry_transition_background(outgoing)
+	_add_screen_entry(entry)
+	_screen_stack.append(entry)
+	var transaction: Variant = NavigationTransactionScript.new(
+		func() -> void:
+			_free_entry(previous)
+			_free_entry(outgoing)
+			_emit_route_changed(),
+		func() -> void:
+			_screen_stack.pop_back()
+			_free_entry(entry)
+			_screen_stack.append(previous)
+			_modal_entry = outgoing
+			_set_entry_modal_background(previous)
+			_set_entry_active(outgoing, true)
+	)
+	_begin_transition(
+		transaction, _transition_kind(route), "push_from_modal", outgoing.view, entry.view, payload
+	)
+	return _success(route)
+
+
 func pop() -> Dictionary:
 	if _transition_host.active_count() > 0:
 		_transition_host.finish_active_to_target()
@@ -201,6 +278,43 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	return _success(route)
 
 
+func pop_from_modal() -> Dictionary:
+	if _transition_host.active_count() > 0:
+		_transition_host.finish_active_to_target()
+	if _modal_entry.is_empty():
+		return pop()
+	if _screen_stack.size() < 2:
+		return _failure(&"invalid_payload", {"reason": "cannot_pop_root"})
+	var outgoing: Dictionary = _screen_stack.pop_back()
+	var previous := current_screen_entry()
+	var modal := _modal_entry
+	_modal_entry = {}
+	_set_entry_active(outgoing, false)
+	_set_entry_transition_background(modal)
+	_set_entry_transition_background(previous)
+	var transaction: Variant = NavigationTransactionScript.new(
+		func() -> void:
+			_free_entry(modal)
+			_free_entry(outgoing)
+			_set_entry_active(previous, true)
+			_emit_route_changed(),
+		func() -> void:
+			_screen_stack.append(outgoing)
+			_modal_entry = modal
+			_set_entry_active(previous, false)
+			_set_entry_modal_background(outgoing)
+			_set_entry_active(modal, true)
+	)
+	_begin_transition(
+		transaction,
+		_pop_transition_kind(outgoing.route, previous.route),
+		"pop",
+		modal.view,
+		previous.view
+	)
+	return _success(current_route())
+
+
 func close_modal(result: Dictionary = {}) -> Dictionary:
 	if _transition_host.active_count() > 0:
 		_transition_host.finish_active_to_target()
@@ -240,6 +354,21 @@ func finish_active_transition() -> Dictionary:
 	return {"ok": true, "finished": true, "state": debug_state_snapshot()}
 
 
+func reveal_prepared_screen(screen: Control) -> void:
+	_transition_host.reveal_prepared_view(screen)
+
+
+func mount_prepared_screen(screen: Control) -> void:
+	# Kept behind the opaque mode page, without adding a speculative route.
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_screen_host.add_child(screen)
+
+
+func wait_until_idle() -> void:
+	while is_instance_valid(_transition_host) and _transition_host.active_count() > 0:
+		await _transition_host.transition_settled
+
+
 func current_route() -> StringName:
 	if not _modal_entry.is_empty():
 		return _modal_entry.route
@@ -254,6 +383,12 @@ func current_screen_entry() -> Dictionary:
 func current_screen_view() -> Control:
 	var entry := current_screen_entry()
 	return entry.get("view") as Control
+
+
+func previous_screen_view() -> Control:
+	if _screen_stack.size() < 2:
+		return null
+	return _screen_stack[-2].get("view") as Control
 
 
 func current_route_view() -> Control:
@@ -271,8 +406,7 @@ func debug_state_snapshot() -> Dictionary:
 		"screen_stack":
 		_screen_stack.map(func(entry: Dictionary) -> String: return String(entry.route)),
 		"modal": String(_modal_entry.get("route", StringName())),
-		"input_locked":
-		_transition_host.active_count() > 0 if is_instance_valid(_transition_host) else false,
+		"input_locked": is_input_locked(),
 		"reduced_motion": _reduced_motion,
 		"active_motion_count": motion.get("active_motion_count", 0),
 		"motion_phase": motion.get("motion_phase", "idle"),
@@ -290,12 +424,15 @@ func _prepare_navigation(allow_finish_active: bool) -> Dictionary:
 	return _failure(&"transition_busy", {})
 
 
-func _build_entry(route: StringName, payload: Dictionary) -> Dictionary:
+func _build_entry(
+	route: StringName, payload: Dictionary, prepared_view: Control = null
+) -> Dictionary:
 	var validation: Dictionary = _registry.validate(route, payload)
 	if not bool(validation.get("ok", false)):
 		return _failure(StringName(validation.get("error", "invalid_payload")), validation)
 	var definition: Variant = validation.definition
-	var view := definition.scene.instantiate() as Control
+	var reused := is_instance_valid(prepared_view) and not prepared_view.is_queued_for_deletion()
+	var view := prepared_view if reused else definition.scene.instantiate() as Control
 	if view == null:
 		return _failure(
 			&"not_found", {"route": String(route), "reason": "scene_root_is_not_control"}
@@ -304,13 +441,15 @@ func _build_entry(route: StringName, payload: Dictionary) -> Dictionary:
 	return {
 		"ok": true,
 		"definition": definition,
-		"entry": {"route": route, "payload": validation.payload, "view": view},
+		"entry": {"route": route, "payload": validation.payload, "view": view, "prepared": reused},
 	}
 
 
 func _add_screen_entry(entry: Dictionary) -> void:
-	_screen_host.add_child(entry.view)
-	_invoke(entry.view, &"navigation_enter", [entry.payload, _navigation_context("enter")])
+	if entry.view.get_parent() != _screen_host:
+		_screen_host.add_child(entry.view)
+	if not bool(entry.get("prepared", false)):
+		_invoke(entry.view, &"navigation_enter", [entry.payload, _navigation_context("enter")])
 	_set_entry_active(entry, true)
 
 
@@ -385,6 +524,7 @@ func _free_entry(entry: Dictionary) -> void:
 	if not is_instance_valid(view):
 		return
 	_invoke(view, &"navigation_exit", [_navigation_context("exit")])
+	view.hide()
 	view.queue_free()
 
 
@@ -413,8 +553,17 @@ func _begin_transition(
 	)
 	context["source_rect"] = payload.get("_transition_source_rect", Rect2())
 	context["source_texture"] = payload.get("_transition_source_texture")
+	context["prepare_before_motion"] = (
+		reason != "pop" and bool(payload.get("_prepare_before_motion", false))
+	)
 	_transition_host.play(kind, context)
 	input_lock_changed.emit(true)
+
+
+func _on_motion_started(kind: StringName) -> void:
+	var entry := _modal_entry if not _modal_entry.is_empty() else current_screen_entry()
+	if not entry.is_empty():
+		transition_started.emit(entry.route, kind)
 
 
 func _on_transition_settled(committed: bool) -> void:
@@ -438,6 +587,8 @@ func _navigation_context(reason: String) -> Dictionary:
 
 func _transition_kind(route: StringName) -> StringName:
 	var source := String(current_screen_entry().get("route", StringName()))
+	if route == &"gameplay":
+		return &"gameplay_page"
 	if source == "home" and route == &"themes":
 		return &"home_to_themes"
 	if source == "home" and route == &"levels":
@@ -446,6 +597,8 @@ func _transition_kind(route: StringName) -> StringName:
 
 
 func _pop_transition_kind(source: StringName, target: StringName) -> StringName:
+	if source == &"gameplay" and target == &"levels":
+		return &"gameplay_page"
 	if source == &"themes" and target == &"home":
 		return &"themes_to_home"
 	if source == &"levels" and target == &"home":

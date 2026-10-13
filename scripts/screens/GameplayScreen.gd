@@ -2,7 +2,6 @@ class_name GameplayScreen
 extends Control
 
 signal back_requested
-signal pause_requested
 signal hint_requested
 signal move_swap_up_requested
 signal move_swap_down_requested
@@ -10,6 +9,7 @@ signal move_swap_left_requested
 signal move_swap_right_requested
 
 const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLayout.gd")
+const Composition := preload("res://scripts/screens/gameplay/GameplaySceneComposition.gd")
 
 @onready var back_button: ActionButton = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title
@@ -21,12 +21,16 @@ const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLa
 
 var _view_model: Variant
 var _input_live := false
+var _board_ready := false
+var _navigation_active := false
+var _navigation_locked := false
+var _composition := Composition.new()
 var _layout_scale := 1.0
 var _layout := GameplayLayoutScript.new()
 
 
 func _ready() -> void:
-	back_button.pressed.connect(pause_requested.emit)
+	back_button.pressed.connect(back_requested.emit)
 	hint_button.pressed.connect(hint_requested.emit)
 	swap_action_bar.move_up_requested.connect(move_swap_up_requested.emit)
 	swap_action_bar.move_down_requested.connect(move_swap_down_requested.emit)
@@ -44,13 +48,24 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	_board_ready = false
 	_set_input_live(false)
+	_composition.release()
+
+
+func attach_board_host(host: Node2D) -> void:
+	_composition.mount(host, $BoardHost)
 
 
 func navigation_set_active(is_active: bool) -> void:
+	_navigation_active = is_active
 	visible = is_active
-	if not is_active:
-		_set_input_live(false)
+	_set_input_live(is_active and _board_ready and not _navigation_locked)
+
+
+func set_navigation_locked(locked: bool) -> void:
+	_navigation_locked = locked
+	_set_input_live(_navigation_active and _board_ready and not locked)
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -74,7 +89,17 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func mark_board_live() -> void:
-	_set_input_live(true)
+	_board_ready = true
+	_set_input_live(_navigation_active and not _navigation_locked)
+
+
+func is_board_input_enabled() -> bool:
+	return _input_live
+
+
+func prepare_completion() -> void:
+	_board_ready = false
+	_set_input_live(false)
 
 
 func board_reserved_rects() -> Array[Rect2]:
@@ -108,11 +133,10 @@ func _apply_current_layout() -> void:
 		. apply(
 			size,
 			$Hud,
-			back_button,
+			[back_button, hint_button],
 			title_label,
 			title_cloud_left,
 			title_cloud_right,
-			hint_button,
 			tray_view,
 			swap_action_bar,
 			_layout_scale,
@@ -121,19 +145,21 @@ func _apply_current_layout() -> void:
 
 
 func bottom_reserved_height() -> float:
-	# PuzzleBoard already adds the explicit tray bounds to the play-area reserve.
-	# Returning the tray height here would reserve it twice.
+	# The board adds tray height itself; reserve only the space below it here.
+	var gap := _layout.board_gap(size, _layout_scale)
 	if tray_view.visible:
-		return 0.0
+		return maxf(0.0, size.y - tray_view.position.y - tray_view.size.y) + gap
 	if swap_action_bar.visible:
-		return swap_action_bar.size.y
+		return size.y - swap_action_bar.position.y + gap
 	return 0.0
 
 
 func _set_input_live(enabled: bool) -> void:
 	_input_live = enabled
-	back_button.disabled = not enabled
-	hint_button.disabled = not enabled
+	for button in [back_button, hint_button]:
+		button.disabled = not enabled
+		if not enabled:
+			button.cancel_motion()
 	swap_action_bar.set_actions_enabled(enabled)
 
 

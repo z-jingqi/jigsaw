@@ -12,6 +12,7 @@ const TITLE_WRAP_MIN_FONT_SIZE := 18
 var level_id := ""
 var _view_model: Variant
 var _thumbnail_path := ""
+var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 
 
@@ -33,7 +34,10 @@ func set_view_model(view_model: Variant) -> void:
 
 func _apply_view_model() -> void:
 	level_id = str(_read("level_id"))
-	title_label.text = str(_read("title"))
+	var next_title := str(_read("title"))
+	var title_changed := title_label.text != next_title
+	if title_changed:
+		title_label.text = next_title
 	var is_locked := bool(_read("locked"))
 	disabled = is_locked
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
@@ -55,7 +59,12 @@ func _apply_view_model() -> void:
 			)
 		]
 	)
-	_apply_layout()
+	# Progress refreshes keep the same geometry and typography. Reapplying the
+	# font overrides to every retained card stalls the first return frame.
+	if title_changed:
+		_apply_layout()
+	else:
+		_apply_preview_style()
 
 
 func _process(_delta: float) -> void:
@@ -76,8 +85,18 @@ func _process(_delta: float) -> void:
 
 
 func _set_thumbnail(texture: Texture2D, path: String) -> void:
+	# Retain unchanged resources so progress refreshes cannot evict the image
+	# and restart a blank-to-image fade.
+	if texture != null and texture == thumbnail.texture:
+		return
+	if texture == null and not path.is_empty():
+		if path == _displayed_thumbnail_path and thumbnail.texture != null:
+			return
+		if path == _thumbnail_path:
+			return
 	_cancel_thumbnail_fade()
 	_thumbnail_path = ""
+	_displayed_thumbnail_path = path
 	set_process(false)
 	if texture != null:
 		_show_loaded_thumbnail(texture, false)
@@ -131,16 +150,26 @@ func _apply_layout() -> void:
 	title_label.position = Vector2(20.0, image_height + inset + 2.0)
 	title_label.size = Vector2(maxf(0.0, size.x - 40.0), title_height)
 	_fit_title_font(title_label.size.x, title_label.size.y)
-	var icon_size := clampf(size.x * 0.108, 40.0, 58.0)
-	completed_modes.configure(icon_size, maxf(5.0, icon_size * 0.13))
-	completed_modes.position = Vector2(inset + 10.0, inset + image_height - icon_size - 10.0)
-	completed_modes.size = Vector2(maxf(0.0, size.x - inset * 2.0 - 20.0), icon_size)
+	var icon_size := clampf(size.x * 0.088, 34.0, 48.0) * 1.5
+	var icon_gap := maxf(5.0, icon_size * 0.12)
+	completed_modes.configure(icon_size, icon_gap)
+	completed_modes.size = Vector2(icon_size, icon_size * 3.0 + icon_gap * 2.0)
+	completed_modes.position = (
+		thumbnail.position + thumbnail.size - completed_modes.size - Vector2.ONE * 12.0
+	)
 	var shader_material := thumbnail.material as ShaderMaterial
 	if shader_material != null and image_height > 0.0:
 		shader_material.set_shader_parameter("rect_aspect", thumbnail.size.x / thumbnail.size.y)
 		shader_material.set_shader_parameter("rect_size", thumbnail.size)
-		shader_material.set_shader_parameter("saturation", 0.16 if disabled else 1.0)
-		shader_material.set_shader_parameter("opacity", 0.56 if disabled else 1.0)
+	_apply_preview_style()
+
+
+func _apply_preview_style() -> void:
+	var shader_material := thumbnail.material as ShaderMaterial
+	if shader_material != null:
+		var revealed := bool(_read("preview_revealed", not disabled))
+		shader_material.set_shader_parameter("saturation", 1.0 if revealed else 0.16)
+		shader_material.set_shader_parameter("opacity", 1.0 if revealed else 0.56)
 
 
 func _fit_title_font(max_width: float, max_height: float) -> void:

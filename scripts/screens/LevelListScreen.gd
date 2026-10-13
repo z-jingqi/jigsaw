@@ -7,6 +7,7 @@ signal level_selected(level_id: String)
 const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
 const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
 @onready var header: Control = $SafeArea/Content/Header
@@ -56,7 +57,7 @@ func navigation_exit(_context: Dictionary) -> void:
 func _exit_tree() -> void:
 	_unlock_sequence.clear()
 	if _grid != null:
-		_grid.clear()
+		_grid.dispose()
 
 
 func navigation_set_active(is_active: bool) -> void:
@@ -85,12 +86,16 @@ func set_view_model(view_model: Variant) -> void:
 
 func refresh_view_model(view_model: Variant) -> void:
 	_view_model = view_model
-	theme_title.text = str(view_model.theme_title)
+	var next_title := str(view_model.theme_title)
+	var title_changed := theme_title.text != next_title
+	if title_changed:
+		theme_title.text = next_title
 	progress_count.text = (
 		"%d / %d"
 		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
 	)
-	_apply_header_layout()
+	if title_changed:
+		_apply_header_layout()
 	_grid.refresh_items(view_model.levels)
 
 
@@ -128,6 +133,7 @@ func play_enter() -> void:
 
 
 func _apply_layout() -> void:
+	_apply_header_layout()
 	if _view_model == null or _grid == null:
 		return
 	var available_width := maxf(1.0, scroll.size.x)
@@ -153,10 +159,10 @@ func _apply_header_layout() -> void:
 	if not is_node_ready() or header.size.x <= 0.0:
 		return
 	var available_width := header.size.x
-	back_button.position = Vector2(4.0, 12.0)
-	back_button.size = Vector2(92.0, 92.0)
+	Buttons.place_navigation(back_button, self)
+	var center_y := back_button.position.y + back_button.size.y * 0.5
 	progress.size = Vector2(232.0, 82.0)
-	progress.position = Vector2(available_width - progress.size.x - 4.0, 18.0)
+	progress.position = Vector2(available_width - progress.size.x - 4.0, center_y - 41.0)
 	var reserved_side := maxf(
 		back_button.position.x + back_button.size.x, available_width - progress.position.x
 	)
@@ -175,14 +181,14 @@ func _apply_header_layout() -> void:
 		)
 	var multiline := measured_width + 2.0 * (52.0 + ornament_gap) > group_width
 	var title_height := 104.0
-	var title_top := 6.0
+	var title_top := center_y - title_height * 0.5
 	if multiline:
 		font_size = 30
 		ornament_gap = 8.0
 		ornament_width = 36.0
 		measured_width = group_width - 2.0 * (ornament_width + ornament_gap)
 		title_height = 112.0
-		title_top = 0.0
+		title_top = center_y - title_height * 0.5
 		theme_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		theme_title.max_lines_visible = 2
 	else:

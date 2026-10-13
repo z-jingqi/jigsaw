@@ -1,36 +1,67 @@
 class_name GameplayHudButton
 extends ActionButton
-## Draws the quiet ink icons used by the gameplay header without a button plate.
+## Shared home-style controls with crisp vector icons and existing press feedback.
 
-@export_enum("pause", "hint") var symbol := "pause"
+@export_enum("back", "hint", "left", "up", "down", "right") var symbol := "back"
 
-const INK := Color("194F47")
+const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
 
 func _ready() -> void:
 	super()
-	flat = true
+	Style.apply_button(self)
 	icon = null
+	resized.connect(queue_redraw)
 	queue_redraw()
 
 
 func _draw() -> void:
-	var ink := INK
+	var ink := Style.INK
 	if disabled:
 		ink.a = 0.38
 	var center := size * 0.5
 	var unit := minf(size.x, size.y) / 148.0
 	var stroke := maxf(2.0, 7.0 * unit)
-	if symbol == "hint":
-		_draw_hint(center, unit, stroke, ink)
-	else:
-		_draw_pause(center, unit, ink)
+	match symbol:
+		"hint":
+			_draw_hint(center, unit, stroke, ink)
+		"back":
+			draw_polyline(
+				PackedVector2Array(
+					[
+						center + Vector2(12, -27) * unit,
+						center + Vector2(-14, 0) * unit,
+						center + Vector2(12, 27) * unit,
+					]
+				),
+				ink,
+				stroke,
+				true,
+			)
+		_:
+			_draw_direction(center, unit, stroke, ink)
 
 
-func _draw_pause(center: Vector2, unit: float, ink: Color) -> void:
-	var bar_size := Vector2(15.0, 64.0) * unit
-	draw_rect(Rect2(center + Vector2(-28.0, -32.0) * unit, bar_size), ink, true)
-	draw_rect(Rect2(center + Vector2(13.0, -32.0) * unit, bar_size), ink, true)
+func _draw_direction(center: Vector2, unit: float, stroke: float, ink: Color) -> void:
+	var angle := 0.0
+	match symbol:
+		"left":
+			angle = -PI * 0.5
+		"down":
+			angle = PI
+		"right":
+			angle = PI * 0.5
+	var points := PackedVector2Array()
+	for point in [Vector2(-23, -5), Vector2(0, -28), Vector2(23, -5)]:
+		points.append(center + point.rotated(angle) * unit)
+	draw_polyline(points, ink, stroke, true)
+	draw_line(
+		center + Vector2(0, -27).rotated(angle) * unit,
+		center + Vector2(0, 28).rotated(angle) * unit,
+		ink,
+		stroke,
+		true,
+	)
 
 
 func _draw_hint(center: Vector2, unit: float, stroke: float, ink: Color) -> void:

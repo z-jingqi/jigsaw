@@ -4,14 +4,13 @@ extends ActionButton
 signal selection_requested(mode: StringName, start_policy: StringName)
 
 const ICONS := {
-	&"polygon": preload("res://assets/ui/levels/mode-stickers/mode_polygon_sticker.webp"),
-	&"knob": preload("res://assets/ui/levels/mode-stickers/mode_knob_sticker.webp"),
-	&"swap": preload("res://assets/ui/levels/mode-stickers/mode_swap_sticker.webp"),
+	&"polygon": preload("res://assets/ui/levels/mode-icons/polygon.svg"),
+	&"knob": preload("res://assets/ui/levels/mode-icons/knob.svg"),
+	&"swap": preload("res://assets/ui/levels/mode-icons/swap.svg"),
 }
 const IconShader := preload("res://shaders/ui/mode_icon_state.gdshader")
 const MotionScene := preload("res://scenes/modals/ModeSelectMotion.tscn")
-const StatusDrawing := preload("res://scripts/modals/ModeStatusDrawing.gd")
-const FONT := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
+const FONT := preload("res://themes/douyin_ui_font.tres")
 const INK := Color("194F47")
 
 var _model: Variant
@@ -21,11 +20,11 @@ var _status_label := Label.new()
 var _motion: Node
 var _icon := TextureRect.new()
 var _icon_material := ShaderMaterial.new()
-var _marks := StatusDrawing.new()
 
 
 func _ready() -> void:
 	kind = Kind.CARD
+	add_theme_font_override("font", FONT)
 	super._ready()
 	_motion = MotionScene.instantiate()
 	add_child(_motion)
@@ -37,8 +36,6 @@ func _ready() -> void:
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	add_child(_icon)
 	_motion.bind_icon(_icon)
-	_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_marks)
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	for label in [_name_label, _status_label]:
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -112,11 +109,10 @@ func presentation_snapshot() -> Dictionary:
 		"status": _read("status", &"not_started"),
 		"selected": _selected,
 		"action": _read("action", &"start"),
-		"badge": _read("status", &"") in [&"in_progress", &"completed"],
+		"badge": false,
 		"label": _status_label.text,
 		"rect": str(get_global_rect()),
 		"reveal": _motion.reveal,
-		"status_progress": _motion.status_progress,
 		"active_motion_count": active_motion_count(),
 		"scale": str(scale),
 		"background": (get_theme_stylebox("normal") as StyleBoxFlat).bg_color.to_html(),
@@ -174,26 +170,17 @@ func _layout() -> void:
 		style.set_border_width_all(maxi(1, int(1.0 * unit)))
 		style.set_corner_radius_all(int(12.0 * unit))
 		add_theme_stylebox_override(state, style)
-	_name_label.position = Vector2(0, size.y * 0.69)
+	_name_label.position = Vector2(0, size.y * 0.61)
 	_name_label.size = Vector2(size.x, size.y * 0.16)
-	_status_label.position = Vector2(0, size.y * 0.85)
-	_status_label.size = Vector2(size.x, size.y * 0.12)
+	_status_label.position = Vector2(0, size.y * 0.81)
+	_status_label.size = Vector2(size.x, size.y * 0.13)
 	_name_label.add_theme_font_size_override("font_size", maxi(12, int(16.0 * unit)))
-	_status_label.add_theme_font_size_override("font_size", maxi(10, int(12.0 * unit)))
+	_status_label.add_theme_font_size_override("font_size", maxi(10, int(11.0 * unit)))
 	pivot_offset = size * 0.5
-	var icon_size := minf(size.x * 0.65, size.y * 0.49)
-	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.18)
+	var icon_size := minf(size.x * 0.56, size.y * 0.44)
+	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.15)
 	_icon.size = Vector2.ONE * icon_size
 	_icon.pivot_offset = _icon.size * 0.5
-	_marks.size = size
-	_marks.icon_rect = Rect2(_icon.position, _icon.size)
-	_marks.status = StringName(_read("status", &"not_started"))
-	queue_redraw()
-
-
-func _draw() -> void:
-	_marks.progress = _motion.status_progress if is_instance_valid(_motion) else 1.0
-	_marks.queue_redraw()
 
 
 func _read(field: String, fallback: Variant) -> Variant:

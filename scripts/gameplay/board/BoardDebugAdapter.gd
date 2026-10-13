@@ -177,7 +177,7 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		await host.get_tree().process_frame
 		var returned_at_same_size: bool = (
 			picked.in_tray
-			and picked.node.get_parent() == host.tray_root
+			and host.tray_root.is_ancestor_of(picked.node)
 			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
 		)
 		result["tray_drag_size"] = (
@@ -211,10 +211,10 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		)
 		active.node.scale = Vector2.ONE
 		host._update_snap_preview(active)
-		var outside_hidden: bool = host.snap_preview_lines.is_empty()
+		var outside_hidden: bool = not host.snap_controller.has_preview()
 		active.node.position = active.anchor_home + Vector2(host._snap_tolerance() * 0.92, 0.0)
 		host._update_snap_preview(active)
-		result["snap_preview"] = outside_hidden and not host.snap_preview_lines.is_empty()
+		result["snap_preview"] = outside_hidden and host.snap_controller.has_preview()
 		var group_count_before: int = host.groups.size()
 		host.PieceVisualFactoryScript.set_group_lifted(active, true, host, false)
 		host.dragging = active
@@ -312,24 +312,13 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 
 
 func _debug_swap_hint_visuals_valid() -> bool:
-	if host.hint_blink_tweens.is_empty():
-		return false
-	var found_thick_blue_line := false
-	for root in host.hint_highlighted_nodes:
-		if root == null or not is_instance_valid(root):
+	for effect in host.hint_highlighted_nodes:
+		if not is_instance_valid(effect) or not effect.has_method("debug_snapshot"):
 			continue
-		for child in root.get_children():
-			if not child is Line2D:
-				continue
-			var line := child as Line2D
-			var width := float(line.get_meta("screen_width", 0.0))
-			if (
-				width >= host.SWAP_HINT_SCREEN_WIDTH
-				and line.default_color.is_equal_approx(host.HINT_TARGET_COLOR)
-			):
-				found_thick_blue_line = true
-				break
-	return found_thick_blue_line
+		var state: Dictionary = effect.debug_snapshot()
+		if state.kind == "swap" and state.contours == 2 and state.copies == 2:
+			return state.source_id != state.target_id and state.animating
+	return false
 
 
 func _debug_check_row_shift() -> bool:
@@ -341,28 +330,29 @@ func _debug_check_row_shift() -> bool:
 	for tile in host.swap_tiles:
 		before[int(tile["correct_index"])] = int(tile["slot_index"])
 	host.shift_swap_rows_down()
-	await (
-		host
-		. get_tree()
-		. create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04)
-		. timeout
-	)
+	await _debug_wait_for_swap_motion()
 	var shifted_down := true
 	for tile in host.swap_tiles:
 		var old_slot := int(before[int(tile["correct_index"])])
 		var expected: int = posmod(int(old_slot / cols) + 1, rows) * cols + old_slot % cols
 		shifted_down = shifted_down and int(tile["slot_index"]) == expected
 	host.shift_swap_rows_up()
-	await (
-		host
-		. get_tree()
-		. create_timer(host._motion_duration(host.SWAP_ROW_SHIFT_ANIMATION_TIME) + 0.04)
-		. timeout
-	)
+	await _debug_wait_for_swap_motion()
 	var restored := true
 	for tile in host.swap_tiles:
 		restored = restored and int(tile["slot_index"]) == int(before[int(tile["correct_index"])])
 	return shifted_down and restored
+
+
+func _debug_wait_for_swap_motion() -> void:
+	var deadline := Time.get_ticks_msec() + 1200
+	while Time.get_ticks_msec() < deadline:
+		var animating := false
+		for tile in host.swap_tiles:
+			animating = animating or bool(tile.get("is_animating", false))
+		if not animating:
+			return
+		await host.get_tree().process_frame
 
 
 func debug_force_complete() -> void:
@@ -385,7 +375,7 @@ func debug_force_complete() -> void:
 		group.node.position = group.anchor_home
 		group.node.rotation_degrees = 0.0
 		group.node.scale = Vector2.ONE
-		host.PieceVisualFactoryScript.add_seam_outline(group, host._seam_line_width())
+		host.PieceVisualFactoryScript.settle_group_edges(group)
 		if not host.locked_groups.has(group):
 			host.locked_groups.append(group)
 	host.tray_groups.clear()
@@ -395,7 +385,6 @@ func debug_force_complete() -> void:
 
 func debug_prepare_restore_snapshot() -> Dictionary:
 	host.hint_count = 2
-	host._zoom_view_at(host._world_view_screen_rect().get_center(), host.base_view_scale * 1.45)
 	if host.current_mode == "swap":
 		var pair: Array = host._find_swap_hint_pair()
 		if pair.size() >= 2:
