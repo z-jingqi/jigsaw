@@ -1,6 +1,15 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/onboarding/HomeFirstRunGuide.gd" id="1_guide"]
+[ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="2_button"]
+[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="3_font"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
+bg_color = Color(0.960784, 0.941176, 0.890196, 1)
+corner_radius_top_left = 40
+corner_radius_top_right = 40
+corner_radius_bottom_left = 40
+corner_radius_bottom_right = 40
 
 [node name="HomeFirstRunGuide" type="Control"]
 layout_mode = 3
@@ -12,7 +21,7 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("1_guide")
 
-[node name="GuidePanel" type="ColorRect" parent="."]
+[node name="GuidePanel" type="Panel" parent="."]
 layout_mode = 1
 anchors_preset = 10
 anchor_left = 0.08
@@ -23,7 +32,7 @@ offset_top = -150.0
 offset_bottom = 150.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.02, 0.12, 0.17, 0.72)
+theme_override_styles/panel = SubResource("StyleBox_panel")
 mouse_filter = 2
 
 [node name="Prompt" type="Label" parent="GuidePanel"]
@@ -35,7 +44,8 @@ offset_top = 38.0
 offset_right = -42.0
 offset_bottom = 150.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 0.98, 0.91, 1)
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 44
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -51,7 +61,8 @@ offset_top = 164.0
 offset_right = -42.0
 offset_bottom = 260.0
 grow_horizontal = 2
-theme_override_colors/font_color = Color(1, 0.76, 0.42, 1)
+theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 48
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -67,7 +78,8 @@ offset_top = 24.0
 offset_right = -42.0
 offset_bottom = 96.0
 grow_horizontal = 0
-theme_override_colors/font_color = Color(1, 0.98, 0.91, 1)
+theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 32
 text = "Skip"
 tooltip_text = "Skip home guide"
+script = ExtResource("2_button")

@@ -25,12 +25,26 @@ func load() -> void:
 	changed.emit(snapshot(), _revision)
 
 
+func flush() -> Dictionary:
+	if _store.has_method(&"flush"):
+		return _store.call(&"flush")
+	return {"ok": true}
+
+
 func snapshot() -> Dictionary:
 	return _data.duplicate(true)
 
 
 func current() -> Dictionary:
 	return (_data["current"] as Dictionary).duplicate(true)
+
+
+func has_stored_play_state(theme_id: String, level_id: String, mode: String) -> bool:
+	return not (
+		(_data["play_states"] as Dictionary)
+		. get(_state_key(theme_id, level_id, mode), {})
+		. is_empty()
+	)
 
 
 func set_current(theme_id: String, level_id: String = "", mode: String = "") -> Dictionary:
@@ -52,6 +66,16 @@ func play_state(
 	if not state.is_empty():
 		clear_play_state(theme_id, level_id, mode)
 	return {}
+
+
+func peek_play_state(
+	theme_id: String, level_id: String, mode: String, piece_ids: Array[String]
+) -> Dictionary:
+	# Preparing a mode is a read-only preview; invalid old saves are left intact.
+	var state: Dictionary = (_data["play_states"] as Dictionary).get(
+		_state_key(theme_id, level_id, mode), {}
+	)
+	return state.duplicate(true) if _is_valid_state(state, piece_ids) else {}
 
 
 func save_play_state(state: Dictionary, piece_ids: Array[String]) -> Dictionary:
@@ -146,6 +170,8 @@ func _expected_fingerprint(piece_ids: Array[String]) -> String:
 
 
 func _commit(next_data: Dictionary) -> Dictionary:
+	if next_data == _data:
+		return {"ok": true, "changed": false}
 	var saved := _store.write_dictionary(_path, next_data)
 	if not bool(saved.get("ok", false)):
 		return saved

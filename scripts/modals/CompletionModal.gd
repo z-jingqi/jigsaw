@@ -4,159 +4,156 @@ extends Control
 signal confirm_requested(completion_event_id: String)
 signal dismissed(completion_event_id: String)
 
-const CompletionLayoutScript := preload("res://scripts/modals/CompletionLayout.gd")
-const ModeStatusIconScene := preload("res://scenes/ui/foundation/ModeStatusIcon.tscn")
+const Layout := preload("res://scripts/modals/CompletionLayout.gd")
+const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
-@onready var canvas: Control = $Canvas
 @onready var header: Control = $Canvas/Header
-@onready var back_button: ActionButton = $Canvas/Header/BackButton
 @onready var level_label: Label = $Canvas/Header/LevelTitle
 @onready var card_stage: Control = $Canvas/CardStage
-@onready var card_frame: Panel = $Canvas/CardStage/CardFrame
 @onready var image_rect: TextureRect = $Canvas/CardStage/CompletedImage
-@onready var completion_paw: TextureRect = $Canvas/CardStage/CompletionPaw
-@onready var celebration: Control = $Canvas/Celebration
-@onready var left_leaf: TextureRect = $Canvas/Celebration/LeftLeaf
-@onready var title_label: Label = $Canvas/Celebration/Title
-@onready var right_leaf: TextureRect = $Canvas/Celebration/RightLeaf
-@onready var mode_row: HBoxContainer = $Canvas/ModeRow
+@onready var description_label: Label = $Canvas/Description
 @onready var confirm_button: ActionButton = $Canvas/Confirm
 @onready var confirm_label: Label = $Canvas/Confirm/Label
+@onready var return_button: ActionButton = $Canvas/Return
+@onready var return_label: Label = $Canvas/Return/Label
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
+@onready var image_motion: Node = $ImageMotion
 
 var _view_model: AppViewModels.CompletionViewModel
-var _layout := CompletionLayoutScript.new()
+var _layout := Layout.new()
 var _reduced_motion := false
 var _closing := false
-var _confirming := false
 
 
 func _ready() -> void:
-	back_button.pressed.connect(_request_confirm)
 	confirm_button.pressed.connect(_request_confirm)
+	return_button.pressed.connect(request_dismiss)
 	animation_player.animation_finished.connect(_on_animation_finished)
 	resized.connect(_apply_layout)
-	_apply_layout()
+	description_label.minimum_size_changed.connect(_apply_layout)
+	Style.apply_button(confirm_button)
+	Style.apply_button(return_button, true)
+	# Input gating during the entrance must not change either button's surface.
+	for button in [confirm_button, return_button]:
+		button.add_theme_stylebox_override(
+			"disabled", button.get_theme_stylebox("normal").duplicate()
+		)
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
-	_reduced_motion = bool(context.get("reduced_motion", false))
-	back_button.set_reduced_motion(_reduced_motion)
-	confirm_button.set_reduced_motion(_reduced_motion)
-	_view_model = payload.get("view_model", null) as AppViewModels.CompletionViewModel
+	_view_model = payload.get("view_model") as AppViewModels.CompletionViewModel
 	if _view_model == null:
 		return
+	_reduced_motion = bool(context.get("reduced_motion", false))
+	confirm_button.set_reduced_motion(_reduced_motion)
+	return_button.set_reduced_motion(_reduced_motion)
 	level_label.text = _view_model.level_title
-	title_label.text = _view_model.title
+	description_label.text = _view_model.level_description
+	description_label.visible = not description_label.text.is_empty()
 	image_rect.texture = _view_model.completed_texture
 	confirm_label.text = _view_model.primary_action_text
-	_reconcile_modes(_view_model.modes)
+	confirm_button.accessibility_name = confirm_label.text
+	return_label.text = _view_model.secondary_action_text
+	return_button.accessibility_name = return_label.text
+	_closing = false
 	_apply_layout()
-	_play_open()
+	if _reduced_motion:
+		_finish_open()
+	else:
+		_set_buttons_enabled(false)
+		animation_player.play(&"open")
+		animation_player.advance(0.0)
 
 
 func navigation_exit(_context: Dictionary) -> void:
 	animation_player.stop()
-	back_button.cancel_motion()
 	confirm_button.cancel_motion()
-	for child in mode_row.get_children():
-		if child is ActionButton:
-			child.cancel_motion()
+	return_button.cancel_motion()
 
 
 func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
+	if is_active and _closing:
+		_closing = false
+		_finish_open()
+
+
+func navigation_prepare_transition() -> void:
+	_finish_open()
+	_closing = true
+	_set_buttons_enabled(false)
+	confirm_button.cancel_motion()
+	return_button.cancel_motion()
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	confirm_button.set_reduced_motion(enabled)
+	return_button.set_reduced_motion(enabled)
+	if enabled and not _closing:
+		_finish_open()
 
 
 func request_dismiss() -> void:
-	_request_confirm()
+	if _closing or _view_model == null:
+		return
+	_closing = true
+	_set_buttons_enabled(false)
+	confirm_button.cancel_motion()
+	return_button.cancel_motion()
+	dismissed.emit(_view_model.completion_event_id)
+
+
+func restore_actions() -> void:
+	_closing = false
+	_finish_open()
 
 
 func active_motion_count() -> int:
-	var count := 1 if animation_player.is_playing() else 0
-	count += back_button.active_motion_count()
-	count += confirm_button.active_motion_count()
-	return count
+	return (
+		int(animation_player.is_playing())
+		+ confirm_button.active_motion_count()
+		+ return_button.active_motion_count()
+	)
 
 
 func _request_confirm() -> void:
-	if _closing or _view_model == null:
+	if _closing or _view_model == null or not _view_model.has_next_level:
 		return
-	_confirming = true
-	_play_close()
-
-
-func _play_open() -> void:
-	_closing = false
-	_confirming = false
-	back_button.disabled = false
-	confirm_button.disabled = false
-	animation_player.stop()
-	if _reduced_motion:
-		animation_player.play(&"RESET")
-		animation_player.advance(0.0)
-		animation_player.stop(true)
-	else:
-		animation_player.play(&"open")
-
-
-func _play_close() -> void:
 	_closing = true
-	back_button.disabled = true
-	confirm_button.disabled = true
-	back_button.cancel_motion()
+	_set_buttons_enabled(false)
 	confirm_button.cancel_motion()
-	animation_player.stop()
-	if _reduced_motion:
-		_finish_close()
-	else:
-		animation_player.play(&"close")
+	return_button.cancel_motion()
+	confirm_requested.emit(_view_model.completion_event_id)
 
 
 func _on_animation_finished(animation_name: StringName) -> void:
-	if animation_name == &"close":
-		_finish_close()
+	if animation_name == &"open" and not _closing:
+		_set_buttons_enabled(true)
 
 
-func _finish_close() -> void:
-	if _view_model == null:
-		return
-	if _confirming:
-		confirm_requested.emit(_view_model.completion_event_id)
-	else:
-		dismissed.emit(_view_model.completion_event_id)
+func _finish_open() -> void:
+	animation_player.play(&"RESET")
+	animation_player.advance(0.0)
+	animation_player.stop(true)
+	_set_buttons_enabled(not _closing)
 
 
-func _reconcile_modes(modes: Array[AppViewModels.ModeStatusViewModel]) -> void:
-	for child in mode_row.get_children():
-		mode_row.remove_child(child)
-		child.queue_free()
-	for mode_model in modes:
-		var status_icon := ModeStatusIconScene.instantiate() as ModeStatusIcon
-		mode_row.add_child(status_icon)
-		status_icon.set_variant(&"completion")
-		status_icon.set_interactive(false)
-		status_icon.set_show_progress_dot(false)
-		status_icon.set_reduced_motion(_reduced_motion)
-		status_icon.set_view_model(mode_model)
+func _set_buttons_enabled(enabled: bool) -> void:
+	confirm_button.disabled = not enabled or _view_model == null or not _view_model.has_next_level
+	confirm_label.modulate.a = (
+		0.4 if _view_model != null and not _view_model.has_next_level else 1.0
+	)
+	return_button.disabled = not enabled
 
 
 func _apply_layout() -> void:
-	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
+	if not is_node_ready() or _view_model == null or size.x <= 0 or size.y <= 0:
 		return
-	_layout.apply_header(size, header, back_button, level_label)
-	_layout.apply_card(size, card_stage, card_frame, image_rect, completion_paw)
-	(
-		_layout
-		. apply_footer(
-			size,
-			celebration,
-			left_leaf,
-			title_label,
-			right_leaf,
-			mode_row,
-			confirm_button,
-			confirm_label,
-		)
-	)
+	var source := get_global_transform_with_canvas().affine_inverse() * _view_model.source_rect
+	var target := _layout.image_target(size, image_rect.texture, source)
+	image_motion.configure(card_stage, image_rect, source, target)
+	_layout.apply_header(size, header, level_label)
+	_layout.apply_footer(size, confirm_button, confirm_label, return_button, return_label)
+	_layout.apply_description(size, description_label, target, confirm_button.position.y)

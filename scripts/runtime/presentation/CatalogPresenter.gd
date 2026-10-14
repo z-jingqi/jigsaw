@@ -5,6 +5,7 @@ const ThemeProgressPolicyScript := preload(
 	"res://scripts/runtime/presentation/ThemeProgressPolicy.gd"
 )
 const ViewModelsScript := preload("res://scripts/runtime/presentation/AppViewModels.gd")
+const PageBackground := preload("res://assets/ui/home/library/page.webp")
 
 var _content: Variant
 var _progress: Variant
@@ -54,18 +55,19 @@ func level_list(
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var cards: Array[AppViewModels.LevelCardViewModel] = []
 	var focus_id := ""
-	var unlock_budget := 1
+	var first_level := true
 	for level in topic.get("levels", []):
 		if typeof(level) != TYPE_DICTIONARY:
 			continue
 		var modes: Array[AppViewModels.ModeStatusViewModel] = _mode_statuses(topic, level)
-		var locked := unlock_budget <= 0
-		if not locked:
-			unlock_budget -= 1
-			if _has_completed_mode(modes):
-				unlock_budget += maxi(1, int(level.get("unlock_grant", 1)))
+		var revealed: bool = (
+			first_level
+			or _progress.is_level_visited(theme_id, str(level["id"]))
+			or _has_played_mode(modes)
+		)
+		first_level = false
 		var is_recommended: bool = requested_focus_level_id == str(level["id"])
-		if focus_id.is_empty() and not locked and _has_unfinished_mode(modes):
+		if focus_id.is_empty() and _has_unfinished_mode(modes):
 			focus_id = str(level["id"])
 		(
 			cards
@@ -79,7 +81,8 @@ func level_list(
 							"title": level["title"],
 							"thumbnail": null,
 							"thumbnail_path": _content.level_thumbnail_path(level),
-							"locked": locked,
+							"locked": false,
+							"preview_revealed": revealed,
 							"recommended": is_recommended,
 							"modes": modes,
 						}
@@ -100,7 +103,7 @@ func level_list(
 				"revision": _revision,
 				"theme_id": topic.get("id", ""),
 				"theme_title": topic.get("name", ""),
-				"background_texture": _content.topic_background(topic),
+				"background_texture": PageBackground,
 				"theme_progress": theme_progress(topic),
 				"focus_level_id":
 				requested_focus_level_id if not requested_focus_level_id.is_empty() else focus_id,
@@ -113,7 +116,7 @@ func level_list(
 func mode_select(theme_id: String, level_id: String) -> AppViewModels.ModeSelectViewModel:
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var level: Dictionary = _content.level_by_id(theme_id, level_id)
-	var level_media: Dictionary = _content.level_media(_content.level_config(level))
+	var preview_texture: Texture2D = _content.level_preview_texture(_content.level_config(level))
 	return (
 		ViewModelsScript
 		. ModeSelectViewModel
@@ -123,36 +126,12 @@ func mode_select(theme_id: String, level_id: String) -> AppViewModels.ModeSelect
 				"theme_id": theme_id,
 				"level_id": level_id,
 				"level_title": level.get("title", ""),
-				"background_texture": _content.topic_background(topic),
-				"preview_texture": level_media.get("texture"),
+				"background_texture": PageBackground,
+				"preview_texture": preview_texture,
 				"options": _mode_statuses(topic, level),
 			}
 		)
 	)
-
-
-func completion_modes(
-	theme_id: String, level_id: String, completed_mode: StringName
-) -> Array[AppViewModels.ModeStatusViewModel]:
-	var topic: Dictionary = _content.topic_by_id(theme_id)
-	var level: Dictionary = _content.level_by_id(theme_id, level_id)
-	var result: Array[AppViewModels.ModeStatusViewModel] = []
-	for option in _mode_statuses(topic, level):
-		if option.mode == completed_mode and option.enabled:
-			result.append(
-				ViewModelsScript.ModeStatusViewModel.new(
-					option.mode,
-					option.label,
-					&"completed",
-					&"replay",
-					true,
-					option.short_label,
-					_mode_action_label(&"replay")
-				)
-			)
-		else:
-			result.append(option)
-	return result
 
 
 func gameplay(
@@ -231,6 +210,8 @@ func _mode_statuses(
 
 
 func _session_state(topic: Dictionary, level: Dictionary, mode: String) -> Dictionary:
+	if not _session.has_stored_play_state(str(topic.get("id", "")), str(level.get("id", "")), mode):
+		return {}
 	return _session.play_state(
 		str(topic.get("id", "")),
 		str(level.get("id", "")),
@@ -246,9 +227,9 @@ func _has_unfinished_mode(modes: Array[AppViewModels.ModeStatusViewModel]) -> bo
 	return false
 
 
-func _has_completed_mode(modes: Array[AppViewModels.ModeStatusViewModel]) -> bool:
+func _has_played_mode(modes: Array[AppViewModels.ModeStatusViewModel]) -> bool:
 	for mode in modes:
-		if mode.enabled and mode.status == &"completed":
+		if mode.enabled and mode.status in [&"completed", &"in_progress"]:
 			return true
 	return false
 

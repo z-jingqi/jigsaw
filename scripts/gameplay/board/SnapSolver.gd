@@ -27,8 +27,8 @@ static func _closest_neighbor_match(a, b) -> Dictionary:
 			if not _are_declared_neighbors(am, bm):
 				continue
 			var expected: Vector2 = bm["home"] - am["home"]
-			var a_anchor: Vector2 = a.node.position + am["visual"].position
-			var b_anchor: Vector2 = b.node.position + bm["visual"].position
+			var a_anchor: Vector2 = a.node.transform * am["visual"].position
+			var b_anchor: Vector2 = b.node.transform * bm["visual"].position
 			var actual: Vector2 = b_anchor - a_anchor
 			var correction := actual - expected
 			var distance := correction.length()

@@ -29,12 +29,14 @@ func execute(command: String, args: Dictionary = {}) -> Dictionary:
 			result = _runtime.show_mode_select(str(args.topic_id), str(args.level_id))
 		"show_settings":
 			result = _runtime.show_settings()
+		"show_album":
+			result = _runtime.show_album()
+		"show_album_artwork":
+			if not _strings(args, ["topic_id", "level_id"]):
+				return _failure(command, "invalid_argument", "topic_id and level_id are required.")
+			result = _runtime.show_album_artwork(str(args.topic_id), str(args.level_id))
 		"show_home_guide":
 			result = _runtime.show_home_guide()
-		"show_mode_tutorial", "show_tutorial":
-			if not _strings(args, ["mode"]):
-				return _failure(command, "invalid_argument", "mode is required.")
-			result = _runtime.show_mode_tutorial(str(args.mode))
 		"enter_level":
 			if not _strings(args, ["topic_id", "level_id", "mode"]):
 				return _failure(

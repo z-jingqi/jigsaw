@@ -3,12 +3,15 @@ class_name LevelRepository
 
 const LEVEL_CATALOG_PATH := "res://levels/catalog.json"
 const LEVEL_THUMBNAIL_FILE := "thumbnail.webp"
+const CONFIG_CACHE_LIMIT := 32
 const LevelAssetCacheScript = preload("res://scripts/catalog/LevelAssetCache.gd")
+const ModeAvailability := preload("res://scripts/catalog/LevelModeAvailability.gd")
 
 var asset_cache := LevelAssetCacheScript.new()
 var texture_cache: Dictionary = asset_cache.texture_cache
 var source_image_cache: Dictionary = asset_cache.source_image_cache
 var config_cache: Dictionary = {}
+var _config_order: Array[String] = []
 var locale := "en"
 var _catalog_cache: Array[Dictionary] = []
 var _catalog_cached := false
@@ -67,6 +70,8 @@ func build_catalog() -> Array[Dictionary]:
 					"description":
 					localized_config_string(level_config, "description", "", level_entry),
 					"config_path": config_path,
+					"available_modes": ModeAvailability.from_config(self, level_config),
+					"thumbnail_path": level_thumbnail_source_path(level_config),
 					"unlock_grant": maxi(1, int(level_entry.get("unlock_grant", 1))),
 				}
 				levels.append(level)
@@ -77,6 +82,8 @@ func build_catalog() -> Array[Dictionary]:
 						"id": str(topic.get("id", "")),
 						"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 						"cover": str(topic.get("cover", "")),
+						"cover_thumbnail":
+						str(topic.get("cover_thumbnail", topic.get("cover", ""))),
 						"color": str(topic.get("color", "#D9933F")),
 						"ui_palette":
 						(
@@ -133,10 +140,13 @@ func load_level_config(level: Dictionary) -> Dictionary:
 
 
 func load_config_path(config_path: String) -> Dictionary:
-	if config_path.is_empty() or not FileAccess.file_exists(config_path):
+	if config_path.is_empty():
 		return {}
 	if config_cache.has(config_path):
+		_touch_config(config_path)
 		return config_cache[config_path]
+	if not FileAccess.file_exists(config_path):
+		return {}
 	var file := FileAccess.open(config_path, FileAccess.READ)
 	if file == null:
 		return {}
@@ -145,7 +155,15 @@ func load_config_path(config_path: String) -> Dictionary:
 	if not config.is_empty():
 		config["_config_path"] = config_path
 		config_cache[config_path] = config
+		_touch_config(config_path)
+		while _config_order.size() > CONFIG_CACHE_LIMIT:
+			config_cache.erase(_config_order.pop_front())
 	return config
+
+
+func _touch_config(config_path: String) -> void:
+	_config_order.erase(config_path)
+	_config_order.append(config_path)
 
 
 func level_thumbnail(level: Dictionary, target_size := Vector2i(480, 360)) -> Texture2D:
@@ -169,7 +187,7 @@ func topic_icon_texture(topic: Dictionary) -> Texture2D:
 	return cached_texture(icon_path) if not icon_path.is_empty() else null
 
 
-func apply_level_media(level_config: Dictionary) -> Dictionary:
+func _level_texture_media(level_config: Dictionary) -> Dictionary:
 	var image_path := level_image_path(level_config)
 	var next_texture := cached_texture(image_path) if not image_path.is_empty() else null
 	if next_texture == null:
@@ -180,7 +198,17 @@ func apply_level_media(level_config: Dictionary) -> Dictionary:
 	if next_texture == null:
 		image_path = ""
 		next_texture = placeholder_texture()
-	var image := cached_source_image(image_path, next_texture)
+	return {"texture": next_texture, "path": image_path}
+
+
+func level_preview_texture(level_config: Dictionary) -> Texture2D:
+	return _level_texture_media(level_config).texture
+
+
+func apply_level_media(level_config: Dictionary) -> Dictionary:
+	var media := _level_texture_media(level_config)
+	var next_texture: Texture2D = media.texture
+	var image := cached_source_image(media.path, next_texture)
 	return {
 		"texture": next_texture,
 		"image": image,
@@ -214,7 +242,10 @@ func level_list_image_path(level_config: Dictionary) -> String:
 
 func level_thumbnail_source_path(level_config: Dictionary) -> String:
 	var thumbnail_path := level_thumbnail_path(level_config)
-	if not thumbnail_path.is_empty() and FileAccess.file_exists(thumbnail_path):
+	if (
+		not thumbnail_path.is_empty()
+		and (ResourceLoader.exists(thumbnail_path) or FileAccess.file_exists(thumbnail_path))
+	):
 		return thumbnail_path
 	return level_list_image_path(level_config)
 

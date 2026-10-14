@@ -2,9 +2,11 @@ class_name HomeScreen
 extends Control
 
 signal selected_theme_changed(theme_id: String)
+signal theme_switch_started
 signal theme_activated(theme_id: String)
 signal menu_requested
 signal themes_requested
+signal album_requested
 
 const Layout := preload("res://scripts/screens/home/HomeLayout.gd")
 const ThemeTitleMotion := preload("res://scripts/screens/home/ThemeTitleMotion.gd")
@@ -25,8 +27,10 @@ func _ready() -> void:
 	)
 	deck.selected.connect(_on_selected)
 	deck.browse_motion.connect(_on_browse_motion)
+	deck.theme_switch_started.connect(theme_switch_started.emit)
 	menu_button.pressed.connect(menu_requested.emit)
 	$ThemesButton.pressed.connect(themes_requested.emit)
+	$AlbumButton.pressed.connect(album_requested.emit)
 	$UndoButton.pressed.connect(deck.undo)
 	start_button.pressed.connect(_on_enter_pressed)
 	resized.connect(_on_resized)

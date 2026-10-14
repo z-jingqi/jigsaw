@@ -1,6 +1,8 @@
 extends Control
 signal close_requested
 signal theme_selected(theme_id: String)
+
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleFont := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
@@ -36,6 +38,9 @@ func scroll_position() -> int:
 
 
 func _build() -> void:
+	for child in $Scroll/Grid.get_children():
+		$Scroll/Grid.remove_child(child)
+		child.queue_free()
 	for model in _themes:
 		var tile := Button.new()
 		tile.name = str(model.theme_id)
@@ -77,9 +82,8 @@ func _build() -> void:
 
 func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
-	$CloseButton.position = Vector2(size.x - 68 * u, 27 * u)
-	$CloseButton.size = Vector2.ONE * 46 * u
-	$Title.position = Vector2(76 * u, 27 * u)
+	Buttons.place_navigation($CloseButton, self, true)
+	$Title.position = Vector2(76 * u, Buttons.header_center_y(size) - 23 * u)
 	$Title.size = Vector2(size.x - 152 * u, 46 * u)
 	$Title.add_theme_font_size_override("font_size", int(28 * u))
 	var horizontal_margin := 14.0 * u

@@ -7,7 +7,7 @@ const TRIGGER := "user://mode_state_preview.once"
 static func consume(model: Variant) -> Variant:
 	if not OS.is_debug_build() or not FileAccess.file_exists(TRIGGER):
 		return null
-	if str(model.get("level_id")) != "greek_01":
+	if str(model.get("level_id")) != "greek_v2_01":
 		return null
 	DirAccess.remove_absolute(TRIGGER)
 	var options: Array = []

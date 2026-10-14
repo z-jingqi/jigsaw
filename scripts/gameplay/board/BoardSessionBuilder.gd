@@ -14,9 +14,19 @@ func _init(owner: Node2D) -> void:
 func _start_play_session(play_mode: String) -> bool:
 	if host._mode_key(play_mode) == "swap":
 		return _start_swap_session()
+	var prepared := prepare_pieces(play_mode)
+	if prepared.is_empty():
+		return false
+	for piece in prepared.pieces:
+		create_group(piece, prepared.seed_ids.has(str(piece.get("id", ""))))
+	finish_pieces()
+	return true
+
+
+func prepare_pieces(play_mode: String) -> Dictionary:
 	var level: Dictionary = _level_from_mode_pieces(play_mode)
 	if level.is_empty():
-		return false
+		return {}
 	host.source_scale = level["source_scale"]
 	host.board_origin = level["board_origin"]
 	host._add_board_outline_shadow()
@@ -31,15 +41,15 @@ func _start_play_session(play_mode: String) -> bool:
 	var seed_ids: Array[String] = _seed_piece_ids(
 		sorted_pieces, host._mode_config(host.active_level_config, play_mode)
 	)
-	for piece in sorted_pieces:
-		var is_seed: bool = seed_ids.has(str(piece.get("id", "")))
-		_create_group(piece, is_seed)
+	return {"pieces": sorted_pieces, "seed_ids": seed_ids}
+
+
+func finish_pieces() -> void:
 	host.tray_scroll_offset = 0.0
 	host._layout_tray(true)
 	host.fit_view_to_pieces(false)
 	for group in host.locked_groups:
-		host.PieceVisualFactoryScript.add_seam_outline(group, host._seam_line_width())
-	return true
+		host.PieceVisualFactoryScript.settle_group_edges(group)
 
 
 func _level_from_mode_pieces(play_mode: String) -> Dictionary:
@@ -430,7 +440,7 @@ func _auto_swap_grid() -> Dictionary:
 	}
 
 
-func _create_group(piece: Dictionary, locked_seed := false) -> void:
+func create_group(piece: Dictionary, locked_seed := false) -> void:
 	var group_node := Node2D.new()
 	group_node.name = piece["id"]
 	group_node.z_index = host.groups.size() * host.GROUP_Z_STEP
@@ -450,7 +460,8 @@ func _create_group(piece: Dictionary, locked_seed := false) -> void:
 	else:
 		group.in_tray = true
 		host.tray_groups.append(group)
-		host._move_group_to_tray(group, host.tray_groups.size() - 1, true)
+		# The session lays out the complete tray once after all groups exist.
+		# Moving each new group first would rebuild the growing tray every time.
 
 
 func _seed_piece_ids(pieces: Array, mode_config: Dictionary) -> Array[String]:

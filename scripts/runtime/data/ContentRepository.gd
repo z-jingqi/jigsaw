@@ -2,6 +2,7 @@ class_name ContentRepository
 extends RefCounted
 
 const LevelRepositoryScript := preload("res://scripts/catalog/LevelRepository.gd")
+const ModeAvailability := preload("res://scripts/catalog/LevelModeAvailability.gd")
 
 var _repository: Variant
 
@@ -30,12 +31,11 @@ func level_by_id(topic_id: String, level_id: String) -> Dictionary:
 
 
 func available_modes(level: Dictionary) -> Array[String]:
-	var config: Dictionary = _repository.load_level_config(level)
 	var result: Array[String] = []
-	for mode in ["polygon", "knob", "swap"]:
-		if _has_mode_data(config, mode):
-			result.append(mode)
-	return result
+	if level.has("available_modes"):
+		result.assign(level.available_modes)
+		return result
+	return ModeAvailability.from_config(_repository, _repository.load_level_config(level))
 
 
 func topic_cover(topic: Dictionary) -> Texture2D:
@@ -51,6 +51,8 @@ func level_thumbnail(level: Dictionary) -> Texture2D:
 
 
 func level_thumbnail_path(level: Dictionary) -> String:
+	if level.has("thumbnail_path"):
+		return str(level.thumbnail_path)
 	var config: Dictionary = _repository.load_level_config(level)
 	return _repository.level_thumbnail_source_path(config)
 
@@ -84,6 +86,10 @@ func level_media(level_config: Dictionary) -> Dictionary:
 	return _repository.apply_level_media(level_config)
 
 
+func level_preview_texture(level_config: Dictionary) -> Texture2D:
+	return _repository.level_preview_texture(level_config)
+
+
 func level_image_path(level_config: Dictionary) -> String:
 	return _repository.level_image_path(level_config)
 
@@ -102,15 +108,3 @@ func config_with_theme_background(level_config: Dictionary, topic: Dictionary) -
 		"color": str(palette.get("surface", "#F5F0E3")),
 	}
 	return result
-
-
-func _has_mode_data(config: Dictionary, mode: String) -> bool:
-	if mode == "swap":
-		return not _repository.level_image_path(config).is_empty()
-	var mode_data: Dictionary = _repository.mode_config(config, mode)
-	if mode == "knob":
-		return not mode_data.is_empty() and not _repository.level_image_path(config).is_empty()
-	return (
-		typeof(mode_data.get("pieces", [])) == TYPE_ARRAY
-		and not (mode_data.get("pieces", []) as Array).is_empty()
-	)

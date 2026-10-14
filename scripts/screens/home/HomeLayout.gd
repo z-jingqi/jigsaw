@@ -2,6 +2,7 @@ extends RefCounted
 ## Responsive home composition, independent of browsing state.
 
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 
 static func apply(host: Control) -> void:
@@ -10,12 +11,9 @@ static func apply(host: Control) -> void:
 	var width := minf(s.x - 40.0 * u, 370.0 * u)
 	var left := (s.x - width) * 0.5
 	var button := Vector2.ONE * 46.0 * u
-	_place(host.get_node("MenuButton"), Vector2(left + width - button.x, 26.0 * u), button)
-	_place(
-		host.get_node("ThemesButton"),
-		Vector2(left + width - button.x * 2.0 - 12.0 * u, 26.0 * u),
-		button
-	)
+	Buttons.place_navigation(host.get_node("AlbumButton"), host)
+	Buttons.place_navigation(host.get_node("MenuButton"), host, true)
+	Buttons.place_navigation(host.get_node("ThemesButton"), host, true, 1)
 	var title := host.get_node("ThemeName") as Label
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.max_lines_visible = 1

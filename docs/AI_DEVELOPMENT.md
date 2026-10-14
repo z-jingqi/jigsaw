@@ -61,7 +61,7 @@ debug_state_snapshot() -> Dictionary
 - `show_levels(topic_id)`
 - `show_mode_select(topic_id, level_id)`
 - `show_settings`
-- `show_tutorial`
+- `show_home_guide`
 - `enter_level(topic_id, level_id, mode)`
 - `preview_complete`
 - `close_modal`

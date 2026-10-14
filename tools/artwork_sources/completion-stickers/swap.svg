@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <path id="upper" d="M18 37C27 17 54 16 73 32L78 38M78 23V38H63"/>
+    <path id="lower" d="M78 59C69 79 42 80 23 64L18 58M18 73V58H33"/>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#6C7C71" stroke-width="22.5"><use href="#upper"/><use href="#lower"/></g>
+    <g stroke="#FFFCF3" stroke-width="20.5"><use href="#upper"/><use href="#lower"/></g>
+    <use href="#upper" stroke="#6F9DAB" stroke-width="8.8"/>
+    <use href="#lower" stroke="#D0A153" stroke-width="8.8"/>
+  </g>
+</svg>

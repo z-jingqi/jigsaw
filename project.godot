@@ -34,6 +34,10 @@ window/handheld/orientation=1
 
 enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/gdUnit4/plugin.cfg")
 
+[gui]
+
+theme/custom_font="res://assets/fonts/noto/NotoSansSC[wght].ttf"
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"

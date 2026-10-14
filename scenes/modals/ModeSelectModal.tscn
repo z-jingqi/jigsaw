@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="4"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="5"]
-[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="6"]
+[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="6"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="7"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="8"]
 [sub_resource type="ShaderMaterial" id="PreviewMaterial"]
@@ -73,7 +73,6 @@ layout_mode = 0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
 theme_override_fonts/font = ExtResource("6")
-text = "选择模式"
 horizontal_alignment = 1
 vertical_alignment = 1
 [node name="Options" type="Control" parent="SafeArea/Content"]
@@ -89,6 +88,5 @@ anchor_bottom = 1.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
 theme_override_fonts/font = ExtResource("6")
-text = "开始拼图"
 horizontal_alignment = 1
 vertical_alignment = 1

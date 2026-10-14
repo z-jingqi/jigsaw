@@ -1,6 +1,8 @@
 extends RefCounted
 ## Responsive composition in the same logical units as the home screen.
 
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
+
 
 static func apply(host: Control) -> void:
 	var content: Control = host.get_node("SafeArea/Content")
@@ -10,15 +12,13 @@ static func apply(host: Control) -> void:
 	var left := (available.x - width) * 0.5
 	var header: Control = content.get_node("Header")
 	header.size = Vector2(available.x, 76.0 * unit)
-	_place(
-		header.get_node("BackButton"), Vector2(left + 18 * unit, 22 * unit), Vector2.ONE * 36 * unit
-	)
+	Buttons.place_navigation(header.get_node("BackButton"), host)
 	var title: Label = header.get_node("Title")
-	_place(title, Vector2(left + 80 * unit, 24 * unit), Vector2(width - 160 * unit, 40 * unit))
+	_place(title, Vector2(left + 80 * unit, 20 * unit), Vector2(width - 160 * unit, 40 * unit))
 	title.add_theme_font_size_override("font_size", int(23 * unit))
 	for side in ["Left", "Right"]:
 		var x := left + (65.0 if side == "Left" else 284.0) * unit
-		_place(header.get_node("Cloud" + side), Vector2(x, 41 * unit), Vector2(40, 12) * unit)
+		_place(header.get_node("Cloud" + side), Vector2(x, 34 * unit), Vector2(40, 12) * unit)
 	var preview: TextureRect = content.get_node("Preview")
 	var preview_height := minf(438 * unit, available.y * 0.52)
 	var aspect := 0.75

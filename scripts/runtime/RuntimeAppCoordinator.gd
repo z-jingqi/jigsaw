@@ -6,6 +6,7 @@ const AppStateScript := preload("res://scripts/runtime/state/AppState.gd")
 const ContentRepositoryScript := preload("res://scripts/runtime/data/ContentRepository.gd")
 const ProgressRepositoryScript := preload("res://scripts/runtime/data/ProgressRepository.gd")
 const SessionRepositoryScript := preload("res://scripts/runtime/data/SessionRepository.gd")
+const BackgroundJsonStoreScript := preload("res://scripts/runtime/data/BackgroundJsonStore.gd")
 const SettingsRepositoryScript := preload("res://scripts/runtime/data/SettingsRepository.gd")
 const MotionPreferencesScript := preload("res://scripts/runtime/state/MotionPreferences.gd")
 const CatalogPresenterScript := preload("res://scripts/runtime/presentation/CatalogPresenter.gd")
@@ -13,16 +14,20 @@ const SystemPresenterScript := preload("res://scripts/runtime/presentation/Syste
 const GameStringsScript := preload("res://scripts/app/GameStrings.gd")
 const PuzzleBoardScene := preload("res://scenes/gameplay/PuzzleBoard.tscn")
 const ThemeLibraryScene := preload("res://scenes/screens/home/ThemeLibraryScreen.tscn")
+const AlbumCoordinatorScript := preload("res://scripts/runtime/AlbumCoordinator.gd")
+const AlbumPresenterScript := preload("res://scripts/runtime/presentation/AlbumPresenter.gd")
+const GameplayPreparationScript := preload("res://scripts/runtime/GameplayPreparation.gd")
+const CompletionFlowScript := preload("res://scripts/runtime/CompletionFlow.gd")
+const AudioPlaybackScript := preload("res://scripts/audio/GameAudioPlayback.gd")
+const AudioBindingsScript := preload("res://scripts/audio/GameAudioBindings.gd")
 
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 const ModeSelectScene := preload("res://scenes/modals/ModeSelectModal.tscn")
 const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
-const GameplayPauseScene := preload("res://scenes/modals/GameplayPausePanel.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
-const ModeTutorialScene := preload("res://scenes/modals/ModeTutorialModal.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
 var _game: Node2D
@@ -32,6 +37,7 @@ var _services: AppServices
 var _state = AppStateScript.new()
 var _catalog: CatalogPresenter
 var _system: SystemPresenter
+var _album: AlbumCoordinator
 var _strings = GameStringsScript.new()
 var _board: PuzzleBoard
 var _theme_library_scroll := 0
@@ -42,9 +48,12 @@ var _completion_event_id := ""
 var _debug_viewport := Vector2i.ZERO
 var _pending_after_modal: Callable
 var _home_guide_timer: SceneTreeTimer
+var _home_guide_action: Callable
 var _dev_panel: Control
 var _returning_to_levels := false
-var _gameplay_paused := false
+var _gameplay_preparation: Variant
+var _completion_flow: Variant
+var _audio_bindings: GameAudioBindings
 
 
 func _init(game: Node2D) -> void:
@@ -54,8 +63,9 @@ func _init(game: Node2D) -> void:
 func start() -> void:
 	_strings.set_locale(GameStringsScript.detect_locale())
 	var content := ContentRepositoryScript.new()
-	var progress := ProgressRepositoryScript.new()
-	var session := SessionRepositoryScript.new()
+	var save_store := BackgroundJsonStoreScript.new()
+	var progress := ProgressRepositoryScript.new(save_store)
+	var session := SessionRepositoryScript.new(save_store)
 	var settings := SettingsRepositoryScript.new()
 	var motion := MotionPreferencesScript.new(settings)
 	_services = AppServicesScript.new(content, progress, session, settings, motion)
@@ -64,13 +74,27 @@ func start() -> void:
 	_system = SystemPresenterScript.new(settings, motion, _strings)
 	_navigator = _game.get_node("AppNavigator") as AppNavigator
 	_world_host = _game.get_node("WorldHost") as Node2D
+	_completion_flow = CompletionFlowScript.new(_navigator, content, self)
 	_bind_routes()
+	_album = AlbumCoordinatorScript.new(_navigator, AlbumPresenterScript.new(content, _strings))
 	_navigator.route_changed.connect(_on_route_changed)
+	_navigator.input_lock_changed.connect(_on_navigation_input_lock_changed)
 	_services.motion_preferences.changed.connect(_on_motion_preference_changed)
 	_board = PuzzleBoardScene.instantiate() as PuzzleBoard
 	_world_host.add_child(_board)
 	_board.completed.connect(_on_board_completed)
 	_board.state_changed.connect(_on_board_state_changed)
+	_gameplay_preparation = GameplayPreparationScript.new(
+		_navigator, _services, _catalog, _board, _world_host
+	)
+	var audio := AudioPlaybackScript.new()
+	audio.name = "GameAudio"
+	_game.add_child(audio)
+	_services.audio = audio
+	audio.configure(_services.settings)
+	_audio_bindings = AudioBindingsScript.new()
+	_game.add_child(_audio_bindings)
+	_audio_bindings.configure(_game, _navigator, _board, audio)
 	_apply_feedback_preferences()
 	_game.get_viewport().size_changed.connect(_refresh_gameplay_layout, CONNECT_DEFERRED)
 	_current_theme_id = _services.initial_home_theme_id()
@@ -79,17 +103,35 @@ func start() -> void:
 
 func shutdown() -> void:
 	_cancel_home_guide_timer()
+	if is_instance_valid(_audio_bindings):
+		_audio_bindings.shutdown()
+	if _services != null and is_instance_valid(_services.audio):
+		_services.audio.shutdown()
+	if _completion_flow != null:
+		_completion_flow.shutdown()
+	if _gameplay_preparation != null:
+		_gameplay_preparation.cancel()
+	if _services != null:
+		_services.progress.flush()
+		_services.session.flush()
 	_board = null
 	_game = null
 
 
 func handle_input(event: InputEvent) -> bool:
-	if not is_instance_valid(_board) or _navigator.current_screen_view() == null:
+	if not is_instance_valid(_board) or _navigator.is_input_locked():
+		return false
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen == null or not screen.is_board_input_enabled():
 		return false
 	if String(_navigator.current_screen_entry().get("route", "")) != "gameplay":
 		return false
 	return _board.handle_input(
-		event, not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty()
+		event,
+		(
+			_board.completion_emitted
+			or not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty()
+		)
 	)
 
 
@@ -163,8 +205,11 @@ func show_levels(
 
 
 func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
-	if _services.content.level_by_id(theme_id, level_id).is_empty():
+	var level := _services.content.level_by_id(theme_id, level_id)
+	if level.is_empty():
 		return {"ok": false, "error": "not_found"}
+	# Prepare gameplay pixels before either page starts moving.
+	_services.content.level_media(_services.content.level_config(level))
 	_current_theme_id = theme_id
 	_current_level_id = level_id
 	var result := _navigator.show_modal(
@@ -177,6 +222,10 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 	)
 	if bool(result.get("ok", false)):
 		_bind_mode_select(_navigator.current_route_view() as RuntimeModeSelectModal)
+		_services.progress.mark_level_visited(theme_id, level_id)
+		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
+		if levels != null:
+			levels.refresh_view_model(_catalog.level_list(theme_id, level_id))
 	return result
 
 
@@ -199,10 +248,19 @@ func enter_level(
 		"mode": mode,
 		"start_policy": start_policy,
 		"view_model": _catalog.gameplay(theme_id, level_id, mode),
-		"_transition_target_companion": _world_host,
-		"_transition_source_companion": _world_host,
+		"_prepare_before_motion": _navigator.current_route() in [&"mode_select", &"completion"],
 	}
-	var result := _navigator.push(&"gameplay", payload)
+	var result: Dictionary
+	if _navigator.current_route() == &"completion":
+		result = _navigator.replace_from_modal(&"gameplay", payload)
+	elif _navigator.current_route() == &"mode_select":
+		result = _navigator.push_from_modal(
+			&"gameplay",
+			payload,
+			_gameplay_preparation.take_screen(theme_id, level_id, mode, start_policy)
+		)
+	else:
+		result = _navigator.push(&"gameplay", payload)
 	if bool(result.get("ok", false)):
 		var screen := _navigator.current_screen_view() as GameplayScreen
 		_bind_gameplay(screen)
@@ -211,40 +269,28 @@ func enter_level(
 
 
 func start_runtime_board(screen: GameplayScreen) -> void:
-	if not is_instance_valid(screen) or _current_mode.is_empty():
+	if (
+		not is_instance_valid(screen)
+		or screen.is_queued_for_deletion()
+		or _navigator.current_screen_view() != screen
+		or _current_mode.is_empty()
+	):
 		return
-	var topic := _services.content.topic_by_id(_current_theme_id)
-	var level := _services.content.level_by_id(_current_theme_id, _current_level_id)
-	if topic.is_empty() or level.is_empty():
-		return
-	var config := _services.content.config_with_theme_background(
-		_services.content.level_config(level), topic
-	)
-	config["_persistent_tabletop_background"] = true
-	var media := _services.content.level_media(config)
 	_apply_feedback_preferences()
-	var loaded := _board.start(
-		config,
-		_current_mode,
-		media.get("texture"),
-		media.get("image"),
-		media.get("source_size", Vector2.ZERO),
-		screen.top_reserved_height(),
-		{},
-		screen.bottom_reserved_height(),
-		screen.tray_rect()
+	var loaded: bool = await _gameplay_preparation.prepare_live(
+		screen, _current_theme_id, _current_level_id, _current_mode
 	)
-	if not loaded:
+	if not loaded or not is_instance_valid(screen) or _navigator.current_screen_view() != screen:
 		return
-	var restore := _services.session.play_state(
-		_current_theme_id, _current_level_id, _current_mode, _board.session_piece_ids()
-	)
-	if not restore.is_empty():
-		_board.apply_state_snapshot(restore)
 	screen.mark_board_live()
 	_refresh_board_blockers()
-	if not _services.progress.tutorial_seen(&"mode", _current_mode):
-		show_mode_tutorial(_current_mode)
+	# Preparation has already rendered the complete board behind the mode page.
+	if is_instance_valid(screen):
+		_navigator.reveal_prepared_screen(screen)
+	if _board.completion_emitted:
+		await _navigator.wait_until_idle()
+		if is_instance_valid(screen) and _navigator.current_screen_view() == screen:
+			_on_board_completed()
 
 
 func show_settings() -> Dictionary:
@@ -253,6 +299,7 @@ func show_settings() -> Dictionary:
 		"haptics": _strings.text("haptics"),
 		"music": _strings.text("music"),
 		"sound_effects": _strings.text("sfx"),
+		"snap_preview": _strings.text("snap_preview"),
 		"reduced_motion": _strings.text("reduce_motion")
 	}
 	var result := _navigator.show_modal(
@@ -277,31 +324,11 @@ func show_home_guide() -> Dictionary:
 	return result
 
 
-func show_mode_tutorial(mode: String) -> Dictionary:
-	if _services.progress.tutorial_seen(&"mode", mode):
-		return {"ok": true, "skipped": true}
-	var description := (
-		_strings.text("tutorial_swap") if mode == "swap" else _strings.text("tutorial_drag")
-	)
-	var result := _navigator.show_modal(
-		&"mode_tutorial",
-		{
-			"mode": mode,
-			"view_model": _system.guide(&"mode", description),
-			"title": _strings.text("tutorial_title"),
-			"skip_text": _strings.text("guide_skip"),
-			"confirm_text": _strings.text("got_it")
-		}
-	)
-	if bool(result.get("ok", false)):
-		var tutorial := _navigator.current_route_view() as ModeTutorialModal
-		tutorial.completed.connect(_complete_mode_tutorial.bind(mode))
-		tutorial.skipped.connect(_complete_mode_tutorial.bind(mode))
-		tutorial.dismissed.connect(_dismiss_modal)
-	return result
-
-
 func close_modal() -> Dictionary:
+	if _navigator.current_route() == &"completion":
+		return _return_to_levels()
+	if _navigator.current_route() == &"mode_select":
+		_gameplay_preparation.cancel()
 	return _navigator.close_modal({"action": &"dismiss", "payload": {}})
 
 
@@ -398,9 +425,7 @@ func _bind_routes() -> void:
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
 		&"settings": SettingsScene,
-		&"gameplay_pause": GameplayPauseScene,
 		&"home_guide": HomeGuideScene,
-		&"mode_tutorial": ModeTutorialScene,
 		&"completion": CompletionScene
 	}
 	for route in routes:
@@ -415,7 +440,17 @@ func _bind_home(screen: HomeScreen) -> void:
 	screen.theme_activated.connect(_on_home_theme_activated)
 	screen.menu_requested.connect(show_settings)
 	screen.themes_requested.connect(_show_theme_library)
+	screen.album_requested.connect(show_album)
 	_schedule_home_guide(screen)
+
+
+func show_album() -> Dictionary:
+	_cancel_home_guide_timer()
+	return _album.open()
+
+
+func show_album_artwork(theme_id: String, level_id: String) -> Dictionary:
+	return _album.open_artwork(theme_id, level_id)
 
 
 func _show_theme_library() -> void:
@@ -443,7 +478,7 @@ func _show_theme_library() -> void:
 	library.theme_selected.connect(
 		func(theme_id: String) -> void:
 			_theme_library_scroll = library.scroll_position()
-			var entered := show_levels(theme_id, "", true)
+			var entered := show_levels(theme_id)
 			if bool(entered.get("ok", false)):
 				home.select_theme(theme_id)
 	)
@@ -459,7 +494,10 @@ func _bind_levels(screen: RuntimeLevelListScreen) -> void:
 func _bind_gameplay(screen: GameplayScreen) -> void:
 	if screen == null:
 		return
-	screen.pause_requested.connect(_show_gameplay_pause)
+	screen.attach_board_host(_world_host)
+	screen.set_reduced_motion(_reduced_motion())
+	screen.set_navigation_locked(_navigator.is_input_locked())
+	screen.back_requested.connect(_return_to_levels)
 	screen.hint_requested.connect(trigger_hint)
 	screen.move_swap_up_requested.connect(shift_swap_rows.bind(true))
 	screen.move_swap_down_requested.connect(shift_swap_rows.bind(false))
@@ -467,41 +505,23 @@ func _bind_gameplay(screen: GameplayScreen) -> void:
 	screen.move_swap_right_requested.connect(shift_swap_columns.bind(1))
 
 
-func _show_gameplay_pause() -> void:
-	if _screen_name() != "gameplay" or _gameplay_paused:
-		return
-	var result := _navigator.show_modal(&"gameplay_pause")
-	if not bool(result.get("ok", false)):
-		return
-	_set_gameplay_paused(true)
-	var panel := _navigator.current_route_view() as GameplayPausePanel
-	if panel != null:
-		panel.resume_requested.connect(_resume_gameplay)
-		panel.exit_requested.connect(_exit_paused_gameplay)
-
-
-func _resume_gameplay() -> void:
-	close_modal()
-
-
-func _exit_paused_gameplay() -> void:
-	_pending_after_modal = _return_to_levels
-	close_modal()
-
-
-func _set_gameplay_paused(enabled: bool) -> void:
-	_gameplay_paused = enabled
-	if is_instance_valid(_world_host):
-		_world_host.process_mode = (
-			Node.PROCESS_MODE_DISABLED if enabled else Node.PROCESS_MODE_INHERIT
-		)
-
-
 func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:
 	if modal == null:
 		return
 	modal.close_requested.connect(_dismiss_modal)
 	modal.mode_selected.connect(_on_mode_selected)
+	modal.selection_changed.connect(_on_mode_preparation_requested)
+	var selection := modal.preparation_selection()
+	if not selection.is_empty():
+		_on_mode_preparation_requested(selection.mode, selection.start_policy)
+
+
+func _on_mode_preparation_requested(mode: StringName, policy: StringName) -> void:
+	var modal := _navigator.current_route_view() as RuntimeModeSelectModal
+	if modal != null:
+		_gameplay_preparation.request(
+			modal, _current_theme_id, _current_level_id, String(mode), String(policy)
+		)
 
 
 func _bind_settings(modal: SettingsModal) -> void:
@@ -538,9 +558,7 @@ func _on_home_theme_activated(theme_id: String) -> void:
 
 
 func _on_mode_selected(mode: StringName, policy: StringName) -> void:
-	_pending_after_modal = func() -> void:
-		enter_level(_current_theme_id, _current_level_id, String(mode), String(policy))
-	close_modal()
+	enter_level(_current_theme_id, _current_level_id, String(mode), String(policy))
 
 
 func _on_level_focused(level_id: String) -> void:
@@ -578,12 +596,30 @@ func _on_board_state_changed(_snapshot: Dictionary) -> void:
 
 
 func _on_board_completed() -> void:
-	if not _completion_event_id.is_empty():
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if (
+		not _completion_event_id.is_empty()
+		or _current_mode.is_empty()
+		or screen == null
+		or not screen.is_board_input_enabled()
+	):
 		return
 	_completion_event_id = (
 		"%s:%s:%s:%d" % [_current_theme_id, _current_level_id, _current_mode, Time.get_ticks_msec()]
 	)
 	_services.complete_mode(_current_theme_id, _current_level_id, _current_mode)
+	if screen != null:
+		screen.prepare_completion()
+	var event_id := _completion_event_id
+	if not _reduced_motion():
+		# Present the final snap before building the completion view on the next frame.
+		await RenderingServer.frame_post_draw
+	if (
+		not is_instance_valid(_game)
+		or _completion_event_id != event_id
+		or _navigator.current_route() != &"gameplay"
+	):
+		return
 	_show_completion()
 
 
@@ -598,11 +634,7 @@ func _show_completion() -> void:
 			% [_current_theme_id, _current_level_id, _current_mode, Time.get_ticks_msec()]
 		)
 	var level := _services.content.level_by_id(_current_theme_id, _current_level_id)
-	var config := _services.content.level_config(level)
-	var media := _services.content.level_media(config)
-	var completion_modes := _catalog.completion_modes(
-		_current_theme_id, _current_level_id, StringName(_current_mode)
-	)
+	var presentation := _board.completion_presentation()
 	var view_model := (
 		ViewModels
 		. CompletionViewModel
@@ -613,12 +645,18 @@ func _show_completion() -> void:
 				"level_id": _current_level_id,
 				"mode": _current_mode,
 				"completion_event_id": _completion_event_id,
-				"title": _strings.text("completion_title"),
 				"level_title": level.get("title", ""),
-				"description": level.get("description", ""),
-				"completed_texture": media.get("texture"),
-				"primary_action_text": _strings.text("completion_return"),
-				"modes": completion_modes,
+				"level_description": level.get("description", ""),
+				"completed_texture": presentation.get("texture"),
+				"source_rect": presentation.get("rect", Rect2()),
+				"primary_action_text": _strings.text("completion_next"),
+				"secondary_action_text": _strings.text("back"),
+				"has_next_level":
+				not (
+					_completion_flow
+					. next_level(_current_theme_id, _current_level_id, _current_mode)
+					. is_empty()
+				),
 			}
 		)
 	)
@@ -634,30 +672,39 @@ func _show_completion() -> void:
 	)
 	if bool(result.get("ok", false)):
 		var modal := _navigator.current_route_view() as CompletionModal
-		modal.confirm_requested.connect(_on_completion_confirmed)
-		modal.dismissed.connect(_dismiss_modal)
+		_completion_flow.bind(modal, view_model)
 
 
-func _on_completion_confirmed(_event_id: String) -> void:
-	_pending_after_modal = _return_to_levels
-	close_modal()
+func restore_completion_context(context: Dictionary) -> void:
+	_current_theme_id = str(context.get("theme_id", ""))
+	_current_level_id = str(context.get("level_id", ""))
+	_current_mode = str(context.get("mode", ""))
+	_completion_event_id = str(context.get("completion_event_id", ""))
+	_services.session.set_current(_current_theme_id, _current_level_id, _current_mode)
+	_clear_board()
 
 
 func _dismiss_modal() -> void:
 	close_modal()
 
 
-func _complete_mode_tutorial(mode: String) -> void:
-	_services.progress.mark_tutorial_seen(&"mode", mode)
-	close_modal()
-
-
-func _return_to_levels() -> void:
+func _return_to_levels() -> Dictionary:
+	# Finish entry before marking the return; its settled callback is a separate
+	# navigation event and must not clear the upcoming return's cleanup state.
+	_navigator.finish_active_transition()
 	_persist_board()
+	var levels := _navigator.previous_screen_view() as RuntimeLevelListScreen
+	if levels != null:
+		levels.refresh_view_model(_catalog.level_list(_current_theme_id, _current_level_id))
 	_returning_to_levels = true
-	var result := _navigator.pop()
+	var result := (
+		_navigator.pop_from_modal()
+		if _navigator.current_route() == &"completion"
+		else _navigator.pop()
+	)
 	if not bool(result.get("ok", false)):
 		_returning_to_levels = false
+	return result
 
 
 func _persist_board() -> void:
@@ -697,6 +744,7 @@ func _apply_feedback_preferences() -> void:
 		return
 	var settings := _services.settings.snapshot()
 	_board.set_feedback_preferences(bool(settings.get("haptics_enabled", true)), _reduced_motion())
+	_board.set_snap_preview_enabled(bool(settings.get("snap_preview_enabled", true)))
 
 
 func _schedule_home_guide(screen: HomeScreen) -> void:
@@ -707,14 +755,15 @@ func _schedule_home_guide(screen: HomeScreen) -> void:
 	):
 		return
 	_home_guide_timer = _game.get_tree().create_timer(1.15)
-	var show_when_current := func() -> void:
+	var screen_ref: WeakRef = weakref(screen)
+	_home_guide_action = func() -> void:
 		if (
-			is_instance_valid(screen)
+			screen_ref.get_ref() != null
 			and _screen_name() == "home"
-			and _navigator.current_screen_view() is HomeScreen
+			and _navigator.current_screen_view() == screen_ref.get_ref()
 		):
 			show_home_guide()
-	_home_guide_timer.timeout.connect(show_when_current, CONNECT_ONE_SHOT)
+	_home_guide_timer.timeout.connect(_home_guide_action, CONNECT_ONE_SHOT)
 
 
 func _record_home_enter() -> void:
@@ -738,21 +787,47 @@ func _home_guide_labels() -> Dictionary:
 
 
 func _cancel_home_guide_timer() -> void:
+	if _home_guide_timer != null and _home_guide_action.is_valid():
+		if _home_guide_timer.timeout.is_connected(_home_guide_action):
+			_home_guide_timer.timeout.disconnect(_home_guide_action)
+	_home_guide_action = Callable()
 	_home_guide_timer = null
+
+
+func _on_navigation_input_lock_changed(is_locked: bool) -> void:
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen != null:
+		screen.set_navigation_locked(is_locked)
+	if is_locked and is_instance_valid(_board):
+		_board.cancel_interaction()
+	if not is_locked and _navigator.current_route() != &"levels":
+		_returning_to_levels = false
+	if (
+		not is_locked
+		and _navigator.current_route() == &"mode_select"
+		and _navigator.current_screen_entry().get("route") == &"levels"
+		and not _current_mode.is_empty()
+	):
+		# A cancelled entrance has released its page; invalidate unfinished build
+		# batches so they cannot leave a second board behind the mode picker.
+		_clear_board()
+		_current_mode = ""
+		_gameplay_preparation.cancel()
+		var modal := _navigator.current_route_view() as RuntimeModeSelectModal
+		if modal != null:
+			var selection := modal.preparation_selection()
+			if not selection.is_empty():
+				_on_mode_preparation_requested(selection.mode, selection.start_policy)
 
 
 func _on_route_changed(route: StringName, payload: Dictionary) -> void:
 	_state.update(route, payload)
-	if _gameplay_paused and route != &"gameplay_pause":
-		_set_gameplay_paused(false)
+	if route not in [&"mode_select", &"gameplay"]:
+		_gameplay_preparation.cancel()
 	if route == &"levels" and _returning_to_levels:
 		_returning_to_levels = false
-		var focus := _current_level_id
 		_clear_board()
 		_current_mode = ""
-		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
-		if levels != null:
-			levels.refresh_view_model(_catalog.level_list(_current_theme_id, focus))
 	if (
 		not _pending_after_modal.is_valid()
 		or not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty()

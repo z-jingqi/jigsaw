@@ -37,6 +37,9 @@ func _init(
 func load() -> void:
 	progress.load()
 	session.load()
+	var previous_visits: Array = [session.current()]
+	previous_visits.append_array((session.snapshot().get("play_states", {}) as Dictionary).values())
+	progress.mark_level_visits(previous_visits)
 	settings.load()
 
 

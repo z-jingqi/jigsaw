@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardAppearance
 
+const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
+
 var host: Node2D
 
 
@@ -121,13 +123,9 @@ func _add_board_line_frame() -> void:
 	frame.z_index = -49
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	var surface := _topic_ui_color("board_surface", Color("#FAF7ED"))
-	surface.a = 0.96
-	style.bg_color = surface
-	var border := _topic_ui_color("board_border", Color("#718A80"))
-	border.a = 0.44
-	style.border_color = border
-	var line_width := maxi(1, roundi(host.view_scale))
+	style.bg_color = Style.BOARD_SURFACE
+	style.border_color = Style.BOARD_RIM
+	var line_width := maxi(2, roundi(rim))
 	style.border_width_left = line_width
 	style.border_width_top = line_width
 	style.border_width_right = line_width
@@ -141,11 +139,3 @@ func _add_board_line_frame() -> void:
 	style.anti_aliasing = true
 	frame.add_theme_stylebox_override("panel", style)
 	host.world_root.add_child(frame)
-
-
-func _topic_ui_color(key: String, fallback: Color) -> Color:
-	var palette_value = host.active_level_config.get("_topic_ui_palette", {})
-	if typeof(palette_value) != TYPE_DICTIONARY:
-		return fallback
-	var palette: Dictionary = palette_value
-	return Color(str(palette.get(key, fallback.to_html())))

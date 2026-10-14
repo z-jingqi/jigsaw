@@ -26,6 +26,8 @@ var _suppressed_buttons: Dictionary = {}
 var _interaction_enabled := true
 var _navigation_locked := false
 var _visual_update_queued := false
+var _scroll_remainder := 0.0
+var _last_scroll_value := 0
 
 
 func _ready() -> void:
@@ -42,6 +44,8 @@ func _ready() -> void:
 
 func _input(event: InputEvent) -> void:
 	if not _can_receive_input():
+		return
+	if event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
 	if event is InputEventScreenTouch:
 		_handle_touch(event)
@@ -92,33 +96,41 @@ func is_user_scrolling() -> bool:
 
 
 func _handle_touch(event: InputEventScreenTouch) -> void:
-	if event.pressed and get_global_rect().has_point(event.position):
+	if event.canceled:
+		if _pressed and event.index == _pointer_id:
+			_cancel_pointer()
+		return
+	if event.pressed and not _pressed and get_global_rect().has_point(event.position):
 		_begin_pointer(event.index)
-	elif _pressed and event.index == _pointer_id:
+	elif not event.pressed and _pressed and event.index == _pointer_id:
 		_end_pointer()
 
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
-	if event.pressed and get_global_rect().has_point(event.position):
+	if event.pressed and not _pressed and get_global_rect().has_point(event.position):
 		_begin_pointer(-1)
-	elif _pressed and _pointer_id == -1:
+	elif not event.pressed and _pressed and _pointer_id == -1:
 		_end_pointer()
 
 
 func _begin_pointer(pointer_id: int) -> void:
+	var stopping_motion := absf(_velocity) > stop_speed or absf(_overscroll) > 0.5
 	_pointer_id = pointer_id
 	_pressed = true
-	_scrolling = false
+	_scrolling = stopping_motion
 	_pending_delta = Vector2.ZERO
 	_velocity = 0.0
 	_spring_velocity = 0.0
 	_last_event_time = Time.get_ticks_usec()
 	set_physics_process(false)
+	if stopping_motion:
+		_suppress_child_buttons()
+		get_viewport().set_input_as_handled()
 
 
 func _handle_drag(relative: Vector2) -> void:
-	_pending_delta += relative
 	if not _scrolling:
+		_pending_delta += relative
 		if (
 			absf(_pending_delta.y) < intent_distance
 			or absf(_pending_delta.y) <= absf(_pending_delta.x)
@@ -152,7 +164,22 @@ func _end_pointer() -> void:
 	_scrolling = false
 	_spring_velocity = -_velocity
 	set_physics_process(absf(_velocity) > stop_speed or absf(_overscroll) > 0.5)
-	_restore_child_buttons.call_deferred()
+	_restore_buttons_after_release.call_deferred()
+
+
+func _cancel_pointer() -> void:
+	# Godot can emit a mouse release for a cancelled physical touch. Abort the
+	# button's pending press as well, so that release cannot activate a card.
+	_collect_and_suppress_buttons(self)
+	get_viewport().set_input_as_handled()
+	_pressed = false
+	_scrolling = false
+	_pointer_id = -2
+	_pending_delta = Vector2.ZERO
+	_velocity = 0.0
+	_spring_velocity = 0.0
+	set_physics_process(absf(_overscroll) > 0.5)
+	_restore_buttons_after_release.call_deferred()
 
 
 func _physics_process(delta: float) -> void:
@@ -177,21 +204,32 @@ func _physics_process(delta: float) -> void:
 
 
 func _apply_scroll_delta(delta: float) -> void:
+	if scroll_vertical != _last_scroll_value:
+		_scroll_remainder = 0.0
+	# Unwind the visible boundary pull before moving into the list. Consuming
+	# the same delta in both places makes a reversal move twice as far.
+	if _overscroll * delta > 0.0:
+		var consumed := minf(absf(_overscroll), absf(delta)) * signf(delta)
+		_overscroll -= consumed
+		delta -= consumed
 	var limit := _vertical_limit()
-	var target := float(scroll_vertical) + delta
+	var target := float(scroll_vertical) + _scroll_remainder + delta
 	if target < 0.0:
 		scroll_vertical = 0
+		_scroll_remainder = 0.0
 		_overscroll = clampf(_overscroll + (-target) * edge_resistance, 0.0, maximum_overscroll)
 		_velocity *= edge_resistance
 	elif target > limit:
 		scroll_vertical = int(round(limit))
+		_scroll_remainder = 0.0
 		_overscroll = clampf(
 			_overscroll - (target - limit) * edge_resistance, -maximum_overscroll, 0.0
 		)
 		_velocity *= edge_resistance
 	else:
 		scroll_vertical = int(round(target))
-		_overscroll = move_toward(_overscroll, 0.0, absf(delta))
+		_scroll_remainder = target - float(scroll_vertical)
+	_last_scroll_value = scroll_vertical
 	_apply_visual_offset()
 	_queue_visual_offset()
 
@@ -209,7 +247,12 @@ func _apply_visual_offset() -> void:
 		return
 	# ScrollContainer normally places its content at -scroll_vertical. A small
 	# resisted offset provides the boundary pull and is returned by the spring.
-	content.position.y = -float(scroll_vertical) + _overscroll
+	content.position.y = -float(scroll_vertical) - _scroll_remainder + _overscroll
+
+
+func _notification(what: int) -> void:
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		stop_motion()
 
 
 func _on_visibility_changed() -> void:
@@ -246,6 +289,8 @@ func _handle_wheel(event: InputEventMouseButton) -> void:
 func _apply_clamped_scroll_delta(delta: float) -> void:
 	var target := clampf(float(scroll_vertical) + delta, 0.0, _vertical_limit())
 	scroll_vertical = int(round(target))
+	_scroll_remainder = target - float(scroll_vertical)
+	_last_scroll_value = scroll_vertical
 	_overscroll = 0.0
 	_apply_visual_offset()
 
@@ -269,14 +314,17 @@ func _on_navigation_input_lock_changed(is_locked: bool) -> void:
 
 
 func _suppress_child_buttons() -> void:
-	_suppressed_buttons.clear()
 	_collect_and_suppress_buttons(self)
 
 
 func _collect_and_suppress_buttons(parent: Node) -> void:
 	for child in parent.get_children():
 		if child is BaseButton:
-			_suppressed_buttons[child] = child.mouse_filter
+			if not _suppressed_buttons.has(child):
+				_suppressed_buttons[child] = child.mouse_filter
+			var was_disabled: bool = child.disabled
+			child.disabled = true
+			child.disabled = was_disabled
 			child.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_collect_and_suppress_buttons(child)
 
@@ -287,3 +335,8 @@ func _restore_child_buttons() -> void:
 		if is_instance_valid(button):
 			button.mouse_filter = int(_suppressed_buttons[candidate]) as Control.MouseFilter
 	_suppressed_buttons.clear()
+
+
+func _restore_buttons_after_release() -> void:
+	if not (_pressed and _scrolling):
+		_restore_child_buttons()

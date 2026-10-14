@@ -226,7 +226,7 @@ func restore_group_state(snapshot: Dictionary) -> void:
 		active.node.rotation_degrees = 0.0
 		active.locked = true
 		active.in_tray = false
-		board.PieceVisualFactoryScript.add_seam_outline(active, board._seam_line_width())
+		board.PieceVisualFactoryScript.settle_group_edges(active)
 		if bool(item.get("seed", false)):
 			active.is_seed = true
 		if not board.locked_groups.has(active):
@@ -295,19 +295,13 @@ func restore_swap_state(snapshot: Dictionary) -> void:
 		board.swap_tiles[index]["node"].z_index = index * board.GROUP_Z_STEP
 
 
-func restore_view_state(snapshot: Dictionary) -> void:
-	var view: Dictionary = snapshot.get("view", {})
-	if view.is_empty():
-		return
-	board.view_scale = board._clamped_actual_scale(
-		board.base_view_scale * float(view.get("ratio", 1.0))
-	)
+func restore_view_state(_snapshot: Dictionary) -> void:
+	# Old sessions may contain a pinched view. Restore the current layout fit
+	# while retaining all piece positions, completion, and tray order.
+	board.view_scale = board.base_view_scale
 	board.view_target_scale = board.view_scale
-	board.view_target_ratio = board._view_ratio_for_scale(board.view_scale)
-	board.view_offset = board._json_vector(
-		view.get("offset", board._vector_to_json(board.base_view_offset))
-	)
-	board._clamp_view_to_table()
+	board.view_target_ratio = 1.0
+	board.view_offset = board.base_view_offset
 	board._apply_view_transform()
 
 

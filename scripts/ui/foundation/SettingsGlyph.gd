@@ -1,9 +1,7 @@
 class_name SettingsGlyph
 extends Control
 
-const SURFACE := Color("D35929")
-const DEEP := Color(0.482, 0.141, 0.047, 0.30)
-const HIGHLIGHT := Color(0.94, 0.48, 0.28, 0.72)
+const SURFACE := Color("194F47")
 
 var _kind := &"music"
 
@@ -25,9 +23,7 @@ func _draw() -> void:
 	var scale_factor := minf(size.x, size.y) / 96.0
 	var origin := (size - Vector2(96.0, 96.0) * scale_factor) * 0.5
 	draw_set_transform(origin, 0.0, Vector2.ONE * scale_factor)
-	_draw_glyph(Vector2(3.0, 4.0), DEEP)
 	_draw_glyph(Vector2.ZERO, SURFACE)
-	_draw_highlight()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -37,6 +33,8 @@ func _draw_glyph(offset: Vector2, color: Color) -> void:
 			_draw_sound(offset, color)
 		&"haptics":
 			_draw_haptics(offset, color)
+		&"snap_preview":
+			_draw_snap_preview(offset, color)
 		&"reduced_motion":
 			_draw_reduced_motion(offset, color)
 		_:
@@ -88,6 +86,19 @@ func _draw_haptics(offset: Vector2, color: Color) -> void:
 	draw_arc(Vector2(61, 48) + offset, 23.0, -PI * 0.32, PI * 0.32, 18, color, 6.0, true)
 
 
+func _draw_snap_preview(offset: Vector2, color: Color) -> void:
+	var shape := PackedVector2Array()
+	for index in 6:
+		var angle := TAU * index / 6.0 - PI * 0.5
+		shape.append(Vector2(42, 45) + Vector2.from_angle(angle) * 27.0 + offset)
+	var ghost := PackedVector2Array()
+	for point in shape:
+		ghost.append(point + Vector2(14, 12))
+	draw_colored_polygon(ghost, Color(color, 0.2))
+	shape.append(shape[0])
+	draw_polyline(shape, color, 6.0, true)
+
+
 func _draw_reduced_motion(offset: Vector2, color: Color) -> void:
 	var center := Vector2(48, 48) + offset
 	draw_arc(center, 31.0, -2.72, -0.42, 24, color, 7.0, true)
@@ -102,15 +113,3 @@ func _draw_reduced_motion(offset: Vector2, color: Color) -> void:
 	pause_style.anti_aliasing = true
 	draw_style_box(pause_style, Rect2(Vector2(35, 31) + offset, Vector2(9, 34)))
 	draw_style_box(pause_style, Rect2(Vector2(52, 31) + offset, Vector2(9, 34)))
-
-
-func _draw_highlight() -> void:
-	match _kind:
-		&"music":
-			draw_line(Vector2(36, 25), Vector2(70, 18), HIGHLIGHT, 3.0, true)
-		&"sound":
-			draw_line(Vector2(21, 42), Vector2(34, 42), HIGHLIGHT, 3.0, true)
-		&"haptics":
-			draw_line(Vector2(40, 23), Vector2(55, 23), HIGHLIGHT, 2.5, true)
-		&"reduced_motion":
-			draw_line(Vector2(37, 33), Vector2(42, 33), HIGHLIGHT, 2.0, true)

@@ -22,7 +22,8 @@ func advance(pointer: Vector2, area: Rect2) -> Dictionary:
 	var vertical := absf(pointer.y - origin.y)
 	var was_locked := scroll_locked
 	if (
-		not area.has_point(pointer)
+		pointer.y < area.position.y
+		or pointer.y > area.end.y
 		or vertical >= float(config["scroll_lock_distance_units"]) * unit
 	):
 		scroll_locked = true

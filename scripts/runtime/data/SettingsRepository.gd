@@ -39,6 +39,7 @@ func set_value(key: StringName, value: bool) -> Dictionary:
 			&"haptics_enabled",
 			&"music_enabled",
 			&"sound_effects_enabled",
+			&"snap_preview_enabled",
 			&"reduced_motion_enabled"
 		]
 	):
@@ -74,5 +75,6 @@ func _defaults() -> Dictionary:
 		"haptics_enabled": true,
 		"music_enabled": true,
 		"sound_effects_enabled": true,
+		"snap_preview_enabled": true,
 		"reduced_motion_enabled": false,
 	}

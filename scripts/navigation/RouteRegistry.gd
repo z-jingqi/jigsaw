@@ -51,6 +51,16 @@ func contracts() -> Array[StringName]:
 
 func _register_runtime_contracts() -> void:
 	register_definition(
+		RouteDefinitionScript.new(&"album", RouteDefinitionScript.Presentation.SCREEN)
+	)
+	register_definition(
+		RouteDefinitionScript.new(
+			&"album_artwork",
+			RouteDefinitionScript.Presentation.SCREEN,
+			{"theme_id": TYPE_STRING, "level_id": TYPE_STRING}
+		)
+	)
+	register_definition(
 		RouteDefinitionScript.new(&"themes", RouteDefinitionScript.Presentation.SCREEN)
 	)
 	register_definition(
@@ -91,20 +101,8 @@ func _register_runtime_contracts() -> void:
 		RouteDefinitionScript.new(&"settings", RouteDefinitionScript.Presentation.MODAL)
 	)
 	register_definition(
-		RouteDefinitionScript.new(&"gameplay_pause", RouteDefinitionScript.Presentation.MODAL)
-	)
-	register_definition(
 		RouteDefinitionScript.new(
 			&"home_guide", RouteDefinitionScript.Presentation.OVERLAY, {}, {"initial_step": "swipe"}
-		)
-	)
-	register_definition(
-		RouteDefinitionScript.new(
-			&"mode_tutorial",
-			RouteDefinitionScript.Presentation.OVERLAY,
-			{"mode": TYPE_STRING},
-			{},
-			{"mode": ["polygon", "knob", "swap"]}
 		)
 	)
 	register_definition(

@@ -30,6 +30,7 @@ func settings(
 				"haptics_enabled": value["haptics_enabled"],
 				"music_enabled": value["music_enabled"],
 				"sound_effects_enabled": value["sound_effects_enabled"],
+				"snap_preview_enabled": value["snap_preview_enabled"],
 				"reduced_motion_enabled": value["reduced_motion_enabled"],
 				"pending": pending,
 				"error_text": error_text,
@@ -38,30 +39,13 @@ func settings(
 	)
 
 
-func guide(
-	step: StringName, description: String, can_skip: bool = true
-) -> AppViewModels.GuideViewModel:
-	return (
-		ViewModelsScript
-		. GuideViewModel
-		. new(
-			{
-				"revision": _revision,
-				"step": step,
-				"description": description,
-				"can_skip": can_skip,
-				"reduced_motion": _motion.snapshot()["reduced_motion"],
-			}
-		)
-	)
-
-
 func completion(data: Dictionary) -> AppViewModels.CompletionViewModel:
 	var value := data.duplicate(true)
 	value["revision"] = _revision
-	value["title"] = value.get("title", _strings.text("complete"))
-	value["description"] = value.get("description", "")
-	value["primary_action_text"] = value.get("primary_action_text", _strings.text("return_levels"))
+	value["primary_action_text"] = value.get(
+		"primary_action_text", _strings.text("completion_next")
+	)
+	value["secondary_action_text"] = value.get("secondary_action_text", _strings.text("back"))
 	return ViewModelsScript.CompletionViewModel.new(value)
 
 

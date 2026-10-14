@@ -2,9 +2,12 @@ extends RefCounted
 class_name BoardSnapController
 
 var host: Node2D
+const READY_EXIT_MARGIN_PIXELS := 4.0
 
-static var _shimmer_shader_cache: Shader = null
-static var _shimmer_uv_texture_cache: Texture2D = null
+const Presentation := preload("res://scripts/gameplay/board/BoardSnapPresentation.gd")
+
+var _presentation: Node2D
+var _preview_enabled := true
 
 
 func _init(owner: Node2D) -> void:
@@ -21,22 +24,21 @@ func _bring_to_front(group) -> void:
 func _refresh_group_z_indices() -> void:
 	for index in host.groups.size():
 		var group = host.groups[index]
-		group.node.z_as_relative = false
+		# World pieces must remain above their page's board frame. Only tray
+		# pieces and a tray capture need an absolute Z above the clipped tray.
+		group.node.z_as_relative = not (
+			group.in_tray or (group == host.dragging and host.dragging_from_tray)
+		)
 		if group == host.dragging and host.dragging_from_tray:
 			group.node.z_index = int(host.tray_config["drag_z_index"])
 		elif group.in_tray:
-			group.node.z_index = int(host.tray_config["z_index"]) + 1
+			group.node.z_index = int(host.tray_config["z_index"])
 		else:
 			group.node.z_index = index * host.GROUP_Z_STEP
 
 
 func _update_snap_preview(active) -> void:
-	if (
-		active == null
-		or active.locked
-		or not is_instance_valid(active.node)
-		or absf(active.node.scale.x - 1.0) > 0.04
-	):
+	if active == null or active.locked or not is_instance_valid(active.node):
 		_clear_snap_preview()
 		return
 	var match := _snap_match_data(active)
@@ -45,55 +47,61 @@ func _update_snap_preview(active) -> void:
 		return
 	var other = match.get("other", null)
 	var key := "%s>%s" % [host._debug_group_id(active), host._debug_group_id(other)]
-	if key != host.snap_preview_key:
-		_clear_snap_preview()
+	if _preview_enabled:
 		host.snap_preview_key = key
-		_add_snap_preview_outline(match.get("active_member", {}))
-		_add_snap_preview_outline(match.get("other_member", {}))
+		_feedback_owner().show_preview(match)
+	else:
+		_hide_preview()
 	if host.snap_ready_key != key:
 		host.snap_ready_key = key
-		host._trigger_haptic("ready")
-
-
-func _add_snap_preview_outline(member) -> void:
-	if typeof(member) != TYPE_DICTIONARY:
-		return
-	var visual: Node2D = member.get("visual", null)
-	if visual == null or not is_instance_valid(visual):
-		return
-	var line := Line2D.new()
-	line.name = "snap_preview_outline"
-	line.points = member.get("polygon", PackedVector2Array())
-	line.closed = true
-	line.default_color = host.SNAP_PREVIEW_COLOR
-	line.width = host.SNAP_PREVIEW_SCREEN_WIDTH
-	line.joint_mode = Line2D.LINE_JOINT_ROUND
-	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	line.end_cap_mode = Line2D.LINE_CAP_ROUND
-	line.antialiased = true
-	line.z_index = 42
-	line.set_meta("screen_width", host.SNAP_PREVIEW_SCREEN_WIDTH)
-	visual.add_child(line)
-	host.snap_preview_lines.append(line)
-	host._update_hint_line_width(line)
+		if _preview_enabled:
+			host._trigger_haptic("ready")
 
 
 func _clear_snap_preview() -> void:
-	for line in host.snap_preview_lines:
-		if line != null and is_instance_valid(line):
-			line.queue_free()
-	host.snap_preview_lines.clear()
-	host.snap_preview_key = ""
+	_hide_preview()
 	host.snap_ready_key = ""
 
 
-func _refresh_snap_preview_line_widths() -> void:
-	var valid: Array[Line2D] = []
-	for line in host.snap_preview_lines:
-		if line != null and is_instance_valid(line):
-			host._update_hint_line_width(line)
-			valid.append(line)
-	host.snap_preview_lines = valid
+func _hide_preview() -> void:
+	if is_instance_valid(_presentation):
+		_presentation.clear_preview()
+	host.snap_preview_key = ""
+
+
+func set_preview_enabled(enabled: bool) -> void:
+	_preview_enabled = enabled
+	if not enabled:
+		_hide_preview()
+	elif host.dragging != null:
+		_update_snap_preview(host.dragging)
+
+
+func has_preview() -> bool:
+	return _preview_enabled and not host.snap_preview_key.is_empty()
+
+
+func debug_snapshot() -> Dictionary:
+	var result := {"enabled": _preview_enabled, "visible": has_preview()}
+	if is_instance_valid(_presentation):
+		result.merge(_presentation.debug_snapshot())
+	return result
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	if is_instance_valid(_presentation):
+		_presentation.set_reduced_motion(enabled)
+
+
+func _feedback_owner() -> Node2D:
+	if not is_instance_valid(_presentation):
+		_presentation = Presentation.new()
+		_presentation.name = "SnapPresentation"
+		_presentation.z_as_relative = false
+		_presentation.z_index = int(host.tray_config["drag_z_index"])
+		host.world_root.add_child(_presentation)
+		_presentation.set_reduced_motion(host.reduced_motion)
+	return _presentation
 
 
 func _try_snap_chain(active) -> bool:
@@ -114,7 +122,7 @@ func _try_snap_chain(active) -> bool:
 			active.node.position = active.anchor_home
 			active.node.rotation_degrees = 0.0
 			active.node.scale = Vector2.ONE
-			host.PieceVisualFactoryScript.add_seam_outline(active, _seam_line_width())
+			host.PieceVisualFactoryScript.settle_group_edges(active)
 			snapped = true
 			progressed = true
 	if snapped:
@@ -123,93 +131,28 @@ func _try_snap_chain(active) -> bool:
 
 
 func _snap_match_data(active) -> Dictionary:
-	return host.SnapSolverScript.find_match_data(
+	var candidate: Dictionary = host.SnapSolverScript.find_match_data(
 		active, _locked_snap_targets(active), _snap_tolerance()
 	)
-
-
-func _seam_line_width() -> float:
-	return (
-		host.SEAM_SCREEN_WIDTH
-		/ maxf(0.001, host.base_view_scale if host.base_view_scale > 0.0 else host.view_scale)
+	if not candidate.is_empty() or host.snap_ready_key.is_empty():
+		return candidate
+	# A small exit band preserves a visible ready state through finger-up jitter.
+	# It applies only to the same neighbor that was already inside the entry band.
+	candidate = host.SnapSolverScript.find_match_data(
+		active,
+		_locked_snap_targets(active),
+		_snap_tolerance() * (1.0 + READY_EXIT_MARGIN_PIXELS / host.SNAP_TOLERANCE)
 	)
+	if not candidate.is_empty():
+		var key := "%s>%s" % [host._debug_group_id(active), host._debug_group_id(candidate.other)]
+		if key == host.snap_ready_key:
+			return candidate
+	return {}
 
 
 func _play_snap_shimmer(members: Array) -> void:
-	if host.reduced_motion:
-		return
-	var material := ShaderMaterial.new()
-	material.shader = _shimmer_shader()
-	material.set_shader_parameter("progress", 0.0)
-	var overlays: Array[Polygon2D] = []
-	for member in members:
-		if typeof(member) != TYPE_DICTIONARY:
-			continue
-		var visual: Node2D = member.get("visual", null)
-		if visual == null or not is_instance_valid(visual):
-			continue
-		var polygon: PackedVector2Array = member["polygon"]
-		var bounds: Rect2 = host._source_rect_for_points(polygon)
-		if bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
-			continue
-		var overlay := Polygon2D.new()
-		overlay.name = "snap_shimmer"
-		overlay.polygon = polygon
-		var uv := PackedVector2Array()
-		for point in polygon:
-			uv.append((point - bounds.position) / bounds.size)
-		overlay.uv = uv
-		overlay.texture = _shimmer_uv_texture()
-		overlay.material = material
-		overlay.z_index = 24
-		visual.add_child(overlay)
-		overlays.append(overlay)
-	if overlays.is_empty():
-		return
-	var tween := host.create_tween()
-	tween.set_ease(Tween.EASE_IN_OUT)
-	tween.set_trans(Tween.TRANS_SINE)
-	tween.tween_method(
-		func(t: float) -> void: material.set_shader_parameter("progress", t),
-		0.0,
-		1.0,
-		host.SHIMMER_DURATION
-	)
-	tween.finished.connect(
-		func() -> void:
-			for overlay in overlays:
-				if is_instance_valid(overlay):
-					overlay.queue_free()
-	)
-
-
-static func _shimmer_shader() -> Shader:
-	if _shimmer_shader_cache != null:
-		return _shimmer_shader_cache
-	var shader := Shader.new()
-	shader.code = """
-shader_type canvas_item;
-uniform float progress : hint_range(0.0, 1.0) = 0.0;
-
-void fragment() {
-	float band_center = mix(-0.4, 1.4, progress);
-	float d = (UV.x + UV.y) * 0.5;
-	float band = 1.0 - smoothstep(0.0, 0.26, abs(d - band_center));
-	float alpha = band * band * 0.8;
-	COLOR = vec4(1.0, 1.0, 1.0, alpha);
-}
-"""
-	_shimmer_shader_cache = shader
-	return shader
-
-
-static func _shimmer_uv_texture() -> Texture2D:
-	if _shimmer_uv_texture_cache != null:
-		return _shimmer_uv_texture_cache
-	var image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
-	image.fill(Color.WHITE)
-	_shimmer_uv_texture_cache = ImageTexture.create_from_image(image)
-	return _shimmer_uv_texture_cache
+	if not host.reduced_motion:
+		_feedback_owner().play_landing(members)
 
 
 func _locked_snap_targets(active) -> Array:
@@ -228,7 +171,7 @@ func _lock_group(group) -> void:
 	group.node.position = group.anchor_home
 	group.node.rotation_degrees = 0.0
 	group.node.scale = Vector2.ONE
-	host.PieceVisualFactoryScript.add_seam_outline(group, _seam_line_width())
+	host.PieceVisualFactoryScript.settle_group_edges(group)
 	if not host.locked_groups.has(group):
 		host.locked_groups.append(group)
 	if host.tray_groups.has(group):
@@ -258,7 +201,13 @@ func _reindex_tray() -> void:
 
 
 func _snap_tolerance() -> float:
-	return clampf(host.SNAP_TOLERANCE * maxf(0.75, host.source_scale), 16.0, 24.0)
+	# Solve in world coordinates with a constant radius in actual display pixels.
+	# Include both board zoom and the 1206-unit canvas stretch used on Android.
+	var world: Node2D = host.world_root
+	var pixels_per_unit := (
+		(world.get_viewport_transform() * world.get_global_transform()).x.length()
+	)
+	return host.SNAP_TOLERANCE / maxf(0.001, pixels_per_unit)
 
 
 func _check_complete() -> void:
