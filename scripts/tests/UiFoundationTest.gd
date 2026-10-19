@@ -1,7 +1,6 @@
 extends SceneTree
 
 const MotionSettle := preload("res://scripts/tests/support/MotionSettle.gd")
-const ThemeProgressScene := preload("res://scenes/ui/foundation/ThemeProgress.tscn")
 const IconButtonScene := preload("res://scenes/ui/foundation/IconButton.tscn")
 const PillButtonScene := preload("res://scenes/ui/foundation/PillButton.tscn")
 const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
@@ -41,91 +40,11 @@ func _run() -> void:
 		"theme_variants"
 	)
 	_check(is_equal_approx(MotionResource.modal_open_duration, 0.24), "motion_token")
-	_check(
-		(
-			is_equal_approx(MotionResource.progress_cat_duration, 0.26)
-			and is_equal_approx(MotionResource.numeric_completion_duration, 0.22)
-		),
-		"progress_motion_tokens"
-	)
-	var progress = ThemeProgressScene.instantiate()
-	root.add_child(progress)
-	progress.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	progress.size = Vector2(208, 48)
-	await process_frame
-	progress.set_progress_data(_progress(0, 0, 0.0, 0, false))
-	_check(progress.get_node("Journey/Fish").visible, "journey_empty_fish_visible")
-	_check(_visible_paws(progress) == 0, "journey_zero_paws")
-	progress.set_progress_data(_progress(1, 5, 0.2, 1, false))
-	_check(_visible_paws(progress) == 1, "journey_20_paws")
-	progress.set_progress_data(_progress(2, 5, 0.4, 2, false))
-	_check(progress.active_motion_count() == 1, "journey_progress_motion")
-	await create_timer(0.30).timeout
-	var journey_released: bool = await MotionSettle.released(
-		self, func() -> int: return progress.active_motion_count()
-	)
-	_check(journey_released, "journey_motion_released")
-	progress.set_progress_data(_progress(5, 5, 1.0, 5, true))
-	_check(_visible_paws(progress) == 0, "journey_complete_hides_paws")
-	_check(
-		(
-			progress.get_node("Journey/Cat").visible
-			and progress.get_node("Journey/Fish").visible
-			and progress.get_node("Journey/Completion").visible
-		),
-		"journey_completion_crossfade_starts"
-	)
-	await create_timer(0.18).timeout
-	_check(
-		(
-			not progress.get_node("Journey/Cat").visible
-			and not progress.get_node("Journey/Fish").visible
-			and progress.get_node("Journey/Completion").visible
-		),
-		"journey_complete_mark"
-	)
-	progress.display_variant = progress.Variant.NUMERIC_CARD
-	progress.set_progress_data(_progress(1, 5, 0.2, 1, false))
-	_check(
-		progress.get_node("Numeric").visible and not progress.get_node("Journey").visible,
-		"numeric_hides_journey"
-	)
-	_check(progress.get_node("Numeric").text == "1 / 5", "numeric_text")
-	progress.display_variant = progress.Variant.NUMERIC_CARD
-	progress.set_progress_data(_progress(5, 5, 1.0, 5, true))
-	_check(progress.get_node("NumericCompletion").visible, "numeric_completion_state")
-	progress.reduced_motion = true
-	progress.display_variant = progress.Variant.JOURNEY
-	progress.set_progress_data(_progress(1, 5, 0.2, 1, false))
-	_check(progress.active_motion_count() == 0, "progress_reduced_motion")
-	progress.queue_free()
-	await process_frame
 	await _test_component_scenes()
 	await _test_modal_interruption()
 	var result := {"ok": _all_ok, "failures": _failures}
 	print("UI_FOUNDATION %s" % JSON.stringify(result))
 	quit(0 if _all_ok else 1)
-
-
-func _progress(
-	completed: int, total: int, ratio: float, paws: int, is_complete: bool
-) -> Dictionary:
-	return {
-		"completed_modes": completed,
-		"total_modes": total,
-		"ratio": ratio,
-		"paw_count": paws,
-		"is_complete": is_complete,
-		"accessibility_text": "%d / %d" % [completed, total]
-	}
-
-
-func _visible_paws(progress: Control) -> int:
-	var count := 0
-	for paw in progress.get_node("Journey/Paws").get_children():
-		if paw.visible:
-			count += 1
-	return count
 
 
 func _test_component_scenes() -> void:

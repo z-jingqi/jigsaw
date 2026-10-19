@@ -20,7 +20,7 @@ Jigsaw 是一个使用 Godot 4.6+ 开发的移动端竖屏轮廓拼图游戏。�
 - `scripts/navigation/`：路由注册、生命周期和单一活动转场。
 - `scripts/screens/`、`scripts/modals/`、`scripts/onboarding/`：页面行为、弹窗和引导控制器。
 - `scripts/gameplay/board/`：棋盘模块；`PuzzleBoard.gd` 保持为 facade。
-- `scripts/ui/foundation/`：Safe Area、ThemeProgress、卡片和控件基础组件。
+- `scripts/ui/foundation/`：Safe Area、卡片和控件基础组件。
 - `scripts/tests/`：真实流程、状态、布局、动画与视觉验证脚本。
 - `test/unit/`：GdUnit4 单元测试。
 - `levels/`：运行时关卡目录与导出数据。
