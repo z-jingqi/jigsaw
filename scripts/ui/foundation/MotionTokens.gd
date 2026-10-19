@@ -13,11 +13,6 @@ extends Resource
 @export var home_cold_duration := 0.9
 @export var unlock_duration := 1.25
 @export var reduced_motion_duration := 0.12
-@export var progress_cat_duration := 0.26
-@export var progress_paw_duration := 0.14
-@export var progress_completion_duration := 0.16
-@export var numeric_progress_duration := 0.12
-@export var numeric_completion_duration := 0.22
 @export var primary_press_scale := 0.97
 @export var card_press_scale := 0.98
 @export var icon_press_scale := 0.96

@@ -1,7 +1,6 @@
 extends SceneTree
 
 const GameScene := preload("res://scenes/app/Game.tscn")
-const ThemeProgressScene := preload("res://scenes/ui/foundation/ThemeProgress.tscn")
 const ThemeProgressPolicyScript := preload(
 	"res://scripts/runtime/presentation/ThemeProgressPolicy.gd"
 )
@@ -53,41 +52,6 @@ func _validate_progress_policy() -> void:
 			bool(model.is_complete) == (int(sample[1]) > 0 and int(sample[0]) == int(sample[1])),
 			"progress_completion_%d_of_%d" % [sample[0], sample[1]]
 		)
-	var journey := ThemeProgressScene.instantiate() as ThemeProgress
-	var numeric := ThemeProgressScene.instantiate() as ThemeProgress
-	root.add_child(journey)
-	root.add_child(numeric)
-	numeric.display_variant = ThemeProgress.Variant.NUMERIC_CARD
-	journey.reduced_motion = true
-	numeric.reduced_motion = true
-	journey.set_progress_data(ThemeProgressPolicyScript.build(100, 100))
-	numeric.set_progress_data(ThemeProgressPolicyScript.build(100, 100))
-	_check(
-		(
-			journey.get_node("Journey/Completion").visible
-			and not journey.get_node("Journey/Fish").visible
-		),
-		"journey_complete_cat_eats_fish"
-	)
-	_check(
-		(
-			numeric.get_node("Numeric").text == "100 / 100"
-			and numeric.get_node("NumericCompletion").visible
-			and not numeric.get_node("Journey").visible
-		),
-		"numeric_complete_has_number_and_mark_only"
-	)
-	journey.set_progress_data(ThemeProgressPolicyScript.build(0, 0))
-	numeric.set_progress_data(ThemeProgressPolicyScript.build(0, 0))
-	_check(
-		(
-			not journey.get_node("Journey/Completion").visible
-			and not numeric.get_node("NumericCompletion").visible
-		),
-		"zero_total_never_complete"
-	)
-	journey.queue_free()
-	numeric.queue_free()
 
 
 func _validate_debug_contract(game: Game) -> void:
