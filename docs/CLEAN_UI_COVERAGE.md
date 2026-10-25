@@ -94,3 +94,25 @@ and safety hooks passed using an external temporary Python 3.12 configuration be
 environment lacks the repository-pinned Python 3.11 interpreter; repository hook and CI
 configuration are unchanged. Feature-branch backups do not trigger the main/PR-only CI,
 so no green CI result is claimed. Physical mobile safe-area/haptics remain unverified.
+
+### Minimal-chrome refinement (2026-10-25, user follow-up)
+
+Removed decorative home/theme subtitles, repeated playable-card action captions, album
+instructions and completion artwork prose. Essential titles, counts, unavailable/empty
+states, errors and a single brief onboarding instruction remain. All top controls use
+bare icons with invisible >=44-native-pixel hit areas; back arrows include a shaft.
+Keyboard focus emphasizes the icon stroke rather than drawing a button outline. Bottom
+CTAs and numeric pagination keep their existing surfaces. All player tooltip text is
+empty, custom tooltip theme/runtime sizing removed; nonvisual accessible names remain.
+
+Native re-review covered all changed page families plus 320×568 and 768×1024 layouts.
+Compact headers/guide close/settings close measured44 pixels, settings toggles44 pixels.
+Pointer-open settings and keyboard focus both keep the close icon unboxed. Actual hover
+on home/gameplay controls produced no tooltip bubble; actual guide swipe, skip, settings
+open, hint and back input remained functional. The already-seen tutorial's debug replay
+stays on step1 by existing progression rules; the step2 layout was separately inspected
+with its presentation method, without changing tutorial-save semantics. Completion was
+shown with the existing debug completion path, not a claim of a full manual puzzle solve.
+Final native process exited0 after the documented external audio drain, with no script
+errors. Godot import and all138-script format/lint checks passed. Suites remain paused
+and were not run. No editor bridge session was available; CLI and native desktop used.

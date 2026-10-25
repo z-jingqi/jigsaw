@@ -19,7 +19,7 @@ var _title_motion: RefCounted
 
 
 func _ready() -> void:
-	$EmptyState.text = GameStrings.ui_text("puzzles_preparing")
+	$EmptyState.text = GameStrings.ui_text("no_topics")
 	var labels := {
 		"AlbumButton": "album_title",
 		"MenuButton": "settings_title",

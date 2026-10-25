@@ -18,6 +18,8 @@ func _ready() -> void:
 	else:
 		Clean.button(self, primary)
 	resized.connect(queue_redraw)
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 
 
 func _draw() -> void:
@@ -26,6 +28,8 @@ func _draw() -> void:
 	var c := size * 0.5
 	var r := minf(size.x, size.y) * 0.21
 	var w := maxf(1.5, r * 0.13)
+	if icon_only and has_focus():
+		w *= 1.5
 	var ink := Clean.MUTED if disabled else (Clean.PAPER if primary else INK)
 	match symbol:
 		"back", "forward":

@@ -14,6 +14,8 @@ func _ready() -> void:
 		Style.Clean.icon_button(self)
 	icon = null
 	resized.connect(queue_redraw)
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 	queue_redraw()
 
 
@@ -24,6 +26,8 @@ func _draw() -> void:
 	var center := size * 0.5
 	var unit := minf(size.x, size.y) / 148.0
 	var stroke := maxf(2.0, 7.0 * unit)
+	if has_focus() and symbol in ["back", "hint"]:
+		stroke *= 1.35
 	match symbol:
 		"hint":
 			_draw_hint(center, unit, stroke, ink)

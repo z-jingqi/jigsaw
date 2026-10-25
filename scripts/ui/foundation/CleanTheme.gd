@@ -58,7 +58,7 @@ static func button(control: Button, primary: bool = false) -> void:
 static func icon_button(control: Button) -> void:
 	# The hit target remains generous; only the glyph is visible at rest.
 	button(control)
-	for state in ["normal", "hover", "pressed", "disabled"]:
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		control.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	control.flat = true
 	control.tooltip_text = ""

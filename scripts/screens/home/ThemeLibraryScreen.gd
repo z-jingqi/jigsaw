@@ -12,7 +12,7 @@ var _scroll_position := 0
 
 func _ready() -> void:
 	$Title.text = GameStrings.ui_text("all_themes")
-	$EmptyState.text = GameStrings.ui_text("library_empty")
+	$EmptyState.text = GameStrings.ui_text("no_topics")
 	$CloseButton.accessibility_name = GameStrings.ui_text("back")
 	$CloseButton.pressed.connect(close_requested.emit)
 	resized.connect(_layout)
@@ -52,6 +52,7 @@ func _build() -> void:
 		tile.name = str(model.theme_id)
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
+		tile.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		tile.disabled = not model.playable
 		tile.accessibility_name = (
 			"%s · %s"
@@ -91,11 +92,8 @@ func _build() -> void:
 		tile.add_child(label)
 		var status := Label.new()
 		status.name = "Status"
-		status.text = (
-			GameStrings.ui_text("enter_topic") + "  →"
-			if model.playable
-			else GameStrings.ui_text("coming_soon")
-		)
+		status.text = GameStrings.ui_text("coming_soon") if not model.playable else ""
+		status.visible = not model.playable
 		status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(status)
 		tile.pressed.connect(func() -> void: theme_selected.emit(str(model.theme_id)))
@@ -132,7 +130,11 @@ func _layout() -> void:
 		var title_height := maxf(28.0 * u, 24.0 * canvas)
 		var status_top := image_height + 17.0 * u + title_height + 4.0 * canvas
 		var status_height := maxf(23.0 * u, 20.0 * canvas)
-		tile.custom_minimum_size = Vector2(tile_width, status_top + status_height + 12.0 * u)
+		var status := tile.get_node("Status") as Label
+		var caption_bottom := image_height + 17.0 * u + title_height
+		if status.visible:
+			caption_bottom = status_top + status_height
+		tile.custom_minimum_size = Vector2(tile_width, caption_bottom + 12.0 * u)
 		var cover := tile.get_node("Cover") as TextureRect
 		cover.position = Vector2.ONE * 10.0 * u
 		cover.size = Vector2(image_width, image_height)
@@ -144,7 +146,6 @@ func _layout() -> void:
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
 		TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
-		var status := tile.get_node("Status") as Label
 		status.position = Vector2(14.0 * u, status_top)
 		status.size = Vector2(tile_width - 28.0 * u, status_height)
 		Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
