@@ -6,6 +6,8 @@ signal move_down_requested
 signal move_left_requested
 signal move_right_requested
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const BUTTON_SIZE := 156.0
 const BUTTON_GAP := 40.0
 
@@ -52,7 +54,7 @@ func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
 	var scale := float(get_meta(&"gameplay_layout_scale", 1.0))
-	var button_size := maxf(44.0, BUTTON_SIZE * scale)
+	var button_size := maxf(Clean.minimum_touch_size(self).x, BUTTON_SIZE * scale)
 	var gap := BUTTON_GAP * scale
 	var total_width := button_size * 4.0 + gap * 3.0
 	var top := maxf(0.0, (size.y - button_size) * 0.5)
@@ -70,3 +72,4 @@ func _configure_group(group: Control, position: Vector2, button_size: float) -> 
 	group.position = position
 	group.size = Vector2.ONE * button_size
 	group.pivot_offset = group.size * 0.5
+	Buttons.apply_size(group.get_node("HitTarget"), group.size)

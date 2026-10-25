@@ -61,9 +61,9 @@ func set_divider_visible(visible: bool) -> void:
 
 func set_visual_scale(unit: float) -> void:
 	_unit = unit
-	custom_minimum_size.y = 66 * unit
+	custom_minimum_size.y = maxf(66 * unit, Clean.minimum_touch_size(toggle).y + 12 * unit)
 	glyph.custom_minimum_size = Vector2.ONE * 28 * unit
-	toggle.custom_minimum_size = (Vector2(58, 44) * unit).max(Vector2(58, 44))
+	toggle.custom_minimum_size = (Vector2(58, 44) * unit).max(Clean.minimum_touch_size(toggle))
 	label.add_theme_font_size_override("font_size", roundi(16 * unit))
 	add_theme_constant_override("separation", roundi(12 * unit))
 	_ensure_thumb()
@@ -128,7 +128,11 @@ func _apply_toggle_style(enabled: bool) -> void:
 func _move_thumb(enabled: bool, animate: bool) -> void:
 	if not is_instance_valid(_thumb):
 		return
-	var target := (Vector2(22, 6) if enabled else Vector2(4, 6)) * _unit
+	var track := toggle.custom_minimum_size
+	var inset := 4 * _unit
+	var target := Vector2(
+		track.x - _thumb.size.x - inset if enabled else inset, (track.y - _thumb.size.y) * 0.5
+	)
 	_stop_toggle_motion()
 	if not animate or _reduced_motion:
 		_thumb.position = target

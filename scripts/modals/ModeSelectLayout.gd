@@ -74,4 +74,7 @@ static func apply(host: Control) -> void:
 
 static func _place(node: Control, position: Vector2, size: Vector2) -> void:
 	node.position = position
-	node.size = size
+	if node is Button:
+		Buttons.apply_size(node as Button, size)
+	else:
+		node.size = size

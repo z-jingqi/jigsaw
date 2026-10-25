@@ -9,6 +9,7 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 static func apply(host: Control) -> void:
 	var s := host.size
 	var u := minf(s.x / 390.0, s.y / 844.0)
+	var canvas := Clean.canvas_scale(s, host.get_window())
 	var safe := Clean.safe_insets(s)
 	var usable_width := s.x - safe.x - safe.z
 	var width := minf(usable_width - 48.0 * u, 370.0 * u)
@@ -23,35 +24,45 @@ static func apply(host: Control) -> void:
 		title.max_lines_visible = 1
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_place(title, Vector2(left, top), Vector2(width - 48.0 * u, 54.0 * u))
-		Clean.label(title, maxi(1, int(32.0 * u)))
-		TitleLayout.fit(title, title.size, maxi(1, int(32.0 * u)))
+		Clean.label(title, roundi(maxf(32.0 * u, 24.0 * canvas)))
+		TitleLayout.fit(title, title.size, roundi(maxf(32.0 * u, 24.0 * canvas)))
 	var subtitle := host.get_node("Subtitle") as Label
-	_place(subtitle, Vector2(left, top + 59.0 * u), Vector2(width, 26.0 * u))
-	Clean.label(subtitle, maxi(1, int(14.0 * u)), true)
+	_place(subtitle, Vector2(left, top + 59.0 * u), Vector2(width, maxf(26.0 * u, 24.0 * canvas)))
+	Clean.label(subtitle, roundi(maxf(14.0 * u, 14.0 * canvas)), true)
 	_place(host.get_node("Botanical"), Vector2(left + width - 43.0 * u, top), Vector2(43, 54) * u)
 	var deck_top := top + 111.0 * u
-	var deck_height := minf(s.y - safe.w - deck_top - 170.0 * u, width * 1.42)
+	var pager_side := maxf(44.0 * u, 44.0 * canvas)
+	var action_height := maxf(54.0 * u, 44.0 * canvas)
+	var footer_height := maxf(170.0 * u, 56.0 * u + pager_side + action_height)
+	var deck_height := minf(s.y - safe.w - deck_top - footer_height, width * 1.42)
 	var deck := host.get_node("Deck") as Control
 	_place(deck, Vector2(left, deck_top), Vector2(width, maxf(100.0 * u, deck_height)))
-	var detail_top := deck_top + deck.size.y + 12.0 * u
+	var pager_top := deck_top + deck.size.y + 4.0 * u
 	var undo := host.get_node("UndoButton") as Button
-	_place(undo, Vector2(left, detail_top - 8.0 * u), Vector2.ONE * 44.0 * u)
-	_place(
-		host.get_node("NextButton"),
-		Vector2(left + width - 44.0 * u, detail_top - 8.0 * u),
-		Vector2.ONE * 44.0 * u
-	)
+	_place(undo, Vector2(left, pager_top), Vector2.ONE * pager_side)
+	var next := host.get_node("NextButton") as Button
+	_place(next, Vector2(left, pager_top), Vector2.ONE * pager_side)
+	next.position.x = left + width - next.size.x
 	var counter := host.get_node("Counter") as Label
-	_place(counter, Vector2(left + 55.0 * u, detail_top), Vector2(width - 110.0 * u, 28.0 * u))
-	Clean.label(counter, maxi(1, int(13.0 * u)), true)
+	var counter_inset := maxf(undo.size.x, next.size.x) + 12.0 * u
+	_place(
+		counter,
+		Vector2(left + counter_inset, pager_top),
+		Vector2(width - counter_inset * 2.0, pager_side)
+	)
+	Clean.label(counter, roundi(maxf(13.0 * u, 13.0 * canvas)), true)
 	var start := host.get_node("StartButton") as Button
-	_place(start, Vector2(left, s.y - safe.w - 88.0 * u), Vector2(width, 54.0 * u))
-	start.add_theme_font_size_override("font_size", maxi(1, int(18.0 * u)))
+	_place(start, Vector2(left, 0), Vector2(width, action_height))
+	start.position.y = s.y - safe.w - 34.0 * u - start.size.y
+	start.add_theme_font_size_override("font_size", roundi(maxf(18.0 * u, 16.0 * canvas)))
 	var empty := host.get_node("EmptyState") as Label
 	_place(empty, Vector2(left, deck_top + deck.size.y * 0.35), Vector2(width, 100.0 * u))
-	Clean.label(empty, maxi(1, int(18.0 * u)), true)
+	Clean.label(empty, roundi(maxf(18.0 * u, 16.0 * canvas)), true)
 
 
 static func _place(node: Control, point: Vector2, dimensions: Vector2) -> void:
 	node.position = point
-	node.size = dimensions
+	if node is Button:
+		Buttons.apply_size(node, dimensions)
+	else:
+		node.size = dimensions

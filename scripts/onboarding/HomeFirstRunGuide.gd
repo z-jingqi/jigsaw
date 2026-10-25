@@ -125,6 +125,8 @@ func _layout() -> void:
 	Clean.button(skip_button)
 	skip_button.add_theme_font_size_override("font_size", roundi(15 * unit))
 	skip_button.clip_text = true
-	skip_button.custom_minimum_size = Vector2(100, 44) * maxf(1.0, unit)
+	skip_button.custom_minimum_size = (Vector2(100, 44) * maxf(1.0, unit)).max(
+		Clean.minimum_touch_size(skip_button)
+	)
 	skip_button.size = Vector2(minf(140 * unit, panel.size.x - 32 * unit), 44 * maxf(1.0, unit))
 	skip_button.position = Vector2((panel.size.x - skip_button.size.x) * 0.5, 148 * unit)

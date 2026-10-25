@@ -175,10 +175,13 @@ func _layout() -> void:
 		add_theme_stylebox_override(state, style)
 	_name_label.position = Vector2(0, size.y * 0.61)
 	_name_label.size = Vector2(size.x, size.y * 0.16)
-	_status_label.position = Vector2(0, size.y * 0.81)
-	_status_label.size = Vector2(size.x, size.y * 0.13)
+	_status_label.position = Vector2(0, size.y * 0.78)
+	_status_label.size = Vector2(size.x, size.y * 0.18)
 	_name_label.add_theme_font_size_override("font_size", maxi(12, int(16.0 * unit)))
-	_status_label.add_theme_font_size_override("font_size", maxi(12, int(12.0 * unit)))
+	var native_scale := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	_status_label.add_theme_font_size_override(
+		"font_size", maxi(ceili(12 * native_scale), int(12.0 * unit))
+	)
 	pivot_offset = size * 0.5
 	var icon_size := minf(size.x * 0.56, size.y * 0.44)
 	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.15)

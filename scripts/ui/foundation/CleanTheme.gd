@@ -12,6 +12,7 @@ const DISABLED := Color("E9E6DE")
 const OUTLINE := Color("C7CCBD")
 const FONT := preload("res://themes/clean_body_font.tres")
 const HEADING := preload("res://themes/clean_heading_font.tres")
+const TOOLTIPS := preload("res://themes/clean_tooltips.tres")
 
 
 static func panel(fill: Color, radius: float = 24.0) -> StyleBoxFlat:
@@ -52,15 +53,7 @@ static func button(control: Button, primary: bool = false) -> void:
 	focus.expand_margin_top = 4.0
 	focus.expand_margin_bottom = 4.0
 	control.add_theme_stylebox_override("focus", focus)
-	_refresh_touch_floor(control)
-	if control.is_inside_tree() and not control.has_meta(&"clean_touch_resize"):
-		var window := control.get_window()
-		var refresh := _refresh_touch_floor.bind(control)
-		window.size_changed.connect(refresh)
-		control.tree_exiting.connect(
-			_disconnect_touch_floor.bind(window, refresh), CONNECT_ONE_SHOT
-		)
-		control.set_meta(&"clean_touch_resize", true)
+	control.custom_minimum_size = control.custom_minimum_size.max(minimum_touch_size(control))
 
 
 static func minimum_touch_size(control: Control) -> Vector2:
@@ -78,28 +71,13 @@ static func canvas_scale(viewport_size: Vector2, window: Window = null) -> float
 	var native_size := Vector2(window.size)
 	if native_size.x <= 0.0 or native_size.y <= 0.0:
 		return 1.0
-	return maxf(viewport_size.x / native_size.x, viewport_size.y / native_size.y)
-
-
-static func _refresh_touch_floor(control: Control) -> void:
-	if not is_instance_valid(control):
-		return
-	var floor := minimum_touch_size(control)
-	var previous: Vector2 = control.get_meta(&"clean_touch_floor", Vector2.ZERO)
-	var minimum := control.custom_minimum_size
-	for axis in 2:
-		minimum[axis] = (
-			floor[axis]
-			if is_equal_approx(minimum[axis], previous[axis])
-			else maxf(minimum[axis], floor[axis])
-		)
-	control.set_meta(&"clean_touch_floor", floor)
-	control.custom_minimum_size = minimum
-
-
-static func _disconnect_touch_floor(window: Window, refresh: Callable) -> void:
-	if is_instance_valid(window) and window.size_changed.is_connected(refresh):
-		window.size_changed.disconnect(refresh)
+	var scale := maxf(viewport_size.x / native_size.x, viewport_size.y / native_size.y)
+	# Called by responsive layouts, after their viewport dimensions have settled.
+	# The project theme defines only tooltip properties, not ordinary label sizes.
+	var tooltip_size := maxi(15, ceili(15.0 * scale))
+	if TOOLTIPS.get_font_size(&"font_size", &"TooltipLabel") != tooltip_size:
+		TOOLTIPS.set_font_size(&"font_size", &"TooltipLabel", tooltip_size)
+	return scale
 
 
 static func label(control: Label, font_size: int, muted: bool = false) -> void:

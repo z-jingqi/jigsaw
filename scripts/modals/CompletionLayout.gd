@@ -29,7 +29,9 @@ func apply_footer(
 	viewport_size: Vector2, confirm: Button, confirm_label: Label, back: Button, back_label: Label
 ) -> void:
 	var scale := minf(viewport_size.x / 1206.0, viewport_size.y / 2680.0)
-	var button_size := Vector2(viewport_size.x * 0.34, maxf(48.0, 164 * scale))
+	var button_size := Vector2(viewport_size.x * 0.34, maxf(48.0, 164 * scale)).max(
+		Clean.minimum_touch_size(confirm)
+	)
 	for button in [confirm, back]:
 		button.size = button_size
 		button.custom_minimum_size = button_size

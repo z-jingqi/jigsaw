@@ -111,6 +111,7 @@ func _build() -> void:
 
 func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
+	var canvas := Clean.canvas_scale(size, get_window())
 	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($CloseButton, self, true)
 	var usable_width := size.x - safe.x - safe.z
@@ -119,16 +120,16 @@ func _layout() -> void:
 	var top := safe.y + maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
 	$Title.position = Vector2(left, top)
 	$Title.size = Vector2(width, 46 * u)
-	Clean.label($Title, maxi(1, int(30 * u)))
+	Clean.label($Title, roundi(maxf(30.0 * u, 24.0 * canvas)))
 	$Subtitle.position = Vector2(left, top + 55.0 * u)
-	$Subtitle.size = Vector2(width, 28 * u)
-	Clean.label($Subtitle, maxi(1, int(13 * u)), true)
+	$Subtitle.size = Vector2(width, maxf(28.0 * u, 24.0 * canvas))
+	Clean.label($Subtitle, roundi(maxf(13.0 * u, 14.0 * canvas)), true)
 	var scroll_top := top + 106.0 * u
 	$Scroll.position = Vector2(left, scroll_top)
 	$Scroll.size = Vector2(width, size.y - safe.w - scroll_top - 28.0 * u)
 	$EmptyState.position = Vector2(left, scroll_top + 80.0 * u)
 	$EmptyState.size = Vector2(width, 100.0 * u)
-	Clean.label($EmptyState, maxi(1, int(18 * u)), true)
+	Clean.label($EmptyState, roundi(maxf(18.0 * u, 14.0 * canvas)), true)
 	var grid := $Scroll/Grid as GridContainer
 	grid.columns = 2 if size.x / size.y < 0.8 else 3
 	var gap := 14.0 * u
@@ -138,7 +139,10 @@ func _layout() -> void:
 	for tile in grid.get_children():
 		var image_width := tile_width - 20.0 * u
 		var image_height := image_width * 1.3
-		tile.custom_minimum_size = Vector2(tile_width, image_height + 85.0 * u)
+		var title_height := maxf(28.0 * u, 24.0 * canvas)
+		var status_top := image_height + 17.0 * u + title_height + 4.0 * canvas
+		var status_height := maxf(23.0 * u, 20.0 * canvas)
+		tile.custom_minimum_size = Vector2(tile_width, status_top + status_height + 12.0 * u)
 		var cover := tile.get_node("Cover") as TextureRect
 		cover.position = Vector2.ONE * 10.0 * u
 		cover.size = Vector2(image_width, image_height)
@@ -146,11 +150,11 @@ func _layout() -> void:
 			cover.material.set_shader_parameter("aspect", image_width / image_height)
 		var title := tile.get_node("Title") as Label
 		title.position = Vector2(14.0 * u, image_height + 17.0 * u)
-		title.size = Vector2(tile_width - 28.0 * u, 28.0 * u)
+		title.size = Vector2(tile_width - 28.0 * u, title_height)
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		Clean.label(title, maxi(1, int(18 * u)))
-		TitleLayout.fit(title, title.size, maxi(1, int(18 * u)))
+		Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
+		TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
 		var status := tile.get_node("Status") as Label
-		status.position = Vector2(14.0 * u, image_height + 49.0 * u)
-		status.size = Vector2(tile_width - 28.0 * u, 23.0 * u)
-		Clean.label(status, maxi(1, int(12 * u)), true)
+		status.position = Vector2(14.0 * u, status_top)
+		status.size = Vector2(tile_width - 28.0 * u, status_height)
+		Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)

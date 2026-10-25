@@ -99,8 +99,8 @@ func _layout() -> void:
 	var bottom := size.y - 74 * u - safe.w
 	$Previous.position = Vector2(size.x * 0.5 - 107 * u, bottom)
 	$Next.position = Vector2(size.x * 0.5 + 61 * u, bottom)
-	$Previous.size = Vector2.ONE * 46 * u
-	$Next.size = Vector2.ONE * 46 * u
+	Buttons.apply_size($Previous, Vector2.ONE * 46 * u)
+	Buttons.apply_size($Next, Vector2.ONE * 46 * u)
 	$Position.position = Vector2(size.x * 0.5 - 55 * u, bottom)
 	$Position.size = Vector2(110, 46) * u
 	Clean.label($Position, roundi(16 * u), true)
