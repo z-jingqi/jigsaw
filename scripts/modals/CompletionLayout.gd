@@ -46,8 +46,11 @@ func apply_description(
 	viewport_size: Vector2, label: Label, image: Rect2, footer_top: float
 ) -> void:
 	var scale := minf(viewport_size.x / 1206.0, viewport_size.y / 2680.0)
-	var width := viewport_size.x * 0.76
-	label.add_theme_font_size_override("font_size", maxi(14, roundi(34.0 * scale)))
+	var unit := minf(viewport_size.x / 390.0, viewport_size.y / 844.0)
+	var width := viewport_size.x * 0.80
+	label.add_theme_font_override("font", Clean.FONT)
+	label.add_theme_font_size_override("font_size", maxi(15, roundi(16.0 * unit)))
+	label.add_theme_constant_override("line_spacing", roundi(3.0 * unit))
 	label.position = Vector2((viewport_size.x - width) * 0.5, image.end.y + 36.0 * scale)
 	label.size = Vector2(width, maxf(0.0, footer_top - label.position.y - 40.0 * scale))
 

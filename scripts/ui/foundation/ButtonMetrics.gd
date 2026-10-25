@@ -1,6 +1,7 @@
 extends RefCounted
 ## Top navigation follows the mode-selection back button's reference geometry.
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const REFERENCE_SIZE := Vector2(390.0, 844.0)
 const SIDE := 44.0
 const EDGE := 18.0
@@ -9,7 +10,10 @@ const GAP := 12.0
 
 
 static func unit(viewport_size: Vector2) -> float:
-	return maxf(1.0, minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y))
+	return maxf(
+		Clean.canvas_scale(viewport_size),
+		minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
+	)
 
 
 static func icon_size(viewport_size: Vector2) -> Vector2:
@@ -35,7 +39,7 @@ static func place_navigation(
 ) -> void:
 	var reference := metric_size if metric_size != Vector2.ZERO else surface.size
 	var point := navigation_position(reference, from_right, slot)
-	var safe := preload("res://scripts/ui/foundation/CleanTheme.gd").safe_insets(surface.size)
+	var safe := Clean.safe_insets(surface.size)
 	point.y += safe.y
 	point.x += -safe.z if from_right else safe.x
 	if from_right:
@@ -49,6 +53,7 @@ static func place_navigation(
 
 
 static func apply_size(button: Button, dimensions: Vector2) -> void:
-	button.custom_minimum_size = dimensions
-	button.size = dimensions
-	button.pivot_offset = dimensions * 0.5
+	var fitted := dimensions.max(Clean.minimum_touch_size(button))
+	button.custom_minimum_size = fitted
+	button.size = fitted
+	button.pivot_offset = fitted * 0.5

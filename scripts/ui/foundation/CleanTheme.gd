@@ -52,7 +52,54 @@ static func button(control: Button, primary: bool = false) -> void:
 	focus.expand_margin_top = 4.0
 	focus.expand_margin_bottom = 4.0
 	control.add_theme_stylebox_override("focus", focus)
-	control.custom_minimum_size = control.custom_minimum_size.max(Vector2(44.0, 44.0))
+	_refresh_touch_floor(control)
+	if control.is_inside_tree() and not control.has_meta(&"clean_touch_resize"):
+		var window := control.get_window()
+		var refresh := _refresh_touch_floor.bind(control)
+		window.size_changed.connect(refresh)
+		control.tree_exiting.connect(
+			_disconnect_touch_floor.bind(window, refresh), CONNECT_ONE_SHOT
+		)
+		control.set_meta(&"clean_touch_resize", true)
+
+
+static func minimum_touch_size(control: Control) -> Vector2:
+	if not control.is_inside_tree():
+		return Vector2.ONE * 44.0
+	return Vector2.ONE * 44.0 * canvas_scale(control.get_viewport_rect().size, control.get_window())
+
+
+static func canvas_scale(viewport_size: Vector2, window: Window = null) -> float:
+	if window == null:
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree == null:
+			return 1.0
+		window = tree.root
+	var native_size := Vector2(window.size)
+	if native_size.x <= 0.0 or native_size.y <= 0.0:
+		return 1.0
+	return maxf(viewport_size.x / native_size.x, viewport_size.y / native_size.y)
+
+
+static func _refresh_touch_floor(control: Control) -> void:
+	if not is_instance_valid(control):
+		return
+	var floor := minimum_touch_size(control)
+	var previous: Vector2 = control.get_meta(&"clean_touch_floor", Vector2.ZERO)
+	var minimum := control.custom_minimum_size
+	for axis in 2:
+		minimum[axis] = (
+			floor[axis]
+			if is_equal_approx(minimum[axis], previous[axis])
+			else maxf(minimum[axis], floor[axis])
+		)
+	control.set_meta(&"clean_touch_floor", floor)
+	control.custom_minimum_size = minimum
+
+
+static func _disconnect_touch_floor(window: Window, refresh: Callable) -> void:
+	if is_instance_valid(window) and window.size_changed.is_connected(refresh):
+		window.size_changed.disconnect(refresh)
 
 
 static func label(control: Label, font_size: int, muted: bool = false) -> void:
