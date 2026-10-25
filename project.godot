@@ -36,8 +36,6 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg", "res://addons/gdUn
 
 [gui]
 
-theme/custom="res://themes/clean_tooltips.tres"
-
 theme/custom_font="res://assets/fonts/noto/NotoSansSC[wght].ttf"
 
 [rendering]

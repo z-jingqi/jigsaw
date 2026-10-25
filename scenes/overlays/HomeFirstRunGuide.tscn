@@ -41,23 +41,6 @@ mouse_filter = 2
 horizontal_alignment = 1
 text = "1 / 2"
 
-[node name="Prompt" type="Label" parent="GuidePanel"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 42.0
-offset_top = 38.0
-offset_right = -42.0
-offset_bottom = 150.0
-grow_horizontal = 2
-theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
-theme_override_fonts/font = ExtResource("3_font")
-theme_override_font_sizes/font_size = 44
-horizontal_alignment = 1
-vertical_alignment = 1
-autowrap_mode = 2
-mouse_filter = 2
-
 [node name="GestureHint" type="Label" parent="GuidePanel"]
 layout_mode = 1
 anchors_preset = 10
@@ -86,6 +69,8 @@ offset_bottom = 96.0
 grow_horizontal = 0
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_font_sizes/font_size = 32
-text = "Skip"
-tooltip_text = "Skip home guide"
+text = ""
+accessibility_name = "Skip home guide"
 script = ExtResource("2_button")
+symbol = "close"
+icon_only = true

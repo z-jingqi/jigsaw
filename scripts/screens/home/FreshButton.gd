@@ -3,6 +3,7 @@ extends Button
 @export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album")
 var symbol := "none"
 @export var primary := false
+@export var icon_only := false
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const INK := Clean.INK
 
@@ -10,8 +11,12 @@ const INK := Clean.INK
 func _ready() -> void:
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	focus_mode = Control.FOCUS_ALL
-	accessibility_name = tooltip_text if not tooltip_text.is_empty() else text
-	Clean.button(self, primary)
+	if accessibility_name.is_empty():
+		accessibility_name = text
+	if icon_only:
+		Clean.icon_button(self)
+	else:
+		Clean.button(self, primary)
 	resized.connect(queue_redraw)
 
 
@@ -24,13 +29,17 @@ func _draw() -> void:
 	var ink := Clean.MUTED if disabled else (Clean.PAPER if primary else INK)
 	match symbol:
 		"back", "forward":
-			var direction := -1.0 if symbol == "forward" else 1.0
+			var direction := -1.0 if symbol == "back" else 1.0
+			var tip := c + Vector2(r * direction * (1.0 if icon_only else 0.45), 0)
+			var wing := r * (0.75 if icon_only else 0.9)
+			if icon_only:
+				draw_line(c - Vector2(r * direction, 0), tip, ink, w, true)
 			draw_polyline(
 				PackedVector2Array(
 					[
-						c + Vector2(r * 0.45 * direction, -r * 0.9),
-						c + Vector2(-r * 0.45 * direction, 0.0),
-						c + Vector2(r * 0.45 * direction, r * 0.9),
+						tip + Vector2(-wing * direction, -wing),
+						tip,
+						tip + Vector2(-wing * direction, wing),
 					]
 				),
 				ink,

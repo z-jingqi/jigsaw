@@ -30,8 +30,7 @@ func _ready() -> void:
 	}
 	for entry in labels:
 		var button := get_node(entry) as Button
-		button.tooltip_text = GameStrings.ui_text(labels[entry])
-		button.accessibility_name = button.tooltip_text
+		button.accessibility_name = GameStrings.ui_text(labels[entry])
 	_title_motion = ThemeTitleMotion.new(
 		$ThemeName, $IncomingThemeName, [], func() -> void: Layout.apply(self)
 	)
@@ -108,9 +107,7 @@ func _update_information() -> void:
 		start_button.disabled = true
 		start_button.text = GameStrings.ui_text("coming_soon")
 		start_button.accessibility_name = start_button.text
-		start_button.tooltip_text = start_button.text
 		$ThemeName.text = GameStrings.ui_text("home_title")
-		$Subtitle.text = GameStrings.ui_text("home_empty_subtitle")
 		Layout.apply(self)
 		return
 	var model: Variant = _themes[_selected_index]
@@ -121,14 +118,8 @@ func _update_information() -> void:
 		GameStrings.ui_text("enter_topic") if model.playable else GameStrings.ui_text("coming_soon")
 	)
 	start_button.accessibility_name = start_button.text
-	start_button.tooltip_text = start_button.text
 	start_button.disabled = not model.playable
 	$Counter.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
-	$Subtitle.text = (
-		GameStrings.ui_text("home_subtitle")
-		if model.playable
-		else GameStrings.ui_text("home_coming_subtitle")
-	)
 	var next_model: Variant = _themes[posmod(_selected_index + 1, _themes.size())]
 	_title_motion.set_current(str(model.title), str(next_model.title))
 

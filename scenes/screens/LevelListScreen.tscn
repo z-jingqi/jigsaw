@@ -90,7 +90,7 @@ offset_right = 96.0
 offset_bottom = 104.0
 script = ExtResource("3_fresh")
 symbol = "back"
-tooltip_text = "返回主题"
+icon_only = true
 
 [node name="TitleLeftOrnament" type="TextureRect" parent="SafeArea/Content/Header"]
 layout_mode = 0

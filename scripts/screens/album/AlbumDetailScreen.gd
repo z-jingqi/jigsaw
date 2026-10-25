@@ -12,6 +12,7 @@ var _reduced_motion := false
 
 
 func _ready() -> void:
+	Clean.icon_button($BackButton)
 	$BackButton.pressed.connect(back_requested.emit)
 	$Previous.pressed.connect(browse_requested.emit.bind(-1))
 	$Next.pressed.connect(browse_requested.emit.bind(1))

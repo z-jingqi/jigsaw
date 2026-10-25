@@ -6,7 +6,6 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 signal skip_requested
 
 @onready var step_label: Label = $GuidePanel/Step
-@onready var prompt: Label = $GuidePanel/Prompt
 @onready var gesture_hint: Label = $GuidePanel/GestureHint
 @onready var skip_button: Button = $GuidePanel/SkipButton
 
@@ -38,14 +37,13 @@ func show_step(step: StringName, reduced_motion: bool, labels: Dictionary) -> vo
 
 func set_step(step: StringName, reduced_motion: bool, labels: Dictionary) -> void:
 	_stop_motion()
-	skip_button.text = str(labels.get("skip", "Skip"))
-	skip_button.tooltip_text = skip_button.text
+	skip_button.text = ""
+	skip_button.accessibility_name = str(labels.get("skip", "Skip"))
+	skip_button.tooltip_text = ""
 	step_label.text = "2 / 2" if step == &"enter" else "1 / 2"
 	if step == &"enter":
-		prompt.text = str(labels.get("enter", "Tap the cover to open its levels"))
 		gesture_hint.text = str(labels.get("enter_hint", "Tap to play"))
 	else:
-		prompt.text = str(labels.get("swipe", "Swipe left or right to explore themes"))
 		gesture_hint.text = str(labels.get("swipe_hint", "←   Swipe   →"))
 	if reduced_motion:
 		return
@@ -104,29 +102,26 @@ func _layout() -> void:
 	var safe := Clean.safe_insets(size)
 	var usable_width := size.x - safe.x - safe.z
 	# Extend beyond the home pagination row so its edge actions cannot peek out.
-	panel.size = Vector2(minf(usable_width - 32 * unit, 390 * unit), 216 * unit)
+	panel.size = Vector2(minf(usable_width - 32 * unit, 390 * unit), 128 * unit)
 	panel.add_theme_stylebox_override("panel", Clean.panel(Clean.SAGE, roundi(24 * unit)))
 	panel.position = Vector2(
-		safe.x + (usable_width - panel.size.x) * 0.5,
-		minf(size.y * 0.61, size.y - safe.w - 300 * unit)
+		safe.x + (usable_width - panel.size.x) * 0.5, size.y - safe.w - 220 * unit
 	)
-	for label in [prompt, gesture_hint]:
+	for label in [gesture_hint]:
 		label.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		label.size = Vector2(panel.size.x - 32 * unit, 46 * unit)
 		Clean.label(label, roundi(17 * unit))
-	step_label.position = Vector2(16, 12) * unit
-	step_label.size = Vector2(panel.size.x - 32 * unit, 22 * unit)
+	step_label.position = Vector2(24, 20) * unit
+	step_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	step_label.size = Vector2(panel.size.x - 88 * unit, 22 * unit)
 	Clean.label(step_label, roundi(12 * unit), true)
-	prompt.position = Vector2(16, 38) * unit
-	_hint_rest = Vector2(16, 90) * unit
+	_hint_rest = Vector2(16, 62) * unit
 	gesture_hint.position = _hint_rest
 	gesture_hint.pivot_offset = gesture_hint.size * 0.5
 	skip_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	Clean.button(skip_button)
-	skip_button.add_theme_font_size_override("font_size", roundi(15 * unit))
-	skip_button.clip_text = true
-	skip_button.custom_minimum_size = (Vector2(100, 44) * maxf(1.0, unit)).max(
+	Clean.icon_button(skip_button)
+	skip_button.custom_minimum_size = (Vector2.ONE * 44 * unit).max(
 		Clean.minimum_touch_size(skip_button)
 	)
-	skip_button.size = Vector2(minf(140 * unit, panel.size.x - 32 * unit), 44 * maxf(1.0, unit))
-	skip_button.position = Vector2((panel.size.x - skip_button.size.x) * 0.5, 148 * unit)
+	skip_button.size = skip_button.custom_minimum_size
+	skip_button.position = Vector2(panel.size.x - skip_button.size.x - 12 * unit, 8 * unit)

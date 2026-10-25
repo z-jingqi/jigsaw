@@ -37,7 +37,7 @@ layout_mode = 0
 layout_mode = 0
 script = ExtResource("3")
 symbol = "back"
-tooltip_text = "返回关卡列表"
+icon_only = true
 accessibility_name = "返回关卡列表"
 [node name="Title" type="Label" parent="SafeArea/Content/Header"]
 layout_mode = 0

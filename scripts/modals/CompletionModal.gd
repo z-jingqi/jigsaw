@@ -11,7 +11,6 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 @onready var level_label: Label = $Canvas/Header/LevelTitle
 @onready var card_stage: Control = $Canvas/CardStage
 @onready var image_rect: TextureRect = $Canvas/CardStage/CompletedImage
-@onready var description_label: Label = $Canvas/Description
 @onready var confirm_button: ActionButton = $Canvas/Confirm
 @onready var confirm_label: Label = $Canvas/Confirm/Label
 @onready var return_button: ActionButton = $Canvas/Return
@@ -30,12 +29,10 @@ func _ready() -> void:
 	return_button.pressed.connect(request_dismiss)
 	animation_player.animation_finished.connect(_on_animation_finished)
 	resized.connect(_apply_layout)
-	description_label.minimum_size_changed.connect(_apply_layout)
 	Clean.button(confirm_button, true)
 	confirm_label.add_theme_color_override("font_color", Clean.PAPER)
 	Clean.button(return_button)
 	return_label.add_theme_color_override("font_color", Clean.INK)
-	description_label.add_theme_color_override("font_color", Clean.MUTED)
 	# Input gating during the entrance must not change either button's surface.
 	for button in [confirm_button, return_button]:
 		button.add_theme_stylebox_override(
@@ -51,8 +48,6 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	confirm_button.set_reduced_motion(_reduced_motion)
 	return_button.set_reduced_motion(_reduced_motion)
 	level_label.text = _view_model.level_title
-	description_label.text = _view_model.level_description
-	description_label.visible = not description_label.text.is_empty()
 	image_rect.texture = _view_model.completed_texture
 	confirm_label.text = _view_model.primary_action_text
 	confirm_button.accessibility_name = confirm_label.text
@@ -159,4 +154,3 @@ func _apply_layout() -> void:
 	image_motion.configure(card_stage, image_rect, source, target)
 	_layout.apply_header(size, header, level_label)
 	_layout.apply_footer(size, confirm_button, confirm_label, return_button, return_label)
-	_layout.apply_description(size, description_label, target, confirm_button.position.y)

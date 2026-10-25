@@ -12,7 +12,6 @@ const DISABLED := Color("E9E6DE")
 const OUTLINE := Color("C7CCBD")
 const FONT := preload("res://themes/clean_body_font.tres")
 const HEADING := preload("res://themes/clean_heading_font.tres")
-const TOOLTIPS := preload("res://themes/clean_tooltips.tres")
 
 
 static func panel(fill: Color, radius: float = 24.0) -> StyleBoxFlat:
@@ -56,6 +55,15 @@ static func button(control: Button, primary: bool = false) -> void:
 	control.custom_minimum_size = control.custom_minimum_size.max(minimum_touch_size(control))
 
 
+static func icon_button(control: Button) -> void:
+	# The hit target remains generous; only the glyph is visible at rest.
+	button(control)
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		control.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	control.flat = true
+	control.tooltip_text = ""
+
+
 static func minimum_touch_size(control: Control) -> Vector2:
 	if not control.is_inside_tree():
 		return Vector2.ONE * 44.0
@@ -72,11 +80,6 @@ static func canvas_scale(viewport_size: Vector2, window: Window = null) -> float
 	if native_size.x <= 0.0 or native_size.y <= 0.0:
 		return 1.0
 	var scale := maxf(viewport_size.x / native_size.x, viewport_size.y / native_size.y)
-	# Called by responsive layouts, after their viewport dimensions have settled.
-	# The project theme defines only tooltip properties, not ordinary label sizes.
-	var tooltip_size := maxi(15, ceili(15.0 * scale))
-	if TOOLTIPS.get_font_size(&"font_size", &"TooltipLabel") != tooltip_size:
-		TOOLTIPS.set_font_size(&"font_size", &"TooltipLabel", tooltip_size)
 	return scale
 
 

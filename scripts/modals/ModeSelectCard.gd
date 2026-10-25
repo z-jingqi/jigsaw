@@ -157,7 +157,7 @@ func _refresh() -> void:
 	accessibility_name = (
 		"%s，%s%s" % [_name_label.text, _status_label.text, "，已选中" if _selected else ""]
 	)
-	tooltip_text = accessibility_name
+	tooltip_text = ""
 	_layout()
 
 

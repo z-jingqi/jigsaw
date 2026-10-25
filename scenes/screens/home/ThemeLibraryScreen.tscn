@@ -19,7 +19,8 @@ mouse_filter = 2
 [node name="CloseButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("2")
-symbol = "close"
+symbol = "back"
+icon_only = true
 [node name="Title" type="Label" parent="."]
 layout_mode = 0
 vertical_alignment = 1
@@ -36,9 +37,6 @@ navigator_path = NodePath("../../../../AppNavigator")
 layout_mode = 2
 size_flags_horizontal = 3
 columns = 2
-[node name="Subtitle" type="Label" parent="."]
-layout_mode = 0
-mouse_filter = 2
 [node name="EmptyState" type="Label" parent="."]
 visible = false
 layout_mode = 0

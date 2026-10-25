@@ -55,7 +55,7 @@ func _apply_view_model() -> void:
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	var mode_states: Array = _read("modes", [])
 	completed_modes.set_modes(mode_states, not is_locked)
-	tooltip_text = title_label.text
+	tooltip_text = ""
 	accessibility_name = (
 		"%s, %s"
 		% [

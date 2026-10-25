@@ -13,8 +13,7 @@ var _scroll_position := 0
 func _ready() -> void:
 	$Title.text = GameStrings.ui_text("all_themes")
 	$EmptyState.text = GameStrings.ui_text("library_empty")
-	$CloseButton.tooltip_text = GameStrings.ui_text("close_themes")
-	$CloseButton.accessibility_name = $CloseButton.tooltip_text
+	$CloseButton.accessibility_name = GameStrings.ui_text("back")
 	$CloseButton.pressed.connect(close_requested.emit)
 	resized.connect(_layout)
 
@@ -46,11 +45,6 @@ func _build() -> void:
 		$Scroll/Grid.remove_child(child)
 		child.queue_free()
 	$EmptyState.visible = _themes.is_empty()
-	$Subtitle.text = (
-		GameStrings.ui_text("library_subtitle")
-		if not _themes.is_empty()
-		else GameStrings.ui_text("library_empty_subtitle")
-	)
 	var palette := [Clean.SAGE, Clean.APRICOT, Clean.LAVENDER]
 	for index in _themes.size():
 		var model: Variant = _themes[index]
@@ -59,7 +53,7 @@ func _build() -> void:
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
 		tile.disabled = not model.playable
-		tile.tooltip_text = (
+		tile.accessibility_name = (
 			"%s · %s"
 			% [
 				model.title,
@@ -70,7 +64,6 @@ func _build() -> void:
 				)
 			]
 		)
-		tile.accessibility_name = tile.tooltip_text
 		Clean.button(tile)
 		var color: Color = palette[index % palette.size()]
 		for state in ["normal", "hover", "pressed", "disabled"]:
@@ -113,7 +106,7 @@ func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
 	var canvas := Clean.canvas_scale(size, get_window())
 	var safe := Clean.safe_insets(size)
-	Buttons.place_navigation($CloseButton, self, true)
+	Buttons.place_navigation($CloseButton, self)
 	var usable_width := size.x - safe.x - safe.z
 	var width := minf(usable_width - 48.0 * u, 680.0 * u)
 	var left := safe.x + (usable_width - width) * 0.5
@@ -121,10 +114,7 @@ func _layout() -> void:
 	$Title.position = Vector2(left, top)
 	$Title.size = Vector2(width, 46 * u)
 	Clean.label($Title, roundi(maxf(30.0 * u, 24.0 * canvas)))
-	$Subtitle.position = Vector2(left, top + 55.0 * u)
-	$Subtitle.size = Vector2(width, maxf(28.0 * u, 24.0 * canvas))
-	Clean.label($Subtitle, roundi(maxf(13.0 * u, 14.0 * canvas)), true)
-	var scroll_top := top + 106.0 * u
+	var scroll_top := top + 72.0 * u
 	$Scroll.position = Vector2(left, scroll_top)
 	$Scroll.size = Vector2(width, size.y - safe.w - scroll_top - 28.0 * u)
 	$EmptyState.position = Vector2(left, scroll_top + 80.0 * u)

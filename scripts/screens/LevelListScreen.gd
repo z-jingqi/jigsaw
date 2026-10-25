@@ -30,8 +30,10 @@ var _empty_label: Label
 
 
 func _ready() -> void:
+	Clean.icon_button(back_button)
+	back_button.accessibility_name = GameStrings.ui_text("return_topics")
 	_empty_label = Label.new()
-	_empty_label.text = GameStrings.ui_text("levels_empty")
+	_empty_label.text = GameStrings.ui_text("no_levels")
 	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

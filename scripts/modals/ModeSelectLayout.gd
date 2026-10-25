@@ -17,6 +17,7 @@ static func apply(host: Control) -> void:
 	var header: Control = content.get_node("Header")
 	header.size = Vector2(available.x, 80 * unit)
 	Buttons.place_navigation(header.get_node("BackButton"), host)
+	Clean.icon_button(header.get_node("BackButton") as Button)
 	var title: Label = header.get_node("Title")
 	_place(title, Vector2(left + 48 * unit, 22 * unit), Vector2(width - 96 * unit, 40 * unit))
 	Clean.label(title, int(24 * unit))

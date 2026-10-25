@@ -10,15 +10,15 @@ const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 func _ready() -> void:
 	super()
 	Style.apply_button(self, symbol == "back")
-	if symbol == "hint":
-		Style.Clean.button(self, true)
+	if symbol == "hint" or symbol == "back":
+		Style.Clean.icon_button(self)
 	icon = null
 	resized.connect(queue_redraw)
 	queue_redraw()
 
 
 func _draw() -> void:
-	var ink := Style.Clean.PAPER if symbol == "hint" else Style.INK
+	var ink := Style.INK
 	if disabled:
 		ink = Style.Clean.MUTED
 	var center := size * 0.5
@@ -31,14 +31,17 @@ func _draw() -> void:
 			draw_polyline(
 				PackedVector2Array(
 					[
-						center + Vector2(12, -27) * unit,
-						center + Vector2(-14, 0) * unit,
-						center + Vector2(12, 27) * unit,
+						center + Vector2(0, -24) * unit,
+						center + Vector2(-25, 0) * unit,
+						center + Vector2(0, 24) * unit,
 					]
 				),
 				ink,
 				stroke,
 				true,
+			)
+			draw_line(
+				center + Vector2(-25, 0) * unit, center + Vector2(28, 0) * unit, ink, stroke, true
 			)
 		_:
 			_draw_direction(center, unit, stroke, ink)

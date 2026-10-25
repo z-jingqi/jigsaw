@@ -51,11 +51,11 @@ theme_override_colors/font_pressed_color = Color(0.968627, 0.921569, 0.843137, 1
 theme_override_colors/font_disabled_color = Color(0.968627, 0.921569, 0.843137, 0.52)
 theme_override_font_sizes/font_size = 68
 text = "×"
-tooltip_text = "Close"
 accessibility_name = "Close"
 focus_mode = 2
 script = ExtResource("5_button")
 symbol = "close"
+icon_only = true
 
 [node name="Rows" type="GridContainer" parent="ModalShell/Panel/Content"]
 layout_mode = 2

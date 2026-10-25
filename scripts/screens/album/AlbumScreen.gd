@@ -22,6 +22,8 @@ var _render_version := 0
 
 
 func _ready() -> void:
+	Clean.icon_button($BackButton)
+	Clean.icon_button($AllButton)
 	_grid = VirtualGrid.new(scroll, grid, CardScene)
 	_grid.level_selected.connect(_select_card)
 	_grid.card_visible.connect(_watch_card)
@@ -53,9 +55,9 @@ func render(model: Dictionary, position_y := 0) -> void:
 	scroll.scroll_vertical = 0
 	$Title.text = str(model.title)
 	$Summary.text = str(model.summary)
-	$Description.text = str(model.description)
 	$BackButton.accessibility_name = str(model.back_label)
-	$AllButton.text = str(model.all_label)
+	$AllButton.text = ""
+	$AllButton.accessibility_name = str(model.all_label)
 	$AllButton.visible = str(model.kind) == "themes"
 	$EmptyLabel.text = str(model.empty_label)
 	$EmptyLabel.visible = model.cards.is_empty()
@@ -152,16 +154,10 @@ func _layout() -> void:
 	$Summary.position = Vector2(margin, 130 * u)
 	$Summary.size = Vector2(size.x - margin * 2, 27 * u)
 	Clean.label($Summary, roundi(20 * u), true)
-	var action_width := 110.0 * u if $AllButton.visible else 0.0
-	$Description.position = Vector2(margin, 169 * u)
-	$Description.size = Vector2(size.x - margin * 2 - action_width - 8 * u, 26 * u)
-	Clean.label($Description, roundi(13 * u), true)
-	$AllButton.position = Vector2(size.x - margin - action_width, 158 * u)
-	$AllButton.size = Vector2(action_width, 46 * u)
-	$AllButton.add_theme_font_size_override("font_size", roundi(14 * u))
-	for item in [$Title, $Summary, $Description, $AllButton]:
+	Buttons.place_navigation($AllButton, self, true)
+	for item in [$Title, $Summary]:
 		item.position.y += safe.y
-	var top := 218.0 * u + safe.y
+	var top := 178.0 * u + safe.y
 	scroll.position = Vector2(margin, top)
 	scroll.size = Vector2(size.x - margin * 2, maxf(1, size.y - top - 18 * u - safe.w))
 	$EmptyLabel.position = scroll.position

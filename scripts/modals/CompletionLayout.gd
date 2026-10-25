@@ -44,19 +44,6 @@ func apply_footer(
 		label.add_theme_font_size_override("font_size", maxi(18, roundi(52 * scale)))
 
 
-func apply_description(
-	viewport_size: Vector2, label: Label, image: Rect2, footer_top: float
-) -> void:
-	var scale := minf(viewport_size.x / 1206.0, viewport_size.y / 2680.0)
-	var unit := minf(viewport_size.x / 390.0, viewport_size.y / 844.0)
-	var width := viewport_size.x * 0.80
-	label.add_theme_font_override("font", Clean.FONT)
-	label.add_theme_font_size_override("font_size", maxi(15, roundi(16.0 * unit)))
-	label.add_theme_constant_override("line_spacing", roundi(3.0 * unit))
-	label.position = Vector2((viewport_size.x - width) * 0.5, image.end.y + 36.0 * scale)
-	label.size = Vector2(width, maxf(0.0, footer_top - label.position.y - 40.0 * scale))
-
-
 func _fit_label(label: Label, maximum: int) -> void:
 	var font := label.get_theme_font("font")
 	var font_size := maxi(12, maximum)

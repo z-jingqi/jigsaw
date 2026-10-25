@@ -106,7 +106,7 @@ func _apply_view_model() -> void:
 	label.visible = _variant in [&"selector", &"focus"]
 	selection_paw.visible = _variant in [&"selector", &"focus"] and _selected
 	accessibility_name = "%s, %s" % [str(_read("label", "")), _status_text(status)]
-	tooltip_text = accessibility_name
+	tooltip_text = ""
 	_apply_interaction_state()
 	_apply_icon_rect()
 

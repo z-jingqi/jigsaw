@@ -67,7 +67,7 @@ func _sync_model() -> void:
 	_subtitle.text = str(model.get("subtitle", ""))
 	_subtitle.visible = not _subtitle.text.is_empty()
 	accessibility_name = _title.text + " " + _subtitle.text
-	tooltip_text = _title.text
+	tooltip_text = ""
 	_layout()
 
 

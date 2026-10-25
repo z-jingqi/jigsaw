@@ -26,11 +26,8 @@ static func apply(host: Control) -> void:
 		_place(title, Vector2(left, top), Vector2(width - 48.0 * u, 54.0 * u))
 		Clean.label(title, roundi(maxf(32.0 * u, 24.0 * canvas)))
 		TitleLayout.fit(title, title.size, roundi(maxf(32.0 * u, 24.0 * canvas)))
-	var subtitle := host.get_node("Subtitle") as Label
-	_place(subtitle, Vector2(left, top + 59.0 * u), Vector2(width, maxf(26.0 * u, 24.0 * canvas)))
-	Clean.label(subtitle, roundi(maxf(14.0 * u, 14.0 * canvas)), true)
 	_place(host.get_node("Botanical"), Vector2(left + width - 43.0 * u, top), Vector2(43, 54) * u)
-	var deck_top := top + 111.0 * u
+	var deck_top := top + 76.0 * u
 	var pager_side := maxf(44.0 * u, 44.0 * canvas)
 	var action_height := maxf(54.0 * u, 44.0 * canvas)
 	var footer_height := maxf(170.0 * u, 56.0 * u + pager_side + action_height)

@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/modals/CompletionModal.gd" id="1_modal"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="2_paper"]
@@ -6,7 +6,6 @@
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="4_shader"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="5_button"]
 [ext_resource type="Script" path="res://scripts/modals/CompletionImageMotion.gd" id="7_motion"]
-[ext_resource type="FontVariation" path="res://themes/clean_body_font.tres" id="8_body"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_image"]
 resource_local_to_scene = true
@@ -32,11 +31,8 @@ tracks/4/type = "value"
 tracks/4/path = NodePath("Canvas/Confirm:modulate:a")
 tracks/4/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 tracks/5/type = "value"
-tracks/5/path = NodePath("Canvas/Description:modulate:a")
+tracks/5/path = NodePath("Canvas/Return:modulate:a")
 tracks/5/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
-tracks/6/type = "value"
-tracks/6/path = NodePath("Canvas/Return:modulate:a")
-tracks/6/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 
 [sub_resource type="Animation" id="Animation_open"]
 resource_name = "open"
@@ -57,11 +53,8 @@ tracks/4/type = "value"
 tracks/4/path = NodePath("Canvas/Confirm:modulate:a")
 tracks/4/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
 tracks/5/type = "value"
-tracks/5/path = NodePath("Canvas/Description:modulate:a")
-tracks/5/keys = {"times": PackedFloat32Array(0, 0.66, 0.94), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
-tracks/6/type = "value"
-tracks/6/path = NodePath("Canvas/Return:modulate:a")
-tracks/6/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
+tracks/5/path = NodePath("Canvas/Return:modulate:a")
+tracks/5/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_completion"]
 _data = {&"RESET": SubResource("Animation_reset"), &"open": SubResource("Animation_open")}
@@ -119,16 +112,6 @@ layout_mode = 0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
-
-[node name="Description" type="Label" parent="Canvas"]
-modulate = Color(1, 1, 1, 0)
-layout_mode = 0
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.33, 0.43, 0.38, 1)
-theme_override_fonts/font = ExtResource("8_body")
-theme_override_constants/line_spacing = 10
-horizontal_alignment = 1
-autowrap_mode = 3
 
 [node name="Confirm" type="Button" parent="Canvas"]
 modulate = Color(1, 1, 1, 0)

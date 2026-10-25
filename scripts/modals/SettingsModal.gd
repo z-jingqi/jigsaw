@@ -228,6 +228,7 @@ func _layout_navigation() -> void:
 
 func _style_close_button() -> void:
 	close_button.text = ""
+	Clean.icon_button(close_button)
 
 
 func _settings_rows() -> Array[SettingsRow]:

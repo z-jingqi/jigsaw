@@ -53,9 +53,6 @@ theme_override_colors/font_color = Color(0.152941, 0.160784, 0.145098, 1)
 theme_override_fonts/font = ExtResource("4")
 horizontal_alignment = 1
 vertical_alignment = 1
-[node name="Subtitle" type="Label" parent="."]
-layout_mode = 0
-mouse_filter = 2
 [node name="Botanical" type="Control" parent="."]
 layout_mode = 0
 mouse_filter = 2
@@ -75,15 +72,18 @@ autowrap_mode = 3
 [node name="AlbumButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
+icon_only = true
 symbol = "album"
 [node name="MenuButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
+icon_only = true
 symbol = "settings"
 theme_override_fonts/font = ExtResource("4")
 [node name="ThemesButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
+icon_only = true
 symbol = "grid"
 theme_override_fonts/font = ExtResource("4")
 [node name="UndoButton" type="Button" parent="."]

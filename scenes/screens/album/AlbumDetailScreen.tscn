@@ -26,6 +26,7 @@ color = Color(0.980392, 0.968627, 0.937255, 1)
 layout_mode = 0
 script = ExtResource("2")
 symbol = "back"
+icon_only = true
 
 [node name="Title" type="Label" parent="."]
 layout_mode = 0

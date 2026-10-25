@@ -27,7 +27,7 @@ func configure(key: StringName, label_text: String, enabled: bool, animate := fa
 	label.text = label_text
 	glyph.set_kind(_glyph_kind_for_key(key))
 	toggle.set_pressed_no_signal(enabled)
-	toggle.tooltip_text = label_text
+	toggle.tooltip_text = ""
 	toggle.accessibility_name = label_text
 	_ensure_thumb()
 	_apply_toggle_style(enabled)
