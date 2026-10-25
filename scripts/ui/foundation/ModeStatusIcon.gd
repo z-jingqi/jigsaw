@@ -100,7 +100,7 @@ func _apply_view_model() -> void:
 	icon_shadow.self_modulate = Color(
 		SHADOW_COLOR.r, SHADOW_COLOR.g, SHADOW_COLOR.b, SHADOW_COLOR.a * icon_opacity
 	)
-	icon_shadow.visible = icon_rect.texture != null
+	icon_shadow.visible = false
 	progress_dot.visible = _show_progress_dot and status == &"in_progress"
 	label.text = str(_read("short_label", _read("label", "")))
 	label.visible = _variant in [&"selector", &"focus"]

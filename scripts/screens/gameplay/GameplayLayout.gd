@@ -2,6 +2,7 @@ extends RefCounted
 class_name GameplayLayout
 
 const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 var _layout_config: Dictionary = PuzzleRulesScript.gameplay_layout()
@@ -20,21 +21,26 @@ func apply(
 	swap_action_bar: SwapActionBarView,
 	requested_scale := 1.0,
 ) -> void:
+	var safe := Clean.safe_insets(viewport_size)
 	var back_button := header_buttons[0]
 	var hint_button := header_buttons[1]
 	var scale := _layout_scale(viewport_size) * maxf(1.0, requested_scale)
 	var control_size := Buttons.icon_size(viewport_size).x
 	var title_height := float(_header_config["control_size"]) * scale
-	var control_top := float(_header_config["top"]) * scale
+	var control_top := float(_header_config["top"]) * scale + safe.y
 	var side_margin := float(_header_config["side_margin"]) * scale
 	hud.offset_left = 0.0
 	hud.offset_top = 0.0
 	hud.offset_right = 0.0
 	hud.offset_bottom = control_top + float(_header_config["height"]) * scale
-	_apply_header_control(back_button, Buttons.navigation_position(viewport_size), control_size)
+	_apply_header_control(
+		back_button,
+		Buttons.navigation_position(viewport_size) + Vector2(safe.x, safe.y),
+		control_size,
+	)
 	_apply_header_control(
 		hint_button,
-		Buttons.navigation_position(viewport_size, true),
+		Buttons.navigation_position(viewport_size, true) + Vector2(-safe.z, safe.y),
 		control_size,
 	)
 	var center := viewport_size.x * 0.5
@@ -52,8 +58,8 @@ func apply(
 			),
 		),
 	)
-	var title_top := Buttons.header_center_y(viewport_size) - title_height * 0.5
-	var ornaments_width := 2.0 * float(_header_config["cloud_width"] + _header_config["cloud_gap"])
+	var title_top := Buttons.header_center_y(viewport_size) - title_height * 0.5 + safe.y
+	var ornaments_width := 0.0
 	var minimum_font := maxi(12, roundi(float(_header_config["title_min_font_size"]) * scale))
 	if (
 		(
@@ -83,10 +89,10 @@ func apply(
 	var bottom := float(_layout_config["bottom_margin"]) * scale
 	# Preserve the upper edge and use the previously empty bottom margin for pieces.
 	_configure_bottom_panel(
-		tray_view, float(_tray_config["height"]) * scale + bottom, 0.0, side_margin
+		tray_view, float(_tray_config["height"]) * scale + bottom, safe.w, side_margin
 	)
 	_configure_bottom_panel(
-		swap_action_bar, float(_layout_config["swap_action_height"]) * scale, bottom, 0.0
+		swap_action_bar, float(_layout_config["swap_action_height"]) * scale, bottom + safe.w, 0.0
 	)
 	swap_action_bar.configure_layout(scale)
 
@@ -119,13 +125,10 @@ func _layout_title(
 	right_cloud: TextureRect,
 	scale: float,
 ) -> void:
-	var cloud_width := float(_header_config["cloud_width"]) * scale
-	var cloud_texture_size := left_cloud.texture.get_size()
-	var cloud_size := Vector2(
-		cloud_width, cloud_width * cloud_texture_size.y / cloud_texture_size.x
-	)
-	var gap := float(_header_config["cloud_gap"]) * scale
-	var text_limit := maxf(1.0, area_width - 2.0 * (cloud_width + gap))
+	# Retain the nodes for scene compatibility; remove ornamental title clutter.
+	left_cloud.visible = false
+	right_cloud.visible = false
+	var text_limit := maxf(1.0, area_width)
 	var font := label.get_theme_font("font")
 	var font_size := roundi(float(_header_config["title_max_font_size"]) * scale)
 	while (
@@ -141,15 +144,8 @@ func _layout_title(
 		text_limit,
 		font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size).x,
 	)
-	var group_width := text_width + 2.0 * (cloud_width + gap)
-	var group_left := (viewport_width - group_width) * 0.5
-	var cloud_top := top + (height - cloud_size.y) * 0.5
-	left_cloud.position = Vector2(group_left, cloud_top)
-	left_cloud.size = cloud_size
-	label.position = Vector2(group_left + cloud_width + gap, top)
+	label.position = Vector2((viewport_width - text_width) * 0.5, top)
 	label.size = Vector2(text_width, height)
-	right_cloud.position = Vector2(label.position.x + text_width + gap, cloud_top)
-	right_cloud.size = cloud_size
 
 
 func _configure_bottom_panel(panel: Control, height: float, bottom: float, margin: float) -> void:

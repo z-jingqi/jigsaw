@@ -1,6 +1,7 @@
 class_name AlbumDetailScreen
 extends Control
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 signal back_requested
@@ -15,6 +16,8 @@ func _ready() -> void:
 	$Previous.pressed.connect(browse_requested.emit.bind(-1))
 	$Next.pressed.connect(browse_requested.emit.bind(1))
 	resized.connect(_layout)
+	$Title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	$ThemeName.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
@@ -76,25 +79,26 @@ func _layout() -> void:
 	if not is_node_ready() or _model.is_empty():
 		return
 	var u := minf(size.x / 390.0, size.y / 700.0) if size.x < size.y else size.y / 390.0
+	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($BackButton, self)
-	$Title.position = Vector2(78 * u, Buttons.header_center_y(size) - 23 * u)
-	$Title.size = Vector2(size.x - 156 * u, 46 * u)
-	$Title.add_theme_font_size_override("font_size", roundi(25 * u))
-	$ThemeName.position = Vector2(60 * u, 80 * u)
-	$ThemeName.size = Vector2(size.x - 120 * u, 26 * u)
-	$ThemeName.add_theme_font_size_override("font_size", roundi(15 * u))
-	var area := Rect2(Vector2(24 * u, 124 * u), size - Vector2(48 * u, 230 * u))
+	$Title.position = Vector2(24 * u, 78 * u + safe.y)
+	$Title.size = Vector2(size.x - 48 * u, 46 * u)
+	Clean.label($Title, roundi(25 * u), false)
+	$ThemeName.position = Vector2(24 * u, 127 * u + safe.y)
+	$ThemeName.size = Vector2(size.x - 48 * u, 26 * u)
+	Clean.label($ThemeName, roundi(15 * u), true)
+	var area := Rect2(Vector2(24 * u, 173 * u + safe.y), size - Vector2(48 * u, 280 * u + safe.y + safe.w))
 	var texture := _model.get("texture") as Texture2D
 	if texture != null and area.size.x > 0 and area.size.y > 0:
 		var dimensions := texture.get_size()
 		var fit := minf(area.size.x / dimensions.x, area.size.y / dimensions.y)
 		$Artwork.size = dimensions * fit
 		$Artwork.position = area.get_center() - $Artwork.size * 0.5
-	var bottom := size.y - 74 * u
+	var bottom := size.y - 74 * u - safe.w
 	$Previous.position = Vector2(size.x * 0.5 - 107 * u, bottom)
 	$Next.position = Vector2(size.x * 0.5 + 61 * u, bottom)
 	$Previous.size = Vector2.ONE * 46 * u
 	$Next.size = Vector2.ONE * 46 * u
 	$Position.position = Vector2(size.x * 0.5 - 55 * u, bottom)
 	$Position.size = Vector2(110, 46) * u
-	$Position.add_theme_font_size_override("font_size", roundi(16 * u))
+	Clean.label($Position, roundi(16 * u), true)

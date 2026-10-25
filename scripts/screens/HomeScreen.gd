@@ -20,10 +20,7 @@ var _title_motion: RefCounted
 
 func _ready() -> void:
 	_title_motion = ThemeTitleMotion.new(
-		$ThemeName,
-		$IncomingThemeName,
-		[$TitleCloudLeft as Control, $TitleCloudRight as Control],
-		func() -> void: Layout.apply(self)
+		$ThemeName, $IncomingThemeName, [], func() -> void: Layout.apply(self)
 	)
 	deck.selected.connect(_on_selected)
 	deck.browse_motion.connect(_on_browse_motion)
@@ -32,6 +29,7 @@ func _ready() -> void:
 	$ThemesButton.pressed.connect(themes_requested.emit)
 	$AlbumButton.pressed.connect(album_requested.emit)
 	$UndoButton.pressed.connect(deck.undo)
+	$NextButton.pressed.connect(_on_next_pressed)
 	start_button.pressed.connect(_on_enter_pressed)
 	resized.connect(_on_resized)
 	Layout.apply(self)
@@ -87,11 +85,19 @@ func _on_selected(index: int) -> void:
 
 func _update_information() -> void:
 	var can_undo: bool = not deck.history.is_empty()
-	$UndoButton.visible = can_undo
+	$UndoButton.visible = not _themes.is_empty()
+	$NextButton.visible = not _themes.is_empty()
+	$NextButton.disabled = _themes.size() < 2
 	$UndoButton.disabled = not can_undo
 	$UndoButton.queue_redraw()
+	$EmptyState.visible = _themes.is_empty()
+	$Counter.visible = not _themes.is_empty()
 	if _themes.is_empty():
 		start_button.disabled = true
+		start_button.text = "敬请期待"
+		$ThemeName.text = "拼图时光"
+		$Subtitle.text = "新的主题，即将与你见面。"
+		Layout.apply(self)
 		return
 	var model: Variant = _themes[_selected_index]
 	$ThemeName.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -99,6 +105,8 @@ func _update_information() -> void:
 	$ThemeName.clip_text = true
 	start_button.text = "进入主题" if model.playable else "敬请期待"
 	start_button.disabled = not model.playable
+	$Counter.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
+	$Subtitle.text = "挑选一幅画，慢慢拼出美好。" if model.playable else "新的风景正在准备中，敬请期待。"
 	var next_model: Variant = _themes[posmod(_selected_index + 1, _themes.size())]
 	_title_motion.set_current(str(model.title), str(next_model.title))
 
@@ -125,6 +133,11 @@ func _on_browse_motion(
 		committed,
 		bool(get_meta("reduced_motion", false))
 	)
+
+
+func _on_next_pressed() -> void:
+	if _themes.size() > 1 and deck.active_motion_count() == 0:
+		deck.select_theme(posmod(_selected_index + 1, _themes.size()))
 
 
 func _on_enter_pressed() -> void:

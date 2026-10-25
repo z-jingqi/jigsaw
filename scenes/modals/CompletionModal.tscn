@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/modals/CompletionModal.gd" id="1_modal"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="2_paper"]
-[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="3_font"]
+[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="3_font"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="4_shader"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="5_button"]
 [ext_resource type="Script" path="res://scripts/modals/CompletionImageMotion.gd" id="7_motion"]
@@ -79,7 +79,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_modal")
 
-[node name="Background" type="TextureRect" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 1
 anchors_preset = 15
@@ -88,10 +88,8 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("2_paper")
-expand_mode = 1
-stretch_mode = 0
 
+color = Color(0.9804, 0.9686, 0.9373, 1)
 [node name="Canvas" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -109,7 +107,7 @@ mouse_filter = 2
 [node name="LevelTitle" type="Label" parent="Canvas/Header"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("3_font")
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -139,7 +137,7 @@ autowrap_mode = 3
 [node name="Confirm" type="Button" parent="Canvas"]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 0
-focus_mode = 0
+focus_mode = 2
 script = ExtResource("5_button")
 kind = 1
 
@@ -151,7 +149,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("3_font")
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -159,7 +157,7 @@ vertical_alignment = 1
 [node name="Return" type="Button" parent="Canvas"]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 0
-focus_mode = 0
+focus_mode = 2
 script = ExtResource("5_button")
 kind = 1
 
@@ -171,7 +169,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("3_font")
 horizontal_alignment = 1
 vertical_alignment = 1

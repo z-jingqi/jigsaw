@@ -9,14 +9,16 @@ const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
 func _ready() -> void:
 	super()
-	Style.apply_button(self)
+	Style.apply_button(self, symbol == "back")
+	if symbol == "hint":
+		Style.Clean.button(self, true)
 	icon = null
 	resized.connect(queue_redraw)
 	queue_redraw()
 
 
 func _draw() -> void:
-	var ink := Style.INK
+	var ink := Style.Clean.PAPER if symbol == "hint" else Style.INK
 	if disabled:
 		ink.a = 0.38
 	var center := size * 0.5

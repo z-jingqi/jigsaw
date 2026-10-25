@@ -6,6 +6,7 @@ signal theme_selected(theme_id: String)
 signal all_requested
 signal artwork_selected(theme_id: String, level_id: String)
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const VirtualGrid := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
 const CardScene := preload("res://scenes/screens/album/AlbumCard.tscn")
@@ -28,6 +29,7 @@ func _ready() -> void:
 	$BackButton.pressed.connect(back_requested.emit)
 	$AllButton.pressed.connect(all_requested.emit)
 	resized.connect(_layout)
+	$Title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 func set_thumbnail_loader(loader: AlbumThumbnailLoader) -> void:
@@ -142,25 +144,30 @@ func _layout() -> void:
 	var portrait := size.x < size.y
 	var u := minf(size.x / 390.0, size.y / 700.0) if portrait else size.y / 390.0
 	var margin := 20.0 * u
+	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($BackButton, self)
-	$Title.position = Vector2(76 * u, Buttons.header_center_y(size) - 23 * u)
-	$Title.size = Vector2(size.x - 152 * u, 46 * u)
-	$Title.add_theme_font_size_override("font_size", roundi(28 * u))
-	$Summary.position = Vector2(margin, 87 * u)
+	$Title.position = Vector2(margin, 76 * u)
+	$Title.size = Vector2(size.x - margin * 2, 48 * u)
+	Clean.label($Title, roundi(30 * u), false)
+	$Summary.position = Vector2(margin, 130 * u)
 	$Summary.size = Vector2(size.x - margin * 2, 27 * u)
-	$Summary.add_theme_font_size_override("font_size", roundi(20 * u))
+	Clean.label($Summary, roundi(20 * u), true)
 	var action_width := 110.0 * u if $AllButton.visible else 0.0
-	$Description.position = Vector2(margin, 121 * u)
+	$Description.position = Vector2(margin, 169 * u)
 	$Description.size = Vector2(size.x - margin * 2 - action_width - 8 * u, 26 * u)
-	$Description.add_theme_font_size_override("font_size", roundi(13 * u))
-	$AllButton.position = Vector2(size.x - margin - action_width, 116 * u)
-	$AllButton.size = Vector2(action_width, 36 * u)
+	Clean.label($Description, roundi(13 * u), true)
+	$AllButton.position = Vector2(size.x - margin - action_width, 158 * u)
+	$AllButton.size = Vector2(action_width, 46 * u)
 	$AllButton.add_theme_font_size_override("font_size", roundi(14 * u))
-	var top := 169.0 * u
+	for item in [$Title, $Summary, $Description, $AllButton]:
+		item.position.y += safe.y
+	var top := 218.0 * u + safe.y
 	scroll.position = Vector2(margin, top)
-	scroll.size = Vector2(size.x - margin * 2, maxf(1, size.y - top - 18 * u))
+	scroll.size = Vector2(size.x - margin * 2, maxf(1, size.y - top - 18 * u - safe.w))
 	$EmptyLabel.position = scroll.position
 	$EmptyLabel.size = scroll.size
+	$EmptyLabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	Clean.label($EmptyLabel, roundi(18 * u), true)
 	$EmptyLabel.add_theme_font_size_override("font_size", roundi(18 * u))
 	var columns := 2 if portrait else 4
 	var gap := Vector2(16, 18) * u

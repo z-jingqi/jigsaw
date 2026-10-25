@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/modals/SettingsModal.gd" id="1_modal"]
 [ext_resource type="PackedScene" path="res://scenes/ui/AnimatedModalShell.tscn" id="2_shell"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SettingsRow.tscn" id="3_row"]
-[ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="4_font"]
+[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="4_font"]
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="5_button"]
 
 [node name="SettingsModal" type="Control"]
@@ -30,7 +30,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("4_font")
 theme_override_font_sizes/font_size = 66
 horizontal_alignment = 1
@@ -53,7 +53,7 @@ theme_override_font_sizes/font_size = 68
 text = "×"
 tooltip_text = "Close"
 accessibility_name = "Close"
-focus_mode = 0
+focus_mode = 2
 script = ExtResource("5_button")
 symbol = "close"
 

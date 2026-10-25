@@ -1,7 +1,7 @@
 class_name SettingsGlyph
 extends Control
 
-const SURFACE := Color("194F47")
+const SURFACE := Color("272925")
 
 var _kind := &"music"
 

@@ -9,7 +9,7 @@ const ModeCard := preload("res://scripts/modals/ModeSelectCard.gd")
 const Layout := preload("res://scripts/modals/ModeSelectLayout.gd")
 const DebugPreview := preload("res://scripts/modals/ModeSelectPreview.gd")
 
-@onready var background: TextureRect = $Background
+@onready var background: ColorRect = $Background
 @onready var content: Control = $SafeArea/Content
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
 @onready var title_label: Label = $SafeArea/Content/Header/Title
@@ -167,11 +167,17 @@ func _refresh_selection(user_change := false) -> void:
 	for child in options.get_children():
 		child.set_selected(child.mode() == selected_mode, user_change)
 	start_button.disabled = selected_mode.is_empty() or _preview_only
+	$SafeArea/Content/ModeHeading.text = "暂无可用模式" if selected_mode.is_empty() else "选择模式"
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	start_label.text = (
 		"开始拼图"
 		if StringName(_read_from(_selected_option, "action", &"start")) == &"start"
 		else action_text
+	)
+	if selected_mode.is_empty():
+		start_label.text = "暂无可用模式"
+	start_label.add_theme_color_override(
+		"font_color", CleanTheme.MUTED if start_button.disabled else CleanTheme.PAPER
 	)
 	start_button.accessibility_name = start_label.text
 	if _preview_only:

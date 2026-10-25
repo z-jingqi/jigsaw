@@ -5,7 +5,7 @@ signal confirm_requested(completion_event_id: String)
 signal dismissed(completion_event_id: String)
 
 const Layout := preload("res://scripts/modals/CompletionLayout.gd")
-const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 @onready var header: Control = $Canvas/Header
 @onready var level_label: Label = $Canvas/Header/LevelTitle
@@ -31,8 +31,11 @@ func _ready() -> void:
 	animation_player.animation_finished.connect(_on_animation_finished)
 	resized.connect(_apply_layout)
 	description_label.minimum_size_changed.connect(_apply_layout)
-	Style.apply_button(confirm_button)
-	Style.apply_button(return_button, true)
+	Clean.button(confirm_button, true)
+	confirm_label.add_theme_color_override("font_color", Clean.PAPER)
+	Clean.button(return_button)
+	return_label.add_theme_color_override("font_color", Clean.INK)
+	description_label.add_theme_color_override("font_color", Clean.MUTED)
 	# Input gating during the entrance must not change either button's surface.
 	for button in [confirm_button, return_button]:
 		button.add_theme_stylebox_override(

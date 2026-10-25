@@ -10,8 +10,9 @@ const ICONS := {
 }
 const IconShader := preload("res://shaders/ui/mode_icon_state.gdshader")
 const MotionScene := preload("res://scenes/modals/ModeSelectMotion.tscn")
-const FONT := preload("res://themes/douyin_ui_font.tres")
-const INK := Color("194F47")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const FONT := preload("res://assets/fonts/noto/NotoSansSC[wght].ttf")
+const INK := Clean.INK
 
 var _model: Variant
 var _selected := false
@@ -44,7 +45,7 @@ func _ready() -> void:
 		label.add_theme_font_override("font", FONT)
 		add_child(label)
 	_name_label.add_theme_color_override("font_color", INK)
-	_status_label.add_theme_color_override("font_color", Color("69897B"))
+	_status_label.add_theme_color_override("font_color", Clean.MUTED)
 	pressed.connect(func(): selection_requested.emit(mode(), StringName(_read("action", &"start"))))
 	resized.connect(_layout)
 	_refresh()
@@ -135,11 +136,11 @@ func _refresh() -> void:
 			"font_color",
 			(
 				{
-					&"not_started": Color("69897B"),
-					&"in_progress": Color("B87516"),
-					&"completed": Color("268573"),
+					&"not_started": Clean.MUTED,
+					&"in_progress": Color("86613D"),
+					&"completed": Color("526447"),
 				}
-				. get(status, Color("69897B"))
+				. get(status, Clean.MUTED)
 			)
 		)
 	)
@@ -164,18 +165,19 @@ func _layout() -> void:
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = (
-			Color("E3E9D6") if _read("status", &"") == &"completed" else Color("FAF8EF")
+			{&"polygon": Clean.SAGE, &"knob": Clean.APRICOT, &"swap": Clean.LAVENDER}
+			. get(mode(), Clean.SAGE)
 		)
-		style.border_color = INK if _selected or state == "focus" else Color("DDE3CF")
-		style.set_border_width_all(maxi(1, int(1.0 * unit)))
-		style.set_corner_radius_all(int(12.0 * unit))
+		style.border_color = INK if _selected or state == "focus" else Color.TRANSPARENT
+		style.set_border_width_all(maxi(2, int(2.0 * unit)) if _selected or state == "focus" else 0)
+		style.set_corner_radius_all(int(20.0 * unit))
 		add_theme_stylebox_override(state, style)
 	_name_label.position = Vector2(0, size.y * 0.61)
 	_name_label.size = Vector2(size.x, size.y * 0.16)
 	_status_label.position = Vector2(0, size.y * 0.81)
 	_status_label.size = Vector2(size.x, size.y * 0.13)
 	_name_label.add_theme_font_size_override("font_size", maxi(12, int(16.0 * unit)))
-	_status_label.add_theme_font_size_override("font_size", maxi(10, int(11.0 * unit)))
+	_status_label.add_theme_font_size_override("font_size", maxi(12, int(12.0 * unit)))
 	pivot_offset = size * 0.5
 	var icon_size := minf(size.x * 0.56, size.y * 0.44)
 	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.15)

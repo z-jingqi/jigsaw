@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://bsngcpu6finig" path="res://scripts/navigation/TransitionHost.gd" id="2_transition"]
 [ext_resource type="Script" uid="uid://ucji8nhjwru0" path="res://scripts/screens/gameplay/TabletopPresentation.gd" id="3_clw2w"]
 [ext_resource type="Script" uid="uid://b6f5rjhx1ydpr" path="res://scripts/app/Game.gd" id="3_game"]
-[ext_resource type="Texture2D" uid="uid://qy603jmxdjyq" path="res://assets/ui/shared/tabletop-desk.webp" id="4_tabletop"]
 
 [node name="Game" type="Node2D" unique_id=205443668]
 script = ExtResource("3_game")
@@ -12,16 +11,13 @@ script = ExtResource("3_game")
 [node name="TabletopLayer" type="CanvasLayer" parent="." unique_id=1007875349]
 layer = -10
 
-[node name="Background" type="TextureRect" parent="TabletopLayer" unique_id=2054972217]
+[node name="Background" type="ColorRect" parent="TabletopLayer" unique_id=2054972217]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("4_tabletop")
-expand_mode = 1
-stretch_mode = 6
 script = ExtResource("3_clw2w")
 
 navigator_path = NodePath("../../AppNavigator")

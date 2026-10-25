@@ -1,6 +1,8 @@
 class_name SettingsRow
 extends HBoxContainer
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+
 signal value_changed(key: StringName, enabled: bool)
 
 @export var setting_key := StringName()
@@ -61,11 +63,11 @@ func set_visual_scale(unit: float) -> void:
 	_unit = unit
 	custom_minimum_size.y = 66 * unit
 	glyph.custom_minimum_size = Vector2.ONE * 28 * unit
-	toggle.custom_minimum_size = Vector2(50, 28) * unit
+	toggle.custom_minimum_size = (Vector2(58, 44) * unit).max(Vector2(58, 44))
 	label.add_theme_font_size_override("font_size", roundi(16 * unit))
 	add_theme_constant_override("separation", roundi(12 * unit))
 	_ensure_thumb()
-	_thumb.size = Vector2.ONE * 20 * unit
+	_thumb.size = Vector2.ONE * 32 * unit
 	_thumb.custom_minimum_size = _thumb.size
 	_apply_toggle_style(toggle.button_pressed)
 	_move_thumb(toggle.button_pressed, false)
@@ -88,7 +90,7 @@ func _ensure_thumb() -> void:
 	_thumb.size = Vector2(64, 64)
 	_thumb.custom_minimum_size = Vector2(64, 64)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("F5F0E3")
+	style.bg_color = Clean.PAPER
 	style.corner_radius_top_left = 32
 	style.corner_radius_top_right = 32
 	style.corner_radius_bottom_left = 32
@@ -101,7 +103,7 @@ func _ensure_thumb() -> void:
 
 func _apply_toggle_style(enabled: bool) -> void:
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("719A78") if enabled else Color("DDE3CF")
+	style.bg_color = Clean.INK if enabled else Clean.SAGE
 	style.corner_radius_top_left = 43
 	style.corner_radius_top_right = 43
 	style.corner_radius_bottom_left = 43
@@ -110,7 +112,14 @@ func _apply_toggle_style(enabled: bool) -> void:
 	style.anti_aliasing = true
 	toggle.add_theme_stylebox_override("normal", style)
 	toggle.add_theme_stylebox_override("pressed", style.duplicate())
-	toggle.add_theme_stylebox_override("focus", style.duplicate())
+	var focus := Clean.panel(Color.TRANSPARENT, 43)
+	focus.set_border_width_all(2)
+	focus.border_color = Clean.INK
+	focus.expand_margin_left = 3
+	focus.expand_margin_right = 3
+	focus.expand_margin_top = 3
+	focus.expand_margin_bottom = 3
+	toggle.add_theme_stylebox_override("focus", focus)
 	var hover := style.duplicate() as StyleBoxFlat
 	hover.bg_color = hover.bg_color.lightened(0.04)
 	toggle.add_theme_stylebox_override("hover", hover)
@@ -119,7 +128,7 @@ func _apply_toggle_style(enabled: bool) -> void:
 func _move_thumb(enabled: bool, animate: bool) -> void:
 	if not is_instance_valid(_thumb):
 		return
-	var target := (Vector2(27, 4) if enabled else Vector2(3, 4)) * _unit
+	var target := (Vector2(22, 6) if enabled else Vector2(4, 6)) * _unit
 	_stop_toggle_motion()
 	if not animate or _reduced_motion:
 		_thumb.position = target

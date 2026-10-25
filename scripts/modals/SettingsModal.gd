@@ -4,6 +4,7 @@ extends Control
 signal setting_changed(key: StringName, enabled: bool)
 signal close_requested
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 @onready var shell: AnimatedModalShell = $ModalShell
@@ -135,7 +136,7 @@ func active_motion_count() -> int:
 func _open() -> void:
 	_closing = false
 	close_button.disabled = false
-	shell.configure_shade(Color(0.05, 0.16, 0.14, 0.28))
+	shell.configure_shade(Color(0.15, 0.16, 0.14, 0.24))
 	shell.play_open(_reduced_motion)
 
 
@@ -194,14 +195,16 @@ func _configure_panel() -> void:
 	)
 	var panel_size := Vector2(340, 514) * unit if portrait else Vector2(660, 356) * unit
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color("F5F0E3")
+	style.bg_color = Clean.PAPER
 	style.set_corner_radius_all(roundi(24 * unit))
 	style.corner_detail = 20
 	style.anti_aliasing = true
 	shell.configure_panel(panel_size, style, Vector4(24, 20, 24, 20) * unit)
 	var header := title_label.get_parent() as Control
 	header.custom_minimum_size.y = 64 * unit
-	title_label.add_theme_font_size_override("font_size", roundi(26 * unit))
+	Clean.label(title_label, roundi(28 * unit))
+	error_label.add_theme_font_size_override("font_size", maxi(13, roundi(13 * unit)))
+	error_label.custom_minimum_size.y = 30 * unit
 	_layout_navigation.call_deferred()
 	var rows := music_row.get_parent() as GridContainer
 	rows.columns = 1 if portrait else 2
@@ -209,7 +212,7 @@ func _configure_panel() -> void:
 	rows.add_theme_constant_override("v_separation", roundi(8 * unit))
 	for row in _settings_rows():
 		row.set_visual_scale(unit)
-		row.set_divider_visible(portrait and row != reduced_motion_row)
+		row.set_divider_visible(false)
 
 
 func _layout_navigation() -> void:

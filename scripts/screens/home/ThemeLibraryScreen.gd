@@ -6,6 +6,7 @@ const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleFont := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 var _themes: Array = []
 var _scroll_position := 0
 
@@ -41,69 +42,94 @@ func _build() -> void:
 	for child in $Scroll/Grid.get_children():
 		$Scroll/Grid.remove_child(child)
 		child.queue_free()
-	for model in _themes:
+	$EmptyState.visible = _themes.is_empty()
+	$Subtitle.text = "每一个主题，都是一段新的拼图时光。" if not _themes.is_empty() else "新的主题正在准备中。"
+	var palette := [Clean.SAGE, Clean.APRICOT, Clean.LAVENDER]
+	for index in _themes.size():
+		var model: Variant = _themes[index]
 		var tile := Button.new()
 		tile.name = str(model.theme_id)
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
 		tile.disabled = not model.playable
-		tile.tooltip_text = "敬请期待" if not model.playable else str(model.title)
-		for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-			var box := StyleBoxFlat.new()
-			box.bg_color = Color.TRANSPARENT
-			box.set_corner_radius_all(20)
-			if state == "focus":
-				box.set_border_width_all(3)
-				box.border_color = Color("9BB39B")
-			tile.add_theme_stylebox_override(state, box)
+		tile.tooltip_text = "%s · %s" % [model.title, "进入主题" if model.playable else "敬请期待"]
+		tile.accessibility_name = tile.tooltip_text
+		Clean.button(tile)
+		var color: Color = palette[index % palette.size()]
+		for state in ["normal", "hover", "pressed", "disabled"]:
+			var fill := color.darkened(0.05) if state == "pressed" else color
+			tile.add_theme_stylebox_override(state, Clean.panel(fill, 20))
 		var cover := TextureRect.new()
 		cover.name = "Cover"
 		cover.texture = model.cover_texture
 		cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var mat := ShaderMaterial.new()
-		mat.shader = CoverShader
-		mat.set_shader_parameter(
-			"texture_aspect", cover.texture.get_size().x / cover.texture.get_size().y
-		)
-		cover.material = mat
+		if cover.texture != null:
+			var mat := ShaderMaterial.new()
+			mat.shader = CoverShader
+			mat.set_shader_parameter(
+				"texture_aspect", cover.texture.get_size().x / cover.texture.get_size().y
+			)
+			cover.material = mat
+		if not model.playable:
+			cover.modulate = Color(1, 1, 1, 0.68)
 		tile.add_child(cover)
 		var label := Label.new()
 		label.name = "Title"
 		label.text = model.title
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.add_theme_font_override("font", TitleFont)
-		label.add_theme_color_override("font_color", Color("194F47"))
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(label)
+		var status := Label.new()
+		status.name = "Status"
+		status.text = "进入主题  →" if model.playable else "敬请期待"
+		status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tile.add_child(status)
 		tile.pressed.connect(func() -> void: theme_selected.emit(str(model.theme_id)))
 		$Scroll/Grid.add_child(tile)
 
 
 func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
+	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($CloseButton, self, true)
-	$Title.position = Vector2(76 * u, Buttons.header_center_y(size) - 23 * u)
-	$Title.size = Vector2(size.x - 152 * u, 46 * u)
-	$Title.add_theme_font_size_override("font_size", int(28 * u))
-	var horizontal_margin := 14.0 * u
-	$Scroll.position = Vector2(horizontal_margin, 100 * u)
-	$Scroll.size = size - Vector2(horizontal_margin * 2.0, 118 * u)
+	var width := minf(size.x - 48.0 * u, 680.0 * u)
+	var left := (size.x - width) * 0.5
+	var top := maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
+	$Title.position = Vector2(left, top)
+	$Title.size = Vector2(width, 46 * u)
+	Clean.label($Title, maxi(1, int(30 * u)))
+	$Subtitle.position = Vector2(left, top + 55.0 * u)
+	$Subtitle.size = Vector2(width, 28 * u)
+	Clean.label($Subtitle, maxi(1, int(13 * u)), true)
+	var scroll_top := top + 106.0 * u
+	$Scroll.position = Vector2(left, scroll_top)
+	$Scroll.size = Vector2(width, size.y - safe.w - scroll_top - 28.0 * u)
+	$EmptyState.position = Vector2(left, scroll_top + 80.0 * u)
+	$EmptyState.size = Vector2(width, 100.0 * u)
+	Clean.label($EmptyState, maxi(1, int(18 * u)), true)
 	var grid := $Scroll/Grid as GridContainer
 	grid.columns = 2 if size.x / size.y < 0.8 else 3
-	var horizontal_gap := 14.0 * u
-	grid.add_theme_constant_override("h_separation", int(horizontal_gap))
-	grid.add_theme_constant_override("v_separation", int(22 * u))
-	var width: float = (
-		($Scroll.size.x - float(grid.columns - 1) * horizontal_gap) / float(grid.columns)
-	)
+	var gap := 14.0 * u
+	grid.add_theme_constant_override("h_separation", int(gap))
+	grid.add_theme_constant_override("v_separation", int(18 * u))
+	var tile_width := (width - float(grid.columns - 1) * gap) / float(grid.columns)
 	for tile in grid.get_children():
-		tile.custom_minimum_size = Vector2(width, width * 1.5 + 47 * u)
+		var image_width := tile_width - 20.0 * u
+		var image_height := image_width * 1.3
+		tile.custom_minimum_size = Vector2(tile_width, image_height + 85.0 * u)
 		var cover := tile.get_node("Cover") as TextureRect
-		cover.position = Vector2.ONE * 5 * u
-		cover.size = Vector2(width - 10 * u, (width - 10 * u) * 1.5)
+		cover.position = Vector2.ONE * 10.0 * u
+		cover.size = Vector2(image_width, image_height)
+		if cover.material != null:
+			cover.material.set_shader_parameter("aspect", image_width / image_height)
 		var title := tile.get_node("Title") as Label
-		title.position = Vector2(0, width * 1.5 + 3 * u)
-		title.size = Vector2(width, 42 * u)
+		title.position = Vector2(14.0 * u, image_height + 17.0 * u)
+		title.size = Vector2(tile_width - 28.0 * u, 28.0 * u)
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		TitleLayout.fit(title, title.size, maxi(1, int(20 * u)))
+		TitleLayout.fit(title, title.size, maxi(1, int(18 * u)))
+		Clean.label(title, title.get_theme_font_size("font_size"))
+		var status := tile.get_node("Status") as Label
+		status.position = Vector2(14.0 * u, image_height + 49.0 * u)
+		status.size = Vector2(tile_width - 28.0 * u, 23.0 * u)
+		Clean.label(status, maxi(1, int(12 * u)), true)

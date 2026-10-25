@@ -1,7 +1,9 @@
 class_name LevelCard
 extends ActionButton
 
-const TITLE_MAX_FONT_SIZE := 40
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+
+const TITLE_MAX_FONT_SIZE := 48
 const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 28
 const TITLE_WRAP_MIN_FONT_SIZE := 18
 
@@ -14,11 +16,19 @@ var _view_model: Variant
 var _thumbnail_path := ""
 var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
+var _status: Label
 
 
 func _ready() -> void:
 	kind = Kind.CARD
 	super._ready()
+	_status = Label.new()
+	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status.add_theme_stylebox_override("normal", Clean.panel(Clean.PAPER, 18))
+	Clean.label(title_label, TITLE_MAX_FONT_SIZE)
+	add_child(_status)
+	Clean.button(self)
 	set_process(false)
 	resized.connect(_apply_layout)
 	_apply_layout()
@@ -40,6 +50,8 @@ func _apply_view_model() -> void:
 		title_label.text = next_title
 	var is_locked := bool(_read("locked"))
 	disabled = is_locked
+	_status.text = "未解锁" if is_locked else ""
+	_status.visible = is_locked
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	var mode_states: Array = _read("modes", [])
 	completed_modes.set_modes(mode_states, not is_locked)
@@ -141,16 +153,16 @@ func _cancel_thumbnail_fade() -> void:
 func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0:
 		return
-	var inset := maxf(4.0, size.x * 0.012)
-	var image_height := minf(size.y - 64.0, (size.x - inset * 2.0) * 4.0 / 3.0)
+	var inset := maxf(8.0, size.x * 0.035)
+	var image_height := minf(size.y - size.x * 0.24, (size.x - inset * 2.0) * 4.0 / 3.0)
 	thumbnail.position = Vector2(inset, inset)
 	thumbnail.size = Vector2(size.x - inset * 2.0, image_height)
 	var remaining := maxf(0.0, size.y - image_height)
-	var title_height := minf(72.0, maxf(54.0, remaining - inset))
+	var title_height := maxf(44.0, remaining - inset)
 	title_label.position = Vector2(20.0, image_height + inset + 2.0)
 	title_label.size = Vector2(maxf(0.0, size.x - 40.0), title_height)
 	_fit_title_font(title_label.size.x, title_label.size.y)
-	var icon_size := clampf(size.x * 0.088, 34.0, 48.0) * 1.5
+	var icon_size := clampf(size.x * 0.072, 24.0, 40.0)
 	var icon_gap := maxf(5.0, icon_size * 0.12)
 	completed_modes.configure(icon_size, icon_gap)
 	completed_modes.size = Vector2(icon_size, icon_size * 3.0 + icon_gap * 2.0)
@@ -161,6 +173,11 @@ func _apply_layout() -> void:
 	if shader_material != null and image_height > 0.0:
 		shader_material.set_shader_parameter("rect_aspect", thumbnail.size.x / thumbnail.size.y)
 		shader_material.set_shader_parameter("rect_size", thumbnail.size)
+	_status.position = thumbnail.position + Vector2(12, 12)
+	_status.size = Vector2(size.x * 0.30, maxf(32, size.x * 0.1))
+	Clean.label(_status, maxi(18, roundi(size.x * 0.06)), true)
+	add_theme_stylebox_override("normal", Clean.panel(Clean.SAGE, 26))
+	add_theme_stylebox_override("disabled", Clean.panel(Clean.LAVENDER, 26))
 	_apply_preview_style()
 
 

@@ -2,14 +2,14 @@ extends RefCounted
 ## Top navigation follows the mode-selection back button's reference geometry.
 
 const REFERENCE_SIZE := Vector2(390.0, 844.0)
-const SIDE := 36.0
+const SIDE := 44.0
 const EDGE := 18.0
 const TOP := 22.0
 const GAP := 12.0
 
 
 static func unit(viewport_size: Vector2) -> float:
-	return minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
+	return maxf(1.0, minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y))
 
 
 static func icon_size(viewport_size: Vector2) -> Vector2:
@@ -35,6 +35,9 @@ static func place_navigation(
 ) -> void:
 	var reference := metric_size if metric_size != Vector2.ZERO else surface.size
 	var point := navigation_position(reference, from_right, slot)
+	var safe := preload("res://scripts/ui/foundation/CleanTheme.gd").safe_insets(surface.size)
+	point.y += safe.y
+	point.x += -safe.z if from_right else safe.x
 	if from_right:
 		point.x += surface.size.x - reference.x
 	button.set_anchors_preset(Control.PRESET_TOP_LEFT)

@@ -1,5 +1,7 @@
 class_name CompletionLayout
 extends RefCounted
+
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 ## Fits the completed image with the same quiet spacing and palette as gameplay.
 
 
@@ -15,7 +17,8 @@ func image_target(viewport_size: Vector2, texture: Texture2D, source: Rect2) -> 
 
 func apply_header(viewport_size: Vector2, header: Control, level_label: Label) -> void:
 	var scale := minf(viewport_size.x / 1206.0, viewport_size.y / 2680.0)
-	header.position = Vector2.ZERO
+	var safe := Clean.safe_insets(viewport_size)
+	header.position = Vector2(0, safe.y)
 	header.size = Vector2(viewport_size.x, 250.0 * scale)
 	level_label.position = Vector2(viewport_size.x * 0.1, 90 * scale)
 	level_label.size = Vector2(viewport_size.x * 0.8, 144 * scale)
@@ -31,7 +34,9 @@ func apply_footer(
 		button.size = button_size
 		button.custom_minimum_size = button_size
 		button.pivot_offset = button_size * 0.5
-	back.position = Vector2(viewport_size.x * 0.14, viewport_size.y - 220 * scale)
+	back.position = Vector2(
+		viewport_size.x * 0.14, viewport_size.y - 220 * scale - Clean.safe_insets(viewport_size).w
+	)
 	confirm.position = Vector2(viewport_size.x * 0.52, back.position.y)
 	for label in [confirm_label, back_label]:
 		label.add_theme_font_size_override("font_size", maxi(18, roundi(52 * scale)))

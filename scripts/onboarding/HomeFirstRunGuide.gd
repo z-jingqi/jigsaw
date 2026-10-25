@@ -1,8 +1,11 @@
 class_name HomeFirstRunGuide
 extends Control
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+
 signal skip_requested
 
+@onready var step_label: Label = $GuidePanel/Step
 @onready var prompt: Label = $GuidePanel/Prompt
 @onready var gesture_hint: Label = $GuidePanel/GestureHint
 @onready var skip_button: Button = $SkipButton
@@ -27,6 +30,7 @@ func set_step(step: StringName, reduced_motion: bool, labels: Dictionary) -> voi
 	_stop_motion()
 	skip_button.text = str(labels.get("skip", "Skip"))
 	skip_button.tooltip_text = skip_button.text
+	step_label.text = "2 / 2" if step == &"enter" else "1 / 2"
 	if step == &"enter":
 		prompt.text = str(labels.get("enter", "Tap the cover to open its levels"))
 		gesture_hint.text = str(labels.get("enter_hint", "Tap to play"))
@@ -87,19 +91,26 @@ func _layout() -> void:
 	var unit := minf(size.x / 390.0, size.y / 700.0)
 	var panel := $GuidePanel as Panel
 	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.size = Vector2(size.x * 0.84, 180 * unit)
-	panel.position = Vector2(size.x * 0.08, minf(size.y * 0.61, size.y - 300 * unit))
+	panel.size = Vector2(minf(size.x * 0.84, 350 * unit), 206 * unit)
+	panel.add_theme_stylebox_override("panel", Clean.panel(Clean.SAGE, roundi(24 * unit)))
+	panel.position = Vector2(
+		(size.x - panel.size.x) * 0.5, minf(size.y * 0.61, size.y - 300 * unit)
+	)
 	for label in [prompt, gesture_hint]:
 		label.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		label.size = Vector2(panel.size.x - 32 * unit, 46 * unit)
-		label.add_theme_font_size_override("font_size", roundi(18 * unit))
-	prompt.position = Vector2(16, 14) * unit
-	_hint_rest = Vector2(16, 68) * unit
+		label.add_theme_font_size_override("font_size", roundi(17 * unit))
+	step_label.position = Vector2(16, 12) * unit
+	step_label.size = Vector2(panel.size.x - 32 * unit, 22 * unit)
+	Clean.label(step_label, roundi(12 * unit), true)
+	prompt.position = Vector2(16, 38) * unit
+	_hint_rest = Vector2(16, 90) * unit
 	gesture_hint.position = _hint_rest
 	gesture_hint.pivot_offset = gesture_hint.size * 0.5
 	skip_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	skip_button.size = Vector2(86, 34) * unit
+	skip_button.size = Vector2(100, 44) * unit
+	Clean.button(skip_button)
 	skip_button.position = (
-		panel.position + Vector2((panel.size.x - skip_button.size.x) * 0.5, 130 * unit)
+		panel.position + Vector2((panel.size.x - skip_button.size.x) * 0.5, 148 * unit)
 	)
 	skip_button.add_theme_font_size_override("font_size", roundi(15 * unit))

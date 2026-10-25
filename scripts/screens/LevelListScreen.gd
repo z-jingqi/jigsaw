@@ -7,6 +7,7 @@ signal level_selected(level_id: String)
 const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
 const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
@@ -25,9 +26,16 @@ var _grid: Variant
 var _reduced_motion := false
 var _unlock_sequence = UnlockSequenceScript.new()
 var _played_unlocks: Dictionary = {}
+var _empty_label: Label
 
 
 func _ready() -> void:
+	_empty_label = Label.new()
+	_empty_label.text = "这里还没有拼图\n试试其他主题吧"
+	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$SafeArea/Content.add_child(_empty_label)
 	_grid = VirtualGridScript.new(scroll, grid_content, LevelCardScene)
 	_grid.level_selected.connect(_on_level_selected)
 	_grid.card_visible.connect(_on_card_visible)
@@ -136,14 +144,18 @@ func _apply_layout() -> void:
 	_apply_header_layout()
 	if _view_model == null or _grid == null:
 		return
+	_empty_label.visible = _view_model.levels.is_empty()
+	_empty_label.position = scroll.position
+	_empty_label.size = scroll.size
+	Clean.label(_empty_label, roundi(18 * size.x / 390.0), true)
 	var available_width := maxf(1.0, scroll.size.x)
 	var columns := grid_column_count_for_width(available_width)
 	var regular := columns == 3
-	var horizontal_gap := 22.0 if regular else 28.0
-	var vertical_gap := 30.0
+	var horizontal_gap := 36.0 if regular else 40.0
+	var vertical_gap := 44.0
 	var card_width := (available_width - horizontal_gap * float(columns - 1)) / float(columns)
-	var card_size := Vector2(card_width, card_width * 4.0 / 3.0 + 72.0)
-	var background_reveal_space := clampf(size.y * 0.07, 140.0, 220.0)
+	var card_size := Vector2(card_width, card_width * 1.55)
+	var background_reveal_space := clampf(size.y * 0.03, 48.0, 100.0)
 	_grid.configure(
 		_view_model.levels,
 		columns,
@@ -158,58 +170,23 @@ func _apply_layout() -> void:
 func _apply_header_layout() -> void:
 	if not is_node_ready() or header.size.x <= 0.0:
 		return
+	var u := minf(size.x / 390.0, size.y / 700.0)
 	var available_width := header.size.x
 	Buttons.place_navigation(back_button, self)
-	var center_y := back_button.position.y + back_button.size.y * 0.5
-	progress.size = Vector2(232.0, 82.0)
-	progress.position = Vector2(available_width - progress.size.x - 4.0, center_y - 41.0)
-	var reserved_side := maxf(
-		back_button.position.x + back_button.size.x, available_width - progress.position.x
-	)
-	var group_width := maxf(320.0, available_width - reserved_side * 2.0 - 20.0)
-	var font := theme_title.get_theme_font("font")
-	var font_size := 58
-	var ornament_gap := 10.0
-	var ornament_width := 104.0
-	var measured_width := (
-		font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
-	)
-	while font_size > 36 and (group_width - measured_width) * 0.5 - ornament_gap < 52.0:
-		font_size -= 2
-		measured_width = (
-			font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
-		)
-	var multiline := measured_width + 2.0 * (52.0 + ornament_gap) > group_width
-	var title_height := 104.0
-	var title_top := center_y - title_height * 0.5
-	if multiline:
-		font_size = 30
-		ornament_gap = 8.0
-		ornament_width = 36.0
-		measured_width = group_width - 2.0 * (ornament_width + ornament_gap)
-		title_height = 112.0
-		title_top = center_y - title_height * 0.5
-		theme_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		theme_title.max_lines_visible = 2
-	else:
-		ornament_width = clampf((group_width - measured_width) * 0.5 - ornament_gap, 52.0, 104.0)
-		theme_title.autowrap_mode = TextServer.AUTOWRAP_OFF
-		theme_title.max_lines_visible = 1
-	theme_title.add_theme_font_size_override("font_size", font_size)
-	var ornament_size := Vector2(ornament_width, ornament_width * 0.36)
-	var actual_group_width := measured_width + (ornament_size.x + ornament_gap) * 2.0
-	var group_left := (available_width - actual_group_width) * 0.5
-	title_left_ornament.position = Vector2(
-		group_left, title_top + (title_height - ornament_size.y) * 0.5
-	)
-	title_left_ornament.size = ornament_size
-	theme_title.position = Vector2(group_left + ornament_size.x + ornament_gap, title_top)
-	theme_title.size = Vector2(measured_width, title_height)
-	title_right_ornament.position = Vector2(
-		theme_title.position.x + theme_title.size.x + ornament_gap,
-		title_top + (title_height - ornament_size.y) * 0.5
-	)
-	title_right_ornament.size = ornament_size
+	title_left_ornament.visible = false
+	title_right_ornament.visible = false
+	progress.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	progress.size = Vector2(100.0, 34.0) * u
+	progress.position = Vector2(available_width - progress.size.x, back_button.position.y)
+	progress.add_theme_stylebox_override("panel", Clean.panel(Clean.SAGE, roundi(17 * u)))
+	Clean.label(progress_count, roundi(14 * u), true)
+	theme_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	theme_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	theme_title.max_lines_visible = 2
+	theme_title.position = Vector2(0, 64 * u)
+	theme_title.size = Vector2(available_width, 80 * u)
+	Clean.label(theme_title, roundi(30 * u))
+	scroll.offset_top = 168 * u
 
 
 func _on_card_visible(card: Control, view_model: Variant) -> void:
