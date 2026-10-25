@@ -72,4 +72,8 @@ func _configure_group(group: Control, position: Vector2, button_size: float) -> 
 	group.position = position
 	group.size = Vector2.ONE * button_size
 	group.pivot_offset = group.size * 0.5
-	Buttons.apply_size(group.get_node("HitTarget"), group.size)
+	var target := group.get_node("HitTarget") as Button
+	# This layout owns the full hit target, rather than stretched scene anchors.
+	target.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	target.position = Vector2.ZERO
+	Buttons.apply_size(target, group.size)

@@ -203,6 +203,7 @@ func _configure_panel() -> void:
 	var header := title_label.get_parent() as Control
 	header.custom_minimum_size.y = 64 * unit
 	Clean.label(title_label, roundi(28 * unit))
+	error_label.add_theme_font_override("font", Clean.FONT)
 	error_label.add_theme_font_size_override("font_size", maxi(13, roundi(13 * unit)))
 	error_label.custom_minimum_size.y = 30 * unit
 	_layout_navigation.call_deferred()
