@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/screens/gameplay/GameplayHudButton.gd" id="2_hud_button"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/TrayView.tscn" id="3_tray"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/SwapActionBar.tscn" id="4_swap"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="5_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_heading_font.tres" id="5_font"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6_cloud"]
 
 [node name="GameplayScreen" type="Control"]

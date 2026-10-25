@@ -27,7 +27,7 @@ var _preview_only := false
 
 
 func _ready() -> void:
-	$SafeArea/Content/ModeHeading.text = "选择模式"
+	$SafeArea/Content/ModeHeading.text = GameStrings.ui_text("choose_mode")
 	back_button.pressed.connect(request_close)
 	start_button.pressed.connect(_on_start_pressed)
 	resized.connect(_apply_layout)
@@ -167,7 +167,11 @@ func _refresh_selection(user_change := false) -> void:
 	for child in options.get_children():
 		child.set_selected(child.mode() == selected_mode, user_change)
 	start_button.disabled = selected_mode.is_empty() or _preview_only
-	$SafeArea/Content/ModeHeading.text = "暂无可用模式" if selected_mode.is_empty() else "选择模式"
+	$SafeArea/Content/ModeHeading.text = (
+		GameStrings.ui_text("no_available_modes")
+		if selected_mode.is_empty()
+		else GameStrings.ui_text("choose_mode")
+	)
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	start_label.text = (
 		"开始拼图"
@@ -175,7 +179,7 @@ func _refresh_selection(user_change := false) -> void:
 		else action_text
 	)
 	if selected_mode.is_empty():
-		start_label.text = "暂无可用模式"
+		start_label.text = GameStrings.ui_text("no_available_modes")
 	start_label.add_theme_color_override(
 		"font_color", CleanTheme.MUTED if start_button.disabled else CleanTheme.PAPER
 	)

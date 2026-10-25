@@ -20,7 +20,7 @@ func _ready() -> void:
 func _draw() -> void:
 	var ink := Style.Clean.PAPER if symbol == "hint" else Style.INK
 	if disabled:
-		ink.a = 0.38
+		ink = Style.Clean.MUTED
 	var center := size * 0.5
 	var unit := minf(size.x, size.y) / 148.0
 	var stroke := maxf(2.0, 7.0 * unit)

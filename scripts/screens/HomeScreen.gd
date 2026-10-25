@@ -19,6 +19,19 @@ var _title_motion: RefCounted
 
 
 func _ready() -> void:
+	$EmptyState.text = GameStrings.ui_text("puzzles_preparing")
+	var labels := {
+		"AlbumButton": "album_title",
+		"MenuButton": "settings_title",
+		"ThemesButton": "all_themes",
+		"UndoButton": "previous_theme",
+		"NextButton": "next_theme",
+		"StartButton": "enter_topic",
+	}
+	for entry in labels:
+		var button := get_node(entry) as Button
+		button.tooltip_text = GameStrings.ui_text(labels[entry])
+		button.accessibility_name = button.tooltip_text
 	_title_motion = ThemeTitleMotion.new(
 		$ThemeName, $IncomingThemeName, [], func() -> void: Layout.apply(self)
 	)
@@ -28,7 +41,7 @@ func _ready() -> void:
 	menu_button.pressed.connect(menu_requested.emit)
 	$ThemesButton.pressed.connect(themes_requested.emit)
 	$AlbumButton.pressed.connect(album_requested.emit)
-	$UndoButton.pressed.connect(deck.undo)
+	$UndoButton.pressed.connect(_on_previous_pressed)
 	$NextButton.pressed.connect(_on_next_pressed)
 	start_button.pressed.connect(_on_enter_pressed)
 	resized.connect(_on_resized)
@@ -84,29 +97,38 @@ func _on_selected(index: int) -> void:
 
 
 func _update_information() -> void:
-	var can_undo: bool = not deck.history.is_empty()
 	$UndoButton.visible = not _themes.is_empty()
 	$NextButton.visible = not _themes.is_empty()
 	$NextButton.disabled = _themes.size() < 2
-	$UndoButton.disabled = not can_undo
+	$UndoButton.disabled = _themes.size() < 2
 	$UndoButton.queue_redraw()
 	$EmptyState.visible = _themes.is_empty()
 	$Counter.visible = not _themes.is_empty()
 	if _themes.is_empty():
 		start_button.disabled = true
-		start_button.text = "敬请期待"
-		$ThemeName.text = "拼图时光"
-		$Subtitle.text = "新的主题，即将与你见面。"
+		start_button.text = GameStrings.ui_text("coming_soon")
+		start_button.accessibility_name = start_button.text
+		start_button.tooltip_text = start_button.text
+		$ThemeName.text = GameStrings.ui_text("home_title")
+		$Subtitle.text = GameStrings.ui_text("home_empty_subtitle")
 		Layout.apply(self)
 		return
 	var model: Variant = _themes[_selected_index]
 	$ThemeName.autowrap_mode = TextServer.AUTOWRAP_OFF
 	$ThemeName.max_lines_visible = 1
 	$ThemeName.clip_text = true
-	start_button.text = "进入主题" if model.playable else "敬请期待"
+	start_button.text = (
+		GameStrings.ui_text("enter_topic") if model.playable else GameStrings.ui_text("coming_soon")
+	)
+	start_button.accessibility_name = start_button.text
+	start_button.tooltip_text = start_button.text
 	start_button.disabled = not model.playable
 	$Counter.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
-	$Subtitle.text = "挑选一幅画，慢慢拼出美好。" if model.playable else "新的风景正在准备中，敬请期待。"
+	$Subtitle.text = (
+		GameStrings.ui_text("home_subtitle")
+		if model.playable
+		else GameStrings.ui_text("home_coming_subtitle")
+	)
 	var next_model: Variant = _themes[posmod(_selected_index + 1, _themes.size())]
 	_title_motion.set_current(str(model.title), str(next_model.title))
 
@@ -133,6 +155,11 @@ func _on_browse_motion(
 		committed,
 		bool(get_meta("reduced_motion", false))
 	)
+
+
+func _on_previous_pressed() -> void:
+	if _themes.size() > 1 and deck.active_motion_count() == 0:
+		deck.select_theme(posmod(_selected_index - 1, _themes.size()))
 
 
 func _on_next_pressed() -> void:

@@ -10,20 +10,21 @@ static func apply(host: Control) -> void:
 	var s := host.size
 	var u := minf(s.x / 390.0, s.y / 844.0)
 	var safe := Clean.safe_insets(s)
-	var width := minf(s.x - 48.0 * u, 370.0 * u)
-	var left := (s.x - width) * 0.5
+	var usable_width := s.x - safe.x - safe.z
+	var width := minf(usable_width - 48.0 * u, 370.0 * u)
+	var left := safe.x + (usable_width - width) * 0.5
 	Buttons.place_navigation(host.get_node("AlbumButton"), host)
 	Buttons.place_navigation(host.get_node("MenuButton"), host, true)
 	Buttons.place_navigation(host.get_node("ThemesButton"), host, true, 1)
-	var top := maxf(100.0 * u, Buttons.header_center_y(s) + 50.0 * u)
+	var top := safe.y + maxf(100.0 * u, Buttons.header_center_y(s) + 50.0 * u)
 	for name in ["ThemeName", "IncomingThemeName"]:
 		var title := host.get_node(name) as Label
 		title.autowrap_mode = TextServer.AUTOWRAP_OFF
 		title.max_lines_visible = 1
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_place(title, Vector2(left, top), Vector2(width - 48.0 * u, 54.0 * u))
+		Clean.label(title, maxi(1, int(32.0 * u)))
 		TitleLayout.fit(title, title.size, maxi(1, int(32.0 * u)))
-		Clean.label(title, title.get_theme_font_size("font_size"))
 	var subtitle := host.get_node("Subtitle") as Label
 	_place(subtitle, Vector2(left, top + 59.0 * u), Vector2(width, 26.0 * u))
 	Clean.label(subtitle, maxi(1, int(14.0 * u)), true)

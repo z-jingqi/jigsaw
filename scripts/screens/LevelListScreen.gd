@@ -31,7 +31,7 @@ var _empty_label: Label
 
 func _ready() -> void:
 	_empty_label = Label.new()
-	_empty_label.text = "这里还没有拼图\n试试其他主题吧"
+	_empty_label.text = GameStrings.ui_text("levels_empty")
 	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE

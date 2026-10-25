@@ -11,7 +11,7 @@ const ICONS := {
 const IconShader := preload("res://shaders/ui/mode_icon_state.gdshader")
 const MotionScene := preload("res://scenes/modals/ModeSelectMotion.tscn")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
-const FONT := preload("res://assets/fonts/noto/NotoSansSC[wght].ttf")
+const FONT := Clean.FONT
 const INK := Clean.INK
 
 var _model: Variant
@@ -44,6 +44,7 @@ func _ready() -> void:
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.add_theme_font_override("font", FONT)
 		add_child(label)
+	_name_label.add_theme_font_override("font", Clean.HEADING)
 	_name_label.add_theme_color_override("font_color", INK)
 	_status_label.add_theme_color_override("font_color", Clean.MUTED)
 	pressed.connect(func(): selection_requested.emit(mode(), StringName(_read("action", &"start"))))

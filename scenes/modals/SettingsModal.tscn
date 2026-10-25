@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/modals/SettingsModal.gd" id="1_modal"]
 [ext_resource type="PackedScene" path="res://scenes/ui/AnimatedModalShell.tscn" id="2_shell"]
 [ext_resource type="PackedScene" path="res://scenes/ui/foundation/SettingsRow.tscn" id="3_row"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="4_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_heading_font.tres" id="4_font"]
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="5_button"]
 
 [node name="SettingsModal" type="Control"]

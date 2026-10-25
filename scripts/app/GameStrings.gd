@@ -4,6 +4,23 @@ class_name GameStrings
 const TEXT := {
 	"en":
 	{
+		"coming_soon": "Coming soon",
+		"home_title": "Puzzle time",
+		"home_subtitle": "Pick a picture. Piece it together.",
+		"home_coming_subtitle": "New scenes are on their way.",
+		"home_empty_subtitle": "New themes are coming soon.",
+		"puzzles_preparing": "New puzzles are on their way.",
+		"all_themes": "All themes",
+		"close_themes": "Close themes",
+		"previous_theme": "Previous theme",
+		"next_theme": "Next theme",
+		"library_subtitle": "A new picture. A new discovery.",
+		"library_empty_subtitle": "New themes are being prepared.",
+		"library_empty": "New scenes are coming soon.",
+		"levels_empty": "No puzzles here yet.\nTry another theme.",
+		"locked": "Locked",
+		"choose_mode": "Choose a mode",
+		"no_available_modes": "No modes available",
 		"no_topics": "No topics yet",
 		"album_title": "Album",
 		"album_all": "All pictures",
@@ -63,6 +80,23 @@ const TEXT := {
 	},
 	"zh":
 	{
+		"coming_soon": "敬请期待",
+		"home_title": "拼图时光",
+		"home_subtitle": "挑选一幅画，慢慢拼出美好。",
+		"home_coming_subtitle": "新的风景正在准备中，敬请期待。",
+		"home_empty_subtitle": "新的主题，即将与你见面。",
+		"puzzles_preparing": "新的拼图正在准备中。",
+		"all_themes": "全部主题",
+		"close_themes": "关闭全部主题",
+		"previous_theme": "上一个主题",
+		"next_theme": "下一个主题",
+		"library_subtitle": "每一个主题，都是一段新的拼图时光。",
+		"library_empty_subtitle": "新的主题正在准备中。",
+		"library_empty": "新的风景，即将与你见面。",
+		"levels_empty": "这里还没有拼图\n试试其他主题吧",
+		"locked": "未解锁",
+		"choose_mode": "选择模式",
+		"no_available_modes": "暂无可用模式",
 		"no_topics": "暂无主题",
 		"album_title": "相册",
 		"album_all": "全部图片",
@@ -122,6 +156,23 @@ const TEXT := {
 	},
 	"ja":
 	{
+		"coming_soon": "近日公開",
+		"home_title": "パズルの時間",
+		"home_subtitle": "一枚の絵を、少しずつ。",
+		"home_coming_subtitle": "新しい風景を準備中です。",
+		"home_empty_subtitle": "新しいテーマをお楽しみに。",
+		"puzzles_preparing": "新しいパズルを準備中です。",
+		"all_themes": "すべてのテーマ",
+		"close_themes": "テーマ一覧を閉じる",
+		"previous_theme": "前のテーマ",
+		"next_theme": "次のテーマ",
+		"library_subtitle": "テーマごとに、新しい発見を。",
+		"library_empty_subtitle": "新しいテーマを準備中です。",
+		"library_empty": "新しい風景をお楽しみに。",
+		"levels_empty": "パズルはまだありません。\nほかのテーマを選んでみましょう。",
+		"locked": "ロック中",
+		"choose_mode": "モードを選ぶ",
+		"no_available_modes": "モードは準備中です",
 		"no_topics": "テーマはまだありません",
 		"album_title": "アルバム",
 		"album_all": "すべての画像",
@@ -181,11 +232,14 @@ const TEXT := {
 	}
 }
 
+static var _ui_locale := ""
+
 var locale := "en"
 
 
 func set_locale(next_locale: String) -> void:
 	locale = normalize_locale(next_locale)
+	_ui_locale = locale
 
 
 func text(key: String) -> String:
@@ -204,3 +258,10 @@ static func normalize_locale(value: String) -> String:
 	if normalized.begins_with("ja"):
 		return "ja"
 	return "en"
+
+
+static func ui_text(key: String) -> String:
+	# Screen-owned copy follows the same locale chosen by the runtime coordinator.
+	var selected := detect_locale() if _ui_locale.is_empty() else _ui_locale
+	var table: Dictionary = TEXT.get(selected, TEXT["en"])
+	return str(table.get(key, TEXT["en"].get(key, key)))

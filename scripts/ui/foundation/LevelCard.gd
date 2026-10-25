@@ -50,7 +50,7 @@ func _apply_view_model() -> void:
 		title_label.text = next_title
 	var is_locked := bool(_read("locked"))
 	disabled = is_locked
-	_status.text = "未解锁" if is_locked else ""
+	_status.text = GameStrings.ui_text("locked") if is_locked else ""
 	_status.visible = is_locked
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	var mode_states: Array = _read("modes", [])

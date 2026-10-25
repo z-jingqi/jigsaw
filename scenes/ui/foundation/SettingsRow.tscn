@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ui/foundation/SettingsRow.gd" id="1_row"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/SettingsGlyph.gd" id="3_glyph"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="4_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_body_font.tres" id="4_font"]
 
 [node name="SettingsRow" type="HBoxContainer"]
 custom_minimum_size = Vector2(0, 190)

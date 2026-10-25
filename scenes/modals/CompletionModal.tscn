@@ -2,11 +2,11 @@
 
 [ext_resource type="Script" path="res://scripts/modals/CompletionModal.gd" id="1_modal"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="2_paper"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="3_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_heading_font.tres" id="3_font"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="4_shader"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="5_button"]
 [ext_resource type="Script" path="res://scripts/modals/CompletionImageMotion.gd" id="7_motion"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="8_body"]
+[ext_resource type="FontVariation" path="res://themes/clean_body_font.tres" id="8_body"]
 
 [sub_resource type="FontVariation" id="Font_description"]
 base_font = ExtResource("8_body")

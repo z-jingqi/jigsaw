@@ -56,7 +56,6 @@ vertical_alignment = 1
 [node name="Subtitle" type="Label" parent="."]
 layout_mode = 0
 mouse_filter = 2
-text = "挑选一幅画，慢慢拼出美好。"
 [node name="Botanical" type="Control" parent="."]
 layout_mode = 0
 mouse_filter = 2
@@ -70,7 +69,6 @@ vertical_alignment = 1
 visible = false
 layout_mode = 0
 mouse_filter = 2
-text = "新的拼图正在准备中。"
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
@@ -78,36 +76,28 @@ autowrap_mode = 3
 layout_mode = 0
 script = ExtResource("3")
 symbol = "album"
-tooltip_text = "相册"
-accessibility_name = "相册"
 [node name="MenuButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
 symbol = "settings"
-tooltip_text = "设置"
 theme_override_fonts/font = ExtResource("4")
 [node name="ThemesButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
 symbol = "grid"
-tooltip_text = "全部主题"
 theme_override_fonts/font = ExtResource("4")
 [node name="UndoButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
-symbol = "undo"
-tooltip_text = "上一张"
+symbol = "back"
 theme_override_fonts/font = ExtResource("4")
 [node name="NextButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
 symbol = "forward"
-tooltip_text = "下一个主题"
-accessibility_name = "下一个主题"
 [node name="StartButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
 symbol = "none"
 primary = true
-tooltip_text = "进入主题"
 theme_override_fonts/font = ExtResource("4")

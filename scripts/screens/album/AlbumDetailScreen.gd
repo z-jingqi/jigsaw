@@ -87,7 +87,9 @@ func _layout() -> void:
 	$ThemeName.position = Vector2(24 * u, 127 * u + safe.y)
 	$ThemeName.size = Vector2(size.x - 48 * u, 26 * u)
 	Clean.label($ThemeName, roundi(15 * u), true)
-	var area := Rect2(Vector2(24 * u, 173 * u + safe.y), size - Vector2(48 * u, 280 * u + safe.y + safe.w))
+	var area := Rect2(
+		Vector2(24 * u, 173 * u + safe.y), size - Vector2(48 * u, 280 * u + safe.y + safe.w)
+	)
 	var texture := _model.get("texture") as Texture2D
 	if texture != null and area.size.x > 0 and area.size.y > 0:
 		var dimensions := texture.get_size()

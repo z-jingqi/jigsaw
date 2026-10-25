@@ -4,7 +4,6 @@ signal theme_selected(theme_id: String)
 
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
-const TitleFont := preload("res://assets/fonts/douyin/DouyinSansBold.ttf")
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 var _themes: Array = []
@@ -12,6 +11,10 @@ var _scroll_position := 0
 
 
 func _ready() -> void:
+	$Title.text = GameStrings.ui_text("all_themes")
+	$EmptyState.text = GameStrings.ui_text("library_empty")
+	$CloseButton.tooltip_text = GameStrings.ui_text("close_themes")
+	$CloseButton.accessibility_name = $CloseButton.tooltip_text
 	$CloseButton.pressed.connect(close_requested.emit)
 	resized.connect(_layout)
 
@@ -43,7 +46,11 @@ func _build() -> void:
 		$Scroll/Grid.remove_child(child)
 		child.queue_free()
 	$EmptyState.visible = _themes.is_empty()
-	$Subtitle.text = "每一个主题，都是一段新的拼图时光。" if not _themes.is_empty() else "新的主题正在准备中。"
+	$Subtitle.text = (
+		GameStrings.ui_text("library_subtitle")
+		if not _themes.is_empty()
+		else GameStrings.ui_text("library_empty_subtitle")
+	)
 	var palette := [Clean.SAGE, Clean.APRICOT, Clean.LAVENDER]
 	for index in _themes.size():
 		var model: Variant = _themes[index]
@@ -52,7 +59,17 @@ func _build() -> void:
 		tile.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		tile.focus_mode = Control.FOCUS_ALL
 		tile.disabled = not model.playable
-		tile.tooltip_text = "%s · %s" % [model.title, "进入主题" if model.playable else "敬请期待"]
+		tile.tooltip_text = (
+			"%s · %s"
+			% [
+				model.title,
+				(
+					GameStrings.ui_text("enter_topic")
+					if model.playable
+					else GameStrings.ui_text("coming_soon")
+				)
+			]
+		)
 		tile.accessibility_name = tile.tooltip_text
 		Clean.button(tile)
 		var color: Color = palette[index % palette.size()]
@@ -77,12 +94,15 @@ func _build() -> void:
 		var label := Label.new()
 		label.name = "Title"
 		label.text = model.title
-		label.add_theme_font_override("font", TitleFont)
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(label)
 		var status := Label.new()
 		status.name = "Status"
-		status.text = "进入主题  →" if model.playable else "敬请期待"
+		status.text = (
+			GameStrings.ui_text("enter_topic") + "  →"
+			if model.playable
+			else GameStrings.ui_text("coming_soon")
+		)
 		status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(status)
 		tile.pressed.connect(func() -> void: theme_selected.emit(str(model.theme_id)))
@@ -93,9 +113,10 @@ func _layout() -> void:
 	var u := minf(size.x / 390.0, size.y / 844.0)
 	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($CloseButton, self, true)
-	var width := minf(size.x - 48.0 * u, 680.0 * u)
-	var left := (size.x - width) * 0.5
-	var top := maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
+	var usable_width := size.x - safe.x - safe.z
+	var width := minf(usable_width - 48.0 * u, 680.0 * u)
+	var left := safe.x + (usable_width - width) * 0.5
+	var top := safe.y + maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
 	$Title.position = Vector2(left, top)
 	$Title.size = Vector2(width, 46 * u)
 	Clean.label($Title, maxi(1, int(30 * u)))
@@ -127,8 +148,8 @@ func _layout() -> void:
 		title.position = Vector2(14.0 * u, image_height + 17.0 * u)
 		title.size = Vector2(tile_width - 28.0 * u, 28.0 * u)
 		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		Clean.label(title, maxi(1, int(18 * u)))
 		TitleLayout.fit(title, title.size, maxi(1, int(18 * u)))
-		Clean.label(title, title.get_theme_font_size("font_size"))
 		var status := tile.get_node("Status") as Label
 		status.position = Vector2(14.0 * u, image_height + 49.0 * u)
 		status.size = Vector2(tile_width - 28.0 * u, 23.0 * u)
