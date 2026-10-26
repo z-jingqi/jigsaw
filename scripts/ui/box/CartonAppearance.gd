@@ -32,20 +32,21 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	_print_motif(StringName(colors.motif), accent)
 	var title := Label3D.new()
 	title.name = "PrintedLevelTitle"
-	title.text = str(data.get("title", ""))
+	var full_title := str(data.get("title", ""))
+	var fitted := _fit_title(full_title, Packaging.title_width(data))
+	title.text = fitted.text
+	title.set_meta("full_title", full_title)
+	_set_accessible_title(full_title)
 	title.font = TitleFont
-	title.font_size = 96
-	title.pixel_size = 0.003
+	title.font_size = fitted.font_size
+	title.pixel_size = Packaging.TITLE_PIXEL_SIZE
 	title.outline_size = 0
 	var title_ink: Color = colors.ink
 	title.modulate = title_ink.darkened(0.60) if title_ink.get_luminance() > 0.40 else title_ink
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.position = Vector3(-0.90, 2.84, 0.255)
 	title.shaded = false
-	# Long localized titles stay inside the white field without colliding with binding.
-	var text_width := TitleFont.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 96).x
-	var title_scale := minf(1.0, 1.74 / maxf(0.01, text_width * title.pixel_size))
-	title.scale = Vector3.ONE * title_scale
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	add_child(title)
 	var revealed := bool(data.get("preview_revealed", true))
 	if texture != null:
@@ -72,6 +73,39 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 			self
 		)
 		status.position = Vector3(0.12 + index * 0.32, 0.148, 0.255)
+
+
+func _fit_title(full_title: String, width: float) -> Dictionary:
+	var text := full_title.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip_edges()
+	var max_pixels := width / Packaging.TITLE_PIXEL_SIZE
+	var font_size := Packaging.TITLE_DEFAULT_SIZE
+	while font_size > Packaging.TITLE_MIN_SIZE and _title_measure(text, font_size) > max_pixels:
+		font_size -= 1
+	if _title_measure(text, font_size) <= max_pixels:
+		return {"text": text, "font_size": font_size}
+	# Preserve a readable floor. Truncate only the printed label; never the model/a11y name.
+	var low := 0
+	var high := text.length()
+	while low < high:
+		var middle := ceili(float(low + high) / 2.0)
+		if _title_measure(text.left(middle).rstrip(" ") + "…", font_size) <= max_pixels:
+			low = middle
+		else:
+			high = middle - 1
+	return {"text": text.left(low).rstrip(" ") + "…", "font_size": font_size}
+
+
+func _title_measure(text: String, font_size: int) -> float:
+	return TitleFont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+
+
+func _set_accessible_title(full_title: String) -> void:
+	var ancestor: Node = get_parent()
+	while ancestor != null:
+		if ancestor is Control:
+			ancestor.accessibility_name = full_title
+			return
+		ancestor = ancestor.get_parent()
 
 
 func _print_wrap(ink: Material) -> void:

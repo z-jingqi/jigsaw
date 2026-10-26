@@ -2,6 +2,7 @@ class_name BoxThumbnailCache
 extends Node
 ## One offscreen renderer, serial jobs and a bounded cache shared by virtual cards.
 
+const Packaging := preload("res://scripts/ui/box/ThemePackaging.gd")
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const MAX_ENTRIES := 24
 const RENDER_SIZE := Vector2i(512, 683)
@@ -45,6 +46,9 @@ func request(
 	callback: Callable,
 	validity: Callable = Callable()
 ) -> void:
+	# Callers may reuse their semantic key across locale/layout updates. The renderer
+	# owns the print-layout signature so title/theme/width cannot return stale pixels.
+	key = JSON.stringify([key, Packaging.title_signature(packaging), RENDER_SIZE])
 	if _entries.has(key):
 		_touch(key)
 		callback.call_deferred(_entries[key])

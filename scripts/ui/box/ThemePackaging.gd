@@ -1,6 +1,12 @@
 extends RefCounted
 ## Theme identity only: never derives symbols or colors from an individual level.
 
+const TITLE_STYLE_VERSION := 2
+const TITLE_DEFAULT_SIZE := 80
+const TITLE_MIN_SIZE := 72
+const TITLE_PIXEL_SIZE := 0.003
+const TITLE_MAX_WIDTH := 1.80
+
 const ICONS := {
 	&"polygon":
 	[
@@ -44,3 +50,18 @@ static func status_texture(mode: StringName, modes: Array) -> Texture2D:
 			complete = StringName(entry.get("status")) == &"completed"
 			break
 	return ICONS[mode][int(complete)]
+
+
+static func title_width(packaging: Dictionary) -> float:
+	return clampf(float(packaging.get("title_width", TITLE_MAX_WIDTH)), 0.60, TITLE_MAX_WIDTH)
+
+
+static func title_signature(packaging: Dictionary) -> Array:
+	return [
+		TITLE_STYLE_VERSION,
+		packaging.get("theme_id", ""),
+		packaging.get("title", ""),
+		title_width(packaging),
+		TITLE_DEFAULT_SIZE,
+		TITLE_MIN_SIZE
+	]

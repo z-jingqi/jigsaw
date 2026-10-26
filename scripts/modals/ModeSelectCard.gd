@@ -8,6 +8,7 @@ const ICONS := {
 	&"knob": preload("res://assets/ui/levels/mode-icons/knob.svg"),
 	&"swap": preload("res://assets/ui/levels/mode-icons/swap.svg"),
 }
+const Glyphs := preload("res://scripts/ui/foundation/ModeCompletionGlyphs.gd")
 const IconShader := preload("res://shaders/ui/mode_icon_state.gdshader")
 const MotionScene := preload("res://scenes/modals/ModeSelectMotion.tscn")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
@@ -31,7 +32,7 @@ func _ready() -> void:
 	add_child(_motion)
 	_motion.bind(self)
 	_icon_material.shader = IconShader
-	_icon.material = _icon_material
+	_icon.material = null
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -129,7 +130,7 @@ func presentation_snapshot() -> Dictionary:
 func _refresh() -> void:
 	_name_label.text = str(_read("short_label", _read("label", "")))
 	var status := StringName(_read("status", &"not_started"))
-	_icon.texture = ICONS.get(mode())
+	_icon.texture = Glyphs.COMPLETE.get(mode())
 	_icon_material.set_shader_parameter("not_started", status == &"not_started")
 	(
 		_status_label
@@ -183,8 +184,10 @@ func _layout() -> void:
 		"font_size", maxi(ceili(12 * native_scale), int(12.0 * unit))
 	)
 	pivot_offset = size * 0.5
-	var icon_size := minf(size.x * 0.56, size.y * 0.44)
-	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.15)
+	_name_label.hide()
+	_status_label.hide()
+	var icon_size := 38 * Clean.minimum_touch_size(self).y / 44.0
+	_icon.position = (size - Vector2.ONE * icon_size) * 0.5
 	_icon.size = Vector2.ONE * icon_size
 	_icon.pivot_offset = _icon.size * 0.5
 

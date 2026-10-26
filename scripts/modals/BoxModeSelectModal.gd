@@ -122,18 +122,11 @@ func _refresh_selection(user_change := false) -> void:
 		return
 	var mode := StringName(_read_from(_selected_option, "mode", &""))
 	start_button.visible = not mode.is_empty()
-	$SafeArea/Content/ModeHeading.text = GameStrings.ui_text("choose_mode")
+	$SafeArea/Content/ModeHeading.hide()
 	_info.visible = not mode.is_empty()
 	if not mode.is_empty():
 		var data: Dictionary = _box_data.get(String(mode), {})
-		_info.text = (
-			"%s · %d %s"
-			% [
-				str(_read_from(_selected_option, "label", mode)),
-				int(data.get("count", 0)),
-				GameStrings.ui_text("box_piece_unit")
-			]
-		)
+		_info.text = ("%d %s" % [int(data.get("count", 0)), GameStrings.ui_text("box_piece_unit")])
 		if user_change:
 			_box.show_mode(mode, data.get("pieces", []), _reduced_motion)
 	_apply_layout()
@@ -238,21 +231,20 @@ func _apply_layout() -> void:
 	if _phase not in ["entering", "closing"]:
 		_box.position = _destination.position
 		_box.size = _destination.size
-	var heading: Label = $SafeArea/Content/ModeHeading
-	heading.position = Vector2(24 * u, _destination.end.y + 4 * u)
-	heading.size = Vector2(s.x - 48 * u, 28 * u)
-	Clean.label(heading, roundi(18 * u))
-	options.position = Vector2(24 * u, heading.position.y + 34 * u)
-	options.size = Vector2(s.x - 48 * u, 90 * u)
+	$SafeArea/Content/ModeHeading.hide()
+	options.position = Vector2(24 * u, _destination.end.y + 12 * u)
+	options.size = Vector2(s.x - 48 * u, 60 * u)
 	var count := options.get_child_count()
 	for index in count:
 		var option: Control = options.get_child(index)
 		option.position = Vector2(float(index) * options.size.x / count, 0)
-		option.custom_minimum_size = Vector2(44 * u, 90 * u)
-		option.size = Vector2(options.size.x / count - 6 * u, 90 * u)
-	_info.position = Vector2(24 * u, options.position.y + 94 * u)
+		option.custom_minimum_size = Vector2(44 * u, 60 * u)
+		option.size = Vector2(options.size.x / count - 6 * u, 60 * u)
+	_info.position = Vector2(24 * u, options.position.y + 68 * u)
 	_info.size = Vector2(s.x - 48 * u, 26 * u)
 	Clean.label(_info, roundi(13 * u), true)
+	start_button.position.y = _info.position.y + _info.size.y + 16 * u
+	Layout.layout_start_content(self)
 
 
 func settle_box_transition(committed: bool) -> void:

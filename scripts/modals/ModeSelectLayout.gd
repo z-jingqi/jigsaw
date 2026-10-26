@@ -51,9 +51,7 @@ static func apply(host: Control) -> void:
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	Clean.label(heading, int(22 * unit))
 	var options: Control = content.get_node("Options")
-	_place(
-		options, Vector2(controls_left, heading_y + 48 * unit), Vector2(controls_width, 136 * unit)
-	)
+	_place(options, Vector2(controls_left, heading_y), Vector2(controls_width, 72 * unit))
 	var count := options.get_child_count()
 	var gap := 10 * unit
 	var card_width := (options.size.x - gap * (count - 1)) / maxf(1, count)
@@ -71,6 +69,26 @@ static func apply(host: Control) -> void:
 	start_label.add_theme_color_override(
 		"font_color", Clean.MUTED if start.disabled else Clean.PAPER
 	)
+
+	layout_start_content(host)
+
+
+static func layout_start_content(host: Control) -> void:
+	var start: Button = host.get_node("SafeArea/Content/StartButton")
+	var label: Label = start.get_node("Label")
+	var icon: TextureRect = start.get_node("ModeIcon")
+	var unit := Clean.minimum_touch_size(start).y / 44.0
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	var text_width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var icon_side := 26 * unit if icon.visible else 0.0
+	var gap := 10 * unit if icon.visible else 0.0
+	var left := (start.size.x - text_width - gap - icon_side) * 0.5
+	label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	label.position = Vector2(left, 0)
+	label.size = Vector2(text_width, start.size.y)
+	icon.position = Vector2(left + text_width + gap, (start.size.y - icon_side) * 0.5)
+	icon.size = Vector2.ONE * icon_side
 
 
 static func _place(node: Control, position: Vector2, size: Vector2) -> void:

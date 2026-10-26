@@ -1,5 +1,5 @@
 extends Control
-## Fixed ledges; only the bounded two-by-two box layers move between pages.
+## Bare two-by-two boxes; only bounded box layers move across the fixed page.
 signal level_selected(level_id: String)
 signal card_visible(card: Control, view_model: Variant)
 signal card_hidden(card: Control)
@@ -22,7 +22,6 @@ var _configured := false
 var _pointer := -2
 var _start := Vector2.ZERO
 var _dragging := false
-var _shelves: Array[Rect2] = []
 
 
 func _ready() -> void:
@@ -217,17 +216,12 @@ func _layout_pages() -> void:
 	)
 	var gap := 18.0 * native
 	# Tall phones leave breathing room below the group, not between each box
-	# and its fixed ledge. Compact screens still use their available half-height.
+	# rows. Compact screens still use their available half-height.
 	var usable_card_width := maxf(44 * native, (size.x - gap - 12 * native) * 0.5)
 	var row_height := minf(size.y * 0.5, usable_card_width / 0.75 + 55 * native)
 	var card_height := maxf(44 * native, row_height - 24 * native)
 	var card_width := minf(usable_card_width, card_height * 0.67)
 	var left := (size.x - card_width * 2 - gap) * 0.5
-	_shelves.clear()
-	for row in 2:
-		_shelves.append(
-			Rect2(2 * native, (row + 1) * row_height - 9 * native, size.x - 4 * native, 4 * native)
-		)
 	for index in _pages:
 		var layer: Control = _pages[index]
 		layer.size = size
@@ -243,25 +237,6 @@ func _layout_pages() -> void:
 			)
 	_set_card_interaction(_interactive and not _dragging)
 	queue_redraw()
-
-
-func _draw() -> void:
-	if _items.is_empty():
-		return
-	for shelf in _shelves:
-		draw_rect(shelf, Color("F5EFE4"))
-		draw_line(
-			shelf.position,
-			Vector2(shelf.end.x, shelf.position.y),
-			Color("FFFCF6"),
-			maxf(1, shelf.size.y * 0.25)
-		)
-		draw_line(
-			Vector2(shelf.position.x, shelf.end.y),
-			shelf.end,
-			Color("DDD4C4"),
-			maxf(1, shelf.size.y * 0.2)
-		)
 
 
 func _on_resized() -> void:
@@ -435,7 +410,7 @@ func debug_snapshot() -> Dictionary:
 		"pending": -1,
 		"visual_page": _visual_page,
 		"dragging": _dragging,
-		"shelf_rects": _shelves,
+		"shelf_rects": [],
 		"box_layer_positions": positions,
 		"allocated_pages": _pages.size(),
 		"active_motion_count": active_motion_count()
