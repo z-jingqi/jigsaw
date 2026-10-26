@@ -7,7 +7,17 @@ const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 var _themes: Array = []
-var _scroll_position := 0
+const Pager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
+const PAGE_SIZE := 4
+var _page := 0
+var _pager: Control
+var _motion: Tween
+var _reduced_motion := false
+var _enabled := true
+var _pointer := -2
+var _drag_start := Vector2.ZERO
+var _drag_delta := 0.0
+var _dragging := false
 
 
 func _ready() -> void:
@@ -15,36 +25,68 @@ func _ready() -> void:
 	$EmptyState.text = GameStrings.ui_text("no_topics")
 	$CloseButton.accessibility_name = GameStrings.ui_text("back")
 	$CloseButton.pressed.connect(close_requested.emit)
-	resized.connect(_layout)
+	_pager = Pager.new()
+	_pager.name = "Pager"
+	add_child(_pager)
+	_pager.page_requested.connect(_request_page)
+	resized.connect(_on_resized)
 
 
-func navigation_enter(payload: Dictionary, _context: Dictionary) -> void:
+func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	_themes = payload.view_model.themes
-	_scroll_position = int(payload.get("scroll_position", 0))
+	# The retained navigation field now stores a zero-based page, not pixels.
+	_page = clampi(int(payload.get("scroll_position", 0)), 0, maxi(0, _page_count() - 1))
+	set_reduced_motion(bool(context.get("reduced_motion", false)))
 	_build()
 	_layout()
-	_restore_scroll.call_deferred()
-
-
-func _restore_scroll() -> void:
-	$Scroll.scroll_vertical = _scroll_position
 
 
 func navigation_set_active(enabled: bool) -> void:
+	_enabled = enabled
+	set_process_input(enabled)
 	visible = enabled
 	mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
-	$Scroll.set_interaction_enabled(enabled)
+	_pager.set_interaction_enabled(enabled)
+	if not enabled:
+		_settle()
+
+
+func navigation_prepare_transition() -> void:
+	_settle()
+
+
+func navigation_exit(_context: Dictionary) -> void:
+	_settle()
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	if enabled:
+		_settle()
 
 
 func scroll_position() -> int:
-	return $Scroll.scroll_vertical
+	return _page
+
+
+func active_motion_count() -> int:
+	return int(_motion != null and _motion.is_valid() and _motion.is_running())
+
+
+func _page_count() -> int:
+	return ceili(float(_themes.size()) / PAGE_SIZE)
 
 
 func _build() -> void:
-	for child in $Scroll/Grid.get_children():
-		$Scroll/Grid.remove_child(child)
+	for child in $Pages.get_children():
+		$Pages.remove_child(child)
 		child.queue_free()
 	$EmptyState.visible = _themes.is_empty()
+	for index in _page_count():
+		var layer := Control.new()
+		layer.name = "Page%d" % index
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		$Pages.add_child(layer)
 	var palette := [Clean.SAGE, Clean.APRICOT, Clean.LAVENDER]
 	for index in _themes.size():
 		var model: Variant = _themes[index]
@@ -96,56 +138,172 @@ func _build() -> void:
 		status.visible = not model.playable
 		status.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tile.add_child(status)
-		tile.pressed.connect(func() -> void: theme_selected.emit(str(model.theme_id)))
-		$Scroll/Grid.add_child(tile)
+		tile.pressed.connect(
+			func() -> void:
+				if not _dragging and active_motion_count() == 0:
+					theme_selected.emit(str(model.theme_id))
+		)
+		$Pages.get_child(index / PAGE_SIZE).add_child(tile)
 
 
 func _layout() -> void:
+	if _pager == null:
+		return
 	var u := minf(size.x / 390.0, size.y / 844.0)
 	var canvas := Clean.canvas_scale(size, get_window())
 	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($CloseButton, self)
 	var usable_width := size.x - safe.x - safe.z
-	var width := minf(usable_width - 48.0 * u, 680.0 * u)
+	var width := minf(usable_width - 48.0 * u, 540.0 * u)
 	var left := safe.x + (usable_width - width) * 0.5
 	var top := safe.y + maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
 	$Title.position = Vector2(left, top)
 	$Title.size = Vector2(width, 46 * u)
 	Clean.label($Title, roundi(maxf(30.0 * u, 24.0 * canvas)))
-	var scroll_top := top + 72.0 * u
-	$Scroll.position = Vector2(left, scroll_top)
-	$Scroll.size = Vector2(width, size.y - safe.w - scroll_top - 28.0 * u)
-	$EmptyState.position = Vector2(left, scroll_top + 80.0 * u)
+	var pages_top := top + 72.0 * u
+	var pager_height := 44.0 * canvas
+	_pager.position = Vector2(left, size.y - safe.w - pager_height - 16.0 * u)
+	_pager.size = Vector2(width, pager_height)
+	_pager.configure(_page_count(), _page)
+	_pager.visible = _page_count() > 1
+	$Pages.position = Vector2(left, pages_top)
+	$Pages.size = Vector2(width, maxf(1, _pager.position.y - pages_top - 16.0 * u))
+	$EmptyState.position = Vector2(left, pages_top + 80.0 * u)
 	$EmptyState.size = Vector2(width, 100.0 * u)
 	Clean.label($EmptyState, roundi(maxf(18.0 * u, 14.0 * canvas)), true)
-	var grid := $Scroll/Grid as GridContainer
-	grid.columns = 2 if size.x / size.y < 0.8 else 3
 	var gap := 14.0 * u
-	grid.add_theme_constant_override("h_separation", int(gap))
-	grid.add_theme_constant_override("v_separation", int(18 * u))
-	var tile_width := (width - float(grid.columns - 1) * gap) / float(grid.columns)
-	for tile in grid.get_children():
-		var image_width := tile_width - 20.0 * u
-		var image_height := image_width * 1.3
-		var title_height := maxf(28.0 * u, 24.0 * canvas)
-		var status_top := image_height + 17.0 * u + title_height + 4.0 * canvas
-		var status_height := maxf(23.0 * u, 20.0 * canvas)
-		var status := tile.get_node("Status") as Label
-		var caption_bottom := image_height + 17.0 * u + title_height
-		if status.visible:
-			caption_bottom = status_top + status_height
-		tile.custom_minimum_size = Vector2(tile_width, caption_bottom + 12.0 * u)
-		var cover := tile.get_node("Cover") as TextureRect
-		cover.position = Vector2.ONE * 10.0 * u
-		cover.size = Vector2(image_width, image_height)
-		if cover.material != null:
-			cover.material.set_shader_parameter("aspect", image_width / image_height)
-		var title := tile.get_node("Title") as Label
-		title.position = Vector2(14.0 * u, image_height + 17.0 * u)
-		title.size = Vector2(tile_width - 28.0 * u, title_height)
-		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
-		TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
-		status.position = Vector2(14.0 * u, status_top)
-		status.size = Vector2(tile_width - 28.0 * u, status_height)
-		Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
+	var row_gap := 18.0 * u
+	var cell := Vector2((width - gap) * 0.5, ($Pages.size.y - row_gap) * 0.5)
+	for page_index in $Pages.get_child_count():
+		var layer := $Pages.get_child(page_index) as Control
+		layer.position = Vector2.ZERO
+		layer.size = $Pages.size
+		layer.visible = page_index == _page
+		for index in layer.get_child_count():
+			var tile := layer.get_child(index) as Button
+			_layout_tile(tile, cell, u, canvas)
+			tile.position = Vector2((index % 2) * (cell.x + gap), (index / 2) * (cell.y + row_gap))
+
+
+func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
+	var title_height := maxf(28.0 * u, 24.0 * canvas)
+	var status_height := maxf(23.0 * u, 20.0 * canvas)
+	var caption_height := title_height + status_height + 26.0 * u
+	var image_height := maxf(1, minf((cell.x - 20.0 * u) * 1.3, cell.y - caption_height))
+	var image_width := image_height / 1.3
+	tile.custom_minimum_size = Vector2.ZERO
+	tile.size = cell
+	var cover := tile.get_node("Cover") as TextureRect
+	cover.position = Vector2((cell.x - image_width) * 0.5, 10.0 * u)
+	cover.size = Vector2(image_width, image_height)
+	if cover.material != null:
+		cover.material.set_shader_parameter("aspect", image_width / image_height)
+	var title := tile.get_node("Title") as Label
+	title.position = Vector2(12.0 * u, image_height + 15.0 * u)
+	title.size = Vector2(cell.x - 24.0 * u, title_height)
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
+	TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
+	var status := tile.get_node("Status") as Label
+	status.position = Vector2(12.0 * u, title.position.y + title_height)
+	status.size = Vector2(cell.x - 24.0 * u, status_height)
+	Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
+
+
+func _request_page(index: int) -> void:
+	if not _enabled or index < 0 or index >= _page_count() or index == _page:
+		return
+	_settle()
+	var outgoing := $Pages.get_child(_page) as Control
+	var incoming := $Pages.get_child(index) as Control
+	var direction := 1.0 if index > _page else -1.0
+	_page = index
+	_pager.configure(_page_count(), _page)
+	if _reduced_motion:
+		_layout()
+		return
+	incoming.visible = true
+	incoming.position.x = direction * $Pages.size.x
+	_motion = create_tween().set_parallel(true)
+	_motion.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_motion.tween_property(outgoing, "position:x", -direction * $Pages.size.x, 0.24)
+	_motion.tween_property(incoming, "position:x", 0.0, 0.24)
+	_motion.finished.connect(_settle)
+
+
+func _settle() -> void:
+	if _motion != null and _motion.is_valid():
+		_motion.kill()
+	_motion = null
+	_pointer = -2
+	_dragging = false
+	_drag_delta = 0.0
+	for layer in $Pages.get_children():
+		for tile in layer.get_children():
+			(tile as Button).set_pressed_no_signal(false)
+	if is_node_ready():
+		_layout()
+
+
+func _on_resized() -> void:
+	_settle()
+
+
+func _input(event: InputEvent) -> void:
+	if not _enabled or not is_visible_in_tree() or event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_begin_drag(event.position, -1)
+		elif _pointer == -1:
+			_end_drag()
+	elif event is InputEventMouseMotion and _pointer == -1:
+		_drag_to(event.position)
+	elif event is InputEventScreenTouch:
+		if event.canceled and event.index == _pointer:
+			_settle()
+		elif event.pressed:
+			_begin_drag(event.position, event.index)
+		elif event.index == _pointer:
+			_end_drag()
+	elif event is InputEventScreenDrag and event.index == _pointer:
+		_drag_to(event.position)
+
+
+func _begin_drag(point: Vector2, pointer: int) -> void:
+	if point.x < 24.0 * Clean.canvas_scale(size, get_window()):
+		return
+	if _pointer != -2 or not $Pages.get_global_rect().has_point(point):
+		return
+	if active_motion_count() > 0:
+		_settle()
+	_pointer = pointer
+	_drag_start = point
+	_drag_delta = 0.0
+
+
+func _drag_to(point: Vector2) -> void:
+	_drag_delta = point.x - _drag_start.x
+	var threshold := 12.0 * Clean.canvas_scale(size, get_window())
+	if absf(_drag_delta) > threshold and absf(_drag_delta) > absf(point.y - _drag_start.y):
+		_dragging = true
+	if _dragging:
+		get_viewport().set_input_as_handled()
+
+
+func _end_drag() -> void:
+	var should_turn: bool = _dragging and absf(_drag_delta) > $Pages.size.x * 0.12
+	var target := _page + (1 if _drag_delta < 0 else -1)
+	if _dragging:
+		get_viewport().set_input_as_handled()
+	_settle()
+	if should_turn:
+		_request_page(target)
+
+
+func _notification(what: int) -> void:
+	if (
+		is_node_ready()
+		and what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]
+	):
+		_settle()

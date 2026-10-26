@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="4_page"]
 [ext_resource type="FontFile" path="res://assets/fonts/douyin/DouyinSansBold.ttf" id="5_font"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6_cloud"]
-[ext_resource type="Script" path="res://scripts/ui/scrolling/NaturalScrollContainer.gd" id="10_natural_scroll"]
+[ext_resource type="Script" path="res://scripts/screens/levels/PagedLevelShelf.gd" id="10_natural_scroll"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_progress"]
 bg_color = Color(0.866667, 0.890196, 0.811765, 0.96)
@@ -157,7 +157,7 @@ theme_override_font_sizes/font_size = 36
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Scroll" type="ScrollContainer" parent="SafeArea/Content"]
+[node name="Scroll" type="Control" parent="SafeArea/Content"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -168,15 +168,8 @@ offset_right = 0.0
 offset_bottom = -14.0
 grow_horizontal = 2
 grow_vertical = 2
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 3
 script = ExtResource("10_natural_scroll")
-navigator_path = NodePath("../../../../../../AppNavigator")
-
-[node name="GridContent" type="Control" parent="SafeArea/Content/Scroll"]
-layout_mode = 2
-
-layout_mode = 1
+clip_contents = true
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {&"": SubResource("AnimationLibrary_levels")}

@@ -22,6 +22,7 @@ var _box_identity := ""
 var _request_token := 0
 var _requested_token := -1
 var _locked := false
+var _shelf_enabled := true
 
 var _box_full_size := Vector2.ZERO
 var _box_used_rect := Rect2()
@@ -114,7 +115,7 @@ func _apply_view_model() -> void:
 	accessibility_name = title_label.text
 	accessibility_description = ", ".join(descriptions)
 	tooltip_text = ""
-	disabled = _locked or _box_source_texture == null
+	disabled = _locked or _box_source_texture == null or not _shelf_enabled
 	_status.visible = false
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	_request_box()
@@ -163,8 +164,15 @@ func _accept_box(entry: Dictionary, token: int, key: String) -> void:
 	cropped.atlas = entry.texture
 	cropped.region = _box_used_rect
 	_box_preview.texture = cropped
-	disabled = _locked
+	disabled = _locked or not _shelf_enabled
 	_apply_layout()
+
+
+func set_shelf_interaction_enabled(enabled: bool) -> void:
+	_shelf_enabled = enabled
+	disabled = _locked or _box_source_texture == null or not enabled
+	if not enabled:
+		set_pressed_no_signal(false)
 
 
 func set_box_transition_hidden(hidden: bool) -> void:
@@ -255,7 +263,7 @@ func _cancel_thumbnail_fade() -> void:
 func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0:
 		return
-	var inset := maxf(8.0, size.x * 0.035)
+	var inset := 0.0 if bool(get_meta("shelf_layout", false)) else maxf(8.0, size.x * 0.035)
 	var area := Rect2(Vector2.ONE * inset, size - Vector2.ONE * inset * 2.0)
 	thumbnail.position = area.position
 	thumbnail.size = area.size
