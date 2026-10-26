@@ -1,4 +1,5 @@
 extends RuntimeModeSelectModal
+signal box_closing
 ## Single-level prototype. All other levels retain the established mode page.
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
@@ -146,6 +147,7 @@ func request_close() -> void:
 	if _closing:
 		return
 	_closing = true
+	box_closing.emit()
 	get_tree().root.get_node("Game/AppNavigator").finish_active_transition()
 	_active = false
 	_generation += 1

@@ -524,6 +524,8 @@ func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:
 	if modal == null:
 		return
 	modal.close_requested.connect(_dismiss_modal)
+	if modal.has_signal("box_closing"):
+		modal.connect("box_closing", _gameplay_preparation.cancel)
 	modal.mode_selected.connect(_on_mode_selected)
 	modal.selection_changed.connect(_on_mode_preparation_requested)
 	var selection := modal.preparation_selection()
