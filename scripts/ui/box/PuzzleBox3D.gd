@@ -21,6 +21,8 @@ var _texture: Texture2D
 var _packaging: Dictionary = {}
 var _appearance: Node3D
 var _lid_tween: Tween
+var _gesture_paused := false
+var _gesture_lid_tween: Tween
 var _sample_motion: RefCounted
 var _opened := false
 var _open_progress := 0.0:
@@ -67,6 +69,7 @@ func set_open(opened: bool, reduced_motion := false) -> void:
 	_lid_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	_lid_tween.tween_property(self, "_open_progress", target, 0.62 * absf(target - _open_progress))
 	_lid_tween.finished.connect(func() -> void: _lid_tween = null)
+	_pause_lid_motion()
 
 
 func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false) -> void:
@@ -86,7 +89,7 @@ func sample_motion_phase() -> StringName:
 
 
 func _samples_can_rise() -> bool:
-	return _opened and _open_progress >= 0.999
+	return not _gesture_paused and _opened and _open_progress >= 0.999
 
 
 func set_rendering(enabled: bool) -> void:
@@ -96,10 +99,40 @@ func set_rendering(enabled: bool) -> void:
 
 
 func cancel_motion() -> void:
+	_gesture_paused = false
+	_gesture_lid_tween = null
 	_kill_lid_tween()
 	_clear_samples()
 	if is_instance_valid(lid):
 		_open_progress = 1.0 if _opened else 0.0
+
+
+func gesture_pause_motion() -> void:
+	if _gesture_paused:
+		return
+	_gesture_paused = true
+	_pause_lid_motion()
+	if _sample_motion != null:
+		_sample_motion.gesture_pause_motion()
+
+
+func gesture_resume_motion() -> void:
+	_gesture_paused = false
+	if (
+		_gesture_lid_tween != null
+		and _gesture_lid_tween == _lid_tween
+		and _gesture_lid_tween.is_valid()
+	):
+		_gesture_lid_tween.play()
+	_gesture_lid_tween = null
+	if _sample_motion != null:
+		_sample_motion.gesture_resume_motion()
+
+
+func _pause_lid_motion() -> void:
+	if _gesture_paused and _lid_tween != null and _lid_tween.is_valid() and _lid_tween.is_running():
+		_gesture_lid_tween = _lid_tween
+		_lid_tween.pause()
 
 
 func active_motion_count() -> int:
@@ -110,6 +143,7 @@ func active_motion_count() -> int:
 
 
 func _kill_lid_tween() -> void:
+	_gesture_lid_tween = null
 	if _lid_tween != null:
 		_lid_tween.kill()
 		_lid_tween = null

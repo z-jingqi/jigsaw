@@ -44,6 +44,16 @@ func _ready() -> void:
 	$SafeArea/Content.add_child(_pager)
 	_pager.page_requested.connect(set_page)
 	_grid.page_changed.connect(_on_page_changed)
+	_grid.gesture_progress.connect(
+		func(value: float) -> void:
+			if _pager.has_method("preview_gesture"):
+				_pager.preview_gesture(value)
+	)
+	_grid.gesture_finished.connect(
+		func(committed: bool, target: int) -> void:
+			if _pager.has_method("finish_gesture"):
+				_pager.finish_gesture(committed, target)
+	)
 	_grid.level_selected.connect(_on_level_selected)
 	_grid.card_visible.connect(_on_card_visible)
 	_grid.card_hidden.connect(_unlock_sequence.cancel)

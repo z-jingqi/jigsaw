@@ -11,14 +11,14 @@ const Pager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
 const PAGE_SIZE := 4
 var _page := 0
 var _visual_page := 0.0
-var _drag_origin := 0.0
+const Gesture := preload("res://scripts/ui/navigation/PagingGesture.gd")
+var _gesture := Gesture.new()
+const Arena := preload("res://scripts/ui/navigation/GestureArena.gd")
 var _pager: Control
 var _motion: Tween
 var _reduced_motion := false
 var _enabled := true
 var _pointer := -2
-var _drag_start := Vector2.ZERO
-var _drag_delta := 0.0
 var _dragging := false
 
 
@@ -220,6 +220,8 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 func _request_page(index: int) -> void:
 	if not _enabled or index < 0 or index >= _page_count():
 		return
+	if _pointer != -2:
+		_dragging = true
 	_reset_drag()
 	_page = index
 	_pager.configure(_page_count(), _page)
@@ -256,22 +258,27 @@ func _pause_motion() -> void:
 
 
 func _reset_drag() -> void:
+	Arena.release(self)
 	if _dragging:
 		for layer in $Pages.get_children():
 			for tile in layer.get_children():
 				(tile as Button).set_pressed_no_signal(false)
 	_pointer = -2
 	_dragging = false
-	_drag_delta = 0.0
 
 
 func _freeze() -> void:
+	if _pointer != -2:
+		_page = _gesture.origin_page
+		_dragging = true
+		if _pager.has_method("gesture_finished"):
+			_pager.gesture_finished(false, _page)
 	_pause_motion()
 	_reset_drag()
 
 
 func _on_resized() -> void:
-	var resume := active_motion_count() > 0
+	var resume := active_motion_count() > 0 or _pointer != -2
 	_freeze()
 	_layout()
 	if resume:
@@ -279,60 +286,92 @@ func _on_resized() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if Arena.block_secondary(get_viewport(), event):
+		get_viewport().set_input_as_handled()
+		return
 	if not _enabled or not is_visible_in_tree() or event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_begin_drag(event.position, -1)
 		elif _pointer == -1:
-			_end_drag()
+			_end_drag(event.position)
 	elif event is InputEventMouseMotion and _pointer == -1:
 		_drag_to(event.position)
 	elif event is InputEventScreenTouch:
 		if event.canceled and event.index == _pointer:
-			_reset_drag()
-			_animate_to_target()
+			_cancel_drag()
 		elif event.pressed:
 			_begin_drag(event.position, event.index)
 		elif event.index == _pointer:
-			_end_drag()
+			_end_drag(event.position)
 	elif event is InputEventScreenDrag and event.index == _pointer:
 		_drag_to(event.position)
 
 
 func _begin_drag(point: Vector2, pointer: int) -> void:
-	if point.x < 24.0 * Clean.canvas_scale(size, get_window()):
+	if _pointer != -2:
+		_cancel_drag()
 		return
-	if _pointer != -2 or not $Pages.get_global_rect().has_point(point):
+	if not $Pages.get_global_rect().has_point(point):
+		return
+	var native := Clean.canvas_scale(size, get_window())
+	if Arena.is_edge_candidate(self, point, native) or not Arena.reserve(self, pointer):
 		return
 	_pause_motion()
-	_drag_origin = _visual_page
+	_gesture.begin(
+		point, _visual_page, $Pages.size.x, Clean.canvas_scale(size, get_window()), _page_count()
+	)
+	_page = _gesture.origin_page
+	_pager.configure(_page_count(), _page)
 	_pointer = pointer
-	_drag_start = point
-	_drag_delta = 0.0
 
 
 func _drag_to(point: Vector2) -> void:
-	_drag_delta = point.x - _drag_start.x
-	var threshold := 12.0 * Clean.canvas_scale(size, get_window())
-	if absf(_drag_delta) > threshold and absf(_drag_delta) > absf(point.y - _drag_start.y):
+	if not Arena.owns(self, _pointer):
+		return
+	var value: float = _gesture.move(point)
+	if _gesture.axis != 0:
 		_dragging = true
-	if _dragging:
-		var next_position := _drag_origin - _drag_delta / maxf(1.0, $Pages.size.x)
-		_apply_visual_page(clampf(next_position, 0.0, maxf(0.0, _page_count() - 1.0)))
+		for layer in $Pages.get_children():
+			for tile in layer.get_children():
+				(tile as Button).set_pressed_no_signal(false)
+	if _gesture.axis == 1:
+		_apply_visual_page(value)
+		if _pager.has_method("gesture_progress"):
+			_pager.gesture_progress(value)
 		get_viewport().set_input_as_handled()
 
 
-func _end_drag() -> void:
-	var should_turn: bool = _dragging and absf(_drag_delta) > $Pages.size.x * 0.12
-	var target := _page + (1 if _drag_delta < 0 else -1)
-	if _dragging:
+func _end_drag(point: Vector2) -> void:
+	var was_dragging := _gesture.axis != 0
+	var target: int = _gesture.release_target(point)
+	if was_dragging:
 		get_viewport().set_input_as_handled()
 	_reset_drag()
-	if should_turn:
-		_request_page(clampi(target, 0, maxi(0, _page_count() - 1)))
+	if was_dragging:
+		if _pager.has_method("gesture_finished"):
+			_pager.gesture_finished(target != _gesture.origin_page, target)
+		_request_page(target)
 	else:
+		# GUI tap gets first chance to pick the currently visible moving card.
+		call_deferred("_resume_after_tap")
+
+
+func _resume_after_tap() -> void:
+	if _enabled and is_visible_in_tree() and _motion == null:
 		_animate_to_target()
+
+
+func _cancel_drag() -> void:
+	if _pointer == -2:
+		return
+	var target: int = _gesture.origin_page
+	_dragging = true
+	if _pager.has_method("gesture_finished"):
+		_pager.gesture_finished(false, target)
+	_reset_drag()
+	_request_page(target)
 
 
 func _notification(what: int) -> void:

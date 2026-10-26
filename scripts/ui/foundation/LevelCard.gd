@@ -17,6 +17,7 @@ var _thumbnail_fade: Tween
 var _status: Label
 var _box_preview: TextureRect
 var _box_hidden := false
+var _edge_back_preview := false
 var _cache_key := ""
 var _box_identity := ""
 var _request_token := 0
@@ -175,6 +176,12 @@ func set_shelf_interaction_enabled(enabled: bool) -> void:
 		set_pressed_no_signal(false)
 
 
+func set_edge_back_preview(enabled: bool) -> void:
+	# Reveal only pixels: retain the shelf's hidden source and opening ownership.
+	_edge_back_preview = enabled
+	_apply_layout()
+
+
 func set_box_transition_hidden(hidden: bool) -> void:
 	_box_hidden = hidden
 	_apply_layout()
@@ -276,8 +283,8 @@ func _apply_layout() -> void:
 		_box_preview.position = (
 			area.position + Vector2((area.size.x - drawn.x) * 0.5, area.size.y - drawn.y)
 		)
-	_box_preview.visible = _box_source_texture != null and not _box_hidden
-	thumbnail.visible = _box_source_texture == null and not _box_hidden
+	_box_preview.visible = _box_source_texture != null and (not _box_hidden or _edge_back_preview)
+	thumbnail.visible = _box_source_texture == null and (not _box_hidden or _edge_back_preview)
 	title_label.hide()
 	completed_modes.hide()
 	_status.hide()

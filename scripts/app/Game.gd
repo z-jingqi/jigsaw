@@ -3,6 +3,7 @@ extends Node2D
 
 const RuntimeAppCoordinatorScript := preload("res://scripts/runtime/RuntimeAppCoordinator.gd")
 const DebugCommandRouterScript := preload("res://scripts/debug/DebugCommandRouter.gd")
+const GestureArena := preload("res://scripts/ui/navigation/GestureArena.gd")
 
 var _runtime: RuntimeAppCoordinator
 var _debug_router: DebugCommandRouter
@@ -23,6 +24,9 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if GestureArena.block_secondary(get_viewport(), event):
+		get_viewport().set_input_as_handled()
+		return
 	if (
 		event is InputEventKey
 		and event.pressed

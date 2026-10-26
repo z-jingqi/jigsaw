@@ -30,6 +30,8 @@ const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
+var _edge_back: Node
+
 var _game: Node2D
 var _navigator: AppNavigator
 var _world_host: Node2D
@@ -73,6 +75,10 @@ func start() -> void:
 	_catalog = CatalogPresenterScript.new(content, progress, session, _strings)
 	_system = SystemPresenterScript.new(settings, motion, _strings)
 	_navigator = _game.get_node("AppNavigator") as AppNavigator
+	_edge_back = preload("res://scripts/navigation/EdgeBackGesture.gd").new()
+	_edge_back.navigator = _navigator
+	_edge_back.commit_back = _commit_edge_back
+	_game.add_child(_edge_back)
 	_world_host = _game.get_node("WorldHost") as Node2D
 	_completion_flow = CompletionFlowScript.new(_navigator, content, self)
 	_bind_routes()
@@ -119,6 +125,8 @@ func shutdown() -> void:
 
 
 func handle_input(event: InputEvent) -> bool:
+	if is_instance_valid(_edge_back) and _edge_back.handle_input(event):
+		return true
 	if not is_instance_valid(_board) or _navigator.is_input_locked():
 		return false
 	var screen := _navigator.current_screen_view() as GameplayScreen
@@ -369,6 +377,8 @@ func show_home_guide() -> Dictionary:
 
 
 func close_modal() -> Dictionary:
+	if is_instance_valid(_edge_back):
+		_edge_back.cancel()
 	var view := _navigator.current_route_view()
 	if view != null and view.has_method("needs_box_close") and view.needs_box_close():
 		view.request_close()
@@ -947,3 +957,17 @@ func _valid_theme_id(requested: String) -> String:
 		if not _services.content.topic_by_id(requested).is_empty()
 		else _services.initial_home_theme_id()
 	)
+
+
+func _commit_edge_back() -> void:
+	match _navigator.current_route():
+		&"gameplay", &"completion":
+			_return_to_levels()
+		&"mode_select":
+			_gameplay_preparation.cancel()
+			_navigator.close_modal({"action": &"dismiss", "payload": {}})
+		_:
+			if not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty():
+				close_modal()
+			else:
+				_navigator.pop()

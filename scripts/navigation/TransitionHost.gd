@@ -37,6 +37,7 @@ var _carried_companion_states: Dictionary = {}
 var _target_companion_carried := false
 var _continuing := false
 var _target_carried := false
+var _gesture_paused := false
 
 
 func _ready() -> void:
@@ -98,6 +99,8 @@ func _start_motion(kind: StringName, duration: float) -> void:
 	if not animated:
 		_active_tween.tween_interval(duration)
 	_active_tween.finished.connect(_settle.bind(_active_sequence, true))
+	if _gesture_paused:
+		_active_tween.pause()
 	motion_started.emit(kind)
 
 
@@ -210,6 +213,25 @@ func _tween_companion_to(companion: Node2D, state: Dictionary, duration: float) 
 		_active_tween.tween_property(companion, property, state[property], duration)
 
 
+func gesture_pause_motion() -> Dictionary:
+	_gesture_paused = true
+	var token := {"sequence": _active_sequence, "running": false}
+	if _active_tween != null:
+		token.running = _active_tween.is_running()
+		_active_tween.pause()
+	return token
+
+
+func gesture_resume_motion(token: Dictionary) -> void:
+	_gesture_paused = false
+	if (
+		_active_tween != null
+		and int(token.get("sequence", -1)) == _active_sequence
+		and bool(token.get("running", false))
+	):
+		_active_tween.play()
+
+
 func finish_active_to_target() -> void:
 	_settle(_active_sequence, true)
 
@@ -259,6 +281,7 @@ func _duration_for(kind: StringName, reduced_motion: bool) -> float:
 
 
 func _settle(sequence: int, committed: bool, settle_custom := true) -> void:
+	_gesture_paused = false
 	if _active_tween == null or sequence != _active_sequence:
 		return
 	var tween := _active_tween

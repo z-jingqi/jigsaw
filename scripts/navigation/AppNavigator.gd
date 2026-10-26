@@ -397,6 +397,15 @@ func wait_until_idle() -> void:
 		await _transition_host.transition_settled
 
 
+func edge_back_context() -> Dictionary:
+	if is_input_locked():
+		return {}
+	var behind := current_screen_view() if not _modal_entry.is_empty() else previous_screen_view()
+	if not is_instance_valid(behind):
+		return {}
+	return {"source": current_route_view(), "previous": behind, "transition": _transition_host}
+
+
 func current_route() -> StringName:
 	if not _modal_entry.is_empty():
 		return _modal_entry.route

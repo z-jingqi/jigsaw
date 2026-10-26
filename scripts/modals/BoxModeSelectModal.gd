@@ -12,6 +12,7 @@ var _box_data: Dictionary = {}
 var _source_rect := Rect2()
 var _destination := Rect2()
 var _close_tween: Tween
+var _gesture_close_tween: Tween
 var _closing := false
 var _closed := false
 var _generation := 0
@@ -145,6 +146,26 @@ func _on_start_pressed() -> void:
 	super._on_start_pressed()
 
 
+func gesture_pause_motion() -> void:
+	if is_instance_valid(_box):
+		_box.gesture_pause_motion()
+	if _close_tween != null and _close_tween.is_valid() and _close_tween.is_running():
+		_gesture_close_tween = _close_tween
+		_close_tween.pause()
+
+
+func gesture_resume_motion() -> void:
+	if is_instance_valid(_box):
+		_box.gesture_resume_motion()
+	if (
+		_gesture_close_tween != null
+		and _gesture_close_tween == _close_tween
+		and _gesture_close_tween.is_valid()
+	):
+		_gesture_close_tween.play()
+	_gesture_close_tween = null
+
+
 func needs_box_close() -> bool:
 	return _prototype and not _closed
 
@@ -275,6 +296,7 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func navigation_exit(context: Dictionary) -> void:
+	_gesture_close_tween = null
 	_generation += 1
 	if _close_tween != null:
 		_close_tween.kill()

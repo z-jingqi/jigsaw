@@ -10,6 +10,8 @@ var _host: Control
 var _samples: Node3D
 var _tween: Tween
 var _epoch := 0
+var _gesture_paused := false
+var _gesture_tween: Tween
 
 
 func _init(host: Control, samples: Node3D) -> void:
@@ -23,6 +25,8 @@ func show(
 	_epoch += 1
 	var token := _epoch
 	_kill_tween()
+	if not await _wait_gesture(token):
+		return
 	if _samples.get_child_count() > 0 and not reduced:
 		phase = &"retracting"
 		_lower(token)
@@ -32,7 +36,7 @@ func show(
 		return
 	_clear_children()
 	phase = &"waiting_for_lid"
-	while _current(token) and not bool(opening_ready.call()):
+	while _current(token) and (_gesture_paused or not bool(opening_ready.call())):
 		await _host.get_tree().process_frame
 	if not _current(token):
 		return
@@ -62,6 +66,7 @@ func _emerge(mode: StringName, token: int) -> void:
 	_tween.tween_callback(_set_phase.bind(token, &"fanning")).set_delay(0.16)
 	_tween.tween_callback(_set_phase.bind(token, &"settling")).set_delay(0.38)
 	_tween.finished.connect(_set_idle.bind(token), CONNECT_ONE_SHOT)
+	_pause_new_tween()
 
 
 func _set_phase(token: int, value: StringName) -> void:
@@ -97,6 +102,8 @@ func retract(reduced: bool) -> void:
 	_epoch += 1
 	var token := _epoch
 	_kill_tween()
+	if not await _wait_gesture(token):
+		return
 	if reduced or _samples.get_child_count() == 0:
 		_clear_children()
 		_set_idle(token)
@@ -109,11 +116,39 @@ func retract(reduced: bool) -> void:
 
 
 func cancel() -> void:
+	_gesture_paused = false
+	_gesture_tween = null
 	_epoch += 1
 	_kill_tween()
 	_clear_children()
 	phase = &"idle"
 	stopped.emit()
+
+
+func gesture_pause_motion() -> void:
+	if _gesture_paused:
+		return
+	_gesture_paused = true
+	_pause_new_tween()
+
+
+func gesture_resume_motion() -> void:
+	_gesture_paused = false
+	if _gesture_tween != null and _gesture_tween == _tween and _gesture_tween.is_valid():
+		_gesture_tween.play()
+	_gesture_tween = null
+
+
+func _pause_new_tween() -> void:
+	if _gesture_paused and _tween != null and _tween.is_valid() and _tween.is_running():
+		_gesture_tween = _tween
+		_tween.pause()
+
+
+func _wait_gesture(token: int) -> bool:
+	while _current(token) and _gesture_paused:
+		await _host.get_tree().process_frame
+	return _current(token)
 
 
 func active_motion_count() -> int:
@@ -149,10 +184,12 @@ func _lower(token: int) -> void:
 		CONNECT_ONE_SHOT
 	)
 
+	_pause_new_tween()
+
 
 func _wait(token: int) -> bool:
 	# Never await Tween.finished: kill() does not emit it. Cancellation/exit must wake.
-	while _current(token) and _tween != null:
+	while _current(token) and (_tween != null or _gesture_paused):
 		await _host.get_tree().process_frame
 	return _current(token)
 
@@ -170,6 +207,7 @@ func _set_idle(token: int) -> void:
 
 
 func _kill_tween() -> void:
+	_gesture_tween = null
 	if _tween != null:
 		_tween.kill()
 		_tween = null

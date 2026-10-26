@@ -4,6 +4,8 @@ signal level_selected(level_id: String)
 signal card_visible(card: Control, view_model: Variant)
 signal card_hidden(card: Control)
 signal page_changed(index: int)
+signal gesture_progress(visual_page: float)
+signal gesture_finished(committed: bool, target: int)
 
 const CardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
@@ -12,7 +14,9 @@ var _items: Array = []
 var _pages: Dictionary = {}
 var _page := 0
 var _visual_page := 0.0
-var _drag_origin := 0.0
+const Gesture := preload("res://scripts/ui/navigation/PagingGesture.gd")
+var _gesture := Gesture.new()
+const Arena := preload("res://scripts/ui/navigation/GestureArena.gd")
 var _opening_card := false
 var _hidden_id := ""
 var _interactive := true
@@ -20,7 +24,6 @@ var _reduced := false
 var _tween: Tween
 var _configured := false
 var _pointer := -2
-var _start := Vector2.ZERO
 var _dragging := false
 
 
@@ -66,6 +69,9 @@ func page_index() -> int:
 
 
 func request_page(index: int) -> void:
+	if _pointer != -2:
+		_set_card_interaction(false)
+	Arena.release(self)
 	if not _interactive or page_count() == 0:
 		return
 	_kill_motion()
@@ -111,6 +117,7 @@ func _position_layers() -> void:
 
 
 func settle() -> void:
+	Arena.release(self)
 	_kill_motion()
 	_pointer = -2
 	_dragging = false
@@ -135,9 +142,7 @@ func _finish_page() -> void:
 func set_interaction_enabled(enabled: bool) -> void:
 	_interactive = enabled
 	if not enabled:
-		_kill_motion()
-		_pointer = -2
-		_dragging = false
+		stop_motion()
 	_set_card_interaction(enabled)
 	if (
 		enabled
@@ -269,6 +274,9 @@ func _on_card_pressed(card: Control) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if Arena.block_secondary(get_viewport(), event):
+		get_viewport().set_input_as_handled()
+		return
 	if event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
 	if not _interactive or not is_visible_in_tree():
@@ -286,7 +294,7 @@ func _input(event: InputEvent) -> void:
 		_move_swipe(event.position, native)
 	elif event is InputEventScreenTouch:
 		if event.canceled and event.index == _pointer:
-			request_page(roundi(_visual_page))
+			_cancel_swipe()
 		elif event.pressed:
 			_begin_swipe(event.position, event.index, native)
 		elif event.index == _pointer:
@@ -307,41 +315,59 @@ func _notification(what: int) -> void:
 
 func _begin_swipe(point: Vector2, pointer: int, native: float) -> void:
 	if _pointer != -2:
+		_cancel_swipe()
 		return
-	if point.x < 24.0 * native or not get_global_rect().has_point(point):
+	if not get_global_rect().has_point(point):
+		return
+	if Arena.is_edge_candidate(self, point, native) or not Arena.reserve(self, pointer):
 		return
 	_kill_motion()
-	_start = point
-	_drag_origin = _visual_page
+	_gesture.begin(point, _visual_page, size.x, native, page_count())
+	_page = _gesture.origin_page
+	page_changed.emit(_page)
 	_pointer = pointer
 	_dragging = false
 	_set_card_interaction(_interactive)
 
 
-func _move_swipe(point: Vector2, native: float) -> void:
-	var delta := point - _start
-	if not _dragging and absf(delta.x) > 12 * native and absf(delta.x) > absf(delta.y):
+func _move_swipe(point: Vector2, _native: float) -> void:
+	if not Arena.owns(self, _pointer):
+		return
+	var value: float = _gesture.move(point)
+	if _gesture.axis == 2:
+		_set_card_interaction(false)
+		return
+	if _gesture.axis == 1:
 		_dragging = true
 		_set_card_interaction(false)
-	if _dragging:
-		_set_visual_page(
-			clampf(_drag_origin - delta.x / maxf(size.x, 1.0), 0, maxi(0, page_count() - 1))
-		)
+		_set_visual_page(value)
+		gesture_progress.emit(value)
 		get_viewport().set_input_as_handled()
 
 
-func _end_swipe(point: Vector2, native: float) -> void:
+func _end_swipe(point: Vector2, _native: float) -> void:
+	Arena.release(self)
 	_pointer = -2
-	if not _dragging:
+	if _gesture.axis == 0:
 		call_deferred("_resume_after_tap")
 		return
+	var target: int = _gesture.release_target(point)
+	gesture_finished.emit(target != _gesture.origin_page, target)
 	_dragging = false
-	var delta := point.x - _start.x
-	var target := roundi(_visual_page)
-	if absf(delta) > 36 * native:
-		target = ceili(_visual_page) if delta < 0 else floori(_visual_page)
-	request_page(target)
+	# Consume the release before GUI dispatch: a completed/cancelled drag is not a tap.
 	get_viewport().set_input_as_handled()
+	request_page(target)
+
+
+func _cancel_swipe() -> void:
+	if _pointer == -2:
+		return
+	var target: int = _gesture.origin_page
+	gesture_finished.emit(false, target)
+	_set_card_interaction(false)
+	_pointer = -2
+	_dragging = false
+	request_page(target)
 
 
 func _resume_after_tap() -> void:
@@ -389,6 +415,10 @@ func prepare_box_return(level_id: String) -> void:
 
 
 func stop_motion() -> void:
+	Arena.release(self)
+	if _pointer != -2:
+		_page = _gesture.origin_page
+		gesture_finished.emit(false, _page)
 	_kill_motion()
 	_pointer = -2
 	_dragging = false
@@ -418,6 +448,7 @@ func debug_snapshot() -> Dictionary:
 
 
 func dispose() -> void:
+	Arena.release(self)
 	if _tween != null:
 		_tween.kill()
 		_tween = null
