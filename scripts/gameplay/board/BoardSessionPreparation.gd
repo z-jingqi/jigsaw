@@ -18,6 +18,7 @@ func configure(options: Dictionary) -> bool:
 	host.source_image = options.image
 	host.source_size = options.source_size
 	host.piece_visual_style = host._piece_visual_style()
+	host.piece_visual_style["cardboard"] = host.current_mode == "polygon"
 	host.hud_top_reserved_height = options.top
 	host.hud_bottom_reserved_height = maxf(0.0, options.bottom)
 	host.tray_bounds_override = options.tray

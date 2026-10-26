@@ -8,20 +8,27 @@ const EdgeFeatherScript := preload("res://scripts/gameplay/board/PieceEdgeFeathe
 
 var points := PackedVector2Array()
 var surface := false
+var cardboard := false
 var seam_color := Color(0.0, 0.0, 0.0, 0.22)
 var triangles := PackedInt32Array()
 var _drawn_canvas_scale := NAN
 var _edge := EdgeFeatherScript.new()
 
 
-func setup(polygon: PackedVector2Array, draw_surface: bool, color := Color(0, 0, 0, 0.22)) -> void:
+func setup(
+	polygon: PackedVector2Array,
+	draw_surface: bool,
+	color := Color(0, 0, 0, 0.22),
+	matte_cardboard := false
+) -> void:
 	points = polygon
+	cardboard = matte_cardboard
 	surface = draw_surface
 	seam_color = color
 	seam_color.a = minf(seam_color.a, 0.26)
 	triangles = Geometry2D.triangulate_polygon(points) if not surface else PackedInt32Array()
 	if not surface:
-		_edge.setup(points, PackedVector2Array(), null, SIDE_COLOR)
+		_edge.setup(points, PackedVector2Array(), null, _side_color())
 	z_index = 2 if surface else -1
 	set_notify_transform(true)
 	queue_redraw()
@@ -52,14 +59,14 @@ func _draw() -> void:
 	if not surface:
 		var side := PackedVector2Array()
 		for point in points:
-			side.append(point + DEPTH / canvas_scale)
+			side.append(point + _depth() / canvas_scale)
 		# Translating a concave outline can make near-collinear knob edges fail
 		# triangulation at some viewport scales. Reuse the source triangulation.
 		if not triangles.is_empty():
 			RenderingServer.canvas_item_add_triangle_array(
-				get_canvas_item(), triangles, side, PackedColorArray([SIDE_COLOR])
+				get_canvas_item(), triangles, side, PackedColorArray([_side_color()])
 			)
-			_edge.draw(self, 1.0 / EdgeFeatherScript.pixel_scale(self), DEPTH / canvas_scale)
+			_edge.draw(self, 1.0 / EdgeFeatherScript.pixel_scale(self), _depth() / canvas_scale)
 		return
 	# Each face owns half the seam inside its outline. A neighboring piece
 	# cannot hide it or expose a thick side depending on draw order.
@@ -70,3 +77,32 @@ func _draw() -> void:
 			continue
 		outline.append(outline[0])
 		draw_polyline(outline, seam_color, width, true)
+		if cardboard:
+			_draw_matte_bevel(outline, canvas_scale)
+
+
+func _draw_matte_bevel(outline: PackedVector2Array, canvas_scale: float) -> void:
+	# A narrow, directional edge catches light; the printed face remains untouched.
+	var winding := -1.0 if Geometry2D.is_polygon_clockwise(points) else 1.0
+	var light := Vector2(-0.6, -0.8)
+	for index in outline.size() - 1:
+		var a := outline[index]
+		var b := outline[index + 1]
+		var edge := b - a
+		if edge.length_squared() < 0.001:
+			continue
+		var normal := Vector2(edge.y, -edge.x).normalized() * winding
+		var amount := normal.dot(light)
+		var color := Color(1.0, 0.98, 0.92, maxf(0.0, amount) * 0.25)
+		if amount < 0.0:
+			color = Color(0.24, 0.21, 0.17, -amount * 0.13)
+		var inset := -normal * 0.45 / canvas_scale
+		draw_line(a + inset, b + inset, color, 0.65 / canvas_scale, true)
+
+
+func _side_color() -> Color:
+	return Color("9B9283") if cardboard else SIDE_COLOR
+
+
+func _depth() -> Vector2:
+	return Vector2(0.35, 1.05) if cardboard else DEPTH
