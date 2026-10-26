@@ -10,6 +10,8 @@ var _themes: Array = []
 const Pager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
 const PAGE_SIZE := 4
 var _page := 0
+var _visual_page := 0.0
+var _drag_origin := 0.0
 var _pager: Control
 var _motion: Tween
 var _reduced_motion := false
@@ -36,6 +38,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	_themes = payload.view_model.themes
 	# The retained navigation field now stores a zero-based page, not pixels.
 	_page = clampi(int(payload.get("scroll_position", 0)), 0, maxi(0, _page_count() - 1))
+	_visual_page = float(_page)
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
 	_build()
 	_layout()
@@ -48,21 +51,24 @@ func navigation_set_active(enabled: bool) -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
 	_pager.set_interaction_enabled(enabled)
 	if not enabled:
-		_settle()
+		_freeze()
+	elif is_node_ready():
+		_animate_to_target()
 
 
 func navigation_prepare_transition() -> void:
-	_settle()
+	_freeze()
 
 
 func navigation_exit(_context: Dictionary) -> void:
-	_settle()
+	_freeze()
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
 	if enabled:
-		_settle()
+		_freeze()
+		_apply_visual_page(float(_page))
 
 
 func scroll_position() -> int:
@@ -140,7 +146,9 @@ func _build() -> void:
 		tile.add_child(status)
 		tile.pressed.connect(
 			func() -> void:
-				if not _dragging and active_motion_count() == 0:
+				if _enabled and not _dragging:
+					_freeze()
+					_page = index / PAGE_SIZE
 					theme_selected.emit(str(model.theme_id))
 		)
 		$Pages.get_child(index / PAGE_SIZE).add_child(tile)
@@ -176,13 +184,12 @@ func _layout() -> void:
 	var cell := Vector2((width - gap) * 0.5, ($Pages.size.y - row_gap) * 0.5)
 	for page_index in $Pages.get_child_count():
 		var layer := $Pages.get_child(page_index) as Control
-		layer.position = Vector2.ZERO
 		layer.size = $Pages.size
-		layer.visible = page_index == _page
 		for index in layer.get_child_count():
 			var tile := layer.get_child(index) as Button
 			_layout_tile(tile, cell, u, canvas)
 			tile.position = Vector2((index % 2) * (cell.x + gap), (index / 2) * (cell.y + row_gap))
+	_apply_visual_page(_visual_page)
 
 
 func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
@@ -211,42 +218,64 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 
 
 func _request_page(index: int) -> void:
-	if not _enabled or index < 0 or index >= _page_count() or index == _page:
+	if not _enabled or index < 0 or index >= _page_count():
 		return
-	_settle()
-	var outgoing := $Pages.get_child(_page) as Control
-	var incoming := $Pages.get_child(index) as Control
-	var direction := 1.0 if index > _page else -1.0
+	_reset_drag()
 	_page = index
 	_pager.configure(_page_count(), _page)
-	if _reduced_motion:
-		_layout()
+	_animate_to_target()
+
+
+func _animate_to_target() -> void:
+	_pause_motion()
+	if _reduced_motion or is_equal_approx(_visual_page, float(_page)):
+		_apply_visual_page(float(_page))
 		return
-	incoming.visible = true
-	incoming.position.x = direction * $Pages.size.x
-	_motion = create_tween().set_parallel(true)
+	var distance := absf(_visual_page - float(_page))
+	_motion = create_tween()
 	_motion.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_motion.tween_property(outgoing, "position:x", -direction * $Pages.size.x, 0.24)
-	_motion.tween_property(incoming, "position:x", 0.0, 0.24)
-	_motion.finished.connect(_settle)
+	_motion.tween_method(
+		_apply_visual_page, _visual_page, float(_page), clampf(distance * 0.24, 0.08, 0.36)
+	)
+	_motion.finished.connect(func() -> void: _motion = null)
 
 
-func _settle() -> void:
+func _apply_visual_page(value: float) -> void:
+	_visual_page = value
+	for index in $Pages.get_child_count():
+		var layer := $Pages.get_child(index) as Control
+		layer.position = Vector2((float(index) - value) * $Pages.size.x, 0)
+		# Only rendered layers are hit-testable; no full-animation input lock.
+		layer.visible = absf(float(index) - value) < 1.0
+
+
+func _pause_motion() -> void:
 	if _motion != null and _motion.is_valid():
 		_motion.kill()
 	_motion = null
+
+
+func _reset_drag() -> void:
+	if _dragging:
+		for layer in $Pages.get_children():
+			for tile in layer.get_children():
+				(tile as Button).set_pressed_no_signal(false)
 	_pointer = -2
 	_dragging = false
 	_drag_delta = 0.0
-	for layer in $Pages.get_children():
-		for tile in layer.get_children():
-			(tile as Button).set_pressed_no_signal(false)
-	if is_node_ready():
-		_layout()
+
+
+func _freeze() -> void:
+	_pause_motion()
+	_reset_drag()
 
 
 func _on_resized() -> void:
-	_settle()
+	var resume := active_motion_count() > 0
+	_freeze()
+	_layout()
+	if resume:
+		_animate_to_target()
 
 
 func _input(event: InputEvent) -> void:
@@ -261,7 +290,8 @@ func _input(event: InputEvent) -> void:
 		_drag_to(event.position)
 	elif event is InputEventScreenTouch:
 		if event.canceled and event.index == _pointer:
-			_settle()
+			_reset_drag()
+			_animate_to_target()
 		elif event.pressed:
 			_begin_drag(event.position, event.index)
 		elif event.index == _pointer:
@@ -275,8 +305,8 @@ func _begin_drag(point: Vector2, pointer: int) -> void:
 		return
 	if _pointer != -2 or not $Pages.get_global_rect().has_point(point):
 		return
-	if active_motion_count() > 0:
-		_settle()
+	_pause_motion()
+	_drag_origin = _visual_page
 	_pointer = pointer
 	_drag_start = point
 	_drag_delta = 0.0
@@ -288,6 +318,8 @@ func _drag_to(point: Vector2) -> void:
 	if absf(_drag_delta) > threshold and absf(_drag_delta) > absf(point.y - _drag_start.y):
 		_dragging = true
 	if _dragging:
+		var next_position := _drag_origin - _drag_delta / maxf(1.0, $Pages.size.x)
+		_apply_visual_page(clampf(next_position, 0.0, maxf(0.0, _page_count() - 1.0)))
 		get_viewport().set_input_as_handled()
 
 
@@ -296,14 +328,21 @@ func _end_drag() -> void:
 	var target := _page + (1 if _drag_delta < 0 else -1)
 	if _dragging:
 		get_viewport().set_input_as_handled()
-	_settle()
+	_reset_drag()
 	if should_turn:
-		_request_page(target)
+		_request_page(clampi(target, 0, maxi(0, _page_count() - 1)))
+	else:
+		_animate_to_target()
 
 
 func _notification(what: int) -> void:
-	if (
-		is_node_ready()
-		and what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]
+	if not is_node_ready():
+		return
+	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
+		_freeze()
+	elif (
+		what in [NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED]
+		and _enabled
+		and is_visible_in_tree()
 	):
-		_settle()
+		_animate_to_target()

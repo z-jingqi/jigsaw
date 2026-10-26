@@ -140,13 +140,13 @@ func _refresh_selection(user_change := false) -> void:
 
 
 func _on_option_selected(mode: StringName, policy: StringName) -> void:
-	if _prototype and (_phase != "ready" or _closing):
+	if _prototype and _closing:
 		return
 	super._on_option_selected(mode, policy)
 
 
 func _on_start_pressed() -> void:
-	if _prototype and (_phase != "ready" or _closing):
+	if _prototype and _closing:
 		return
 	super._on_start_pressed()
 
@@ -193,7 +193,15 @@ func request_close() -> void:
 	target.position -= content.global_position
 	if not target.has_area():
 		target = _destination
-	var duration := 0.01 if _reduced_motion else 0.36
+	var full_distance := (
+		_destination.position.distance_to(target.position)
+		+ _destination.size.distance_to(target.size)
+	)
+	var remaining_distance := (
+		_box.position.distance_to(target.position) + _box.size.distance_to(target.size)
+	)
+	var fraction := clampf(remaining_distance / maxf(full_distance, 0.001), 0.004, 1.0)
+	var duration := 0.01 if _reduced_motion else 0.36 * fraction
 	_close_tween.tween_property(_box, "position", target.position, duration)
 	_close_tween.tween_property(_box, "size", target.size, duration)
 	_close_tween.tween_property(background, "modulate:a", 0.0, duration)

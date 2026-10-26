@@ -61,21 +61,23 @@ func set_open(opened: bool, reduced_motion := false) -> void:
 	var target := 1.0 if opened else 0.0
 	if not opened:
 		_clear_samples()
-	if reduced_motion:
+	if reduced_motion or is_equal_approx(_open_progress, target):
 		_open_progress = target
 		return
 	_lid_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_lid_tween.tween_property(self, "_open_progress", target, 0.62)
+	_lid_tween.tween_property(self, "_open_progress", target, 0.62 * absf(target - _open_progress))
 	_lid_tween.finished.connect(func() -> void: _lid_tween = null)
 
 
 func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false) -> void:
-	if not _opened or _texture == null:
+	if _texture == null:
 		return
 	_sample_motion.show(mode, piece_data, _texture, reduced_motion, _samples_can_rise)
 
 
 func retract_mode(reduced_motion := false) -> void:
+	# Back owns the current pose immediately, even while the lid is opening.
+	_kill_lid_tween()
 	await _sample_motion.retract(reduced_motion)
 
 

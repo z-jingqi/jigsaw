@@ -250,6 +250,10 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 					func() -> void:
 						var screen: Node = source.get_ref()
 						if is_instance_valid(screen):
+							# Recenter a clicked moving page only behind an opaque modal.
+							# An immediate Back returns to the still-visible frozen source.
+							if modal.background.modulate.a >= 0.98:
+								screen.prepare_box_return(level_id)
 							modal.update_box_source_rect(screen.debug_box_rect(level_id))
 				)
 		_services.progress.mark_level_visited(theme_id, level_id)

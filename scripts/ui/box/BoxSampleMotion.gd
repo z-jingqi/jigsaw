@@ -96,9 +96,10 @@ func active_motion_count() -> int:
 func _lower(token: int) -> void:
 	_tween = _host.create_tween().set_parallel(true)
 	for child in _samples.get_children():
+		var duration := 0.24 * clampf(absf(child.position.y - HIDDEN_Y) / 0.78, 0.004, 1.0)
 		(
 			_tween
-			. tween_property(child, "position:y", HIDDEN_Y, 0.24)
+			. tween_property(child, "position:y", HIDDEN_Y, duration)
 			. set_trans(Tween.TRANS_CUBIC)
 			. set_ease(Tween.EASE_IN)
 		)
@@ -168,7 +169,10 @@ func _build(mode: StringName, data: Array, texture: Texture2D) -> void:
 				x += [0.02, 0.01, 0.02][index]
 				y += [0.02, 0.01, 0.0][index]
 			piece.position = Vector3(x, y, z)
-			piece.rotation = Vector3(
-				deg_to_rad([84.0, 94.0, 87.0][index]), 0, deg_to_rad([-8.0, 6.0, -5.0][index])
+			# XZ source mesh faces the camera after X rotation. Apply roll in world Z
+			# afterward: default YXZ Euler would turn this into yaw instead.
+			piece.basis = (
+				Basis(Vector3.BACK, deg_to_rad([-8.0, 6.0, -5.0][index]))
+				* Basis(Vector3.RIGHT, deg_to_rad([84.0, 94.0, 87.0][index]))
 			)
 		_samples.add_child(piece)

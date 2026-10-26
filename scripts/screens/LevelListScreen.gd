@@ -67,7 +67,7 @@ func navigation_exit(_context: Dictionary) -> void:
 	scroll.set_interaction_enabled(false)
 	_unlock_sequence.clear()
 	if _grid != null:
-		_grid.settle()
+		_grid.stop_motion()
 	animation_player.play(&"exit")
 
 
@@ -155,6 +155,11 @@ func debug_box_rect(level_id: String) -> Rect2:
 func set_box_transition_source(level_id: String, hidden: bool) -> void:
 	if _grid != null:
 		_grid.set_box_transition_source(level_id, hidden)
+
+
+func prepare_box_return(level_id: String) -> void:
+	if _grid != null:
+		_grid.prepare_box_return(level_id)
 
 
 static func grid_column_count_for_width(_available_width: float) -> int:
