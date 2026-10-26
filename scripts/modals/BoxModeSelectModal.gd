@@ -1,5 +1,6 @@
 extends RuntimeModeSelectModal
 signal box_closing
+signal box_returned
 ## Shared theme packaging for every playable level, with reversible source transitions.
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
@@ -197,6 +198,9 @@ func request_close() -> void:
 	await _close_tween.finished
 	_close_tween = null
 	_closed = true
+	# Hand the exact source rectangle back before the navigator's modal fade.
+	_box.hide()
+	box_returned.emit()
 	close_requested.emit()
 
 

@@ -189,17 +189,6 @@ func _apply_paper_materials(node: Node) -> void:
 		for index in node.mesh.get_surface_count():
 			var source: Material = node.mesh.surface_get_material(index)
 			if source is StandardMaterial3D:
-				# White outer coating continues over the tiny exposed cut. Keeping a
-				# dark kraft stripe here aliases into broken dashes at card scale.
-				if (
-					node.name in ["FrontBoard", "TopFlap"]
-					and source.resource_name == "Kraft cut edge"
-				):
-					var coated_edge := StandardMaterial3D.new()
-					coated_edge.albedo_color = Color(0.96, 0.955, 0.94)
-					coated_edge.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-					node.set_surface_override_material(index, coated_edge)
-					continue
 				var material := ShaderMaterial.new()
 				material.shader = PaperShader
 				material.set_shader_parameter("paper_color", source.albedo_color)

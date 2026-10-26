@@ -237,12 +237,13 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 		_bind_mode_select(modal)
 		if list != null:
 			var source: WeakRef = weakref(list)
-			modal.tree_exiting.connect(
-				func() -> void:
-					var screen: Node = source.get_ref()
-					if is_instance_valid(screen):
-						screen.call("set_box_transition_source", level_id, false)
-			)
+			var restore_source := func() -> void:
+				var screen: Node = source.get_ref()
+				if is_instance_valid(screen):
+					screen.call("set_box_transition_source", level_id, false)
+			modal.tree_exiting.connect(restore_source)
+			if modal.has_signal("box_returned"):
+				modal.connect("box_returned", restore_source)
 		_services.progress.mark_level_visited(theme_id, level_id)
 		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
 		if levels != null:

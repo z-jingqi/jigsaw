@@ -39,6 +39,9 @@ func _ready() -> void:
 	completed_modes.hide()
 	add_child(_status)
 	_box_preview = TextureRect.new()
+	var composite := ShaderMaterial.new()
+	composite.shader = preload("res://scripts/ui/box/BoxComposite.gdshader")
+	_box_preview.material = composite
 	_box_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_box_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_box_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

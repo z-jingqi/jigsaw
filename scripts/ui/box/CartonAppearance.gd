@@ -27,7 +27,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	title.name = "PrintedLevelTitle"
 	title.text = str(data.get("title", ""))
 	title.font = TitleFont
-	title.font_size = 64
+	title.font_size = 96
 	title.pixel_size = 0.003
 	title.outline_size = 0
 	var title_ink: Color = colors.ink
@@ -36,7 +36,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	title.position = Vector3(-1.0, 2.78, 0.255)
 	title.shaded = false
 	# Long localized titles stay inside the white field without colliding with binding.
-	var text_width := TitleFont.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 64).x
+	var text_width := TitleFont.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 96).x
 	var title_scale := minf(1.0, 1.74 / maxf(0.01, text_width * title.pixel_size))
 	title.scale = Vector3.ONE * title_scale
 	add_child(title)
