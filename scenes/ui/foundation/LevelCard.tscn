@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/foundation/LevelCard.gd" id="1_card"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
@@ -12,45 +12,17 @@ shader = ExtResource("5_shader")
 shader_parameter/corner_radius = 0.055
 shader_parameter/rect_aspect = 1.333
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_card"]
-bg_color = Color(1, 1, 1, 0)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-corner_radius_bottom_right = 24
-corner_radius_bottom_left = 24
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_hover"]
-bg_color = Color(0.866667, 0.890196, 0.811765, 0.16)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-corner_radius_bottom_right = 24
-corner_radius_bottom_left = 24
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_pressed"]
-bg_color = Color(0.737255, 0.803922, 0.686275, 0.24)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-corner_radius_bottom_right = 24
-corner_radius_bottom_left = 24
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_disabled"]
-bg_color = Color(1, 1, 1, 0)
-corner_radius_top_left = 24
-corner_radius_top_right = 24
-corner_radius_bottom_right = 24
-corner_radius_bottom_left = 24
-
-[sub_resource type="StyleBoxEmpty" id="StyleBox_focus"]
+[sub_resource type="StyleBoxEmpty" id="StyleBox_card"]
 
 [node name="LevelCard" type="Button"]
 custom_minimum_size = Vector2(300, 450)
 theme = ExtResource("2_theme")
 theme_override_fonts/font = ExtResource("3_font")
 theme_override_styles/normal = SubResource("StyleBox_card")
-theme_override_styles/hover = SubResource("StyleBox_hover")
-theme_override_styles/pressed = SubResource("StyleBox_pressed")
-theme_override_styles/disabled = SubResource("StyleBox_disabled")
-theme_override_styles/focus = SubResource("StyleBox_focus")
+theme_override_styles/hover = SubResource("StyleBox_card")
+theme_override_styles/pressed = SubResource("StyleBox_card")
+theme_override_styles/disabled = SubResource("StyleBox_card")
+theme_override_styles/focus = SubResource("StyleBox_card")
 script = ExtResource("1_card")
 kind = 3
 

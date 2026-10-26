@@ -78,6 +78,7 @@ func level_list(
 					. new(
 						{
 							"level_id": level["id"],
+							"level_number": cards.size() + 1,
 							"title": level["title"],
 							"thumbnail": null,
 							"thumbnail_path": _content.level_thumbnail_path(level),

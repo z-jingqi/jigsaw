@@ -96,6 +96,7 @@ class HomeViewModel:
 
 class LevelCardViewModel:
 	extends RefCounted
+	var level_number: int
 	var level_id: String
 	var title: String
 	var thumbnail: Texture2D
@@ -107,6 +108,7 @@ class LevelCardViewModel:
 	var modes: Array[ModeStatusViewModel]
 
 	func _init(data: Dictionary) -> void:
+		level_number = int(data.get("level_number", 1))
 		level_id = str(data["level_id"])
 		title = str(data["title"])
 		thumbnail = data.get("thumbnail") as Texture2D

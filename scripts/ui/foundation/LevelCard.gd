@@ -17,6 +17,8 @@ var _thumbnail_path := ""
 var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 var _status: Label
+var _completion: Label
+var _all_completed := false
 
 
 func _ready() -> void:
@@ -28,9 +30,18 @@ func _ready() -> void:
 	_status.add_theme_stylebox_override("normal", Clean.panel(Clean.PAPER, 18))
 	Clean.label(title_label, TITLE_MAX_FONT_SIZE)
 	add_child(_status)
-	Clean.button(self)
+	_completion = Label.new()
+	_completion.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_completion.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_completion.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	add_child(_completion)
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 	set_process(false)
 	resized.connect(_apply_layout)
+	get_viewport().size_changed.connect(_apply_layout)
 	_apply_layout()
 	if _view_model != null:
 		_apply_view_model()
@@ -44,7 +55,7 @@ func set_view_model(view_model: Variant) -> void:
 
 func _apply_view_model() -> void:
 	level_id = str(_read("level_id"))
-	var next_title := str(_read("title"))
+	var next_title := "%02d" % int(_read("level_number", 1))
 	var title_changed := title_label.text != next_title
 	if title_changed:
 		title_label.text = next_title
@@ -55,11 +66,18 @@ func _apply_view_model() -> void:
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	var mode_states: Array = _read("modes", [])
 	completed_modes.set_modes(mode_states, not is_locked)
+	var count := completed_modes.completed_count()
+	_all_completed = count > 0 and count == mode_states.size()
+	_completion.text = (
+		"%d/%d" % [count, mode_states.size()] if count > 0 and not _all_completed else ""
+	)
+	completed_modes.hide()
+	queue_redraw()
 	tooltip_text = ""
 	accessibility_name = (
 		"%s, %s"
 		% [
-			title_label.text,
+			"%s, %s" % [title_label.text, str(_read("title"))],
 			(
 				"Locked"
 				if is_locked
@@ -162,12 +180,12 @@ func _apply_layout() -> void:
 	title_label.position = Vector2(20.0, image_height + inset + 2.0)
 	title_label.size = Vector2(maxf(0.0, size.x - 40.0), title_height)
 	_fit_title_font(title_label.size.x, title_label.size.y)
-	var icon_size := clampf(size.x * 0.072, 24.0, 40.0)
-	var icon_gap := maxf(5.0, icon_size * 0.12)
-	completed_modes.configure(icon_size, icon_gap)
-	completed_modes.size = Vector2(icon_size, icon_size * 3.0 + icon_gap * 2.0)
-	completed_modes.position = (
-		thumbnail.position + thumbnail.size - completed_modes.size - Vector2.ONE * 12.0
+	_completion.position = title_label.position
+	_completion.size = title_label.size
+	Clean.label(
+		_completion,
+		roundi(maxf(size.x * 0.065, 10.0 * Clean.minimum_touch_size(self).x / 44.0)),
+		true
 	)
 	var shader_material := thumbnail.material as ShaderMaterial
 	if shader_material != null and image_height > 0.0:
@@ -176,9 +194,40 @@ func _apply_layout() -> void:
 	_status.position = thumbnail.position + Vector2(12, 12)
 	_status.size = Vector2(size.x * 0.30, maxf(32, size.x * 0.1))
 	Clean.label(_status, maxi(18, roundi(size.x * 0.06)), true)
-	add_theme_stylebox_override("normal", Clean.panel(Clean.SAGE, 26))
-	add_theme_stylebox_override("disabled", Clean.panel(Clean.LAVENDER, 26))
+	queue_redraw()
 	_apply_preview_style()
+
+
+func _draw() -> void:
+	if not is_node_ready():
+		return
+	var unit := size.x / 150.0
+	if _all_completed:
+		var center := (
+			title_label.position
+			+ Vector2(title_label.size.x - 9.0 * unit, title_label.size.y * 0.5)
+		)
+		draw_polyline(
+			PackedVector2Array(
+				[
+					center + Vector2(-5, 0) * unit,
+					center + Vector2(-1, 4) * unit,
+					center + Vector2(6, -5) * unit
+				]
+			),
+			Clean.INK,
+			maxf(1.5, 1.5 * unit),
+			true
+		)
+	if has_focus():
+		var center := title_label.position + title_label.size * 0.5
+		draw_line(
+			center + Vector2(-12, 8) * unit,
+			center + Vector2(12, 8) * unit,
+			Clean.INK,
+			maxf(1.5, unit),
+			true
+		)
 
 
 func _apply_preview_style() -> void:
@@ -191,7 +240,9 @@ func _apply_preview_style() -> void:
 
 func _fit_title_font(max_width: float, max_height: float) -> void:
 	var font := title_label.get_theme_font("font")
-	var single_line_size := TITLE_MAX_FONT_SIZE
+	var single_line_size := roundi(
+		maxf(TITLE_MAX_FONT_SIZE, 12.0 * Clean.minimum_touch_size(self).x / 44.0)
+	)
 	while single_line_size >= TITLE_MIN_SINGLE_LINE_FONT_SIZE:
 		var text_width := (
 			font
