@@ -184,9 +184,8 @@ func card_for_level_id(level_id: String) -> Control:
 
 func _relayout() -> void:
 	var row_count := _row_count()
-	var content_width := float(_columns) * _card_size.x + float(_columns - 1) * _gap.x
 	_content.custom_minimum_size = Vector2(
-		content_width,
+		0.0,
 		maxf(
 			0.0,
 			(

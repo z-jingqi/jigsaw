@@ -44,6 +44,7 @@ func _ready() -> void:
 	_grid.card_hidden.connect(_unlock_sequence.cancel)
 	back_button.pressed.connect(_on_back_pressed)
 	resized.connect(_apply_layout)
+	scroll.resized.connect(_apply_layout)
 	header.resized.connect(_apply_header_layout)
 	animation_player.play(&"RESET")
 	animation_player.advance(0.0)
