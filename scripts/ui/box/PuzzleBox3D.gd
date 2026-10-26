@@ -7,7 +7,7 @@ const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 
 const Appearance := preload("res://scripts/ui/box/CartonAppearance.gd")
 
-const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
+const SampleMotion := preload("res://scripts/ui/box/BoxSampleMotion.gd")
 
 @onready var viewport: SubViewport = $Viewport
 @onready var display: TextureRect = $Display
@@ -21,7 +21,7 @@ var _texture: Texture2D
 var _packaging: Dictionary = {}
 var _appearance: Node3D
 var _lid_tween: Tween
-var _sample_tween: Tween
+var _sample_motion: RefCounted
 var _opened := false
 var _open_progress := 0.0:
 	set(value):
@@ -31,6 +31,8 @@ var _open_progress := 0.0:
 
 func _ready() -> void:
 	display.texture = viewport.get_texture()
+	_sample_motion = SampleMotion.new(self, samples)
+	_sample_motion.stopped.connect(func() -> void: sample_motion_stopped.emit())
 	$Viewport/World/Camera.look_at(Vector3(0, 1.8, 0), Vector3.UP)
 	_apply_paper_materials(carton)
 	_appearance = Appearance.new()
@@ -68,63 +70,21 @@ func set_open(opened: bool, reduced_motion := false) -> void:
 
 
 func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false) -> void:
-	_clear_samples()
 	if not _opened or _texture == null:
 		return
-	if mode == &"swap":
-		_create_swap_strip(piece_data)
-	else:
-		for index in mini(3, piece_data.size()):
-			var data: Dictionary = piece_data[index]
-			var piece := Pieces.textured_polygon(
-				PackedVector2Array(data.get("polygon", [])),
-				PackedVector2Array(data.get("uv", [])),
-				_texture
-			)
-			piece.position = Vector3(float(index - 1) * 0.68, 0, float(index % 2) * 0.04)
-			piece.rotation = Vector3(deg_to_rad(90), 0, deg_to_rad(float(index - 1) * 8))
-			samples.add_child(piece)
-	var display_height := 3.16 if mode == &"swap" else 3.38
-	samples.position = Vector3(0, display_height if reduced_motion else 2.50, 0)
-	if not reduced_motion:
-		_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		_sample_tween.tween_property(samples, "position:y", display_height, 0.36)
-		_sample_tween.finished.connect(func() -> void: _sample_tween = null)
-
-
-func _create_swap_strip(piece_data: Array) -> void:
-	# These are the actual top-row gameplay polygons and UVs, not inferred crops.
-	var order := [2, 0, 3, 1]
-	for index in order.size():
-		var source_index: int = order[index]
-		if source_index >= piece_data.size():
-			continue
-		var data: Dictionary = piece_data[source_index]
-		var piece := Pieces.textured_polygon(
-			PackedVector2Array(data.get("polygon", [])),
-			PackedVector2Array(data.get("uv", [])),
-			_texture,
-			0.53
-		)
-		piece.position.x = (float(index) - 1.5) * 0.55
-		piece.rotation.x = deg_to_rad(90)
-		samples.add_child(piece)
+	_sample_motion.show(mode, piece_data, _texture, reduced_motion, _samples_can_rise)
 
 
 func retract_mode(reduced_motion := false) -> void:
-	# Cancellation emits the same completion signal, so an awaiting close never hangs.
-	if _sample_tween != null:
-		_sample_tween.kill()
-		_sample_tween = null
-	if samples.get_child_count() == 0:
-		return
-	if reduced_motion:
-		_clear_samples()
-		return
-	_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	_sample_tween.tween_property(samples, "position:y", 2.50, 0.28)
-	_sample_tween.finished.connect(_clear_samples, CONNECT_ONE_SHOT)
-	await sample_motion_stopped
+	await _sample_motion.retract(reduced_motion)
+
+
+func sample_motion_phase() -> StringName:
+	return _sample_motion.phase if _sample_motion != null else &"idle"
+
+
+func _samples_can_rise() -> bool:
+	return _opened and _open_progress >= 0.999
 
 
 func set_rendering(enabled: bool) -> void:
@@ -141,7 +101,10 @@ func cancel_motion() -> void:
 
 
 func active_motion_count() -> int:
-	return int(_lid_tween != null) + int(_sample_tween != null)
+	return (
+		int(_lid_tween != null)
+		+ (_sample_motion.active_motion_count() if _sample_motion != null else 0)
+	)
 
 
 func _kill_lid_tween() -> void:
@@ -151,13 +114,8 @@ func _kill_lid_tween() -> void:
 
 
 func _clear_samples() -> void:
-	if _sample_tween != null:
-		_sample_tween.kill()
-		_sample_tween = null
-	if is_instance_valid(samples):
-		for child in samples.get_children():
-			child.free()
-	sample_motion_stopped.emit()
+	if _sample_motion != null:
+		_sample_motion.cancel()
 
 
 func _resize_viewport() -> void:
