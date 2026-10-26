@@ -265,7 +265,12 @@ func _draw() -> void:
 
 
 func _on_resized() -> void:
-	settle()
+	# The scalar is normalized to page width, so a viewport change can reflow
+	# both visible layers without forcing either one to its target endpoint.
+	stop_motion()
+	_layout_pages()
+	if _interactive and not _opening_card and _hidden_id.is_empty():
+		request_page(_page)
 
 
 func _set_card_interaction(enabled: bool) -> void:

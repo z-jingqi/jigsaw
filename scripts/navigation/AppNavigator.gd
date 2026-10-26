@@ -19,6 +19,9 @@ var _screen_stack: Array[Dictionary] = []
 var _modal_entry: Dictionary = {}
 var _active_transaction: Variant
 var _reduced_motion := false
+var _handoff_in_progress := false
+var _pending_unlock := false
+var _preparation_lock_active := false
 
 @onready var _screen_host: Control = get_node(screen_host_path) as Control
 @onready var _modal_host: Node = get_node(modal_host_path)
@@ -44,7 +47,10 @@ func route_contracts() -> Array[StringName]:
 
 
 func is_input_locked() -> bool:
-	return is_instance_valid(_transition_host) and _transition_host.active_count() > 0
+	return (
+		is_instance_valid(_transition_host)
+		and _transition_host.snapshot().get("motion_phase") == "preparing"
+	)
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -84,6 +90,10 @@ func set_root(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 
 func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	var current := current_screen_entry()
+	if _same_destination(current, route, payload):
+		_transition_host.resume_active_to_target()
+		return _success(route)
 	var preparation := _prepare_navigation(false)
 	if not bool(preparation.get("ok", false)):
 		return preparation
@@ -148,7 +158,7 @@ func push_from_modal(
 	route: StringName, payload: Dictionary = {}, prepared_view: Control = null
 ) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return push(route, payload)
 	var built := _build_entry(route, payload, prepared_view)
@@ -180,7 +190,7 @@ func push_from_modal(
 
 func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return replace(route, payload)
 	var built := _build_entry(route, payload)
@@ -217,7 +227,11 @@ func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictiona
 
 func pop() -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		var motion: Dictionary = _transition_host.snapshot()
+		if motion.get("reason") == "push" and _modal_entry.is_empty():
+			_transition_host.reverse_active_to_source()
+			return _success(current_route())
+		_interrupt_for_navigation()
 	if not _modal_entry.is_empty():
 		return close_modal({"action": &"dismiss", "payload": {}})
 	if _screen_stack.size() < 2:
@@ -249,6 +263,8 @@ func pop() -> Dictionary:
 
 
 func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	if _same_destination(_modal_entry, route, payload):
+		return _success(route)
 	var preparation := _prepare_navigation(false)
 	if not bool(preparation.get("ok", false)):
 		return preparation
@@ -285,7 +301,7 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 func pop_from_modal() -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return pop()
 	if _screen_stack.size() < 2:
@@ -322,7 +338,7 @@ func pop_from_modal() -> Dictionary:
 
 func close_modal(result: Dictionary = {}) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return _failure(&"invalid_payload", {"reason": "missing_modal"})
 	var normalized_result := _normalize_modal_result(result)
@@ -350,6 +366,13 @@ func cancel_active_transition() -> Dictionary:
 		return {"ok": true, "cancelled": false, "state": debug_state_snapshot()}
 	_transition_host.cancel_active_to_source()
 	return {"ok": true, "cancelled": true, "state": debug_state_snapshot()}
+
+
+func interrupt_active_transition() -> Dictionary:
+	if _transition_host.active_count() == 0:
+		return {"ok": true, "interrupted": false}
+	_interrupt_for_navigation()
+	return {"ok": true, "interrupted": true, "state": debug_state_snapshot()}
 
 
 func finish_active_transition() -> Dictionary:
@@ -420,13 +443,27 @@ func debug_state_snapshot() -> Dictionary:
 	}
 
 
-func _prepare_navigation(allow_finish_active: bool) -> Dictionary:
-	if _transition_host.active_count() == 0:
-		return {"ok": true}
-	if allow_finish_active:
-		_transition_host.finish_active_to_target()
-		return {"ok": true}
-	return _failure(&"transition_busy", {})
+func _interrupt_for_navigation() -> void:
+	_handoff_in_progress = true
+	_transition_host.interrupt_at_current_pose()
+	_handoff_in_progress = false
+	_pending_unlock = true
+
+
+func _same_destination(entry: Dictionary, route: StringName, payload: Dictionary) -> bool:
+	if entry.is_empty() or entry.route != route:
+		return false
+	# Fresh view models and moving source rectangles do not make a new route.
+	for key in ["theme_id", "level_id", "mode", "focus_level_id"]:
+		if entry.payload.get(key) != payload.get(key):
+			return false
+	return true
+
+
+func _prepare_navigation(_allow_finish_active: bool) -> Dictionary:
+	if _transition_host.active_count() > 0:
+		_interrupt_for_navigation()
+	return {"ok": true}
 
 
 func _build_entry(
@@ -562,10 +599,17 @@ func _begin_transition(
 		reason != "pop" and bool(payload.get("_prepare_before_motion", false))
 	)
 	_transition_host.play(kind, context)
-	input_lock_changed.emit(true)
+	if is_input_locked() or _pending_unlock:
+		_pending_unlock = false
+		_preparation_lock_active = is_input_locked()
+		input_lock_changed.emit(_preparation_lock_active)
 
 
 func _on_motion_started(kind: StringName) -> void:
+	# Assets/board are now ready. The following visual entrance is not an input lock.
+	if _preparation_lock_active and not is_input_locked():
+		_preparation_lock_active = false
+		input_lock_changed.emit(false)
 	var entry := _modal_entry if not _modal_entry.is_empty() else current_screen_entry()
 	if not entry.is_empty():
 		transition_started.emit(entry.route, kind)
@@ -576,7 +620,9 @@ func _on_transition_settled(committed: bool) -> void:
 	_active_transaction = null
 	if transaction != null:
 		transaction.resolve(committed)
-	input_lock_changed.emit(false)
+	if not _handoff_in_progress:
+		_preparation_lock_active = false
+		input_lock_changed.emit(false)
 
 
 func _navigation_context(reason: String) -> Dictionary:

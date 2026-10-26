@@ -268,6 +268,14 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 func enter_level(
 	theme_id: String, level_id: String, mode: String, start_policy := "start"
 ) -> Dictionary:
+	# Repeated activation during a handoff must not rebuild or clear the same board.
+	if (
+		_navigator.current_route() == &"gameplay"
+		and _current_theme_id == theme_id
+		and _current_level_id == level_id
+		and _current_mode == mode
+	):
+		return {"ok": true, "unchanged": true}
 	var level := _services.content.level_by_id(theme_id, level_id)
 	if level.is_empty() or not _services.content.available_modes(level).has(mode):
 		return {"ok": false, "error": "invalid_argument"}

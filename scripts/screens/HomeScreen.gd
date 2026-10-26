@@ -53,18 +53,20 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 
 
 func navigation_prepare_transition() -> void:
-	deck.cancel()
+	deck.pause_at_current_pose()
 
 
 func navigation_exit(_context: Dictionary) -> void:
-	deck.cancel()
+	deck.pause_at_current_pose()
 
 
 func navigation_set_active(enabled: bool) -> void:
 	visible = enabled
 	mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
-	if not enabled:
-		deck.cancel()
+	if enabled:
+		deck.resume_to_rest()
+	else:
+		deck.pause_at_current_pose()
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -145,11 +147,7 @@ func _on_browse_motion(
 
 
 func _on_enter_pressed() -> void:
-	if (
-		not _themes.is_empty()
-		and _themes[_selected_index].playable
-		and deck.active_motion_count() == 0
-	):
+	if not _themes.is_empty() and _themes[_selected_index].playable:
 		theme_activated.emit(str(_themes[_selected_index].theme_id))
 
 

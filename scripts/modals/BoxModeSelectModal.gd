@@ -167,7 +167,7 @@ func request_close() -> void:
 		return
 	_closing = true
 	box_closing.emit()
-	get_tree().root.get_node("Game/AppNavigator").finish_active_transition()
+	get_tree().root.get_node("Game/AppNavigator").interrupt_active_transition()
 	_active = false
 	_generation += 1
 	var generation := _generation
