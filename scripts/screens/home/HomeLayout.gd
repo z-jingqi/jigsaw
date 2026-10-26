@@ -36,18 +36,8 @@ static func apply(host: Control) -> void:
 	_place(deck, Vector2(left, deck_top), Vector2(width, maxf(100.0 * u, deck_height)))
 	var pager_top := deck_top + deck.size.y + 4.0 * u
 	var undo := host.get_node("UndoButton") as Button
-	_place(undo, Vector2(left, pager_top), Vector2.ONE * pager_side)
-	var next := host.get_node("NextButton") as Button
-	_place(next, Vector2(left, pager_top), Vector2.ONE * pager_side)
-	next.position.x = left + width - next.size.x
-	var counter := host.get_node("Counter") as Label
-	var counter_inset := maxf(undo.size.x, next.size.x) + 12.0 * u
-	_place(
-		counter,
-		Vector2(left + counter_inset, pager_top),
-		Vector2(width - counter_inset * 2.0, pager_side)
-	)
-	Clean.label(counter, roundi(maxf(13.0 * u, 13.0 * canvas)), true)
+	_place(undo, Vector2(left, pager_top), Vector2(maxf(96.0 * u, 96.0 * canvas), pager_side))
+	undo.add_theme_font_size_override("font_size", roundi(maxf(16.0 * u, 16.0 * canvas)))
 	var start := host.get_node("StartButton") as Button
 	_place(start, Vector2(left, 0), Vector2(width, action_height))
 	start.position.y = s.y - safe.w - 34.0 * u - start.size.y

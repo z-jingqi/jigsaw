@@ -57,11 +57,6 @@ vertical_alignment = 1
 layout_mode = 0
 mouse_filter = 2
 script = ExtResource("5")
-[node name="Counter" type="Label" parent="."]
-layout_mode = 0
-mouse_filter = 2
-horizontal_alignment = 1
-vertical_alignment = 1
 [node name="EmptyState" type="Label" parent="."]
 visible = false
 layout_mode = 0
@@ -89,12 +84,8 @@ theme_override_fonts/font = ExtResource("4")
 [node name="UndoButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")
-symbol = "back"
+symbol = "none"
 theme_override_fonts/font = ExtResource("4")
-[node name="NextButton" type="Button" parent="."]
-layout_mode = 0
-script = ExtResource("3")
-symbol = "forward"
 [node name="StartButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("3")

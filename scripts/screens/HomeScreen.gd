@@ -25,7 +25,6 @@ func _ready() -> void:
 		"MenuButton": "settings_title",
 		"ThemesButton": "all_themes",
 		"UndoButton": "previous_theme",
-		"NextButton": "next_theme",
 		"StartButton": "enter_topic",
 	}
 	for entry in labels:
@@ -40,8 +39,8 @@ func _ready() -> void:
 	menu_button.pressed.connect(menu_requested.emit)
 	$ThemesButton.pressed.connect(themes_requested.emit)
 	$AlbumButton.pressed.connect(album_requested.emit)
-	$UndoButton.pressed.connect(_on_previous_pressed)
-	$NextButton.pressed.connect(_on_next_pressed)
+	$UndoButton.text = GameStrings.ui_text("previous_theme")
+	$UndoButton.pressed.connect(deck.undo)
 	start_button.pressed.connect(_on_enter_pressed)
 	resized.connect(_on_resized)
 	Layout.apply(self)
@@ -96,13 +95,11 @@ func _on_selected(index: int) -> void:
 
 
 func _update_information() -> void:
-	$UndoButton.visible = not _themes.is_empty()
-	$NextButton.visible = not _themes.is_empty()
-	$NextButton.disabled = _themes.size() < 2
-	$UndoButton.disabled = _themes.size() < 2
+	var can_undo: bool = not deck.history.is_empty()
+	$UndoButton.visible = can_undo
+	$UndoButton.disabled = not can_undo
 	$UndoButton.queue_redraw()
 	$EmptyState.visible = _themes.is_empty()
-	$Counter.visible = not _themes.is_empty()
 	if _themes.is_empty():
 		start_button.disabled = true
 		start_button.text = GameStrings.ui_text("coming_soon")
@@ -119,7 +116,6 @@ func _update_information() -> void:
 	)
 	start_button.accessibility_name = start_button.text
 	start_button.disabled = not model.playable
-	$Counter.text = "%02d / %02d" % [_selected_index + 1, _themes.size()]
 	var next_model: Variant = _themes[posmod(_selected_index + 1, _themes.size())]
 	_title_motion.set_current(str(model.title), str(next_model.title))
 
@@ -146,16 +142,6 @@ func _on_browse_motion(
 		committed,
 		bool(get_meta("reduced_motion", false))
 	)
-
-
-func _on_previous_pressed() -> void:
-	if _themes.size() > 1 and deck.active_motion_count() == 0:
-		deck.select_theme(posmod(_selected_index - 1, _themes.size()))
-
-
-func _on_next_pressed() -> void:
-	if _themes.size() > 1 and deck.active_motion_count() == 0:
-		deck.select_theme(posmod(_selected_index + 1, _themes.size()))
 
 
 func _on_enter_pressed() -> void:
