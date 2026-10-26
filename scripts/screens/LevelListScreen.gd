@@ -6,7 +6,6 @@ signal level_selected(level_id: String)
 
 const DotPager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
-const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
@@ -50,6 +49,7 @@ func _ready() -> void:
 	_grid.card_hidden.connect(_unlock_sequence.cancel)
 	back_button.pressed.connect(_on_back_pressed)
 	resized.connect(_apply_layout)
+	$SafeArea/Content.resized.connect(_apply_layout, CONNECT_DEFERRED)
 	scroll.resized.connect(_apply_layout)
 	header.resized.connect(_apply_header_layout)
 	animation_player.play(&"RESET")
@@ -100,6 +100,8 @@ func set_view_model(view_model: Variant) -> void:
 		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
 	)
 	_apply_header_layout()
+	if _initial_focus_applied:
+		_grid.refresh_items(view_model.levels)
 	call_deferred("_apply_layout")
 
 
@@ -116,6 +118,7 @@ func refresh_view_model(view_model: Variant) -> void:
 	if title_changed:
 		_apply_header_layout()
 	_grid.refresh_items(view_model.levels)
+	_apply_layout()
 
 
 func active_motion_count() -> int:

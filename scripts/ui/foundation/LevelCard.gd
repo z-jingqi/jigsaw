@@ -269,6 +269,13 @@ func _apply_layout() -> void:
 	thumbnail.size = area.size
 	_box_preview.position = area.position
 	_box_preview.size = area.size
+	if bool(get_meta("shelf_layout", false)) and _box_used_rect.has_area():
+		var fit := minf(area.size.x / _box_used_rect.size.x, area.size.y / _box_used_rect.size.y)
+		var drawn := _box_used_rect.size * fit
+		_box_preview.size = drawn
+		_box_preview.position = (
+			area.position + Vector2((area.size.x - drawn.x) * 0.5, area.size.y - drawn.y)
+		)
 	_box_preview.visible = _box_source_texture != null and not _box_hidden
 	thumbnail.visible = _box_source_texture == null and not _box_hidden
 	title_label.hide()

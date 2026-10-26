@@ -195,9 +195,12 @@ func _layout_pages() -> void:
 		Clean.canvas_scale(get_viewport_rect().size, get_window()) if is_inside_tree() else 1.0
 	)
 	var gap := 18.0 * native
-	var row_height := size.y * 0.5
+	# Tall phones leave breathing room below the group, not between each box
+	# and its fixed ledge. Compact screens still use their available half-height.
+	var usable_card_width := maxf(44 * native, (size.x - gap - 12 * native) * 0.5)
+	var row_height := minf(size.y * 0.5, usable_card_width / 0.75 + 55 * native)
 	var card_height := maxf(44 * native, row_height - 24 * native)
-	var card_width := minf((size.x - gap - 12 * native) * 0.5, card_height * 0.67)
+	var card_width := minf(usable_card_width, card_height * 0.67)
 	var left := (size.x - card_width * 2 - gap) * 0.5
 	_shelves.clear()
 	for row in 2:
@@ -272,7 +275,11 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _pointer == -1:
 		_move_swipe(event.position, native)
 	elif event is InputEventScreenTouch:
-		if event.pressed:
+		if event.canceled and event.index == _pointer:
+			_pointer = -2
+			_dragging = false
+			_set_card_interaction(_interactive and _tween == null)
+		elif event.pressed:
 			_begin_swipe(event.position, event.index, native)
 		elif event.index == _pointer:
 			_end_swipe(event.position, native)
@@ -280,7 +287,17 @@ func _input(event: InputEvent) -> void:
 		_move_swipe(event.position, native)
 
 
+func _notification(what: int) -> void:
+	if (
+		what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]
+		and is_node_ready()
+	):
+		settle()
+
+
 func _begin_swipe(point: Vector2, pointer: int, native: float) -> void:
+	if _pointer != -2:
+		return
 	if point.x < 24.0 * native or not get_global_rect().has_point(point):
 		return
 	_start = point
