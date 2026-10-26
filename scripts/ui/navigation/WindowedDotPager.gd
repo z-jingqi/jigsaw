@@ -44,10 +44,9 @@ class ArrowButton:
 	func _draw() -> void:
 		var c := size * 0.5
 		var r := 7.0 * unit
-		var tip := c + Vector2(r * direction, 0)
+		var tip := c + Vector2(r * 0.5 * direction, 0)
 		var ink := Color("272925")
 		var stroke := (2.2 if has_focus() else 1.6) * unit
-		draw_line(c - Vector2(r * direction, 0), tip, ink, stroke, true)
 		draw_polyline(
 			PackedVector2Array(
 				[tip + Vector2(-r * direction, -r), tip, tip + Vector2(-r * direction, r)]

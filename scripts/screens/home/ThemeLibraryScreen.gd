@@ -93,7 +93,6 @@ func _build() -> void:
 		layer.name = "Page%d" % index
 		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		$Pages.add_child(layer)
-	var palette := [Clean.SAGE, Clean.APRICOT, Clean.LAVENDER]
 	for index in _themes.size():
 		var model: Variant = _themes[index]
 		var tile := Button.new()
@@ -114,10 +113,14 @@ func _build() -> void:
 			]
 		)
 		Clean.button(tile)
-		var color: Color = palette[index % palette.size()]
-		for state in ["normal", "hover", "pressed", "disabled"]:
-			var fill := color.darkened(0.05) if state == "pressed" else color
-			tile.add_theme_stylebox_override(state, Clean.panel(fill, 20))
+		for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+			tile.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+		var focus := StyleBoxFlat.new()
+		focus.bg_color = Color.TRANSPARENT
+		focus.border_color = Clean.INK
+		focus.set_border_width_all(1)
+		focus.set_corner_radius_all(8)
+		tile.add_theme_stylebox_override("focus", focus)
 		var cover := TextureRect.new()
 		cover.name = "Cover"
 		cover.texture = model.cover_texture
@@ -197,10 +200,14 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 	var status_height := maxf(23.0 * u, 20.0 * canvas)
 	var caption_height := title_height + status_height + 26.0 * u
 	var image_height := maxf(1, minf((cell.x - 20.0 * u) * 1.3, cell.y - caption_height))
-	var image_width := image_height / 1.3
+	var image_width := cell.x - 20.0 * u
 	tile.custom_minimum_size = Vector2.ZERO
 	tile.size = cell
 	var cover := tile.get_node("Cover") as TextureRect
+	if cover.texture != null:
+		var ratio := cover.texture.get_size().x / cover.texture.get_size().y
+		image_width = minf(image_width, image_height * ratio)
+		image_height = image_width / ratio
 	cover.position = Vector2((cell.x - image_width) * 0.5, 10.0 * u)
 	cover.size = Vector2(image_width, image_height)
 	if cover.material != null:
@@ -209,11 +216,13 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 	title.position = Vector2(12.0 * u, image_height + 15.0 * u)
 	title.size = Vector2(cell.x - 24.0 * u, title_height)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
 	TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
 	var status := tile.get_node("Status") as Label
 	status.position = Vector2(12.0 * u, title.position.y + title_height)
 	status.size = Vector2(cell.x - 24.0 * u, status_height)
+	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
 
 
