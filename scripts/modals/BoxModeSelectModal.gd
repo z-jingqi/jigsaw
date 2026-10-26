@@ -123,10 +123,11 @@ func _refresh_selection(user_change := false) -> void:
 	var mode := StringName(_read_from(_selected_option, "mode", &""))
 	start_button.visible = not mode.is_empty()
 	$SafeArea/Content/ModeHeading.hide()
-	_info.visible = not mode.is_empty()
+	_info.hide()
 	if not mode.is_empty():
 		var data: Dictionary = _box_data.get(String(mode), {})
 		_info.text = ("%d %s" % [int(data.get("count", 0)), GameStrings.ui_text("box_piece_unit")])
+		start_button.accessibility_name += ", " + _info.text
 		if user_change:
 			_box.show_mode(mode, data.get("pieces", []), _reduced_motion)
 	_apply_layout()
@@ -243,7 +244,7 @@ func _apply_layout() -> void:
 	_info.position = Vector2(24 * u, options.position.y + 68 * u)
 	_info.size = Vector2(s.x - 48 * u, 26 * u)
 	Clean.label(_info, roundi(13 * u), true)
-	start_button.position.y = _info.position.y + _info.size.y + 16 * u
+	start_button.position.y = options.position.y + options.size.y + 20 * u
 	Layout.layout_start_content(self)
 
 
