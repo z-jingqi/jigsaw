@@ -1,6 +1,6 @@
 extends RuntimeModeSelectModal
 signal box_closing
-## Single-level prototype. All other levels retain the established mode page.
+## Shared theme packaging for every playable level, with reversible source transitions.
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
@@ -18,9 +18,10 @@ var _phase := "inactive"
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
-	_prototype = (
-		payload.get("theme_id") == "topic_01" and payload.get("level_id") == "shanhai_v2_01"
-	)
+	_prototype = not str(payload.get("level_id", "")).is_empty()
+	if _prototype:
+		add_to_group("runtime_box_modal")
+		get_tree().call_group("runtime_box_cache", "pause_for_modal")
 	if _prototype:
 		_box_data = payload.get("box_preview", {})
 		_source_rect = payload.get("box_source_rect", Rect2())
@@ -35,7 +36,19 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	super.navigation_enter(payload, context)
 	if _prototype:
 		preview.hide()
-		_box.configure(preview.texture)
+		(
+			_box
+			. configure(
+				preview.texture,
+				{
+					"theme_id": str(payload.get("theme_id", "")),
+					"title": str(_read("level_title", "")),
+					"modes": _read("options", []),
+					"preview_revealed": true,
+					"locked": false,
+				}
+			)
+		)
 		_box.set_rendering(true)
 		_phase = "entering"
 
@@ -193,6 +206,7 @@ func _apply_layout() -> void:
 	if not is_node_ready() or content.size.y <= 0:
 		return
 	Layout.apply(self)
+	title_label.hide()
 	preview.hide()
 	var u := Clean.canvas_scale(content.size, get_window())
 	var s := content.size
@@ -253,6 +267,8 @@ func navigation_exit(context: Dictionary) -> void:
 	if is_instance_valid(_box):
 		_box.cancel_motion()
 		_box.set_rendering(false)
+	if is_in_group("runtime_box_modal"):
+		remove_from_group("runtime_box_modal")
 	super.navigation_exit(context)
 
 

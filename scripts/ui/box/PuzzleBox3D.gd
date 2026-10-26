@@ -5,6 +5,8 @@ signal sample_motion_stopped
 
 const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 
+const Appearance := preload("res://scripts/ui/box/CartonAppearance.gd")
+
 const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
 
 @onready var viewport: SubViewport = $Viewport
@@ -16,7 +18,8 @@ const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
 @onready var right_ear: Node3D = carton.find_child("SideEarRight", true, false)
 @onready var samples: Node3D = $Viewport/World/Samples
 var _texture: Texture2D
-var _lid_art: MeshInstance3D
+var _packaging: Dictionary = {}
+var _appearance: Node3D
 var _lid_tween: Tween
 var _sample_tween: Tween
 var _opened := false
@@ -30,20 +33,22 @@ func _ready() -> void:
 	display.texture = viewport.get_texture()
 	$Viewport/World/Camera.look_at(Vector3(0, 1.8, 0), Vector3.UP)
 	_apply_paper_materials(carton)
+	_appearance = Appearance.new()
+	carton.add_child(_appearance)
 	resized.connect(_resize_viewport)
 	_resize_viewport()
 	if _texture != null:
-		configure(_texture)
+		configure(_texture, _packaging)
 
 
-func configure(texture: Texture2D) -> void:
+func configure(texture: Texture2D, packaging: Dictionary = {}) -> void:
 	_texture = texture
+	_packaging = packaging.duplicate(true)
 	if not is_node_ready():
 		return
 	cancel_motion()
 	_clear_samples()
-	_lid_art = carton.find_child("FrontArtwork", true, false)
-	_lid_art.material_override = Pieces.artwork_material(texture)
+	_appearance.configure(carton, lid, texture, _packaging)
 	_opened = false
 	_open_progress = 0.0
 

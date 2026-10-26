@@ -20,6 +20,7 @@ var _pool: Array[Control] = []
 var _pending: Array[int] = []
 var _pending_tree: SceneTree
 var _scroll_changed: Callable
+var _hidden_box_level_id := ""
 
 
 func _init(scroll: ScrollContainer, content: Control, card_scene: PackedScene) -> void:
@@ -70,6 +71,9 @@ func refresh_items(items: Array) -> void:
 			var card: Control = _visible[index]
 			if is_instance_valid(card):
 				card.call(&"set_view_model", _items[int(index)])
+				card.call(
+					&"set_box_transition_hidden", str(card.get("level_id")) == _hidden_box_level_id
+				)
 				card_visible.emit(card, _items[int(index)])
 	render_visible()
 
@@ -182,6 +186,15 @@ func card_for_level_id(level_id: String) -> Control:
 	return null
 
 
+func set_box_transition_source(level_id: String, hidden: bool) -> void:
+	if hidden:
+		_hidden_box_level_id = level_id
+	elif _hidden_box_level_id == level_id:
+		_hidden_box_level_id = ""
+	for card in visible_cards():
+		card.call(&"set_box_transition_hidden", str(card.get("level_id")) == _hidden_box_level_id)
+
+
 func _relayout() -> void:
 	var row_count := _row_count()
 	_content.custom_minimum_size = Vector2(
@@ -214,6 +227,7 @@ func _acquire_index(index: int) -> void:
 	card.size = _card_size
 	card.position = _item_position(index)
 	card.call(&"set_view_model", _items[index])
+	card.call(&"set_box_transition_hidden", str(card.get("level_id")) == _hidden_box_level_id)
 	if not card.has_meta(&"virtual_grid_wired"):
 		button.pressed.connect(_on_card_pressed.bind(button))
 		card.set_meta(&"virtual_grid_wired", true)

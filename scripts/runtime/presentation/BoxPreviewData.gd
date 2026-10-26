@@ -39,7 +39,7 @@ static func build(content: ContentRepository, level: Dictionary) -> Dictionary:
 					func(a: Dictionary, b: Dictionary) -> bool:
 						return _shape_score(a) < _shape_score(b)
 				)
-			var start := mini(pieces.size() - 1, 6) if mode == "knob" else 0
+			var start := maxi(0, mini(pieces.size() - 1, 6)) if mode == "knob" else 0
 			for index in range(start, mini(start + 3, pieces.size())):
 				var polygon := PackedVector2Array()
 				var uv := PackedVector2Array()

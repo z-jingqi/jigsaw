@@ -136,6 +136,11 @@ func debug_box_rect(level_id: String) -> Rect2:
 	return card.prototype_box_rect() if is_instance_valid(card) else Rect2()
 
 
+func set_box_transition_source(level_id: String, hidden: bool) -> void:
+	if _grid != null:
+		_grid.set_box_transition_source(level_id, hidden)
+
+
 static func grid_column_count_for_width(available_width: float) -> int:
 	return 3 if available_width >= 1440.0 else 2
 

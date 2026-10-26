@@ -96,6 +96,7 @@ class HomeViewModel:
 
 class LevelCardViewModel:
 	extends RefCounted
+	var theme_id: String
 	var level_number: int
 	var level_id: String
 	var title: String
@@ -108,6 +109,7 @@ class LevelCardViewModel:
 	var modes: Array[ModeStatusViewModel]
 
 	func _init(data: Dictionary) -> void:
+		theme_id = str(data.get("theme_id", ""))
 		level_number = int(data.get("level_number", 1))
 		level_id = str(data["level_id"])
 		title = str(data["title"])

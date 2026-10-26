@@ -205,6 +205,8 @@ func show_levels(
 
 
 func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
+	if _navigator.current_route() == &"mode_select":
+		return {"ok": false, "error": "modal_busy"}
 	var level := _services.content.level_by_id(theme_id, level_id)
 	if level.is_empty():
 		return {"ok": false, "error": "not_found"}
@@ -212,15 +214,14 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 	_services.content.level_media(_services.content.level_config(level))
 	_current_theme_id = theme_id
 	_current_level_id = level_id
-	var box_payload: Dictionary = {}
+	var box_payload := preload("res://scripts/runtime/presentation/BoxPreviewData.gd").build(
+		_services.content, level
+	)
 	var box_source := Rect2()
-	if theme_id == "topic_01" and level_id == "shanhai_v2_01":
-		box_payload = preload("res://scripts/runtime/presentation/BoxPreviewData.gd").build(
-			_services.content, level
-		)
-		var list := _navigator.current_screen_view() as RuntimeLevelListScreen
-		if list != null:
-			box_source = list.debug_box_rect(level_id)
+	var list := _navigator.current_screen_view() as RuntimeLevelListScreen
+	if list != null:
+		box_source = list.debug_box_rect(level_id)
+		list.call("set_box_transition_source", level_id, true)
 	var result := _navigator.show_modal(
 		&"mode_select",
 		{
@@ -232,11 +233,22 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 		}
 	)
 	if bool(result.get("ok", false)):
-		_bind_mode_select(_navigator.current_route_view() as RuntimeModeSelectModal)
+		var modal := _navigator.current_route_view() as RuntimeModeSelectModal
+		_bind_mode_select(modal)
+		if list != null:
+			var source: WeakRef = weakref(list)
+			modal.tree_exiting.connect(
+				func() -> void:
+					var screen: Node = source.get_ref()
+					if is_instance_valid(screen):
+						screen.call("set_box_transition_source", level_id, false)
+			)
 		_services.progress.mark_level_visited(theme_id, level_id)
 		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
 		if levels != null:
 			levels.refresh_view_model(_catalog.level_list(theme_id, level_id))
+	elif list != null:
+		list.call("set_box_transition_source", level_id, false)
 	return result
 
 
