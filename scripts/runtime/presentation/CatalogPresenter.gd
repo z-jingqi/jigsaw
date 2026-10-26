@@ -43,7 +43,6 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 				"themes": models,
 				"selected_theme_id": resolved_id,
 				"selected_index": selected_index,
-				"show_home_guide": not _progress.tutorial_seen(&"home_swipe"),
 			}
 		)
 	)

@@ -30,11 +30,7 @@ func open() -> Dictionary:
 		"view_model": _presenter.overview() if _show_themes else _presenter.gallery(_theme_id),
 		"scroll_position": int(_scroll_positions.get(_view_key(), 0)),
 	}
-	var result := (
-		_navigator.push_from_modal(&"album", payload)
-		if _navigator.current_route() == &"home_guide"
-		else _navigator.push(&"album", payload)
-	)
+	var result := _navigator.push(&"album", payload)
 	if bool(result.get("ok", false)):
 		var screen := _navigator.current_screen_view() as AlbumScreen
 		if screen.has_meta("album_coordinator_bound"):

@@ -31,7 +31,6 @@ func overview() -> Dictionary:
 		)
 	var model := _model("themes", "", cards, _strings.text("album_title"))
 	model.summary = _strings.text("album_overview_count") % [cards.size(), total]
-	model.description = _strings.text("album_description")
 	model.total = total
 	model.theme_count = cards.size()
 	return model
@@ -98,7 +97,6 @@ func _model(kind: String, theme_id: String, cards: Array[Dictionary], title: Str
 		"cards": cards,
 		"title": title,
 		"summary": _strings.text("album_count") % cards.size(),
-		"description": _strings.text("album_browse_hint"),
 		"back_label": _strings.text("back"),
 		"all_label": _strings.text("album_all"),
 		"empty_label": _strings.text("album_empty"),

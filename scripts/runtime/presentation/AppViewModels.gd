@@ -80,7 +80,6 @@ class HomeViewModel:
 	var total_themes: int
 	var can_go_previous: bool
 	var can_go_next: bool
-	var show_home_guide: bool
 
 	func _init(data: Dictionary) -> void:
 		revision = int(data["revision"])
@@ -91,7 +90,6 @@ class HomeViewModel:
 		total_themes = themes.size()
 		can_go_previous = selected_index > 0
 		can_go_next = selected_index + 1 < total_themes
-		show_home_guide = bool(data["show_home_guide"])
 
 
 class LevelCardViewModel:

@@ -35,8 +35,6 @@ func execute(command: String, args: Dictionary = {}) -> Dictionary:
 			if not _strings(args, ["topic_id", "level_id"]):
 				return _failure(command, "invalid_argument", "topic_id and level_id are required.")
 			result = _runtime.show_album_artwork(str(args.topic_id), str(args.level_id))
-		"show_home_guide":
-			result = _runtime.show_home_guide()
 		"enter_level":
 			if not _strings(args, ["topic_id", "level_id", "mode"]):
 				return _failure(

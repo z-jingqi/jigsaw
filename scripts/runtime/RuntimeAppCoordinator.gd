@@ -27,7 +27,6 @@ const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 const ModeSelectScene := preload("res://scenes/modals/BoxModeSelectModal.tscn")
 const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
-const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
 var _edge_back: Node
@@ -49,8 +48,6 @@ var _current_mode := ""
 var _completion_event_id := ""
 var _debug_viewport := Vector2i.ZERO
 var _pending_after_modal: Callable
-var _home_guide_timer: SceneTreeTimer
-var _home_guide_action: Callable
 var _dev_panel: Control
 var _returning_to_levels := false
 var _gameplay_preparation: Variant
@@ -108,7 +105,6 @@ func start() -> void:
 
 
 func shutdown() -> void:
-	_cancel_home_guide_timer()
 	if is_instance_valid(_audio_bindings):
 		_audio_bindings.shutdown()
 	if _services != null and is_instance_valid(_services.audio):
@@ -369,20 +365,6 @@ func show_settings() -> Dictionary:
 	return result
 
 
-func show_home_guide() -> Dictionary:
-	var result := _navigator.show_modal(
-		&"home_guide", {"initial_step": "swipe", "labels": _home_guide_labels()}
-	)
-	if bool(result.get("ok", false)):
-		var guide := _navigator.current_route_view() as HomeFirstRunGuide
-		guide.skip_requested.connect(_skip_home_guide)
-		guide.show_step(&"swipe", _reduced_motion(), _home_guide_labels())
-		var home := _navigator.current_screen_view() as HomeScreen
-		if home != null:
-			home.navigation_set_active(true)
-	return result
-
-
 func close_modal() -> Dictionary:
 	if is_instance_valid(_edge_back):
 		_edge_back.cancel()
@@ -490,7 +472,6 @@ func _bind_routes() -> void:
 		&"gameplay": GameplayScene,
 		&"mode_select": ModeSelectScene,
 		&"settings": SettingsScene,
-		&"home_guide": HomeGuideScene,
 		&"completion": CompletionScene
 	}
 	for route in routes:
@@ -507,11 +488,9 @@ func _bind_home(screen: HomeScreen) -> void:
 	screen.menu_requested.connect(show_settings)
 	screen.themes_requested.connect(_show_theme_library)
 	screen.album_requested.connect(show_album)
-	_schedule_home_guide(screen)
 
 
 func show_album() -> Dictionary:
-	_cancel_home_guide_timer()
 	return _album.open()
 
 
@@ -606,19 +585,9 @@ func _bind_settings(modal: SettingsModal) -> void:
 func _on_home_theme_changed(theme_id: String) -> void:
 	_current_theme_id = theme_id
 	_services.session.set_current(theme_id)
-	if not _services.progress.tutorial_seen(&"home_swipe"):
-		_services.progress.mark_tutorial_seen(&"home_swipe")
-		var guide := _navigator.current_route_view() as HomeFirstRunGuide
-		if guide != null:
-			guide.set_step(&"enter", _reduced_motion(), _home_guide_labels())
 
 
 func _on_home_theme_activated(theme_id: String) -> void:
-	_record_home_enter()
-	if String(_navigator.current_route()) == "home_guide":
-		_pending_after_modal = func() -> void: show_levels(theme_id)
-		close_modal()
-		return
 	var home := _navigator.current_screen_view() as HomeScreen
 	show_levels(
 		theme_id,
@@ -824,53 +793,6 @@ func _apply_feedback_preferences() -> void:
 	var settings := _services.settings.snapshot()
 	_board.set_feedback_preferences(bool(settings.get("haptics_enabled", true)), _reduced_motion())
 	_board.set_snap_preview_enabled(bool(settings.get("snap_preview_enabled", true)))
-
-
-func _schedule_home_guide(screen: HomeScreen) -> void:
-	_cancel_home_guide_timer()
-	if (
-		_services.progress.tutorial_seen(&"home_swipe")
-		and _services.progress.tutorial_seen(&"home_enter")
-	):
-		return
-	_home_guide_timer = _game.get_tree().create_timer(1.15)
-	var screen_ref: WeakRef = weakref(screen)
-	_home_guide_action = func() -> void:
-		if (
-			screen_ref.get_ref() != null
-			and _screen_name() == "home"
-			and _navigator.current_screen_view() == screen_ref.get_ref()
-		):
-			show_home_guide()
-	_home_guide_timer.timeout.connect(_home_guide_action, CONNECT_ONE_SHOT)
-
-
-func _record_home_enter() -> void:
-	_services.progress.mark_tutorial_seen(&"home_enter")
-
-
-func _skip_home_guide() -> void:
-	_services.progress.mark_tutorial_seen(&"home_swipe")
-	_services.progress.mark_tutorial_seen(&"home_enter")
-	close_modal()
-
-
-func _home_guide_labels() -> Dictionary:
-	return {
-		"skip": _strings.text("guide_skip"),
-		"swipe": _strings.text("guide_swipe"),
-		"swipe_hint": _strings.text("guide_swipe_hint"),
-		"enter": _strings.text("guide_enter"),
-		"enter_hint": _strings.text("guide_enter_hint")
-	}
-
-
-func _cancel_home_guide_timer() -> void:
-	if _home_guide_timer != null and _home_guide_action.is_valid():
-		if _home_guide_timer.timeout.is_connected(_home_guide_action):
-			_home_guide_timer.timeout.disconnect(_home_guide_action)
-	_home_guide_action = Callable()
-	_home_guide_timer = null
 
 
 func _on_navigation_input_lock_changed(is_locked: bool) -> void:

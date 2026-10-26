@@ -169,11 +169,7 @@ func _refresh_selection(user_change := false) -> void:
 	for child in options.get_children():
 		child.set_selected(child.mode() == selected_mode, user_change)
 	start_button.disabled = selected_mode.is_empty() or _preview_only
-	$SafeArea/Content/ModeHeading.text = (
-		GameStrings.ui_text("no_available_modes")
-		if selected_mode.is_empty()
-		else GameStrings.ui_text("choose_mode")
-	)
+	$SafeArea/Content/ModeHeading.text = GameStrings.ui_text("no_available_modes")
 	var mode_label := str(_read_from(_selected_option, "label", selected_mode))
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	var status := str(_read_from(_selected_option, "status", ""))

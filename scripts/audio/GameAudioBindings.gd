@@ -132,7 +132,7 @@ func _on_route_changed(route: StringName, _payload: Dictionary) -> void:
 
 func _on_transition_started(route: StringName, _kind: StringName) -> void:
 	_audio.set_context(route)
-	if not _previous_route.is_empty() and route not in [&"completion", &"home_guide"]:
+	if not _previous_route.is_empty() and route != &"completion":
 		_play_motion(&"page")
 
 
