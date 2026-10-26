@@ -2,6 +2,7 @@ extends RefCounted
 class_name PieceVisualFactory
 
 const PieceReliefScript := preload("res://scripts/gameplay/board/PieceRelief.gd")
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
 const CardboardShadow := preload("res://scripts/gameplay/board/PieceCardboardShadow.gd")
 const PieceSurfaceScript := preload("res://scripts/gameplay/board/PieceSurface.gd")
 
@@ -40,10 +41,12 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := 
 	poly.uv = piece["uv"]
 	poly.z_index = 0
 	node.add_child(poly)
+	var curved := cardboard and CurvedEdge.apply(poly, str(piece["id"]))
 	var bevel := PieceReliefScript.new()
 	bevel.name = "piece_bevel"
 	bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR), cardboard)
 	node.add_child(bevel)
+	bevel.visible = not curved
 	cut_line_color.a = minf(cut_line_color.a, 0.24)
 	cut_line_lift_color.a = minf(cut_line_lift_color.a, 0.32)
 	for cut_line in piece["cut_lines"]:
