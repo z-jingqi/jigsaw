@@ -18,7 +18,12 @@ func configure(options: Dictionary) -> bool:
 	host.source_image = options.image
 	host.source_size = options.source_size
 	host.piece_visual_style = host._piece_visual_style()
-	host.piece_visual_style["cardboard"] = host.current_mode == "polygon"
+	var curve_preview: bool = (
+		OS.get_environment("JIGSAW_CURVED_EDGE_PREVIEW") == "1"
+		and host.current_mode in ["polygon", "knob"]
+	)
+	host.piece_visual_style["curve_preview"] = curve_preview
+	host.piece_visual_style["cardboard"] = host.current_mode == "polygon" or curve_preview
 	host.hud_top_reserved_height = options.top
 	host.hud_bottom_reserved_height = maxf(0.0, options.bottom)
 	host.tray_bounds_override = options.tray

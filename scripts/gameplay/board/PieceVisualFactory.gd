@@ -41,7 +41,10 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := 
 	poly.uv = piece["uv"]
 	poly.z_index = 0
 	node.add_child(poly)
-	var curved := cardboard and CurvedEdge.apply(poly, str(piece["id"]))
+	var curved := (
+		cardboard
+		and CurvedEdge.apply(poly, str(piece["id"]), bool(style.get("curve_preview", false)))
+	)
 	var bevel := PieceReliefScript.new()
 	bevel.name = "piece_bevel"
 	bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR), cardboard)
