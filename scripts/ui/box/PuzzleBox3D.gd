@@ -93,7 +93,7 @@ func _create_swap_strip(piece_data: Array) -> void:
 			0.53
 		)
 		piece.position.x = (float(index) - 1.5) * 0.55
-		piece.rotation.x = deg_to_rad(-35)
+		piece.rotation.x = deg_to_rad(20)
 		samples.add_child(piece)
 
 

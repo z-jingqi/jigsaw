@@ -338,7 +338,6 @@ func show_home_guide() -> Dictionary:
 func close_modal() -> Dictionary:
 	var view := _navigator.current_route_view()
 	if view != null and view.has_method("needs_box_close") and view.needs_box_close():
-		_navigator.finish_active_transition()
 		view.request_close()
 		return {"ok": true}
 	if _navigator.current_route() == &"completion":

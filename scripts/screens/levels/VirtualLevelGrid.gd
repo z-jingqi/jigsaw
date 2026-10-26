@@ -50,8 +50,8 @@ func configure(
 	_relayout()
 	for index in _visible:
 		var card: Control = _visible[index]
-		card.size = _card_size
 		card.custom_minimum_size = _card_size
+		card.size = _card_size
 		card.position = _item_position(int(index))
 	if retain_position:
 		var target := int(floor(float(top_index) / _columns) * (_card_size.y + _gap.y))
@@ -211,8 +211,8 @@ func _acquire_index(index: int) -> void:
 	card.visible = true
 	var button := card as Button
 	button.disabled = false
-	card.size = _card_size
 	card.custom_minimum_size = _card_size
+	card.size = _card_size
 	card.position = _item_position(index)
 	card.call(&"set_view_model", _items[index])
 	if not card.has_meta(&"virtual_grid_wired"):

@@ -82,6 +82,7 @@ func configure_box_transition(tween: Tween, duration: float) -> bool:
 		_open_lid()
 		background.modulate.a = 1.0
 		options.modulate.a = 1.0
+		tween.tween_interval(0.001)
 		return true
 	tween.tween_property(background, "modulate:a", 1.0, duration)
 	tween.tween_property(_box, "position", _destination.position, duration)
