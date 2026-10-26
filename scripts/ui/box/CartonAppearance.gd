@@ -1,6 +1,7 @@
 extends Node3D
 ## Flat printed surfaces on the existing authored carton. No extra viewport.
 
+const InkLineShader := preload("res://scripts/ui/box/CartonInkLine.gdshader")
 const RevealShader := preload("res://scripts/ui/box/CartonArtwork.gdshader")
 const Packaging := preload("res://scripts/ui/box/ThemePackaging.gd")
 const TitleFont := preload("res://assets/fonts/noto/NotoSerifSC[wght].ttf")
@@ -29,7 +30,8 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	title.font_size = 64
 	title.pixel_size = 0.003
 	title.outline_size = 0
-	title.modulate = colors.ink
+	var title_ink: Color = colors.ink
+	title.modulate = title_ink.darkened(0.60) if title_ink.get_luminance() > 0.40 else title_ink
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	title.position = Vector3(-1.0, 2.78, 0.255)
 	title.shaded = false
@@ -74,7 +76,7 @@ func _print_wrap(ink: Material) -> void:
 	spine.position = Vector3(1.136, 1.5, 0)
 	spine.rotation.y = PI / 2
 	var top := _quad("TopBinding", Vector2(2.25, 0.48), ink, _top_print)
-	top.position = Vector3(0, 0.010, 0.24)
+	top.position = Vector3(0, 0.012, 0.24)
 	top.rotation.x = -PI / 2
 
 
@@ -141,9 +143,17 @@ func _stroke(points: Array[Vector2], material: Material, parent: Node3D, on_top 
 	for index in points.size() - 1:
 		var delta := points[index + 1] - points[index]
 		var midpoint := (points[index] + points[index + 1]) / 2
-		var line := _quad("PrintedLine", Vector2(delta.length(), 0.005), material, parent)
+		var line_material: Material = material
 		if on_top:
-			line.position = Vector3(midpoint.x, 0.012, midpoint.y)
+			var antialiased := ShaderMaterial.new()
+			antialiased.shader = InkLineShader
+			antialiased.set_shader_parameter("ink", (material as StandardMaterial3D).albedo_color)
+			line_material = antialiased
+		var line := _quad(
+			"PrintedLine", Vector2(delta.length(), 0.04 if on_top else 0.005), line_material, parent
+		)
+		if on_top:
+			line.position = Vector3(midpoint.x, 0.014, midpoint.y)
 			line.rotation = Vector3(-PI / 2, -delta.angle(), 0)
 		else:
 			line.position = Vector3(midpoint.x, midpoint.y, 0.255)

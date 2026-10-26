@@ -87,7 +87,8 @@ func configure_box_transition(tween: Tween, duration: float) -> bool:
 	var initial := _source_rect
 	if not initial.has_area():
 		initial = _destination
-	initial.position -= content.global_position
+	else:
+		initial.position -= content.global_position
 	_box.position = initial.position
 	_box.size = initial.size
 	if _reduced_motion:
@@ -206,6 +207,8 @@ func _apply_layout() -> void:
 	if not is_node_ready() or content.size.y <= 0:
 		return
 	Layout.apply(self)
+	# Keep navigation above the live viewport's transparent display quad.
+	$SafeArea/Content/Header.z_index = 2
 	title_label.hide()
 	preview.hide()
 	var u := Clean.canvas_scale(content.size, get_window())

@@ -18,6 +18,7 @@ var _status: Label
 var _box_preview: TextureRect
 var _box_hidden := false
 var _cache_key := ""
+var _box_identity := ""
 var _request_token := 0
 var _requested_token := -1
 var _locked := false
@@ -64,6 +65,7 @@ func set_view_model(view_model: Variant) -> void:
 
 func _apply_view_model() -> void:
 	var next_level_id := str(_read("level_id"))
+	var next_identity := JSON.stringify([_read("theme_id", ""), next_level_id])
 	var modes: Array = []
 	var descriptions: PackedStringArray = []
 	for state in _read("modes", []):
@@ -94,12 +96,15 @@ func _apply_view_model() -> void:
 	if key != _cache_key:
 		_request_token += 1
 		_requested_token = -1
-		_box_preview.texture = null
-		_box_source_texture = null
-		_box_preview.visible = false
-		_box_used_rect = Rect2()
-		if level_id != next_level_id:
+		# Retain the last image for this box while state/reveal changes are queued.
+		# A recycled card must never show another level's image or hide state.
+		if _box_identity != next_identity:
+			_box_preview.texture = null
+			_box_source_texture = null
+			_box_preview.visible = false
+			_box_used_rect = Rect2()
 			_box_hidden = false
+	_box_identity = next_identity
 	_cache_key = key
 	level_id = next_level_id
 	title_label.text = str(_read("title"))
@@ -133,8 +138,16 @@ func _request_box() -> void:
 		"locked": _locked,
 	}
 	BoxCache.shared(get_tree()).request(
-		_cache_key, thumbnail.texture, packaging, _accept_box.bind(_request_token, _cache_key)
+		_cache_key,
+		thumbnail.texture,
+		packaging,
+		_accept_box.bind(_request_token, _cache_key),
+		_box_request_is_current.bind(_request_token, _cache_key)
 	)
+
+
+func _box_request_is_current(token: int, key: String) -> bool:
+	return is_inside_tree() and token == _request_token and key == _cache_key
 
 
 func _accept_box(entry: Dictionary, token: int, key: String) -> void:

@@ -30,6 +30,7 @@ static func shared(tree: SceneTree) -> Node:
 func _ready() -> void:
 	add_to_group("runtime_box_cache")
 	_renderer = BoxScene.instantiate()
+	_renderer.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_renderer.position = Vector2(-10000, -10000)
 	_renderer.size = Vector2(RENDER_SIZE)
 	_renderer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -37,16 +38,26 @@ func _ready() -> void:
 	_renderer.call("set_rendering", false)
 
 
-func request(key: String, texture: Texture2D, packaging: Dictionary, callback: Callable) -> void:
+func request(
+	key: String,
+	texture: Texture2D,
+	packaging: Dictionary,
+	callback: Callable,
+	validity: Callable = Callable()
+) -> void:
 	if _entries.has(key):
 		_touch(key)
 		callback.call_deferred(_entries[key])
 		return
+	var listener := {"callback": callback, "validity": validity}
 	if _jobs.has(key):
-		_jobs[key].callbacks.append(callback)
+		_jobs[key].callbacks.append(listener)
+		if key != _active_key:
+			_queue.erase(key)
+			_queue.push_front(key)
 		return
-	_jobs[key] = {"texture": texture, "packaging": packaging, "callbacks": [callback]}
-	_queue.append(key)
+	_jobs[key] = {"texture": texture, "packaging": packaging, "callbacks": [listener]}
+	_queue.push_front(key)
 
 
 func pause_for_modal() -> void:
@@ -69,6 +80,11 @@ func _process(_delta: float) -> void:
 	if _active_key.is_empty():
 		_start_next()
 		return
+	if _live_callbacks(_jobs[_active_key]).is_empty():
+		_renderer.call("set_rendering", false)
+		_jobs.erase(_active_key)
+		_active_key = ""
+		return
 	_frames += 1
 	if _frames >= 2:
 		_capture(_active_key, _epoch)
@@ -80,10 +96,7 @@ func _start_next() -> void:
 		if not _jobs.has(key):
 			continue
 		var job: Dictionary = _jobs[key]
-		var live: Array = []
-		for callback: Callable in job.callbacks:
-			if callback.is_valid():
-				live.append(callback)
+		var live := _live_callbacks(job)
 		if live.is_empty():
 			_jobs.erase(key)
 			continue
@@ -116,12 +129,25 @@ func _capture(key: String, epoch: int) -> void:
 		_touch(key)
 		while _lru.size() > MAX_ENTRIES:
 			_entries.erase(_lru.pop_front())
-		var callbacks: Array = _jobs[key].callbacks
-		for callback: Callable in callbacks:
-			if callback.is_valid():
-				callback.call_deferred(entry)
+		var callbacks := _live_callbacks(_jobs[key])
+		for listener: Dictionary in callbacks:
+			var callback: Callable = listener.callback
+			callback.call_deferred(entry)
 	_jobs.erase(key)
 	_active_key = ""
+
+
+func _live_callbacks(job: Dictionary) -> Array:
+	var live: Array = []
+	for listener: Dictionary in job.callbacks:
+		var callback: Callable = listener.callback
+		var validity: Callable = listener.validity
+		if not callback.is_valid():
+			continue
+		if validity.is_valid() and not bool(validity.call()):
+			continue
+		live.append(listener)
+	return live
 
 
 func _touch(key: String) -> void:
