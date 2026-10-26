@@ -82,22 +82,32 @@ func _draw() -> void:
 
 
 func _draw_matte_bevel(outline: PackedVector2Array, canvas_scale: float) -> void:
-	# A narrow, directional edge catches light; the printed face remains untouched.
-	var winding := -1.0 if Geometry2D.is_polygon_clockwise(points) else 1.0
-	var light := Vector2(-0.6, -0.8)
-	for index in outline.size() - 1:
-		var a := outline[index]
-		var b := outline[index + 1]
-		var edge := b - a
-		if edge.length_squared() < 0.001:
+	# One joined contour avoids the gaps and overlapping caps of separate edges.
+	var boundary := outline.duplicate()
+	boundary.remove_at(boundary.size() - 1)
+	var contours := Geometry2D.offset_polygon(boundary, -0.45 / canvas_scale, Geometry2D.JOIN_ROUND)
+	for contour in contours:
+		if contour.size() < 3:
 			continue
-		var normal := Vector2(edge.y, -edge.x).normalized() * winding
-		var amount := normal.dot(light)
-		var color := Color(1.0, 0.98, 0.92, maxf(0.0, amount) * 0.25)
-		if amount < 0.0:
-			color = Color(0.24, 0.21, 0.17, -amount * 0.13)
-		var inset := -normal * 0.45 / canvas_scale
-		draw_line(a + inset, b + inset, color, 0.65 / canvas_scale, true)
+		var colors := PackedColorArray()
+		var winding := -1.0 if Geometry2D.is_polygon_clockwise(contour) else 1.0
+		var light := Vector2(-0.6, -0.8)
+		for index in contour.size():
+			var previous := (
+				(contour[index] - contour[posmod(index - 1, contour.size())]).normalized()
+			)
+			var next := (contour[(index + 1) % contour.size()] - contour[index]).normalized()
+			var tangent := (previous + next).normalized()
+			var normal := Vector2(tangent.y, -tangent.x) * winding
+			var amount := normal.dot(light)
+			var color := Color(1.0, 0.98, 0.92, maxf(0.0, amount) * 0.20)
+			if amount < 0.0:
+				color = Color(0.24, 0.21, 0.17, -amount * 0.10)
+			colors.append(color)
+		contour.append(contour[0])
+		colors.append(colors[0])
+		# A full display-pixel coverage strip remains delicate without stair-step caps.
+		draw_polyline_colors(contour, colors, 1.0 / canvas_scale, true)
 
 
 func _side_color() -> Color:

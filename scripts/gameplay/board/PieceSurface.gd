@@ -27,4 +27,7 @@ func _screen_scale() -> float:
 
 func _draw() -> void:
 	_drawn_screen_scale = _screen_scale()
+	# Native polygon AA already owns face coverage; do not layer a second fringe.
+	if antialiased:
+		return
 	_edge.draw(self, 1.0 / _drawn_screen_scale)

@@ -34,6 +34,7 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := 
 	node.add_child(side)
 	var poly := PieceSurfaceScript.new()
 	poly.name = "piece_texture"
+	poly.antialiased = cardboard
 	poly.texture = texture
 	poly.polygon = piece["polygon"]
 	poly.uv = piece["uv"]
