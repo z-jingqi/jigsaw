@@ -11,6 +11,7 @@ signal move_swap_right_requested
 const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLayout.gd")
 const Composition := preload("res://scripts/screens/gameplay/GameplaySceneComposition.gd")
 
+@onready var loading_label: Label = $LoadingLabel
 @onready var back_button: ActionButton = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title
 @onready var hint_button: ActionButton = $Hud/HintButton
@@ -22,6 +23,7 @@ const Composition := preload("res://scripts/screens/gameplay/GameplaySceneCompos
 var _view_model: Variant
 var _input_live := false
 var _board_ready := false
+var _preparing_board := true
 var _navigation_active := false
 var _navigation_locked := false
 var _composition := Composition.new()
@@ -42,12 +44,16 @@ func _ready() -> void:
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
+	_preparing_board = true
+	loading_label.text = preload("res://scripts/app/GameStrings.gd").ui_text("loading_puzzle")
 	if payload.has("view_model"):
 		set_view_model(payload["view_model"])
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	_navigation_active = false
+	_preparing_board = false
 	_board_ready = false
 	_set_input_live(false)
 	_composition.release()
@@ -89,8 +95,13 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func mark_board_live() -> void:
+	_preparing_board = false
 	_board_ready = true
 	_set_input_live(_navigation_active and not _navigation_locked)
+
+
+func has_live_board() -> bool:
+	return _board_ready
 
 
 func is_board_input_enabled() -> bool:
@@ -98,6 +109,7 @@ func is_board_input_enabled() -> bool:
 
 
 func prepare_completion() -> void:
+	_preparing_board = false
 	_board_ready = false
 	_set_input_live(false)
 
@@ -156,7 +168,9 @@ func bottom_reserved_height() -> float:
 
 func _set_input_live(enabled: bool) -> void:
 	_input_live = enabled
-	for button in [back_button, hint_button]:
+	loading_label.visible = _navigation_active and _preparing_board
+	back_button.disabled = not _navigation_active
+	for button in [hint_button]:
 		button.disabled = not enabled
 		if not enabled:
 			button.cancel_motion()

@@ -392,9 +392,17 @@ func mount_prepared_screen(screen: Control) -> void:
 	_screen_host.add_child(screen)
 
 
-func wait_until_idle() -> void:
+func wait_until_idle(canceled: Signal = Signal()) -> bool:
 	while is_instance_valid(_transition_host) and _transition_host.active_count() > 0:
-		await _transition_host.transition_settled
+		if canceled.is_null():
+			await _transition_host.transition_settled
+		else:
+			var continued := await preload("res://scripts/runtime/CancellableFrame.gd").wait(
+				get_tree().process_frame, canceled
+			)
+			if not continued:
+				return false
+	return true
 
 
 func edge_back_context() -> Dictionary:

@@ -2,6 +2,9 @@ extends RefCounted
 ## Owns one cancellable, read-only gameplay preparation behind the mode page.
 
 signal preparation_changed
+signal preparation_canceled
+
+const FrameGate := preload("res://scripts/runtime/CancellableFrame.gd")
 
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
 
@@ -79,12 +82,16 @@ func prepare_live(screen: GameplayScreen, theme_id: String, level_id: String, mo
 		return loaded
 	var loaded := await _build_board(screen, theme_id, level_id, mode, "resume")
 	if loaded:
-		await RenderingServer.frame_post_draw
+		if not await FrameGate.wait(RenderingServer.frame_post_draw, preparation_canceled):
+			return false
 	return loaded
 
 
 func cancel() -> void:
 	_generation += 1
+	if is_instance_valid(_board):
+		_board.cancel_pending_preparation()
+	preparation_canceled.emit()
 	var screen := _screen
 	var claimed := _claimed
 	_screen = null
@@ -117,7 +124,7 @@ func _prepare(
 	generation: int, theme_id: String, level_id: String, mode: String, policy: String
 ) -> void:
 	# Wait for the mode card entrance, rather than competing with its first draw.
-	await _navigator.wait_until_idle()
+	await _navigator.wait_until_idle(preparation_canceled)
 	if not _current(generation):
 		return
 	if not is_instance_valid(_screen):
@@ -139,7 +146,7 @@ func _prepare(
 		_failed = true
 		preparation_changed.emit()
 		return
-	await RenderingServer.frame_post_draw
+	await FrameGate.wait(RenderingServer.frame_post_draw, preparation_canceled)
 	if not _current(generation):
 		return
 	_ready = true

@@ -1,6 +1,8 @@
 extends RefCounted
 class_name BoardStateController
 
+signal pending_canceled
+
 const BoardSessionIdentityScript := preload(
 	"res://scripts/gameplay/runtime/BoardSessionIdentity.gd"
 )
@@ -330,6 +332,7 @@ func notify_changed(immediate := false) -> void:
 
 func cancel_pending() -> void:
 	generation += 1
+	pending_canceled.emit()
 	if board != null and is_instance_valid(board):
 		board.state_emit_pending = false
 

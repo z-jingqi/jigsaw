@@ -1,6 +1,9 @@
 extends RefCounted
 ## Prepares a runtime board in small batches before enabling gameplay input.
 
+const FrameGate := preload("res://scripts/runtime/CancellableFrame.gd")
+const CurvePreparation := preload("res://scripts/gameplay/board/PieceCurvePreparation.gd")
+
 const CREATION_BUDGET_USEC := 7000
 
 var host: Node2D
@@ -43,7 +46,7 @@ func configure(options: Dictionary) -> bool:
 func build_progressive() -> bool:
 	var tree: SceneTree = host.get_tree()
 	var generation: int = host.state_controller.generation
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	if host.current_mode == "swap":
@@ -55,25 +58,45 @@ func build_progressive() -> bool:
 	# Piece data and creation share a budget, rather than forcing an idle frame
 	# between cheap stages. Keep layout and saved-state restoration separate.
 	if Time.get_ticks_usec() - started >= CREATION_BUDGET_USEC:
-		await tree.process_frame
+		await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 		if not _current(generation):
+			return false
+		started = Time.get_ticks_usec()
+	var curve_pieces: Array = []
+	for piece in prepared.pieces:
+		if (
+			bool(host.piece_visual_style.get("curve_preview", false))
+			or (
+				host.current_mode == "polygon"
+				and OS.get_environment("JIGSAW_CURVED_EDGE_PIECE") == str(piece.get("id", ""))
+			)
+		):
+			curve_pieces.append(piece)
+	if not curve_pieces.is_empty():
+		var ready := await CurvePreparation.prepare_many(
+			curve_pieces,
+			tree,
+			func() -> bool: return _current(generation),
+			host.state_controller.pending_canceled
+		)
+		if not ready or not _current(generation):
 			return false
 		started = Time.get_ticks_usec()
 	for piece in prepared.pieces:
 		host.session_builder.create_group(piece, prepared.seed_ids.has(str(piece.get("id", ""))))
 		host.groups.back().node.modulate.a = 0.0
 		if Time.get_ticks_usec() - started >= CREATION_BUDGET_USEC:
-			await tree.process_frame
+			await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 			if not _current(generation):
 				return false
 			started = Time.get_ticks_usec()
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	host.session_builder.finish_pieces()
 	# Let layout settle before the coordinator restores saved groups and tray order.
 	# Both stages rebuild visual geometry and must not occupy the same frame.
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	for group in host.groups:

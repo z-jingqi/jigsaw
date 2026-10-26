@@ -300,7 +300,14 @@ func enter_level(
 		"mode": mode,
 		"start_policy": start_policy,
 		"view_model": _catalog.gameplay(theme_id, level_id, mode),
-		"_prepare_before_motion": _navigator.current_route() in [&"mode_select", &"completion"],
+		"_prepare_before_motion":
+		(
+			_navigator.current_route() in [&"mode_select", &"completion"]
+			and not (
+				OS.get_environment("JIGSAW_CURVED_EDGE_PREVIEW") == "1"
+				and mode in ["polygon", "knob"]
+			)
+		),
 	}
 	var result: Dictionary
 	if _navigator.current_route() == &"completion":
@@ -648,6 +655,9 @@ func _on_setting_changed(key: StringName, enabled: bool) -> void:
 
 
 func _on_board_state_changed(_snapshot: Dictionary) -> void:
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen == null or not screen.has_live_board():
+		return
 	if (
 		_current_theme_id.is_empty()
 		or _current_level_id.is_empty()
@@ -758,6 +768,7 @@ func _return_to_levels() -> Dictionary:
 	# pose. Back must also interrupt a board/HUD that is still entering.
 	_navigator.interrupt_active_transition()
 	_persist_board()
+	_board.cancel_pending_preparation()
 	var levels := _navigator.previous_screen_view() as RuntimeLevelListScreen
 	if levels != null:
 		levels.refresh_view_model(_catalog.level_list(_current_theme_id, _current_level_id))
@@ -773,6 +784,9 @@ func _return_to_levels() -> Dictionary:
 
 
 func _persist_board() -> void:
+	var screen := _navigator.current_screen_view() as GameplayScreen
+	if screen == null or not screen.has_live_board():
+		return
 	if (
 		is_instance_valid(_board)
 		and not _current_theme_id.is_empty()

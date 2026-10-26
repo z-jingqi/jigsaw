@@ -13,8 +13,8 @@ static func apply(face: Polygon2D, piece_id: String, preview_all := false) -> bo
 	var bounds := Rect2(face.polygon[0], Vector2.ZERO)
 	for point in face.polygon:
 		bounds = bounds.expand(point)
-	var field := Field.build(face.polygon, minf(bounds.size.x, bounds.size.y) * 0.065)
-	if field.texture == null or not field.bounds.has_area():
+	var field := Field.get_cached(face.polygon, minf(bounds.size.x, bounds.size.y) * 0.065)
+	if field.is_empty() or field.texture == null or not field.bounds.has_area():
 		return false
 	var effect := ShaderMaterial.new()
 	effect.shader = Surface
