@@ -482,8 +482,9 @@ func _bind_routes() -> void:
 
 
 func _bind_home(screen: HomeScreen) -> void:
-	if screen == null:
+	if screen == null or screen.has_meta("runtime_coordinator_bound"):
 		return
+	screen.set_meta("runtime_coordinator_bound", true)
 	screen.selected_theme_changed.connect(_on_home_theme_changed)
 	screen.theme_activated.connect(_on_home_theme_activated)
 	screen.menu_requested.connect(show_settings)
@@ -533,15 +534,17 @@ func _show_theme_library() -> void:
 
 
 func _bind_levels(screen: RuntimeLevelListScreen) -> void:
-	if screen == null:
+	if screen == null or screen.has_meta("runtime_coordinator_bound"):
 		return
+	screen.set_meta("runtime_coordinator_bound", true)
 	screen.back_requested.connect(_navigator.pop)
 	screen.level_selected.connect(_on_level_focused)
 
 
 func _bind_gameplay(screen: GameplayScreen) -> void:
-	if screen == null:
+	if screen == null or screen.has_meta("runtime_coordinator_bound"):
 		return
+	screen.set_meta("runtime_coordinator_bound", true)
 	screen.attach_board_host(_world_host)
 	screen.set_reduced_motion(_reduced_motion())
 	screen.set_navigation_locked(_navigator.is_input_locked())
@@ -554,8 +557,9 @@ func _bind_gameplay(screen: GameplayScreen) -> void:
 
 
 func _bind_mode_select(modal: RuntimeModeSelectModal) -> void:
-	if modal == null:
+	if modal == null or modal.has_meta("runtime_coordinator_bound"):
 		return
+	modal.set_meta("runtime_coordinator_bound", true)
 	modal.close_requested.connect(_dismiss_modal)
 	if modal.has_signal("box_closing"):
 		modal.connect("box_closing", _gameplay_preparation.cancel)
@@ -575,8 +579,9 @@ func _on_mode_preparation_requested(mode: StringName, policy: StringName) -> voi
 
 
 func _bind_settings(modal: SettingsModal) -> void:
-	if modal == null:
+	if modal == null or modal.has_meta("runtime_coordinator_bound"):
 		return
+	modal.set_meta("runtime_coordinator_bound", true)
 	modal.setting_changed.connect(_on_setting_changed)
 	modal.close_requested.connect(_dismiss_modal)
 
@@ -739,9 +744,9 @@ func _dismiss_modal() -> void:
 
 
 func _return_to_levels() -> Dictionary:
-	# Finish entry before marking the return; its settled callback is a separate
-	# navigation event and must not clear the upcoming return's cleanup state.
-	_navigator.finish_active_transition()
+	# Resolve entry ownership before marking return, without completing its visual
+	# pose. Back must also interrupt a board/HUD that is still entering.
+	_navigator.interrupt_active_transition()
 	_persist_board()
 	var levels := _navigator.previous_screen_view() as RuntimeLevelListScreen
 	if levels != null:

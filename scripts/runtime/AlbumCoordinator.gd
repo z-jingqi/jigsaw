@@ -37,6 +37,9 @@ func open() -> Dictionary:
 	)
 	if bool(result.get("ok", false)):
 		var screen := _navigator.current_screen_view() as AlbumScreen
+		if screen.has_meta("album_coordinator_bound"):
+			return result
+		screen.set_meta("album_coordinator_bound", true)
 		screen.set_thumbnail_loader(_thumbnails)
 		screen.back_requested.connect(_back.bind(screen))
 		screen.theme_selected.connect(_select_theme.bind(screen))
