@@ -110,7 +110,7 @@ for i,value in enumerate([(0,0),(1,0),(1,1),(0,1)]): uv.data[i].uv=value
 top=node('TopFlapPivot',(0,3.016,-.24),root)
 top_board=panel('TopFlap',[(-1.116,0,0),(1.116,0,0),(1.116,0,.48),(-1.116,0,.48)],(0,1,0),top)
 # Rounded tuck tongue hanging inside front when closed; hinge independently unfolds.
-tab=node('TuckTab',(0,0,.465),top)
+tab=node('TuckTab',(0,0,.460),top)
 r=.09; width=2.04; depth=.35
 outline=[(-width/2,0),(width/2,0),(width/2,-depth+r)]
 for i in range(1,7):

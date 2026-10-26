@@ -19,7 +19,7 @@ All hinge nodes have identity local rotation in the closed GLB. Positions below 
 |---|---|---|---|---|
 | FrontArtwork | TuckCarton | (0,0,0), vertices contain full face position | (0,0,0) | **unchanged** |
 | TopFlapPivot | TuckCarton | (0,3.016,-.24), rear upper edge | (0,0,0) | (-105,0,0) |
-| TuckTab | TopFlapPivot | (0,0,.465), front edge of top flap | (0,0,0) | (-82,0,0) |
+| TuckTab | TopFlapPivot | (0,0,.460), front edge of top flap | (0,0,0) | (-82,0,0) |
 | SideEarLeft | TuckCarton | (-1.116,2.992,0), left top edge | (0,0,0) | (0,0,64) |
 | SideEarRight | TuckCarton | (1.116,2.992,0), right top edge | (0,0,0) | (0,0,-64) |
 

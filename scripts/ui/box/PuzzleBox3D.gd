@@ -1,24 +1,35 @@
 extends Control
-## One live viewport, one shallow shell, one hinged lid. No gameplay state is owned here.
+## One live viewport and an authored thin-paper tuck carton; no gameplay state.
 
 signal sample_motion_stopped
+
+const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 
 const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
 
 @onready var viewport: SubViewport = $Viewport
 @onready var display: TextureRect = $Display
-@onready var lid: Node3D = $Viewport/World/LidPivot
+@onready var carton: Node3D = $Viewport/World/Carton
+@onready var lid: Node3D = carton.find_child("TopFlapPivot", true, false)
+@onready var tab: Node3D = carton.find_child("TuckTab", true, false)
+@onready var left_ear: Node3D = carton.find_child("SideEarLeft", true, false)
+@onready var right_ear: Node3D = carton.find_child("SideEarRight", true, false)
 @onready var samples: Node3D = $Viewport/World/Samples
 var _texture: Texture2D
 var _lid_art: MeshInstance3D
 var _lid_tween: Tween
 var _sample_tween: Tween
 var _opened := false
+var _open_progress := 0.0:
+	set(value):
+		_open_progress = value
+		_apply_fold_pose()
 
 
 func _ready() -> void:
 	display.texture = viewport.get_texture()
-	$Viewport/World/Camera.look_at(Vector3(0, 0.8, 0), Vector3.UP)
+	$Viewport/World/Camera.look_at(Vector3(0, 1.8, 0), Vector3.UP)
+	_apply_paper_materials(carton)
 	resized.connect(_resize_viewport)
 	_resize_viewport()
 	if _texture != null:
@@ -31,26 +42,23 @@ func configure(texture: Texture2D) -> void:
 		return
 	cancel_motion()
 	_clear_samples()
-	if is_instance_valid(_lid_art):
-		_lid_art.free()
-	_lid_art = Pieces.artwork_plane(texture, Vector2(2.25, 3.0))
-	_lid_art.position = Vector3(0, 0.045, 1.5)
-	lid.add_child(_lid_art)
+	_lid_art = carton.find_child("FrontArtwork", true, false)
+	_lid_art.material_override = Pieces.artwork_material(texture)
 	_opened = false
-	lid.rotation.x = 0.0
+	_open_progress = 0.0
 
 
 func set_open(opened: bool, reduced_motion := false) -> void:
 	_kill_lid_tween()
 	_opened = opened
-	var target := deg_to_rad(-78.0) if opened else 0.0
+	var target := 1.0 if opened else 0.0
 	if not opened:
 		_clear_samples()
 	if reduced_motion:
-		lid.rotation.x = target
+		_open_progress = target
 		return
 	_lid_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_lid_tween.tween_property(lid, "rotation:x", target, 0.46)
+	_lid_tween.tween_property(self, "_open_progress", target, 0.62)
 	_lid_tween.finished.connect(func() -> void: _lid_tween = null)
 
 
@@ -68,13 +76,13 @@ func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false
 				PackedVector2Array(data.get("uv", [])),
 				_texture
 			)
-			piece.position = Vector3(float(index - 1) * 0.68, 0, float(index % 2) * 0.18)
-			piece.rotation = Vector3(deg_to_rad(20), deg_to_rad(float(index - 1) * 12), 0)
+			piece.position = Vector3(float(index - 1) * 0.68, 0, float(index % 2) * 0.04)
+			piece.rotation = Vector3(deg_to_rad(90), 0, deg_to_rad(float(index - 1) * 8))
 			samples.add_child(piece)
-	samples.position = Vector3(0, 1.02 if reduced_motion else 0.32, -0.2)
+	samples.position = Vector3(0, 3.38 if reduced_motion else 2.50, 0)
 	if not reduced_motion:
 		_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		_sample_tween.tween_property(samples, "position:y", 1.02, 0.36)
+		_sample_tween.tween_property(samples, "position:y", 3.38, 0.36)
 		_sample_tween.finished.connect(func() -> void: _sample_tween = null)
 
 
@@ -93,7 +101,7 @@ func _create_swap_strip(piece_data: Array) -> void:
 			0.53
 		)
 		piece.position.x = (float(index) - 1.5) * 0.55
-		piece.rotation.x = deg_to_rad(20)
+		piece.rotation.x = deg_to_rad(90)
 		samples.add_child(piece)
 
 
@@ -108,7 +116,7 @@ func retract_mode(reduced_motion := false) -> void:
 		_clear_samples()
 		return
 	_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	_sample_tween.tween_property(samples, "position:y", 0.2, 0.28)
+	_sample_tween.tween_property(samples, "position:y", 2.50, 0.28)
 	_sample_tween.finished.connect(_clear_samples, CONNECT_ONE_SHOT)
 	await sample_motion_stopped
 
@@ -123,7 +131,7 @@ func cancel_motion() -> void:
 	_kill_lid_tween()
 	_clear_samples()
 	if is_instance_valid(lid):
-		lid.rotation.x = deg_to_rad(-78.0) if _opened else 0.0
+		_open_progress = 1.0 if _opened else 0.0
 
 
 func active_motion_count() -> int:
@@ -156,3 +164,28 @@ func _resize_viewport() -> void:
 
 func _exit_tree() -> void:
 	cancel_motion()
+
+
+func _apply_fold_pose() -> void:
+	if not is_instance_valid(lid):
+		return
+	var p := clampf(_open_progress, 0.0, 1.0)
+	lid.rotation.x = deg_to_rad(-105.0 * p)
+	# Keep the tongue vertical until its bottom clears the fixed front wall.
+	var unfold := clampf((p - 0.55) / 0.45, 0.0, 1.0)
+	tab.rotation.x = deg_to_rad(105.0 * p if p <= 0.55 else lerpf(57.75, -82.0, unfold))
+	left_ear.rotation.z = deg_to_rad(64.0 * unfold)
+	right_ear.rotation.z = deg_to_rad(-64.0 * unfold)
+
+
+func _apply_paper_materials(node: Node) -> void:
+	if node is MeshInstance3D and node.name != "FrontArtwork":
+		for index in node.mesh.get_surface_count():
+			var source: Material = node.mesh.surface_get_material(index)
+			if source is StandardMaterial3D:
+				var material := ShaderMaterial.new()
+				material.shader = PaperShader
+				material.set_shader_parameter("paper_color", source.albedo_color)
+				node.set_surface_override_material(index, material)
+	for child in node.get_children():
+		_apply_paper_materials(child)
