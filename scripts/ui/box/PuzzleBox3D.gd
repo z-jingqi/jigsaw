@@ -79,10 +79,11 @@ func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false
 			piece.position = Vector3(float(index - 1) * 0.68, 0, float(index % 2) * 0.04)
 			piece.rotation = Vector3(deg_to_rad(90), 0, deg_to_rad(float(index - 1) * 8))
 			samples.add_child(piece)
-	samples.position = Vector3(0, 3.38 if reduced_motion else 2.50, 0)
+	var display_height := 3.16 if mode == &"swap" else 3.38
+	samples.position = Vector3(0, display_height if reduced_motion else 2.50, 0)
 	if not reduced_motion:
 		_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		_sample_tween.tween_property(samples, "position:y", 3.38, 0.36)
+		_sample_tween.tween_property(samples, "position:y", display_height, 0.36)
 		_sample_tween.finished.connect(func() -> void: _sample_tween = null)
 
 
