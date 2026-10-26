@@ -36,6 +36,7 @@ static func textured_polygon(
 static func artwork_material(texture: Texture2D) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_texture = texture
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.roughness = 1.0
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS

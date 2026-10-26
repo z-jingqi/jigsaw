@@ -145,6 +145,7 @@ func request_close() -> void:
 	if _closing:
 		return
 	_closing = true
+	get_tree().root.get_node("Game/AppNavigator").finish_active_transition()
 	_active = false
 	_generation += 1
 	var generation := _generation
@@ -153,6 +154,9 @@ func request_close() -> void:
 	back_button.disabled = true
 	for child in options.get_children():
 		child.disabled = true
+	await _box.retract_mode(_reduced_motion)
+	if generation != _generation or not is_inside_tree():
+		return
 	_box.set_open(false, _reduced_motion)
 	while is_inside_tree() and _box.active_motion_count() > 0:
 		await get_tree().process_frame
@@ -205,10 +209,37 @@ func _apply_layout() -> void:
 	for index in count:
 		var option: Control = options.get_child(index)
 		option.position = Vector2(float(index) * options.size.x / count, 0)
+		option.custom_minimum_size = Vector2(44 * u, 90 * u)
 		option.size = Vector2(options.size.x / count - 6 * u, 90 * u)
 	_info.position = Vector2(24 * u, options.position.y + 94 * u)
 	_info.size = Vector2(s.x - 48 * u, 26 * u)
 	Clean.label(_info, roundi(13 * u), true)
+
+
+func settle_box_transition(committed: bool) -> void:
+	if not _prototype or _closing:
+		return
+	if committed:
+		_phase = "ready"
+		_apply_layout()
+		background.modulate.a = 1.0
+		options.modulate.a = 1.0
+		_box.set_open(true, _reduced_motion)
+	else:
+		_box.cancel_motion()
+		_box.set_rendering(false)
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	super.set_reduced_motion(enabled)
+	if not _prototype or not is_instance_valid(_box) or not enabled:
+		return
+	_box.set_open(not _closing, true)
+	if _selected_option != null and not _closing:
+		var mode := StringName(_selected_option.mode)
+		_box.show_mode(mode, _box_data.get(String(mode), {}).get("pieces", []), true)
+	if _close_tween != null:
+		_close_tween.custom_step(10.0)
 
 
 func navigation_exit(context: Dictionary) -> void:

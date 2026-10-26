@@ -33,6 +33,12 @@ static func build(content: ContentRepository, level: Dictionary) -> Dictionary:
 				)
 				samples.append({"polygon": uv, "uv": uv})
 		else:
+			if mode == "polygon":
+				pieces = pieces.duplicate()
+				pieces.sort_custom(
+					func(a: Dictionary, b: Dictionary) -> bool:
+						return _shape_score(a) < _shape_score(b)
+				)
 			var start := mini(pieces.size() - 1, 6) if mode == "knob" else 0
 			for index in range(start, mini(start + 3, pieces.size())):
 				var polygon := PackedVector2Array()
@@ -44,3 +50,11 @@ static func build(content: ContentRepository, level: Dictionary) -> Dictionary:
 				samples.append({"polygon": polygon, "uv": uv})
 		result[mode] = {"count": count, "pieces": samples}
 	return result
+
+
+static func _shape_score(piece: Dictionary) -> float:
+	var points: Array = piece.get("points", [])
+	var bounds := Rect2(Vector2(points[0][0], points[0][1]), Vector2.ZERO)
+	for point in points:
+		bounds = bounds.expand(Vector2(point[0], point[1]))
+	return absf(log(maxf(0.01, bounds.size.x / maxf(1.0, bounds.size.y))))

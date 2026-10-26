@@ -134,6 +134,8 @@ func _settle(sequence: int, committed: bool) -> void:
 	_active_tween = null
 	if is_instance_valid(tween):
 		tween.kill()
+	if is_instance_valid(_target_view) and _target_view.has_method("settle_box_transition"):
+		_target_view.settle_box_transition(committed)
 	_restore_view_states()
 	_motion_phase = &"idle"
 	_gesture_progress = 0.0

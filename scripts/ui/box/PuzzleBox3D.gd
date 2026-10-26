@@ -1,6 +1,8 @@
 extends Control
 ## One live viewport, one shallow shell, one hinged lid. No gameplay state is owned here.
 
+signal sample_motion_stopped
+
 const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
 
 @onready var viewport: SubViewport = $Viewport
@@ -67,7 +69,7 @@ func show_mode(mode: StringName, piece_data: Array = [], reduced_motion := false
 				_texture
 			)
 			piece.position = Vector3(float(index - 1) * 0.68, 0, float(index % 2) * 0.18)
-			piece.rotation = Vector3(deg_to_rad(-18), deg_to_rad(float(index - 1) * 12), 0)
+			piece.rotation = Vector3(deg_to_rad(20), deg_to_rad(float(index - 1) * 12), 0)
 			samples.add_child(piece)
 	samples.position = Vector3(0, 1.02 if reduced_motion else 0.32, -0.2)
 	if not reduced_motion:
@@ -93,6 +95,22 @@ func _create_swap_strip(piece_data: Array) -> void:
 		piece.position.x = (float(index) - 1.5) * 0.55
 		piece.rotation.x = deg_to_rad(-35)
 		samples.add_child(piece)
+
+
+func retract_mode(reduced_motion := false) -> void:
+	# Cancellation emits the same completion signal, so an awaiting close never hangs.
+	if _sample_tween != null:
+		_sample_tween.kill()
+		_sample_tween = null
+	if samples.get_child_count() == 0:
+		return
+	if reduced_motion:
+		_clear_samples()
+		return
+	_sample_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	_sample_tween.tween_property(samples, "position:y", 0.2, 0.28)
+	_sample_tween.finished.connect(_clear_samples, CONNECT_ONE_SHOT)
+	await sample_motion_stopped
 
 
 func set_rendering(enabled: bool) -> void:
@@ -125,6 +143,7 @@ func _clear_samples() -> void:
 	if is_instance_valid(samples):
 		for child in samples.get_children():
 			child.free()
+	sample_motion_stopped.emit()
 
 
 func _resize_viewport() -> void:

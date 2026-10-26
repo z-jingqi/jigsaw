@@ -20,6 +20,10 @@ var _status: Label
 var _box_preview: TextureRect
 var _box_depth := Vector2.ZERO
 
+var _box_full_size := Vector2.ZERO
+var _box_used_rect := Rect2()
+var _box_source_texture: Texture2D
+
 
 func _ready() -> void:
 	kind = Kind.CARD
@@ -58,6 +62,7 @@ func _apply_view_model() -> void:
 	var next_level_id := str(_read("level_id"))
 	if level_id != next_level_id and _box_preview != null:
 		_box_preview.texture = null
+		_box_source_texture = null
 		_box_preview.visible = false
 	level_id = next_level_id
 	if level_id == PROTOTYPE_LEVEL and ResourceLoader.exists(BOX_CACHE_PATH):
@@ -195,7 +200,7 @@ func _apply_layout() -> void:
 	thumbnail.size = Vector2(image_width, image_height)
 	var title_top := image_height + inset + _box_depth.y + 5.0 * native
 	var title_height := maxf(18.0 * native, size.y - title_top)
-	var icon_side := clampf(size.x / native * 0.08, 12.0, 14.0) * native
+	var icon_side := 14.0 * native
 	var icon_gap := 3.0 * native
 	completed_modes.configure(icon_side, icon_gap)
 	completed_modes.position = Vector2(
@@ -287,18 +292,33 @@ func _fit_title_font(max_width: float, _max_height: float) -> void:
 
 
 func prototype_box_rect() -> Rect2:
-	return _box_preview.get_global_rect() if _box_preview.visible else thumbnail.get_global_rect()
+	if not _box_preview.visible or not _box_used_rect.has_area():
+		return thumbnail.get_global_rect()
+	var area := _box_preview.get_global_rect()
+	var scale_factor := minf(
+		area.size.x / _box_used_rect.size.x, area.size.y / _box_used_rect.size.y
+	)
+	var drawn := _box_used_rect.size * scale_factor
+	var origin := area.position + (area.size - drawn) * 0.5
+	return Rect2(origin - _box_used_rect.position * scale_factor, _box_full_size * scale_factor)
 
 
 func set_box_preview(texture: Texture2D) -> void:
-	if not is_node_ready() or level_id != PROTOTYPE_LEVEL:
+	if not is_node_ready() or level_id != PROTOTYPE_LEVEL or texture == _box_source_texture:
 		return
-	var changed := _box_preview.texture != texture
-	_box_preview.texture = texture
+	_box_source_texture = texture
+	if texture != null:
+		_box_full_size = texture.get_size()
+		_box_used_rect = Rect2(texture.get_image().get_used_rect())
+		var cropped := AtlasTexture.new()
+		cropped.atlas = texture
+		cropped.region = _box_used_rect
+		_box_preview.texture = cropped
+	else:
+		_box_preview.texture = null
 	_box_preview.visible = texture != null
 	thumbnail.visible = texture == null
-	if changed:
-		_apply_layout()
+	_apply_layout()
 	queue_redraw()
 
 
