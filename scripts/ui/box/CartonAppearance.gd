@@ -6,6 +6,7 @@ const RevealShader := preload("res://scripts/ui/box/CartonArtwork.gdshader")
 const Packaging := preload("res://scripts/ui/box/ThemePackaging.gd")
 const TitleFont := preload("res://assets/fonts/noto/NotoSerifSC[wght].ttf")
 var _top_print: Node3D
+var _side_print: Node3D
 
 
 func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary) -> void:
@@ -16,6 +17,12 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	_top_print = Node3D.new()
 	_top_print.name = "TopPrinting"
 	lid.add_child(_top_print)
+	_side_print = Node3D.new()
+	_side_print.name = "SpinePrinting"
+	# Reuse the theme's authored print coordinates on the side, not the artwork face.
+	_side_print.position = Vector3(0.882, 0, 0.99)
+	_side_print.rotation.y = PI / 2
+	add_child(_side_print)
 	var old_art := carton.find_child("FrontArtwork", true, false) as GeometryInstance3D
 	old_art.visible = false
 	var colors := Packaging.palette(str(data.get("theme_id", "")))
@@ -33,7 +40,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var title_ink: Color = colors.ink
 	title.modulate = title_ink.darkened(0.60) if title_ink.get_luminance() > 0.40 else title_ink
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.position = Vector3(-1.0, 2.78, 0.255)
+	title.position = Vector3(-0.90, 2.84, 0.255)
 	title.shaded = false
 	# Long localized titles stay inside the white field without colliding with binding.
 	var text_width := TitleFont.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 96).x
@@ -43,7 +50,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var revealed := bool(data.get("preview_revealed", true))
 	if texture != null:
 		var dimensions := texture.get_size()
-		var factor := minf(1.72 / dimensions.x, (1.72 * 4.0 / 3.0) / dimensions.y)
+		var factor := minf(1.80 / dimensions.x, 2.40 / dimensions.y)
 		var material: Material = _image(texture)
 		if not revealed:
 			var faded := ShaderMaterial.new()
@@ -51,12 +58,10 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 			faded.set_shader_parameter("artwork", texture)
 			material = faded
 		var art := _quad("FullArtwork", dimensions * factor, material, self)
-		art.position = Vector3(-0.145, 1.45, 0.253)
+		art.position = Vector3(0, 1.47, 0.253)
 	else:
-		var placeholder := _quad(
-			"MissingArtwork", Vector2(1.72, 1.72 * 4.0 / 3.0), _ink(Color("efede7")), self
-		)
-		placeholder.position = Vector3(-0.145, 1.45, 0.253)
+		var placeholder := _quad("MissingArtwork", Vector2(1.80, 2.40), _ink(Color("efede7")), self)
+		placeholder.position = Vector3(0, 1.47, 0.253)
 	var modes: Array = data.get("modes", [])
 	for index in 3:
 		var mode: StringName = [&"polygon", &"knob", &"swap"][index]
@@ -66,12 +71,12 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 			_image(Packaging.status_texture(mode, modes), true),
 			self
 		)
-		status.position = Vector3(-0.16 + index * 0.32, 0.148, 0.255)
+		status.position = Vector3(0.12 + index * 0.32, 0.148, 0.255)
 
 
 func _print_wrap(ink: Material) -> void:
-	var front := _quad("FrontBinding", Vector2(0.27, 3), ink, self)
-	front.position = Vector3(0.99, 1.5, 0.253)
+	var front := _quad("FrontBinding", Vector2(0.05, 3), ink, self)
+	front.position = Vector3(1.10, 1.5, 0.253)
 	var spine := _quad("SpineBinding", Vector2(0.48, 3), ink, self)
 	spine.position = Vector3(1.136, 1.5, 0)
 	spine.rotation.y = PI / 2
@@ -81,7 +86,7 @@ func _print_wrap(ink: Material) -> void:
 
 
 func _print_motif(motif: StringName, material: Material) -> void:
-	_stroke([Vector2(0.888, 0.08), Vector2(0.888, 2.91)], material, self)
+	_stroke([Vector2(0.888, 0.08), Vector2(0.888, 2.91)], material, _side_print)
 	for index in 6:
 		var offset := -0.91 + index * 0.32
 		var points: Array[Vector2] = []
@@ -120,7 +125,7 @@ func _print_motif(motif: StringName, material: Material) -> void:
 					Vector2(1.025, y + 0.055)
 				],
 				material,
-				self
+				_side_print
 			)
 	else:
 		for index in 2:
@@ -131,11 +136,11 @@ func _print_motif(motif: StringName, material: Material) -> void:
 						0.94 + sin(float(step) / 12 * PI) * 0.09, 2.53 + step * 0.023 + index * 0.03
 					)
 				)
-			_stroke(points, material, self)
+			_stroke(points, material, _side_print)
 		if motif == &"mural":
 			var red := _ink(Color("a45c48"))
 			for index in 3:
-				var mark := _quad("OchreAccent", Vector2(0.10, 0.028), red, self)
+				var mark := _quad("OchreAccent", Vector2(0.10, 0.028), red, _side_print)
 				mark.position = Vector3(0.99, 0.24 + index * 0.10, 0.255)
 
 
@@ -173,7 +178,7 @@ func _disk(center: Vector2, radii: Vector2, material: Material) -> void:
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
 	instance.material_override = material
-	add_child(instance)
+	_side_print.add_child(instance)
 
 
 func _quad(

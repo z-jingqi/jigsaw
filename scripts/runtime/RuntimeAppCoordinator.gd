@@ -244,6 +244,14 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 			modal.tree_exiting.connect(restore_source)
 			if modal.has_signal("box_returned"):
 				modal.connect("box_returned", restore_source)
+			if modal.has_signal("box_closing"):
+				modal.connect(
+					"box_closing",
+					func() -> void:
+						var screen: Node = source.get_ref()
+						if is_instance_valid(screen):
+							modal.update_box_source_rect(screen.debug_box_rect(level_id))
+				)
 		_services.progress.mark_level_visited(theme_id, level_id)
 		var levels := _navigator.current_screen_view() as RuntimeLevelListScreen
 		if levels != null:

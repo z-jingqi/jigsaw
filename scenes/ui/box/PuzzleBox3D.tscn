@@ -46,7 +46,7 @@ light_energy = 0.7
 shadow_enabled = false
 
 [node name="Camera" type="Camera3D" parent="Viewport/World"]
-position = Vector3(2.45, 2.78, 7.54)
+position = Vector3(1.935, 2.359, 7.762)
 projection = 1
 current = true
 size = 4.8

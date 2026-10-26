@@ -155,6 +155,10 @@ func needs_box_close() -> bool:
 	return _prototype and not _closed
 
 
+func update_box_source_rect(rect: Rect2) -> void:
+	_source_rect = rect
+
+
 func request_close() -> void:
 	if not _prototype:
 		super.request_close()
@@ -195,6 +199,9 @@ func request_close() -> void:
 	_close_tween.tween_property(background, "modulate:a", 0.0, duration)
 	_close_tween.tween_property(options, "modulate:a", 0.0, duration)
 	_close_tween.tween_property(_info, "modulate:a", 0.0, duration)
+	_close_tween.tween_property($SafeArea/Content/ModeHeading, "modulate:a", 0.0, duration)
+	_close_tween.tween_property(start_button, "modulate:a", 0.0, duration)
+	_close_tween.tween_property($SafeArea/Content/Header, "modulate:a", 0.0, duration)
 	await _close_tween.finished
 	_close_tween = null
 	_closed = true
