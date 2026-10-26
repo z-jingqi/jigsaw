@@ -130,6 +130,11 @@ func debug_card_rect(level_id: String) -> Rect2:
 	return card.get_global_rect() if is_instance_valid(card) else Rect2()
 
 
+func debug_box_rect(level_id: String) -> Rect2:
+	var card: Control = _grid.card_for_level_id(level_id) as Control if _grid != null else null
+	return card.prototype_box_rect() if is_instance_valid(card) else Rect2()
+
+
 static func grid_column_count_for_width(available_width: float) -> int:
 	return 3 if available_width >= 1440.0 else 2
 

@@ -274,7 +274,12 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 			_free_entry(entry)
 			_set_entry_active(current_screen_entry(), true)
 	)
-	_begin_transition(transaction, &"modal", "show_modal")
+	var animated_modal: Control = (
+		entry.view
+		if entry.view.has_method("needs_box_close") and entry.view.needs_box_close()
+		else null
+	)
+	_begin_transition(transaction, &"modal", "show_modal", null, animated_modal)
 	return _success(route)
 
 

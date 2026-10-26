@@ -4,12 +4,12 @@ extends ActionButton
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 const TITLE_MAX_FONT_SIZE := 48
-const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 28
-const TITLE_WRAP_MIN_FONT_SIZE := 18
+const PROTOTYPE_LEVEL := "shanhai_v2_01"
+const BOX_CACHE_PATH := "res://assets/ui/box/prototype-closed.png"
 
 @onready var title_label: Label = $Title
 @onready var thumbnail: TextureRect = $Thumbnail
-@onready var completed_modes: CompletedModeStickers = $CompletedModes
+@onready var completed_modes: Control = $CompletedModes
 
 var level_id := ""
 var _view_model: Variant
@@ -17,8 +17,8 @@ var _thumbnail_path := ""
 var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 var _status: Label
-var _completion: Label
-var _all_completed := false
+var _box_preview: TextureRect
+var _box_depth := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -30,11 +30,12 @@ func _ready() -> void:
 	_status.add_theme_stylebox_override("normal", Clean.panel(Clean.PAPER, 18))
 	Clean.label(title_label, TITLE_MAX_FONT_SIZE)
 	add_child(_status)
-	_completion = Label.new()
-	_completion.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_completion.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_completion.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	add_child(_completion)
+	_box_preview = TextureRect.new()
+	_box_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_box_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_box_preview.visible = false
+	add_child(_box_preview)
 	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
 		add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	focus_entered.connect(queue_redraw)
@@ -54,8 +55,14 @@ func set_view_model(view_model: Variant) -> void:
 
 
 func _apply_view_model() -> void:
-	level_id = str(_read("level_id"))
-	var next_title := "%02d" % int(_read("level_number", 1))
+	var next_level_id := str(_read("level_id"))
+	if level_id != next_level_id and _box_preview != null:
+		_box_preview.texture = null
+		_box_preview.visible = false
+	level_id = next_level_id
+	if level_id == PROTOTYPE_LEVEL and ResourceLoader.exists(BOX_CACHE_PATH):
+		set_box_preview(load(BOX_CACHE_PATH) as Texture2D)
+	var next_title := str(_read("title"))
 	var title_changed := title_label.text != next_title
 	if title_changed:
 		title_label.text = next_title
@@ -66,18 +73,22 @@ func _apply_view_model() -> void:
 	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
 	var mode_states: Array = _read("modes", [])
 	completed_modes.set_modes(mode_states, not is_locked)
-	var count := completed_modes.completed_count()
-	_all_completed = count > 0 and count == mode_states.size()
-	_completion.text = (
-		"%d/%d" % [count, mode_states.size()] if count > 0 and not _all_completed else ""
-	)
-	completed_modes.hide()
+	var descriptions: PackedStringArray = []
+	for state in mode_states:
+		var mode_label := str(state.get("label"))
+		var status := StringName(state.get("status"))
+		if status == &"completed":
+			descriptions.append(GameStrings.ui_text("completed_mode") % mode_label)
+		else:
+			var status_key := "in_progress" if status == &"in_progress" else "todo"
+			descriptions.append("%s: %s" % [mode_label, GameStrings.ui_text(status_key)])
+	accessibility_description = ", ".join(descriptions)
 	queue_redraw()
 	tooltip_text = ""
 	accessibility_name = (
 		"%s, %s"
 		% [
-			"%s, %s" % [title_label.text, str(_read("title"))],
+			title_label.text,
 			(
 				"Locked"
 				if is_locked
@@ -171,22 +182,33 @@ func _cancel_thumbnail_fade() -> void:
 func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0:
 		return
+	var native := Clean.minimum_touch_size(self).x / 44.0
 	var inset := maxf(8.0, size.x * 0.035)
-	var image_height := minf(size.y - size.x * 0.24, (size.x - inset * 2.0) * 4.0 / 3.0)
-	thumbnail.position = Vector2(inset, inset)
-	thumbnail.size = Vector2(size.x - inset * 2.0, image_height)
-	var remaining := maxf(0.0, size.y - image_height)
-	var title_height := maxf(44.0, remaining - inset)
-	title_label.position = Vector2(20.0, image_height + inset + 2.0)
-	title_label.size = Vector2(maxf(0.0, size.x - 40.0), title_height)
-	_fit_title_font(title_label.size.x, title_label.size.y)
-	_completion.position = title_label.position
-	_completion.size = title_label.size
-	Clean.label(
-		_completion,
-		roundi(maxf(size.x * 0.065, 10.0 * Clean.minimum_touch_size(self).x / 44.0)),
-		true
+	_box_depth = (
+		Vector2(4, 5) * native
+		if level_id == PROTOTYPE_LEVEL and not _box_preview.visible
+		else Vector2.ZERO
 	)
+	var image_width := size.x - inset * 2.0 - _box_depth.x
+	var image_height := minf(size.y - size.x * 0.24, image_width * 4.0 / 3.0)
+	thumbnail.position = Vector2(inset, inset)
+	thumbnail.size = Vector2(image_width, image_height)
+	var title_top := image_height + inset + _box_depth.y + 5.0 * native
+	var title_height := maxf(18.0 * native, size.y - title_top)
+	var icon_side := clampf(size.x / native * 0.08, 12.0, 14.0) * native
+	var icon_gap := 3.0 * native
+	completed_modes.configure(icon_side, icon_gap)
+	completed_modes.position = Vector2(
+		size.x - inset - completed_modes.size.x, title_top + (title_height - icon_side) * 0.5
+	)
+	title_label.position = Vector2(inset, title_top)
+	title_label.size = Vector2(
+		maxf(0.0, completed_modes.position.x - inset - 5.0 * native), title_height
+	)
+	_fit_title_font(title_label.size.x, title_label.size.y)
+	_box_preview.position = thumbnail.position
+	_box_preview.size = thumbnail.size + _box_depth
+	thumbnail.visible = not _box_preview.visible
 	var shader_material := thumbnail.material as ShaderMaterial
 	if shader_material != null and image_height > 0.0:
 		shader_material.set_shader_parameter("rect_aspect", thumbnail.size.x / thumbnail.size.y)
@@ -202,22 +224,30 @@ func _draw() -> void:
 	if not is_node_ready():
 		return
 	var unit := size.x / 150.0
-	if _all_completed:
-		var center := (
-			title_label.position
-			+ Vector2(title_label.size.x - 9.0 * unit, title_label.size.y * 0.5)
-		)
-		draw_polyline(
+	if level_id == PROTOTYPE_LEVEL and not _box_preview.visible:
+		var rect := thumbnail.get_rect()
+		var depth := _box_depth
+		draw_colored_polygon(
 			PackedVector2Array(
 				[
-					center + Vector2(-5, 0) * unit,
-					center + Vector2(-1, 4) * unit,
-					center + Vector2(6, -5) * unit
+					Vector2(rect.end.x, rect.position.y),
+					rect.end,
+					rect.end + depth,
+					Vector2(rect.end.x + depth.x, rect.position.y + depth.y),
 				]
 			),
-			Clean.INK,
-			maxf(1.5, 1.5 * unit),
-			true
+			Color("D9C9AC")
+		)
+		draw_colored_polygon(
+			PackedVector2Array(
+				[
+					Vector2(rect.position.x, rect.end.y),
+					rect.end,
+					rect.end + depth,
+					Vector2(rect.position.x + depth.x, rect.end.y + depth.y),
+				]
+			),
+			Color("E8DCC7")
 		)
 	if has_focus():
 		var center := title_label.position + title_label.size * 0.5
@@ -238,35 +268,38 @@ func _apply_preview_style() -> void:
 		shader_material.set_shader_parameter("opacity", 1.0 if revealed else 0.56)
 
 
-func _fit_title_font(max_width: float, max_height: float) -> void:
+func _fit_title_font(max_width: float, _max_height: float) -> void:
+	var native := Clean.minimum_touch_size(self).x / 44.0
 	var font := title_label.get_theme_font("font")
-	var single_line_size := roundi(
-		maxf(TITLE_MAX_FONT_SIZE, 12.0 * Clean.minimum_touch_size(self).x / 44.0)
-	)
-	while single_line_size >= TITLE_MIN_SINGLE_LINE_FONT_SIZE:
-		var text_width := (
-			font
-			. get_string_size(title_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, single_line_size)
-			. x
-		)
-		if text_width <= max_width:
-			title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-			title_label.max_lines_visible = 1
-			title_label.add_theme_font_size_override("font_size", single_line_size)
-			return
-		single_line_size -= 2
-
-	var wrapped_size := TITLE_MAX_FONT_SIZE
-	while wrapped_size > TITLE_WRAP_MIN_FONT_SIZE:
-		var text_block := font.get_multiline_string_size(
-			title_label.text, HORIZONTAL_ALIGNMENT_CENTER, max_width, wrapped_size
-		)
-		if text_block.x <= max_width and text_block.y <= max_height:
+	var font_size := roundi(14.0 * native)
+	var minimum := ceili(12.0 * native)
+	while font_size > minimum:
+		if (
+			font.get_string_size(title_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
+			<= max_width
+		):
 			break
-		wrapped_size -= 2
-	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_label.max_lines_visible = 2
-	title_label.add_theme_font_size_override("font_size", wrapped_size)
+		font_size -= 1
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title_label.max_lines_visible = 1
+	title_label.add_theme_font_size_override("font_size", font_size)
+
+
+func prototype_box_rect() -> Rect2:
+	return _box_preview.get_global_rect() if _box_preview.visible else thumbnail.get_global_rect()
+
+
+func set_box_preview(texture: Texture2D) -> void:
+	if not is_node_ready() or level_id != PROTOTYPE_LEVEL:
+		return
+	var changed := _box_preview.texture != texture
+	_box_preview.texture = texture
+	_box_preview.visible = texture != null
+	thumbnail.visible = texture == null
+	if changed:
+		_apply_layout()
+	queue_redraw()
 
 
 func _read(field: String, fallback: Variant = null) -> Variant:

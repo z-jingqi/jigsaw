@@ -146,6 +146,12 @@ func _settle(sequence: int, committed: bool) -> void:
 func _configure_motion(kind: StringName, duration: float) -> bool:
 	if not is_instance_valid(_target_view):
 		return false
+	if (
+		_active_context.get("reason") == "show_modal"
+		and _target_view.has_method("configure_box_transition")
+	):
+		if _target_view.configure_box_transition(_active_tween, duration):
+			return true
 	var reduced := bool(_active_context.get("reduced_motion", false))
 	if kind in [&"home_to_themes", &"themes_to_home"] and is_instance_valid(_source_view):
 		ThemeLibraryMotion.configure(

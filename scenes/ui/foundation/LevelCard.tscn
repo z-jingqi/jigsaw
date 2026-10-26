@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/ui/foundation/LevelCard.gd" id="1_card"]
 [ext_resource type="Theme" path="res://themes/jigcat_theme.tres" id="2_theme"]
 [ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="3_font"]
-[ext_resource type="Script" path="res://scripts/ui/foundation/CompletedModeStickers.gd" id="4_stickers"]
+[ext_resource type="Script" path="res://scripts/ui/foundation/ModeCompletionGlyphs.gd" id="4_stickers"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="5_shader"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_thumbnail"]

@@ -24,7 +24,7 @@ const AudioBindingsScript := preload("res://scripts/audio/GameAudioBindings.gd")
 const HomeScene := preload("res://scenes/screens/HomeScreen.tscn")
 const LevelsScene := preload("res://scenes/screens/LevelListScreen.tscn")
 const GameplayScene := preload("res://scenes/screens/GameplayScreen.tscn")
-const ModeSelectScene := preload("res://scenes/modals/ModeSelectModal.tscn")
+const ModeSelectScene := preload("res://scenes/modals/BoxModeSelectModal.tscn")
 const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const HomeGuideScene := preload("res://scenes/overlays/HomeFirstRunGuide.tscn")
@@ -212,12 +212,23 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 	_services.content.level_media(_services.content.level_config(level))
 	_current_theme_id = theme_id
 	_current_level_id = level_id
+	var box_payload: Dictionary = {}
+	var box_source := Rect2()
+	if theme_id == "topic_01" and level_id == "shanhai_v2_01":
+		box_payload = preload("res://scripts/runtime/presentation/BoxPreviewData.gd").build(
+			_services.content, level
+		)
+		var list := _navigator.current_screen_view() as RuntimeLevelListScreen
+		if list != null:
+			box_source = list.debug_box_rect(level_id)
 	var result := _navigator.show_modal(
 		&"mode_select",
 		{
 			"theme_id": theme_id,
 			"level_id": level_id,
-			"view_model": _catalog.mode_select(theme_id, level_id)
+			"view_model": _catalog.mode_select(theme_id, level_id),
+			"box_preview": box_payload,
+			"box_source_rect": box_source
 		}
 	)
 	if bool(result.get("ok", false)):
@@ -325,6 +336,11 @@ func show_home_guide() -> Dictionary:
 
 
 func close_modal() -> Dictionary:
+	var view := _navigator.current_route_view()
+	if view != null and view.has_method("needs_box_close") and view.needs_box_close():
+		_navigator.finish_active_transition()
+		view.request_close()
+		return {"ok": true}
 	if _navigator.current_route() == &"completion":
 		return _return_to_levels()
 	if _navigator.current_route() == &"mode_select":
