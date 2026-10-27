@@ -6,6 +6,10 @@ static var _quarantined: Dictionary = {}
 
 
 static func block_secondary(viewport: Viewport, event: InputEvent) -> bool:
+	# Godot's emulated mouse is the primary touch's GUI click, not another finger.
+	# Gesture owners ignore it themselves; BaseButton still needs it for taps.
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return false
 	var key := viewport.get_instance_id()
 	var current := _current(key)
 	var pointer := -2

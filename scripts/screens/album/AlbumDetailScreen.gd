@@ -1,6 +1,7 @@
 class_name AlbumDetailScreen
 extends Control
 ## Pure artwork viewer. Loading follows latest intent, never gates navigation.
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const ZoomGesture := preload("res://scripts/screens/album/AlbumZoomGesture.gd")
@@ -230,12 +231,20 @@ func debug_state_snapshot() -> Dictionary:
 func _layout() -> void:
 	if not is_node_ready():
 		return
-	var u := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var u := Metrics.unit(get_viewport_rect().size)
 	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($BackButton, self)
 	_area = Rect2(
-		Vector2(safe.x + 16 * u, safe.y + 72 * u),
-		size - Vector2(safe.x + safe.z + 32 * u, safe.y + safe.w + 96 * u)
+		Vector2(
+			safe.x + Metrics.EDGE * u, safe.y + (Metrics.TOP + Metrics.TOUCH + Metrics.GAP) * u
+		),
+		(
+			size
+			- Vector2(
+				safe.x + safe.z + Metrics.EDGE * 2 * u,
+				safe.y + safe.w + (Metrics.TOP + Metrics.TOUCH + Metrics.GAP + Metrics.EDGE) * u
+			)
+		)
 	)
 	_gesture.excluded = $BackButton.get_global_rect()
 	_gesture.image_center = global_position + _area.get_center()

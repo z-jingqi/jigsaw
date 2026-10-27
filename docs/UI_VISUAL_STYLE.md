@@ -1,5 +1,29 @@
 # JigCat UI visual style
 
+## 统一尺寸规范（当前实现）
+
+尺寸源为 `scripts/ui/foundation/UiMetrics.gd`，颜色、字体及按钮状态源为
+`CleanTheme.gd`。页面不得各自定义同一角色的字号、按钮高度或缩放公式。
+旧章节中的历史美术说明不覆盖这里的当前运行时规范。
+
+- 基准画布为 390 × 844；逻辑单位使用宽高等比缩放的较小值。
+- 系统安全区只加一次；顶部栏额外留白 12，左右内容边距 24。
+- 间距使用 8 / 16 / 24 / 32；导航与分页触摸区 48，主按钮高 52。
+- 页面标题 26，正文及主按钮 18，辅助说明与页数 14；固定单行标题使用统一字体测量适配，最小不低于正文角色，仍超宽时省略并保留完整提示。
+- 多列主题卡片名称使用正文 18、卡片内最多三行换行；名称区域固定，超长内容省略，禁止按文字最小宽度扩大卡片标题区域。
+- Logo 为 144 × 48；菜单宽 224、行高 48，使用与页面相同的逻辑单位。
+- 原生像素换算 `CleanTheme.canvas_scale` 仅用于输入阈值等需要设备像素的场景；
+  不再用于分页和菜单的视觉尺寸，不新建页面专属比例。
+- 首页、关卡列表、模式选择、游戏顶部栏、完成页、相册与作品详情、设置已接入共同角色。
+  棋盘与托盘保留玩法几何缩放；纸盒保留透视布局，选项名称和状态使用共同文字规格。
+- 相册主题选择为居中淡入淡出弹窗；只有首页的全部主题使用顶部落下、向上收起。
+
+首页从上至下为顶部栏、固定主题名称、横向滚动图片、分页控件、数字页数、固定进入按钮。
+标题只改变透明度，不移动位置；透明度由实际视觉分页进度计算，中点完全淡出并切换文案，
+再渐显下一标题。拖动、回弹、连续切换和 Reduced Motion 共用图片的分页状态。
+页数表示当前选择，进入按钮只在选中页稳定后可用；未开放主题显示“敬请期待”。
+图片只负责分页，进入主题由固定按钮负责。
+
 ## Shared screen palette
 
 Home, level selection, and gameplay share the warm ivory background in
@@ -127,3 +151,19 @@ level title and Done button enter in the same 0.96-second AnimationPlayer
 timeline. The completion screen contains only the level title, artwork, and
 Done button. The entire artwork stays visible. Reduced Motion
 uses the settled layout immediately.
+
+## Shared navigation motion
+
+Only All Themes uses a top sheet: drop down to open, retract upward to close.
+Other full route pages, including mode selection, enter from the right
+and leave to the right on Back. The navigation host owns these transitions;
+page-local content animations must not add another route entrance or exit.
+Reduced Motion settles the route immediately. Settings remains a popup with its
+own open/close animation; native Back dismisses it without a horizontal drag.
+
+Back starts only within the leftmost 24 logical design units (UiMetrics.BACK_EDGE).
+The route follows the finger; release past 30 percent of screen width or a
+qualified rightward fling commits, otherwise it returns to its starting position.
+GestureArena reserves the pointer on press: edge gestures cannot page content,
+and a paging drag cannot become Back when it reaches the edge. All Themes keeps
+its sheet close control and does not claim horizontal edge Back.

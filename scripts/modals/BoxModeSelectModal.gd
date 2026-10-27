@@ -1,7 +1,7 @@
 extends RuntimeModeSelectModal
 signal box_closing
 signal box_returned
-## Shared theme packaging for every playable level, with reversible source transitions.
+## Mode content stays local; the navigator owns the page transition.
 const OpticalLayout := preload("res://scripts/modals/BoxModeOpticalLayout.gd")
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
@@ -12,11 +12,8 @@ var _info: Label
 var _box_data: Dictionary = {}
 var _source_rect := Rect2()
 var _destination := Rect2()
-var _close_tween: Tween
-var _gesture_close_tween: Tween
 var _closing := false
 var _closed := false
-var _generation := 0
 var _phase := "inactive"
 
 
@@ -54,6 +51,8 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 		)
 		_box.set_rendering(true)
 		_phase = "entering"
+		_apply_layout()
+		_open_lid()
 
 
 func _reconcile_options() -> void:
@@ -77,37 +76,6 @@ func _reconcile_options() -> void:
 func opening() -> void:
 	if not _prototype:
 		super.opening()
-
-
-func configure_box_transition(tween: Tween, duration: float) -> bool:
-	if not _prototype:
-		return false
-	if content.size.y <= 0:
-		content.size = size
-	_apply_layout()
-	background.modulate.a = 0.0
-	options.modulate.a = 0.0
-	var initial := _source_rect
-	if not initial.has_area():
-		initial = _destination
-	else:
-		initial.position -= content.global_position
-	_box.position = initial.position
-	_box.size = initial.size
-	if _reduced_motion:
-		_box.position = _destination.position
-		_box.size = _destination.size
-		_open_lid()
-		background.modulate.a = 1.0
-		options.modulate.a = 1.0
-		tween.tween_interval(0.001)
-		return true
-	tween.tween_property(background, "modulate:a", 1.0, duration)
-	tween.tween_property(_box, "position", _destination.position, duration)
-	tween.tween_property(_box, "size", _destination.size, duration)
-	tween.tween_property(options, "modulate:a", 1.0, duration)
-	tween.tween_callback(_open_lid).set_delay(duration)
-	return true
 
 
 func _open_lid() -> void:
@@ -150,21 +118,11 @@ func _on_start_pressed() -> void:
 func gesture_pause_motion() -> void:
 	if is_instance_valid(_box):
 		_box.gesture_pause_motion()
-	if _close_tween != null and _close_tween.is_valid() and _close_tween.is_running():
-		_gesture_close_tween = _close_tween
-		_close_tween.pause()
 
 
 func gesture_resume_motion() -> void:
 	if is_instance_valid(_box):
 		_box.gesture_resume_motion()
-	if (
-		_gesture_close_tween != null
-		and _gesture_close_tween == _close_tween
-		and _gesture_close_tween.is_valid()
-	):
-		_gesture_close_tween.play()
-	_gesture_close_tween = null
 
 
 func needs_box_close() -> bool:
@@ -176,61 +134,11 @@ func update_box_source_rect(rect: Rect2) -> void:
 
 
 func request_close() -> void:
-	if not _prototype:
-		super.request_close()
-		return
 	if _closing:
 		return
 	_closing = true
-	box_closing.emit()
-	get_tree().root.get_node("Game/AppNavigator").interrupt_active_transition()
 	_active = false
-	_generation += 1
-	var generation := _generation
 	_phase = "closing"
-	start_button.disabled = true
-	back_button.disabled = true
-	for child in options.get_children():
-		child.disabled = true
-	await _box.retract_mode(_reduced_motion)
-	if generation != _generation or not is_inside_tree():
-		return
-	_box.set_open(false, _reduced_motion)
-	while is_inside_tree() and _box.active_motion_count() > 0:
-		await get_tree().process_frame
-		if generation != _generation:
-			return
-	if not is_inside_tree():
-		return
-	_close_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(
-		Tween.EASE_IN_OUT
-	)
-	var target := _source_rect
-	target.position -= content.global_position
-	if not target.has_area():
-		target = _destination
-	var full_distance := (
-		_destination.position.distance_to(target.position)
-		+ _destination.size.distance_to(target.size)
-	)
-	var remaining_distance := (
-		_box.position.distance_to(target.position) + _box.size.distance_to(target.size)
-	)
-	var fraction := clampf(remaining_distance / maxf(full_distance, 0.001), 0.004, 1.0)
-	var duration := 0.01 if _reduced_motion else 0.36 * fraction
-	_close_tween.tween_property(_box, "position", target.position, duration)
-	_close_tween.tween_property(_box, "size", target.size, duration)
-	_close_tween.tween_property(background, "modulate:a", 0.0, duration)
-	_close_tween.tween_property(options, "modulate:a", 0.0, duration)
-	_close_tween.tween_property(_info, "modulate:a", 0.0, duration)
-	_close_tween.tween_property($SafeArea/Content/ModeHeading, "modulate:a", 0.0, duration)
-	_close_tween.tween_property(start_button, "modulate:a", 0.0, duration)
-	_close_tween.tween_property($SafeArea/Content/Header, "modulate:a", 0.0, duration)
-	await _close_tween.finished
-	_close_tween = null
-	_closed = true
-	# Hand the exact source rectangle back before the navigator's modal fade.
-	_box.hide()
 	box_returned.emit()
 	close_requested.emit()
 
@@ -277,16 +185,9 @@ func set_reduced_motion(enabled: bool) -> void:
 	if _selected_option != null and not _closing:
 		var mode := StringName(_selected_option.mode)
 		_box.show_mode(mode, _box_data.get(String(mode), {}).get("pieces", []), true)
-	if _close_tween != null:
-		_close_tween.custom_step(10.0)
 
 
 func navigation_exit(context: Dictionary) -> void:
-	_gesture_close_tween = null
-	_generation += 1
-	if _close_tween != null:
-		_close_tween.kill()
-		_close_tween = null
 	if is_instance_valid(_box):
 		_box.cancel_motion()
 		_box.set_rendering(false)
@@ -297,9 +198,7 @@ func navigation_exit(context: Dictionary) -> void:
 
 func active_motion_count() -> int:
 	return (
-		super.active_motion_count()
-		+ int(_close_tween != null)
-		+ (_box.active_motion_count() if is_instance_valid(_box) else 0)
+		super.active_motion_count() + (_box.active_motion_count() if is_instance_valid(_box) else 0)
 	)
 
 

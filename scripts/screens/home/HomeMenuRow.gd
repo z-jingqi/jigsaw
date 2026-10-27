@@ -1,6 +1,7 @@
 extends Button
 ## Local menu-row styling: no global button theme and no stacked focus frames.
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 var _action: StringName = &"themes"
 var _unit := 1.0
 var _keyboard_focus_visible := false
@@ -22,9 +23,9 @@ func _ready() -> void:
 func configure(action: StringName, unit: float) -> void:
 	_action = action
 	_unit = maxf(0.01, unit)
-	custom_minimum_size = Vector2(0, 48.0 * _unit)
+	custom_minimum_size = Vector2(0, Metrics.TOUCH * _unit)
 	add_theme_font_override("font", Clean.FONT)
-	add_theme_font_size_override("font_size", roundi(16.0 * _unit))
+	add_theme_font_size_override("font_size", roundi(Metrics.BODY * _unit))
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		add_theme_color_override(state, Clean.INK)
 	add_theme_color_override("font_disabled_color", Clean.MUTED)

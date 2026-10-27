@@ -29,6 +29,7 @@ func _ready() -> void:
 	$MoreButton.accessibility_name = GameStrings.ui_text("more_actions")
 	$MoreButton.pressed.connect(_open_menu)
 	theme_selected.connect(_activate_theme)
+	$FixedContent.enter_requested.connect(_enter_selected)
 	_menu = MenuScene.instantiate()
 	_menu.can_interact = _can_open_menu
 	add_child(_menu)
@@ -84,24 +85,52 @@ func _activate_theme(theme_id: String) -> void:
 
 func _layout() -> void:
 	super._layout()
-	if not is_node_ready():
+	if not is_node_ready() or _pager == null:
 		return
 	$CloseButton.hide()
 	$Title.hide()
 	Buttons.place_navigation($MoreButton, self, true)
-	var unit := Clean.canvas_scale(size, get_window())
+	var u := Metrics.unit(size)
 	var safe := Clean.safe_insets(size)
-	$BrandLogo.position = Vector2(
-		safe.x + 24.0 * unit, $MoreButton.position.y + ($MoreButton.size.y - 40.0 * unit) * 0.5
-	)
-	$BrandLogo.size = Vector2(120.0, 40.0) * unit
+	$BrandLogo.position = Vector2(safe.x + Metrics.EDGE * u, $MoreButton.position.y)
+	$BrandLogo.size = Metrics.LOGO * u
+	var header_bottom: float = $MoreButton.position.y + $MoreButton.size.y
+	var note_height := _extra_header_height(size.x - 2 * Metrics.EDGE * u, u)
 	if _storage_notice != null and _storage_notice.visible:
-		var note_height := _extra_header_height($Pages.size.x, unit)
-		_storage_notice.position = Vector2($Pages.position.x, $Pages.position.y - note_height)
-		_storage_notice.size.x = $Pages.size.x
-		_storage_notice.set_deferred("size", Vector2($Pages.size.x, note_height - 16.0 * unit))
+		_storage_notice.position = Vector2($BrandLogo.position.x, header_bottom)
+		_storage_notice.size = Vector2(size.x - 2 * Metrics.EDGE * u, note_height)
+	var image_rect: Rect2 = $FixedContent.arrange(size, safe, header_bottom + note_height)
+	$Pages.position = image_rect.position
+	$Pages.size = image_rect.size
+	_pager.position = Vector2(image_rect.position.x, image_rect.end.y + Metrics.SMALL_GAP * u)
+	_pager.size = Vector2(image_rect.size.x, Metrics.TOUCH * u)
+	for layer in $Pages.get_children():
+		layer.size = image_rect.size
+		for tile in layer.get_children():
+			_layout_tile(tile, image_rect.size, u, u)
+	_apply_visual_page(_visual_page)
 	if _menu != null and _menu.visible:
 		_menu.reposition($MoreButton.get_global_rect())
+
+
+func _apply_visual_page(value: float) -> void:
+	super._apply_visual_page(value)
+	if is_node_ready():
+		$FixedContent.present(
+			_themes, value, _page, _enabled and (_menu == null or not _menu.visible)
+		)
+
+
+func _enter_selected() -> void:
+	if not _enabled or _themes.is_empty() or _pointer != -2:
+		return
+	if not is_equal_approx(_visual_page, float(_page)) or not _themes[_page].playable:
+		return
+	var cover := $Pages.get_child(_page).get_child(0).get_node("Cover") as TextureRect
+	_source_rect = cover.get_global_rect()
+	_source_texture = cover.texture
+	_freeze()
+	_activate_theme(str(_themes[_page].theme_id))
 
 
 func set_storage_status(status: Dictionary) -> void:
@@ -140,31 +169,21 @@ func _extra_header_height(width: float, canvas: float) -> float:
 	)
 
 
-func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
-	super._layout_tile(tile, cell, u, canvas)
+func _layout_tile(tile: Button, cell: Vector2, _u: float, _canvas: float) -> void:
+	tile.custom_minimum_size = Vector2.ZERO
+	tile.size = cell
+	# The image is a paging surface. Only the fixed action enters the theme.
+	tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile.focus_mode = Control.FOCUS_NONE
+	tile.get_node("Title").hide()
+	tile.get_node("Status").hide()
 	var cover := tile.get_node("Cover") as TextureRect
-	var title := tile.get_node("Title") as Label
-	var status := tile.get_node("Status") as Label
-	var gap := 32.0 * u
-	var title_height := maxf(32.0 * u, 28.0 * canvas)
-	var status_height := status.size.y if status.visible else 0.0
-	var available := Vector2(
-		minf(cell.x, size.x * 0.78), maxf(1.0, cell.y - gap - title_height - status_height)
-	)
-	var image_size := available
+	var image_size := cell
 	if cover.texture != null:
 		var texture_size := cover.texture.get_size()
-		image_size = texture_size * minf(available.x / texture_size.x, available.y / texture_size.y)
-	var group_height := image_size.y + gap + title_height + status_height
-	var top := maxf(0.0, (cell.y - group_height) * 0.5)
-	cover.position = Vector2((cell.x - image_size.x) * 0.5, top)
+		image_size = texture_size * minf(cell.x / texture_size.x, cell.y / texture_size.y)
+	cover.position = (cell - image_size) * 0.5
 	cover.size = image_size
-	title.position = Vector2(0, top + image_size.y + gap)
-	title.size = Vector2(cell.x, title_height)
-	Clean.label(title, roundi(maxf(22.0 * u, 18.0 * canvas)))
-	TitleLayout.fit(title, title.size, roundi(maxf(22.0 * u, 18.0 * canvas)))
-	status.position = Vector2(0, title.position.y + title_height)
-	status.size.x = cell.x
 
 
 func _can_open_menu() -> bool:
@@ -180,6 +199,7 @@ func _open_menu() -> void:
 	_pause_motion()
 	_pager.set_interaction_enabled(false)
 	_menu.open_menu($MoreButton.get_global_rect())
+	_apply_visual_page(_visual_page)
 
 
 func refresh_album_availability() -> void:

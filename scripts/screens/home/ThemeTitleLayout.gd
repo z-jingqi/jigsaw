@@ -11,7 +11,10 @@ static func fit(label: Label, bounds: Vector2, max_size: int) -> int:
 	label.clip_text = true
 	label.update_minimum_size()
 	label.size = Vector2(safe_width, safe_height)
-	for font_size in range(max_size, 0, -1):
+	var minimum := maxi(1, roundi(max_size * 18.0 / 26.0))
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.tooltip_text = label.text
+	for font_size in range(max_size, minimum - 1, -1):
 		var single_line := font.get_string_size(
 			label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size
 		)
@@ -20,10 +23,7 @@ static func fit(label: Label, bounds: Vector2, max_size: int) -> int:
 			label.update_minimum_size()
 			label.size = Vector2(safe_width, safe_height)
 			return font_size
-	# Font sizes below one pixel are unsupported. Preserve exceptional text
-	# instead of silently clipping it if even the smallest size cannot fit.
-	label.clip_text = false
-	label.add_theme_font_size_override("font_size", 1)
-	label.update_minimum_size()
+	# Preserve readable body size for exceptionally long titles.
+	label.add_theme_font_size_override("font_size", minimum)
 	label.size = Vector2(safe_width, safe_height)
-	return 1
+	return minimum

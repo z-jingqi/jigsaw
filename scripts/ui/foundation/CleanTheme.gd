@@ -3,6 +3,7 @@ extends RefCounted
 ## Shared, quiet paper palette for every player-facing surface.
 
 const SPACE_8 := 8.0
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const SPACE_16 := 16.0
 const SPACE_24 := 24.0
 const SPACE_32 := 32.0
@@ -71,8 +72,8 @@ static func icon_button(control: Button) -> void:
 
 static func minimum_touch_size(control: Control) -> Vector2:
 	if not control.is_inside_tree():
-		return Vector2.ONE * 44.0
-	return Vector2.ONE * 44.0 * canvas_scale(control.get_viewport_rect().size, control.get_window())
+		return Vector2.ONE * Metrics.TOUCH
+	return Vector2.ONE * Metrics.TOUCH * Metrics.unit(control.get_viewport_rect().size)
 
 
 static func canvas_scale(viewport_size: Vector2, window: Window = null) -> float:

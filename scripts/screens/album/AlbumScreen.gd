@@ -5,6 +5,7 @@ signal back_requested
 signal theme_selected(theme_id: String)
 signal artwork_selected(theme_id: String, level_id: String)
 signal index_selected(index: int)
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const FreshButton := preload("res://scripts/screens/home/FreshButton.gd")
@@ -45,7 +46,7 @@ func _ready() -> void:
 	_back.symbol = "back"
 	_back.icon_only = true
 	add_child(_back)
-	_back.pressed.connect(_back_pressed)
+	_back.pressed.connect(request_back)
 	_theme = ThemeButton.new()
 	_theme.name = "ThemeButton"
 	Clean.icon_button(_theme)
@@ -66,6 +67,7 @@ func _label(node_name: String) -> Label:
 	label.name = node_name
 	label.mouse_filter = MOUSE_FILTER_IGNORE
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.clip_text = true
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	add_child(label)
 	return label
@@ -160,7 +162,7 @@ func edge_back_allowed() -> bool:
 	return not _chooser.is_presented()
 
 
-func _back_pressed() -> void:
+func request_back() -> void:
 	if not dismiss_menu():
 		back_requested.emit()
 
@@ -214,14 +216,14 @@ func debug_state_snapshot() -> Dictionary:
 func _layout() -> void:
 	if not is_node_ready():
 		return
-	var native := Clean.canvas_scale(size, get_window())
-	var u := minf(size.x / 390.0, size.y / 844.0)
+	var native := Metrics.unit(size)
+	var u := Metrics.unit(size)
 	var safe := Clean.safe_insets(size)
-	var margin := maxf(18 * u, 16 * native)
+	var margin := Metrics.EDGE * u
 	Buttons.place_navigation(_back, self)
 	_theme.position = Vector2(_back.position.x + _back.size.x + 8 * u, _back.position.y)
 	_theme.size = Vector2(size.x - 2 * (_back.position.x + _back.size.x + 8 * u), _back.size.y)
-	_theme.configure(str(_model.get("theme_title", "")), roundi(22 * native), native)
+	_theme.configure(str(_model.get("theme_title", "")), roundi(Metrics.TITLE * native), native)
 	var strip_h := minf(116 * u, 104 * native)
 	_strip.position = Vector2(margin, size.y - safe.w - 24 * u - strip_h)
 	_strip.size = Vector2(size.x - 2 * margin, strip_h)
@@ -230,8 +232,8 @@ func _layout() -> void:
 	_title.size = Vector2((size.x - 2 * margin) * 0.73, caption_h)
 	_position.position = Vector2(_title.position.x + _title.size.x, _title.position.y)
 	_position.size = Vector2((size.x - 2 * margin) * 0.27, caption_h)
-	Clean.label(_title, roundi(21 * native))
-	Clean.label(_position, roundi(15 * native), true)
+	Clean.label(_title, roundi(Metrics.BODY * native))
+	Clean.label(_position, roundi(Metrics.CAPTION * native), true)
 	var top := _back.position.y + _back.size.y + 24 * u
 	_focus.position = Vector2(margin, top)
 	_focus.size = Vector2(size.x - 2 * margin, maxf(1, _title.position.y - top - 12 * u))

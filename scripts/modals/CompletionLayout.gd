@@ -2,12 +2,13 @@ class_name CompletionLayout
 extends RefCounted
 ## Fixed navigation surrounds a single-screen editorial artwork and subject introduction.
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 
 func apply(view: Control) -> Rect2:
 	var size: Vector2 = view.size
-	var unit: float = Clean.canvas_scale(size, view.get_window())
+	var unit: float = Metrics.unit(size)
 	var safe: Vector4 = Clean.safe_insets(size)
 	var width := size.x - safe.x - safe.z
 	var margin := 24.0 * unit
@@ -16,17 +17,23 @@ func apply(view: Control) -> Rect2:
 	var footer_height := 76.0 * unit
 	view.header.position = Vector2(safe.x, safe.y)
 	view.header.size = Vector2(width, header_height)
-	view.level_label.position = Vector2(72, 8) * unit
-	view.level_label.size = Vector2(width - 72 * unit - margin, 48 * unit)
+	view.level_label.position = (
+		Vector2(Metrics.EDGE + Metrics.TOUCH + Metrics.SMALL_GAP, Metrics.TOP) * unit
+	)
+	view.level_label.clip_text = true
+	view.level_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	view.level_label.size = Vector2(
+		width - (Metrics.EDGE + Metrics.TOUCH + Metrics.SMALL_GAP) * unit - margin, 48 * unit
+	)
 	view.level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_fit_title(view.level_label, roundi(26 * unit), roundi(20 * unit))
-	view.return_button.position = Vector2(safe.x + 12 * unit, safe.y + 8 * unit)
+	_fit_title(view.level_label, roundi(Metrics.TITLE * unit), roundi(Metrics.BODY * unit))
+	view.return_button.position = Vector2(safe.x + Metrics.EDGE * unit, safe.y + Metrics.TOP * unit)
 	view.return_button.size = Vector2.ONE * 48 * unit
 	view.return_button.custom_minimum_size = Clean.minimum_touch_size(view.return_button)
 	view.confirm_button.position = Vector2(safe.x + margin, size.y - safe.w - footer_height)
 	view.confirm_button.size = Vector2(width - margin * 2, 52 * unit)
 	view.confirm_button.custom_minimum_size = Clean.minimum_touch_size(view.confirm_button)
-	view.confirm_label.add_theme_font_size_override("font_size", roundi(18 * unit))
+	view.confirm_label.add_theme_font_size_override("font_size", roundi(Metrics.BODY * unit))
 	# Release the previous content minimum before resizing its scroll container.
 	view.body_content.custom_minimum_size = Vector2.ZERO
 	view.body.position = Vector2(safe.x + margin, safe.y + header_height)
@@ -34,7 +41,7 @@ func apply(view: Control) -> Rect2:
 		width - margin * 2, size.y - safe.y - safe.w - header_height - footer_height - 12 * unit
 	)
 	var content_width: float = view.body.size.x
-	var font_size := roundi(16 * unit)
+	var font_size := roundi(Metrics.BODY * unit)
 	view.description_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	view.description_label.add_theme_font_size_override("font_size", font_size)
 	var cat_side := 56 * unit if compact else clampf(content_width * .25, 64 * unit, 96 * unit)
@@ -57,7 +64,7 @@ func apply(view: Control) -> Rect2:
 	)
 	var fit := minf(content_width / source_size.x, image_height / source_size.y)
 	var image_size := source_size * fit
-	var target := Rect2(Vector2(0, 0), image_size)
+	var target := Rect2(Vector2((content_width - image_size.x) * 0.5, 0), image_size)
 	var row_y := image_size.y + gap
 	view.description_label.position = Vector2(0, row_y)
 	view.description_label.size = Vector2(text_width, description_height)

@@ -6,6 +6,7 @@ signal level_selected(level_id: String)
 
 const DotPager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
@@ -189,20 +190,20 @@ func _apply_layout() -> void:
 		return
 	_apply_header_layout()
 	var content: Control = $SafeArea/Content
-	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
-	var top := 80.0 * native
-	var footer := (44.0 + Clean.SPACE_16 * 2.0) * native
+	var native := Metrics.unit(get_viewport_rect().size)
+	var top := (Metrics.TOP + Metrics.TOUCH + Metrics.GAP) * native
+	var footer := (Metrics.TOUCH + Metrics.GAP * 2.0) * native
 	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	scroll.position = Vector2(0, top)
 	scroll.size = Vector2(content.size.x, maxf(100 * native, content.size.y - top - footer))
-	_pager.position = Vector2(0, content.size.y - (44.0 + Clean.SPACE_16) * native)
-	_pager.size = Vector2(content.size.x, 44 * native)
+	_pager.position = Vector2(0, content.size.y - (Metrics.TOUCH + Metrics.GAP) * native)
+	_pager.size = Vector2(content.size.x, Metrics.TOUCH * native)
 	if _view_model == null:
 		return
 	_empty_label.visible = _view_model.levels.is_empty()
 	_empty_label.position = scroll.position
 	_empty_label.size = scroll.size
-	Clean.label(_empty_label, roundi(18 * native), true)
+	Clean.label(_empty_label, roundi(Metrics.BODY * native), true)
 	if not _initial_focus_applied:
 		_initial_focus_applied = true
 		_grid.configure(_view_model.levels, str(_view_model.focus_level_id))
@@ -212,23 +213,30 @@ func _apply_layout() -> void:
 func _apply_header_layout() -> void:
 	if not is_node_ready() or header.size.x <= 0.0:
 		return
-	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var native := Metrics.unit(get_viewport_rect().size)
 	Buttons.place_navigation(back_button, self)
 	title_left_ornament.hide()
 	title_right_ornament.hide()
 	progress.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	progress.size = Vector2(64, 32) * native
 	progress.position = Vector2(
-		header.size.x - progress.size.x, back_button.position.y + 6 * native
+		header.size.x - progress.size.x,
+		back_button.position.y + (Metrics.TOUCH - 32) * native * 0.5
 	)
 	progress.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	Clean.label(progress_count, roundi(13 * native), true)
+	Clean.label(progress_count, roundi(Metrics.CAPTION * native), true)
 	theme_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	theme_title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	theme_title.max_lines_visible = 1
-	theme_title.position = Vector2(48 * native, back_button.position.y)
-	theme_title.size = Vector2(maxf(0, header.size.x - 120 * native), 44 * native)
-	Clean.label(theme_title, roundi(23 * native))
+	var title_left := back_button.position.x + back_button.size.x + Metrics.SMALL_GAP * native
+	theme_title.position = Vector2(title_left, back_button.position.y)
+	var bounds := Vector2(
+		maxf(1, progress.position.x - title_left - Metrics.SMALL_GAP * native), back_button.size.y
+	)
+	Clean.label(theme_title, roundi(Metrics.TITLE * native))
+	preload("res://scripts/screens/home/ThemeTitleLayout.gd").fit(
+		theme_title, bounds, roundi(Metrics.TITLE * native)
+	)
 
 
 func set_page(index: int) -> void:

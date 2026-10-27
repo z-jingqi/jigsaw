@@ -1,10 +1,12 @@
 extends Node
 ## Left-edge input ownership and reversible release motion, independent of routes.
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Arena := preload("res://scripts/ui/navigation/GestureArena.gd")
 const Visual := preload("res://scripts/navigation/EdgeBackVisual.gd")
 var navigator: AppNavigator
 var commit_back: Callable
+var _last_commit_time := -1000
 var _session: RefCounted
 var _pointer := -2
 var _start := Vector2.ZERO
@@ -17,6 +19,7 @@ var _release: Tween
 
 
 func _ready() -> void:
+	get_tree().quit_on_go_back = false
 	add_to_group("runtime_edge_back")
 	get_viewport().size_changed.connect(cancel)
 	navigator.route_changed.connect(_route_changed)
@@ -32,6 +35,11 @@ func _exit_tree() -> void:
 
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and is_inside_tree():
+		if Time.get_ticks_msec() - _last_commit_time < 400:
+			return
+		cancel()
+		_system_back()
 	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
 		cancel()
 
@@ -40,7 +48,16 @@ func can_start_edge(point: Vector2, _canvas_units_per_native_pixel: float) -> bo
 	return (
 		is_instance_valid(navigator)
 		and not navigator.edge_back_context().is_empty()
-		and (_session != null or (point.x >= 0.0 and point.x * _native_scale() <= 24.0))
+		and (
+			_session != null
+			or (
+				point.x >= 0.0
+				and (
+					point.x
+					<= Metrics.BACK_EDGE * Metrics.unit(get_viewport().get_visible_rect().size)
+				)
+			)
+		)
 	)
 
 
@@ -187,6 +204,7 @@ func _finish_release(accepted: bool) -> void:
 		_session.restore(false)
 		_session = null
 		navigator.finish_active_transition()
+		_last_commit_time = Time.get_ticks_msec()
 		commit_back.call()
 		navigator.finish_active_transition()
 	else:
@@ -207,3 +225,22 @@ func _width() -> float:
 
 func _native_scale() -> float:
 	return maxf(0.001, get_viewport().get_screen_transform().get_scale().x)
+
+
+func _system_back() -> void:
+	if not is_instance_valid(navigator) or navigator.is_input_locked():
+		return
+	var view := navigator.current_route_view()
+	if view is SettingsModal:
+		view.request_close()
+		return
+	if view != null and view.has_method("request_back"):
+		view.request_back()
+		return
+	var screen := navigator.current_screen_view()
+	if screen != null and screen.has_method("dismiss_menu") and screen.dismiss_menu():
+		return
+	# The sheet owns its native Back notification; the root has no previous page.
+	if navigator.current_route() in [&"home", &"themes"]:
+		return
+	commit_back.call()

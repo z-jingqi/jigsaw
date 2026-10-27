@@ -2,6 +2,7 @@ extends Control
 ## Selection moves first; the bounded window follows without replacing live poses.
 signal page_requested(index: int)
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const MAX_DOTS := 5
 const SELECT_DURATION := 0.11
@@ -244,8 +245,8 @@ func _target_window() -> int:
 func _desired_count() -> int:
 	if not is_inside_tree() or size.x <= 0.0:
 		return mini(MAX_DOTS, _page_count)
-	var unit := Clean.canvas_scale(get_viewport_rect().size, get_window())
-	var available := maxi(1, floori(size.x / (44.0 * unit)) - 2)
+	var unit := Metrics.unit(get_viewport_rect().size)
+	var available := maxi(1, floori(size.x / (Metrics.TOUCH * unit)) - 2)
 	var count := mini(_page_count, mini(MAX_DOTS, available))
 	if count == 4 and _page_count > 4:
 		count = 3
@@ -269,8 +270,8 @@ func _render() -> void:
 		return
 	var focus_before := get_viewport().gui_get_focus_owner()
 	var focused_page := (focus_before as PageDot).page_index if focus_before is PageDot else -1
-	var unit := Clean.canvas_scale(get_viewport_rect().size, get_window())
-	var side := 44.0 * unit
+	var unit := Metrics.unit(get_viewport_rect().size)
+	var side := Metrics.TOUCH * unit
 	var left := (size.x - side * (_visible_count + 2)) * 0.5
 	_band.position = Vector2(left + side, (size.y - side) * 0.5)
 	_band.size = Vector2(side * _visible_count, side)

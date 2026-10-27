@@ -1,19 +1,17 @@
 extends RefCounted
 ## Top navigation follows the mode-selection back button's reference geometry.
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const REFERENCE_SIZE := Vector2(390.0, 844.0)
-const SIDE := 44.0
-const EDGE := 18.0
-const TOP := 22.0
+const SIDE := Metrics.TOUCH
+const EDGE := Metrics.EDGE
+const TOP := Metrics.TOP
 const GAP := 12.0
 
 
 static func unit(viewport_size: Vector2) -> float:
-	return maxf(
-		Clean.canvas_scale(viewport_size),
-		minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
-	)
+	return Metrics.unit(viewport_size)
 
 
 static func icon_size(viewport_size: Vector2) -> Vector2:

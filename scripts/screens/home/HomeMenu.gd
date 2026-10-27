@@ -1,6 +1,7 @@
 extends Control
 signal action_requested(action: StringName)
 signal closed
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Arena := preload("res://scripts/ui/navigation/GestureArena.gd")
 var can_interact: Callable
@@ -65,7 +66,7 @@ func open_menu(anchor: Rect2) -> void:
 
 
 func reposition(anchor: Rect2) -> void:
-	var unit := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var unit := Metrics.unit(get_viewport_rect().size)
 	var panel := Clean.panel(Color("FFFCF5"), 12.0 * unit)
 	panel.set_border_width_all(maxi(1, roundi(unit)))
 	panel.border_color = Color("E1DDD3")
@@ -73,8 +74,8 @@ func reposition(anchor: Rect2) -> void:
 	panel.shadow_size = roundi(3 * unit)
 	panel.shadow_offset = Vector2(0, unit)
 	$Panel.add_theme_stylebox_override("panel", panel)
-	var row := 48.0 * unit
-	var width := minf(220.0 * unit, size.x - 32.0 * unit)
+	var row := Metrics.TOUCH * unit
+	var width := minf(Metrics.MENU_WIDTH * unit, size.x - 32.0 * unit)
 	var buttons := _visible_buttons()
 	$Panel.size = Vector2(width, row * buttons.size() + 16.0 * unit)
 	var local := get_global_transform().affine_inverse() * Vector2(anchor.end.x, anchor.end.y)
@@ -83,7 +84,7 @@ func reposition(anchor: Rect2) -> void:
 	)
 	for index in buttons.size():
 		var button := buttons[index]
-		button.position = Vector2(8, 8 + index * 48) * unit
+		button.position = Vector2(8, 8 + index * Metrics.TOUCH) * unit
 		button.size = Vector2(width - 16.0 * unit, row)
 		button.configure(
 			[&"themes", &"album", &"settings"][$Panel.get_children().find(button)], unit

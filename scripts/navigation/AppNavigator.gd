@@ -301,12 +301,10 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 			_free_entry(entry)
 			_set_entry_active(current_screen_entry(), true)
 	)
-	var animated_modal: Control = (
-		entry.view
-		if entry.view.has_method("needs_box_close") and entry.view.needs_box_close()
-		else null
-	)
-	_begin_transition(transaction, &"modal", "show_modal", null, animated_modal)
+	if entry.view is SettingsModal:
+		_begin_transition(transaction, &"modal", "show_modal")
+	else:
+		_begin_transition(transaction, &"modal", "show_modal", current_screen_view(), entry.view)
 	return _success(route)
 
 
@@ -357,7 +355,7 @@ func close_modal(result: Dictionary = {}) -> Dictionary:
 		return normalized_result
 	var closing := _modal_entry
 	_modal_entry = {}
-	_set_entry_active(closing, false)
+	_set_entry_transition_background(closing)
 	_set_entry_active(current_screen_entry(), true)
 	var transaction: Variant = NavigationTransactionScript.new(
 		func() -> void:
@@ -368,7 +366,10 @@ func close_modal(result: Dictionary = {}) -> Dictionary:
 			_modal_entry = closing
 			_set_entry_active(closing, true)
 	)
-	_begin_transition(transaction, &"modal", "close_modal")
+	if closing.view is SettingsModal:
+		_begin_transition(transaction, &"modal", "close_modal")
+	else:
+		_begin_transition(transaction, &"modal", "close_modal", closing.view, current_screen_view())
 	return {"ok": true, "result": normalized_result.result, "state": debug_state_snapshot()}
 
 
@@ -480,6 +481,8 @@ func wait_until_idle(canceled: Signal = Signal()) -> bool:
 
 func edge_back_context() -> Dictionary:
 	var view := current_route_view()
+	if view is SettingsModal:
+		return {}
 	if view != null and view.has_method("edge_back_allowed") and not view.edge_back_allowed():
 		return {}
 	if current_route() == &"themes":
@@ -487,6 +490,8 @@ func edge_back_context() -> Dictionary:
 	if is_input_locked():
 		return {}
 	var behind := current_screen_view() if not _modal_entry.is_empty() else previous_screen_view()
+	if current_route() == &"completion":
+		behind = previous_screen_view()
 	if not is_instance_valid(behind):
 		return {}
 	return {"source": current_route_view(), "previous": behind, "transition": _transition_host}

@@ -4,6 +4,7 @@ extends Control
 signal setting_changed(key: StringName, enabled: bool)
 signal close_requested
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
@@ -191,11 +192,9 @@ func _configure_panel() -> void:
 	if not is_instance_valid(shell):
 		return
 	var portrait := size.x < size.y
-	var unit := (
-		minf(size.x / 390.0, size.y / 700.0) if portrait else minf(size.x / 844.0, size.y / 390.0)
-	)
+	var unit := Metrics.unit(size)
 	var panel_size := Vector2(340, 514) * unit if portrait else Vector2(660, 356) * unit
-	var error_size := maxi(13, roundi(13 * unit))
+	var error_size := roundi(Metrics.CAPTION * unit)
 	if error_label.visible:
 		var error_height := (
 			Clean
@@ -216,9 +215,9 @@ func _configure_panel() -> void:
 	shell.content.add_theme_constant_override("separation", roundi(Clean.SPACE_8 * unit))
 	var header := title_label.get_parent() as Control
 	header.custom_minimum_size.y = 64 * unit
-	Clean.label(title_label, roundi(28 * unit))
+	Clean.label(title_label, roundi(Metrics.TITLE * unit))
 	error_label.add_theme_font_override("font", Clean.FONT)
-	error_label.add_theme_font_size_override("font_size", maxi(13, roundi(13 * unit)))
+	error_label.add_theme_font_size_override("font_size", roundi(Metrics.CAPTION * unit))
 	error_label.custom_minimum_size.y = 30 * unit
 	_layout_navigation.call_deferred()
 	var rows := music_row.get_parent() as GridContainer
@@ -234,8 +233,8 @@ func _layout_navigation() -> void:
 	if not is_node_ready():
 		return
 	var header := title_label.get_parent() as Control
-	var unit := minf(size.x / 390.0, size.y / 700.0)
-	var side := maxf(44 * unit, Clean.minimum_touch_size(close_button).x)
+	var unit := Metrics.unit(size)
+	var side := maxf(Metrics.TOUCH * unit, Clean.minimum_touch_size(close_button).x)
 	close_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	Buttons.apply_size(close_button, Vector2.ONE * side)
 	close_button.position = Vector2(maxf(0, header.size.x - side), 0)

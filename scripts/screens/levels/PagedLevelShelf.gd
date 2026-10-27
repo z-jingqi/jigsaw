@@ -8,6 +8,7 @@ signal gesture_progress(visual_page: float)
 signal gesture_finished(committed: bool, target: int)
 
 const CardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const PAGE_SIZE := 4
 var _items: Array = []
@@ -216,10 +217,8 @@ func _refresh_models() -> void:
 
 
 func _layout_pages() -> void:
-	var native := (
-		Clean.canvas_scale(get_viewport_rect().size, get_window()) if is_inside_tree() else 1.0
-	)
-	var gap := 18.0 * native
+	var native := Metrics.unit(get_viewport_rect().size) if is_inside_tree() else 1.0
+	var gap := Metrics.GAP * native
 	# Tall phones leave breathing room below the group, not between each box
 	# rows. Compact screens still use their available half-height.
 	var usable_card_width := maxf(44 * native, (size.x - gap - 12 * native) * 0.5)
