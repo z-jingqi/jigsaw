@@ -13,6 +13,7 @@ var _session: Variant
 var _strings: Variant
 var _revision := 0
 var _home_models_revision := -1
+var _home_models_source_key := ""
 var _home_models: Array = []
 
 
@@ -268,8 +269,20 @@ func _on_source_changed(_snapshot: Dictionary, _source_revision: int) -> void:
 
 
 func _cached_home_models(themes: Array[Dictionary]) -> Array:
-	if _home_models_revision == _revision:
+	var sources: Array = []
+	for topic in themes:
+		sources.append(
+			[
+				topic.get("id", ""),
+				topic.get("name", ""),
+				topic.get("theme_subject", ""),
+				topic.get("cover", "")
+			]
+		)
+	var source_key := JSON.stringify(sources)
+	if _home_models_revision == _revision and source_key == _home_models_source_key:
 		return _home_models
+	_home_models_source_key = source_key
 	_home_models.clear()
 	for topic in themes:
 		(
@@ -282,7 +295,7 @@ func _cached_home_models(themes: Array[Dictionary]) -> Array:
 						{
 							"theme_id": topic["id"],
 							"title": topic["name"],
-							"cover_texture": _content.topic_cover(topic),
+							"cover_texture": _content.topic_display_texture(topic),
 							"playable": not topic.get("levels", []).is_empty(),
 							"subtitle":
 							(

@@ -2,6 +2,11 @@ class_name CleanTheme
 extends RefCounted
 ## Shared, quiet paper palette for every player-facing surface.
 
+const SPACE_8 := 8.0
+const SPACE_16 := 16.0
+const SPACE_24 := 24.0
+const SPACE_32 := 32.0
+
 const PAPER := Color("FAF7EF")
 const INK := Color("272925")
 const MUTED := Color("62665D")

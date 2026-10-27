@@ -170,6 +170,7 @@ func _render_errors() -> void:
 		messages.append(str(_view_model.error_text[key]))
 	error_label.text = "\n".join(messages)
 	error_label.visible = not messages.is_empty()
+	_configure_panel()
 	if error_label.visible and not _reduced_motion:
 		_stop_error_motion()
 		error_label.modulate.a = 0.0
@@ -194,12 +195,25 @@ func _configure_panel() -> void:
 		minf(size.x / 390.0, size.y / 700.0) if portrait else minf(size.x / 844.0, size.y / 390.0)
 	)
 	var panel_size := Vector2(340, 514) * unit if portrait else Vector2(660, 356) * unit
+	var error_size := maxi(13, roundi(13 * unit))
+	if error_label.visible:
+		var error_height := (
+			Clean
+			. FONT
+			. get_multiline_string_size(
+				error_label.text, HORIZONTAL_ALIGNMENT_LEFT, panel_size.x - 48 * unit, error_size
+			)
+			. y
+		)
+		panel_size.y += maxf(0, error_height - 30 * unit)
+	panel_size.y = minf(panel_size.y, size.y - Clean.SPACE_32 * unit)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Clean.PAPER
 	style.set_corner_radius_all(roundi(24 * unit))
 	style.corner_detail = 20
 	style.anti_aliasing = true
 	shell.configure_panel(panel_size, style, Vector4(24, 20, 24, 20) * unit)
+	shell.content.add_theme_constant_override("separation", roundi(Clean.SPACE_8 * unit))
 	var header := title_label.get_parent() as Control
 	header.custom_minimum_size.y = 64 * unit
 	Clean.label(title_label, roundi(28 * unit))
@@ -219,11 +233,16 @@ func _configure_panel() -> void:
 func _layout_navigation() -> void:
 	if not is_node_ready():
 		return
-	Buttons.place_navigation(close_button, shell.panel, true, 0, size)
 	var header := title_label.get_parent() as Control
-	var title_shift := close_button.position.y + close_button.size.y * 0.5 - header.size.y * 0.5
-	title_label.offset_top = title_shift
-	title_label.offset_bottom = title_shift
+	var unit := minf(size.x / 390.0, size.y / 700.0)
+	var side := maxf(44 * unit, Clean.minimum_touch_size(close_button).x)
+	close_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	Buttons.apply_size(close_button, Vector2.ONE * side)
+	close_button.position = Vector2(maxf(0, header.size.x - side), 0)
+	title_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	title_label.position = Vector2.ZERO
+	title_label.size = Vector2(maxf(0, close_button.position.x - Clean.SPACE_16 * unit), side)
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 func _style_close_button() -> void:

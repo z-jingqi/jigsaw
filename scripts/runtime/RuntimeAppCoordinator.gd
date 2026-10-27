@@ -366,8 +366,17 @@ func show_settings() -> Dictionary:
 
 
 func close_modal() -> Dictionary:
+	var screen := _navigator.current_screen_view()
+	if screen != null and screen.has_method("dismiss_menu") and screen.dismiss_menu():
+		return {"ok": true}
 	if is_instance_valid(_edge_back):
 		_edge_back.cancel()
+	var motion: Dictionary = _navigator.debug_state_snapshot()
+	if (
+		_navigator.current_route() == &"themes"
+		or motion.get("transition_kind") in ["home_to_themes", "themes_to_home"]
+	):
+		return _navigator.pop()
 	var view := _navigator.current_route_view()
 	if view != null and view.has_method("needs_box_close") and view.needs_box_close():
 		view.request_close()
@@ -486,7 +495,7 @@ func _bind_home(screen: HomeScreen) -> void:
 	screen.selected_theme_changed.connect(_on_home_theme_changed)
 	screen.theme_activated.connect(_on_home_theme_activated)
 	screen.menu_requested.connect(show_settings)
-	screen.themes_requested.connect(_show_theme_library)
+	screen.all_themes_requested.connect(_show_theme_library)
 	screen.album_requested.connect(show_album)
 
 
@@ -499,8 +508,12 @@ func show_album_artwork(theme_id: String, level_id: String) -> Dictionary:
 
 
 func _show_theme_library() -> void:
-	var home := _navigator.current_screen_view() as HomeScreen
-	if home == null:
+	# A reversed opening still owns the themes stack entry until cancellation.
+	# Forward repeat intent to push(), which resumes that same live instance.
+	if (
+		not _navigator.current_screen_view() is HomeScreen
+		and _navigator.current_route() != &"themes"
+	):
 		return
 	var result := (
 		_navigator
@@ -514,7 +527,13 @@ func _show_theme_library() -> void:
 	)
 	if not bool(result.get("ok", false)):
 		return
+	if _navigator.current_route() != &"themes":
+		return
 	var library := _navigator.current_screen_view()
+	if library.has_meta("runtime_coordinator_bound"):
+		return
+	library.set_meta("runtime_coordinator_bound", true)
+	library.tree_exiting.connect(func() -> void: _theme_library_scroll = library.scroll_position())
 	library.close_requested.connect(
 		func() -> void:
 			_theme_library_scroll = library.scroll_position()
@@ -523,9 +542,13 @@ func _show_theme_library() -> void:
 	library.theme_selected.connect(
 		func(theme_id: String) -> void:
 			_theme_library_scroll = library.scroll_position()
-			var entered := show_levels(theme_id)
-			if bool(entered.get("ok", false)):
-				home.select_theme(theme_id)
+			show_levels(
+				theme_id,
+				"",
+				false,
+				library.transition_source_rect(),
+				library.transition_source_texture()
+			)
 	)
 
 

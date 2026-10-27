@@ -145,28 +145,28 @@ func _layout() -> void:
 		return
 	var portrait := size.x < size.y
 	var u := minf(size.x / 390.0, size.y / 700.0) if portrait else size.y / 390.0
-	var margin := 20.0 * u
+	var margin := Clean.SPACE_24 * u
 	var safe := Clean.safe_insets(size)
 	Buttons.place_navigation($BackButton, self)
 	$Title.position = Vector2(margin, 76 * u)
 	$Title.size = Vector2(size.x - margin * 2, 48 * u)
 	Clean.label($Title, roundi(30 * u), false)
-	$Summary.position = Vector2(margin, 130 * u)
+	$Summary.position = Vector2(margin, $Title.position.y + $Title.size.y + Clean.SPACE_8 * u)
 	$Summary.size = Vector2(size.x - margin * 2, 27 * u)
 	Clean.label($Summary, roundi(20 * u), true)
 	Buttons.place_navigation($AllButton, self, true)
 	for item in [$Title, $Summary]:
 		item.position.y += safe.y
-	var top := 178.0 * u + safe.y
+	var top: float = $Summary.position.y + $Summary.size.y + Clean.SPACE_24 * u
 	scroll.position = Vector2(margin, top)
-	scroll.size = Vector2(size.x - margin * 2, maxf(1, size.y - top - 18 * u - safe.w))
+	scroll.size = Vector2(size.x - margin * 2, maxf(1, size.y - top - Clean.SPACE_24 * u - safe.w))
 	$EmptyLabel.position = scroll.position
 	$EmptyLabel.size = scroll.size
 	$EmptyLabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	Clean.label($EmptyLabel, roundi(18 * u), true)
 	$EmptyLabel.add_theme_font_size_override("font_size", roundi(18 * u))
 	var columns := 2 if portrait else 4
-	var gap := Vector2(16, 18) * u
+	var gap := Vector2.ONE * Clean.SPACE_16 * u
 	if not portrait:
 		var fitting_width := scroll.size.y / (1.0 / 0.75 + 0.36)
 		columns = maxi(columns, ceili((scroll.size.x + gap.x) / (fitting_width + gap.x)))

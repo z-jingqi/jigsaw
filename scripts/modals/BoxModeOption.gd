@@ -66,3 +66,14 @@ func _refresh() -> void:
 		]
 	)
 	tooltip_text = ""
+
+
+func icon_visible_rect() -> Rect2:
+	if _icon.texture == null:
+		return Rect2(_icon.position, _icon.size)
+	var image := _icon.texture.get_image()
+	if image == null or image.is_empty():
+		return Rect2(_icon.position, _icon.size)
+	var used := Rect2(image.get_used_rect())
+	var scale := _icon.size / Vector2(image.get_size())
+	return Rect2(_icon.position + used.position * scale, used.size * scale)

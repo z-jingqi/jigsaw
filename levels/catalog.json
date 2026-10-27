@@ -88,7 +88,8 @@
 					"sort_order": 9,
 					"path": "res://levels/topic_01/shanhai_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_01-shanhai.webp"
 		},
 		{
 			"id": "topic_02",
@@ -162,7 +163,8 @@
 					"sort_order": 9,
 					"path": "res://levels/topic_02/greek_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_02-greek.webp"
 		},
 		{
 			"id": "topic_03",
@@ -236,7 +238,8 @@
 					"sort_order": 9,
 					"path": "res://levels/topic_03/cat_v2_09/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_03-cat.webp"
 		},
 		{
 			"id": "topic_04",
@@ -310,7 +313,8 @@
 					"sort_order": 9,
 					"path": "res://levels/topic_04/dog_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_04-dog.webp"
 		},
 		{
 			"id": "theme_flowers",
@@ -375,7 +379,8 @@
 					"sort_order": 9,
 					"path": "res://levels/theme_flowers/flowers_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_05-flower.webp"
 		},
 		{
 			"id": "theme_ocean",
@@ -440,7 +445,8 @@
 					"sort_order": 9,
 					"path": "res://levels/theme_ocean/ocean_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_06-shell.webp"
 		},
 		{
 			"id": "theme_birds",
@@ -505,7 +511,8 @@
 					"sort_order": 9,
 					"path": "res://levels/theme_birds/birds_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_07-bird.webp"
 		},
 		{
 			"id": "theme_forest",
@@ -570,7 +577,8 @@
 					"sort_order": 9,
 					"path": "res://levels/theme_forest/forest_v2_10/level.json"
 				}
-			]
+			],
+			"theme_subject": "res://assets/ui/themes/subject/topic_08-tree.webp"
 		}
 	],
 	"content_revision": "2026-10-artwork-4-easier"

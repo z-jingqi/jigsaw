@@ -1,6 +1,6 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
-@export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album")
+@export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album", "more")
 var symbol := "none"
 @export var primary := false
 @export var icon_only := false
@@ -50,6 +50,9 @@ func _draw() -> void:
 				w,
 				true
 			)
+		"more":
+			for offset in [-0.8, 0.0, 0.8]:
+				draw_circle(c + Vector2(offset * r, 0), w * 0.9, ink, true, -1.0, true)
 		"close":
 			draw_line(c - Vector2.ONE * r, c + Vector2.ONE * r, ink, w, true)
 			draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, w, true)

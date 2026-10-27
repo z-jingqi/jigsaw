@@ -2,6 +2,7 @@ extends RuntimeModeSelectModal
 signal box_closing
 signal box_returned
 ## Shared theme packaging for every playable level, with reversible source transitions.
+const OpticalLayout := preload("res://scripts/modals/BoxModeOpticalLayout.gd")
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
@@ -245,27 +246,12 @@ func _apply_layout() -> void:
 	$SafeArea/Content/Header.z_index = 2
 	title_label.hide()
 	preview.hide()
-	var u := Clean.canvas_scale(content.size, get_window())
-	var s := content.size
-	var width := minf(s.x - 32 * u, (s.y - 320 * u) * 0.75)
-	width = maxf(120 * u, width)
-	_destination = Rect2(Vector2((s.x - width) * 0.5, 78 * u), Vector2(width, width / 0.75))
+	_destination = OpticalLayout.apply(_box, options, start_button, content.size)
 	if _phase not in ["entering", "closing"]:
 		_box.position = _destination.position
 		_box.size = _destination.size
 	$SafeArea/Content/ModeHeading.hide()
-	options.position = Vector2(24 * u, _destination.end.y + 12 * u)
-	options.size = Vector2(s.x - 48 * u, 60 * u)
-	var count := options.get_child_count()
-	for index in count:
-		var option: Control = options.get_child(index)
-		option.position = Vector2(float(index) * options.size.x / count, 0)
-		option.custom_minimum_size = Vector2(44 * u, 60 * u)
-		option.size = Vector2(options.size.x / count - 6 * u, 60 * u)
-	_info.position = Vector2(24 * u, options.position.y + 68 * u)
-	_info.size = Vector2(s.x - 48 * u, 26 * u)
-	Clean.label(_info, roundi(13 * u), true)
-	start_button.position.y = options.position.y + options.size.y + 20 * u
+	_info.hide()
 	Layout.layout_start_content(self)
 
 

@@ -8,7 +8,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1")
-metadata/dismiss_down = true
+metadata/dismiss_down = false
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
 anchor_right = 1.0
@@ -18,7 +18,7 @@ mouse_filter = 2
 [node name="CloseButton" type="Button" parent="."]
 layout_mode = 0
 script = ExtResource("2")
-symbol = "back"
+symbol = "close"
 icon_only = true
 [node name="Title" type="Label" parent="."]
 layout_mode = 0

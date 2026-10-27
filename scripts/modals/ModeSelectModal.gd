@@ -7,7 +7,6 @@ signal selection_changed(mode: StringName, start_policy: StringName)
 
 const ModeCard := preload("res://scripts/modals/ModeSelectCard.gd")
 const Layout := preload("res://scripts/modals/ModeSelectLayout.gd")
-const Glyphs := preload("res://scripts/ui/foundation/ModeCompletionGlyphs.gd")
 const DebugPreview := preload("res://scripts/modals/ModeSelectPreview.gd")
 
 @onready var background: ColorRect = $Background
@@ -17,7 +16,6 @@ const DebugPreview := preload("res://scripts/modals/ModeSelectPreview.gd")
 @onready var preview: TextureRect = $SafeArea/Content/Preview
 @onready var options: Control = $SafeArea/Content/Options
 @onready var start_button: ActionButton = $SafeArea/Content/StartButton
-@onready var start_icon: TextureRect = $SafeArea/Content/StartButton/ModeIcon
 @onready var start_label: Label = $SafeArea/Content/StartButton/Label
 
 var _view_model: Variant
@@ -174,8 +172,6 @@ func _refresh_selection(user_change := false) -> void:
 	var action_text := str(_read_from(_selected_option, "action_label", ""))
 	var status := str(_read_from(_selected_option, "status", ""))
 	start_label.text = GameStrings.ui_text("start_short")
-	start_icon.texture = Glyphs.COMPLETE.get(selected_mode)
-	start_icon.visible = not selected_mode.is_empty() and start_icon.texture != null
 	$SafeArea/Content/ModeHeading.visible = options.get_child_count() == 0
 	start_label.add_theme_color_override(
 		"font_color", CleanTheme.MUTED if start_button.disabled else CleanTheme.PAPER

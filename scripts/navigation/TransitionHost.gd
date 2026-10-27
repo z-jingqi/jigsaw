@@ -6,6 +6,8 @@ signal motion_started(kind: StringName)
 
 const CardMotion := preload("res://scripts/navigation/CardPageMotion.gd")
 const GameplayMotion := preload("res://scripts/navigation/GameplayPageMotion.gd")
+const SheetCloseOverlay := preload("res://scripts/navigation/ThemeLibraryCloseOverlay.gd")
+var _sheet_close := SheetCloseOverlay.new()
 const ThemeLibraryMotion := preload("res://scripts/navigation/ThemeLibraryMotion.gd")
 const NORMAL_DURATION := 0.40
 const HOME_TO_LEVELS_DURATION := 0.56
@@ -183,6 +185,13 @@ func interrupt_at_current_pose() -> void:
 
 
 func _configure_continuation(duration: float) -> bool:
+	if (
+		_active_kind in [&"home_to_themes", &"themes_to_home"]
+		and is_instance_valid(_source_view)
+		and is_instance_valid(_target_view)
+	):
+		_configure_theme_sheet(duration, true)
+		return true
 	if not is_instance_valid(_target_view):
 		return false
 	if not _target_carried:
@@ -294,6 +303,7 @@ func _settle(sequence: int, committed: bool, settle_custom := true) -> void:
 		and _target_view.has_method("settle_box_transition")
 	):
 		_target_view.settle_box_transition(committed)
+	_sheet_close.clear()
 	_restore_view_states()
 	_motion_phase = &"idle"
 	_gesture_progress = 0.0
@@ -314,9 +324,7 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 			return true
 	var reduced := bool(_active_context.get("reduced_motion", false))
 	if kind in [&"home_to_themes", &"themes_to_home"] and is_instance_valid(_source_view):
-		ThemeLibraryMotion.configure(
-			_active_tween, _source_view, _target_view, _active_context, duration, reduced
-		)
+		_configure_theme_sheet(duration, false)
 		return true
 	if reduced:
 		if kind == &"gameplay_page":
@@ -352,6 +360,24 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 	if is_instance_valid(_source_view):
 		_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
 	return true
+
+
+func _configure_theme_sheet(duration: float, continuation: bool) -> void:
+	var closing: bool = _active_context.get("reason") == "pop"
+	var sheet := _source_view if closing else _target_view
+	var state := _source_state if closing else _target_state
+	_sheet_close.install(self, sheet, state.get("position", Vector2.ZERO))
+	ThemeLibraryMotion.configure(
+		_active_tween,
+		_source_view,
+		_target_view,
+		_active_context,
+		duration,
+		bool(_active_context.get("reduced_motion", false)),
+		continuation,
+		_source_state.get("position", Vector2.ZERO),
+		_target_state.get("position", Vector2.ZERO)
+	)
 
 
 func _capture_view_states() -> void:

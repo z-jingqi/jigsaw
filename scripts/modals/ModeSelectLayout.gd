@@ -61,11 +61,18 @@ static func apply(host: Control) -> void:
 		options.get_child(index).set_layout_origin(origin)
 	var start: Button = content.get_node("StartButton")
 	_place(
-		start, Vector2(controls_left, available.y - 80 * unit), Vector2(controls_width, 54 * unit)
+		start,
+		Vector2(controls_left, available.y - 80 * unit),
+		Vector2(
+			controls_width, maxf(52 * Clean.canvas_scale(available, host.get_window()), 54 * unit)
+		)
 	)
 	Clean.button(start, true)
 	var start_label: Label = start.get_node("Label")
-	Clean.label(start_label, int(20 * unit))
+	Clean.label(
+		start_label,
+		maxi(int(20 * unit), ceili(18 * Clean.canvas_scale(available, host.get_window())))
+	)
 	start_label.add_theme_color_override(
 		"font_color", Clean.MUTED if start.disabled else Clean.PAPER
 	)
@@ -76,19 +83,10 @@ static func apply(host: Control) -> void:
 static func layout_start_content(host: Control) -> void:
 	var start: Button = host.get_node("SafeArea/Content/StartButton")
 	var label: Label = start.get_node("Label")
-	var icon: TextureRect = start.get_node("ModeIcon")
-	var unit := Clean.minimum_touch_size(start).y / 44.0
-	var font := label.get_theme_font("font")
-	var font_size := label.get_theme_font_size("font_size")
-	var text_width := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var icon_side := 26 * unit if icon.visible else 0.0
-	var gap := 10 * unit if icon.visible else 0.0
-	var left := (start.size.x - text_width - gap - icon_side) * 0.5
 	label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	label.position = Vector2(left, 0)
-	label.size = Vector2(text_width, start.size.y)
-	icon.position = Vector2(left + text_width + gap, (start.size.y - icon_side) * 0.5)
-	icon.size = Vector2.ONE * icon_side
+	label.position = Vector2.ZERO
+	label.size = start.size
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 static func _place(node: Control, position: Vector2, size: Vector2) -> void:

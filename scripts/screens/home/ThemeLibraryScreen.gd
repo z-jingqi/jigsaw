@@ -3,12 +3,13 @@ signal close_requested
 signal theme_selected(theme_id: String)
 
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
-const CoverShader := preload("res://shaders/ui/theme_cover.gdshader")
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 var _themes: Array = []
 const Pager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
-const PAGE_SIZE := 4
+@export var close_as_sheet := true
+var _source_rect := Rect2()
+var _source_texture: Texture2D
 var _page := 0
 var _visual_page := 0.0
 const Gesture := preload("res://scripts/ui/navigation/PagingGesture.gd")
@@ -25,7 +26,7 @@ var _dragging := false
 func _ready() -> void:
 	$Title.text = GameStrings.ui_text("all_themes")
 	$EmptyState.text = GameStrings.ui_text("no_topics")
-	$CloseButton.accessibility_name = GameStrings.ui_text("back")
+	$CloseButton.accessibility_name = GameStrings.ui_text("close_themes")
 	$CloseButton.pressed.connect(close_requested.emit)
 	_pager = Pager.new()
 	_pager.name = "Pager"
@@ -66,6 +67,8 @@ func navigation_exit(_context: Dictionary) -> void:
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
+	if _pager != null:
+		_pager.set_reduced_motion(enabled)
 	if enabled:
 		_freeze()
 		_apply_visual_page(float(_page))
@@ -76,11 +79,26 @@ func scroll_position() -> int:
 
 
 func active_motion_count() -> int:
-	return int(_motion != null and _motion.is_valid() and _motion.is_running())
+	return (
+		int(_motion != null and _motion.is_valid() and _motion.is_running())
+		+ (_pager.active_motion_count() if _pager != null else 0)
+	)
+
+
+func _page_size() -> int:
+	return 4
+
+
+func transition_source_rect() -> Rect2:
+	return _source_rect
+
+
+func transition_source_texture() -> Texture2D:
+	return _source_texture
 
 
 func _page_count() -> int:
-	return ceili(float(_themes.size()) / PAGE_SIZE)
+	return ceili(float(_themes.size()) / _page_size())
 
 
 func _build() -> void:
@@ -126,13 +144,7 @@ func _build() -> void:
 		cover.texture = model.cover_texture
 		cover.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if cover.texture != null:
-			var mat := ShaderMaterial.new()
-			mat.shader = CoverShader
-			mat.set_shader_parameter(
-				"texture_aspect", cover.texture.get_size().x / cover.texture.get_size().y
-			)
-			cover.material = mat
+		cover.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		if not model.playable:
 			cover.modulate = Color(1, 1, 1, 0.68)
 		tile.add_child(cover)
@@ -150,11 +162,13 @@ func _build() -> void:
 		tile.pressed.connect(
 			func() -> void:
 				if _enabled and not _dragging:
+					_source_rect = cover.get_global_rect()
+					_source_texture = cover.texture
 					_freeze()
-					_page = index / PAGE_SIZE
+					_page = index / _page_size()
 					theme_selected.emit(str(model.theme_id))
 		)
-		$Pages.get_child(index / PAGE_SIZE).add_child(tile)
+		$Pages.get_child(index / _page_size()).add_child(tile)
 
 
 func _layout() -> void:
@@ -168,10 +182,11 @@ func _layout() -> void:
 	var width := minf(usable_width - 48.0 * u, 540.0 * u)
 	var left := safe.x + (usable_width - width) * 0.5
 	var top := safe.y + maxf(93.0 * u, Buttons.header_center_y(size) + 48.0 * u)
-	$Title.position = Vector2(left, top)
-	$Title.size = Vector2(width, 46 * u)
-	Clean.label($Title, roundi(maxf(30.0 * u, 24.0 * canvas)))
-	var pages_top := top + 72.0 * u
+	$Title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	$Title.position = Vector2(left + $CloseButton.size.x, $CloseButton.position.y)
+	$Title.size = Vector2(width - $CloseButton.size.x, $CloseButton.size.y)
+	Clean.label($Title, roundi(maxf(26.0 * u, 26.0 * canvas)))
+	var pages_top := top
 	var pager_height := 44.0 * canvas
 	_pager.position = Vector2(left, size.y - safe.w - pager_height - 16.0 * u)
 	_pager.size = Vector2(width, pager_height)
@@ -182,23 +197,31 @@ func _layout() -> void:
 	$EmptyState.position = Vector2(left, pages_top + 80.0 * u)
 	$EmptyState.size = Vector2(width, 100.0 * u)
 	Clean.label($EmptyState, roundi(maxf(18.0 * u, 14.0 * canvas)), true)
-	var gap := 14.0 * u
-	var row_gap := 18.0 * u
-	var cell := Vector2((width - gap) * 0.5, ($Pages.size.y - row_gap) * 0.5)
+	var gap := 16.0 * u
+	var row_gap := 16.0 * u
+	var columns := 1 if _page_size() == 1 else 2
+	var rows := ceili(float(_page_size()) / columns)
+	var cell := Vector2(
+		(width - gap * (columns - 1)) / columns, ($Pages.size.y - row_gap * (rows - 1)) / rows
+	)
 	for page_index in $Pages.get_child_count():
 		var layer := $Pages.get_child(page_index) as Control
 		layer.size = $Pages.size
 		for index in layer.get_child_count():
 			var tile := layer.get_child(index) as Button
 			_layout_tile(tile, cell, u, canvas)
-			tile.position = Vector2((index % 2) * (cell.x + gap), (index / 2) * (cell.y + row_gap))
+			tile.position = Vector2(
+				(index % columns) * (cell.x + gap), (index / columns) * (cell.y + row_gap)
+			)
 	_apply_visual_page(_visual_page)
 
 
 func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 	var title_height := maxf(28.0 * u, 24.0 * canvas)
 	var status_height := maxf(23.0 * u, 20.0 * canvas)
-	var caption_height := title_height + status_height + 26.0 * u
+	var caption_height := (
+		title_height + (status_height if tile.get_node("Status").visible else 0.0) + 32.0 * u
+	)
 	var image_height := maxf(1, minf((cell.x - 20.0 * u) * 1.3, cell.y - caption_height))
 	var image_width := cell.x - 20.0 * u
 	tile.custom_minimum_size = Vector2.ZERO
@@ -208,20 +231,20 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 		var ratio := cover.texture.get_size().x / cover.texture.get_size().y
 		image_width = minf(image_width, image_height * ratio)
 		image_height = image_width / ratio
-	cover.position = Vector2((cell.x - image_width) * 0.5, 10.0 * u)
+	cover.position = Vector2((cell.x - image_width) * 0.5, 8.0 * u)
 	cover.size = Vector2(image_width, image_height)
 	if cover.material != null:
 		cover.material.set_shader_parameter("aspect", image_width / image_height)
 	var title := tile.get_node("Title") as Label
-	title.position = Vector2(12.0 * u, image_height + 15.0 * u)
-	title.size = Vector2(cell.x - 24.0 * u, title_height)
+	title.position = Vector2(16.0 * u, image_height + 16.0 * u)
+	title.size = Vector2(cell.x - 32.0 * u, title_height)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Clean.label(title, roundi(maxf(18.0 * u, 14.0 * canvas)))
 	TitleLayout.fit(title, title.size, roundi(maxf(18.0 * u, 14.0 * canvas)))
 	var status := tile.get_node("Status") as Label
-	status.position = Vector2(12.0 * u, title.position.y + title_height)
-	status.size = Vector2(cell.x - 24.0 * u, status_height)
+	status.position = Vector2(16.0 * u, title.position.y + title_height)
+	status.size = Vector2(cell.x - 32.0 * u, status_height)
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
 
@@ -295,6 +318,19 @@ func _on_resized() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if (
+		close_as_sheet
+		and _enabled
+		and is_visible_in_tree()
+		and event is InputEventKey
+		and event.keycode == KEY_BACK
+		and event.pressed
+		and not event.echo
+		and Arena._current(get_viewport().get_instance_id()).is_empty()
+	):
+		close_requested.emit()
+		get_viewport().set_input_as_handled()
+		return
 	if Arena.block_secondary(get_viewport(), event):
 		get_viewport().set_input_as_handled()
 		return
@@ -386,6 +422,14 @@ func _cancel_drag() -> void:
 func _notification(what: int) -> void:
 	if not is_node_ready():
 		return
+	if (
+		what == NOTIFICATION_WM_GO_BACK_REQUEST
+		and close_as_sheet
+		and _enabled
+		and is_visible_in_tree()
+		and Arena._current(get_viewport().get_instance_id()).is_empty()
+	):
+		close_requested.emit()
 	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
 		_freeze()
 	elif (

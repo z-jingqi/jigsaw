@@ -90,6 +90,13 @@ func set_root(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 
 func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	if (
+		route == &"themes"
+		and _transition_host.active_count() > 0
+		and _transition_host.snapshot().get("transition_kind") == "themes_to_home"
+	):
+		_transition_host.reverse_active_to_source()
+		return _success(route)
 	var current := current_screen_entry()
 	if _same_destination(current, route, payload):
 		_transition_host.resume_active_to_target()
@@ -228,6 +235,9 @@ func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictiona
 func pop() -> Dictionary:
 	if _transition_host.active_count() > 0:
 		var motion: Dictionary = _transition_host.snapshot()
+		if motion.get("transition_kind") == "themes_to_home":
+			_transition_host.resume_active_to_target()
+			return _success(current_route())
 		if motion.get("reason") == "push" and _modal_entry.is_empty():
 			_transition_host.reverse_active_to_source()
 			return _success(current_route())
@@ -406,6 +416,8 @@ func wait_until_idle(canceled: Signal = Signal()) -> bool:
 
 
 func edge_back_context() -> Dictionary:
+	if current_route() == &"themes":
+		return {}
 	if is_input_locked():
 		return {}
 	var behind := current_screen_view() if not _modal_entry.is_empty() else previous_screen_view()

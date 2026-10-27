@@ -4,6 +4,7 @@ extends ActionButton
 
 @export_enum("back", "hint", "left", "up", "down", "right") var symbol := "back"
 
+const Chevron := preload("res://scripts/ui/foundation/ChevronGeometry.gd")
 const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
 
@@ -52,25 +53,10 @@ func _draw() -> void:
 
 
 func _draw_direction(center: Vector2, unit: float, stroke: float, ink: Color) -> void:
-	var angle := 0.0
-	match symbol:
-		"left":
-			angle = -PI * 0.5
-		"down":
-			angle = PI
-		"right":
-			angle = PI * 0.5
-	var points := PackedVector2Array()
-	for point in [Vector2(-23, -5), Vector2(0, -28), Vector2(23, -5)]:
-		points.append(center + point.rotated(angle) * unit)
-	draw_polyline(points, ink, stroke, true)
-	draw_line(
-		center + Vector2(0, -27).rotated(angle) * unit,
-		center + Vector2(0, 28).rotated(angle) * unit,
-		ink,
-		stroke,
-		true,
+	var angle: float = {"left": 0.0, "up": PI * 0.5, "right": PI, "down": -PI * 0.5}.get(
+		symbol, 0.0
 	)
+	draw_polyline(Chevron.points(center, 27 * unit, angle), ink, stroke, true)
 
 
 func _draw_hint(center: Vector2, unit: float, stroke: float, ink: Color) -> void:

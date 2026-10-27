@@ -38,6 +38,13 @@ func available_modes(level: Dictionary) -> Array[String]:
 	return ModeAvailability.from_config(_repository, _repository.load_level_config(level))
 
 
+func topic_display_texture(topic: Dictionary) -> Texture2D:
+	var path := str(topic.get("theme_subject", ""))
+	if not path.is_empty() and ResourceLoader.exists(path):
+		return _repository.cached_texture(path)
+	return topic_cover(topic)
+
+
 func topic_cover(topic: Dictionary) -> Texture2D:
 	return _repository.topic_cover_texture(topic)
 

@@ -191,11 +191,11 @@ func _apply_layout() -> void:
 	var content: Control = $SafeArea/Content
 	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
 	var top := 80.0 * native
-	var footer := 62.0 * native
+	var footer := (44.0 + Clean.SPACE_16 * 2.0) * native
 	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	scroll.position = Vector2(0, top)
 	scroll.size = Vector2(content.size.x, maxf(100 * native, content.size.y - top - footer))
-	_pager.position = Vector2(0, content.size.y - 54 * native)
+	_pager.position = Vector2(0, content.size.y - (44.0 + Clean.SPACE_16) * native)
 	_pager.size = Vector2(content.size.x, 44 * native)
 	if _view_model == null:
 		return

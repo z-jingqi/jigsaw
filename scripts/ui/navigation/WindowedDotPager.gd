@@ -30,29 +30,62 @@ class PageDot:
 
 	func _draw() -> void:
 		var ink := Color("AFB4A8").lerp(Color("272925"), weight)
-		var radius := lerpf(2.5, 3.5, weight) * dot_unit
-		draw_circle(size * 0.5, radius, ink, true, -1.0, true)
+		var center := size * 0.5
+		var radius := 2.5 * (1.0 - weight) * dot_unit
+		var dot_ink := ink
+		dot_ink.a = 1.0 - weight
+		draw_circle(center, radius, dot_ink, true, -1.0, true)
+		if weight > 0.0:
+			var paw_ink := ink
+			paw_ink.a = weight
+			_draw_paw(center, dot_unit * lerpf(0.85, 1.0, weight), paw_ink)
 		if has_focus():
-			draw_arc(size * 0.5, radius + 3.0 * dot_unit, 0, TAU, 32, ink, dot_unit, true)
+			var focus_radius := lerpf(5.5, 10.0, weight) * dot_unit
+			draw_arc(center, focus_radius, 0, TAU, 48, ink, dot_unit, true)
+
+	func _draw_paw(center: Vector2, unit: float, ink: Color) -> void:
+		# Optical small-size version: retain native-pixel gaps between all five pads.
+		_draw_toe(center, Vector2(-5.0, -1.9), -0.35, unit, ink)
+		_draw_toe(center, Vector2(-2.1, -4.5), -0.12, unit, ink)
+		_draw_toe(center, Vector2(2.1, -4.5), 0.12, unit, ink)
+		_draw_toe(center, Vector2(5.0, -1.9), 0.35, unit, ink)
+		var pad := PackedVector2Array()
+		var anchors := [Vector2(0, 0.8), Vector2(3.6, 4.0), Vector2(0, 4.6), Vector2(-3.6, 4.0)]
+		var outgoing := [
+			Vector2(1.7, 0.8), Vector2(3.5, 5.8), Vector2(-1.6, 4.6), Vector2(-3.7, 2.2)
+		]
+		var incoming := [
+			Vector2(-1.7, 0.8), Vector2(3.7, 2.2), Vector2(1.6, 4.6), Vector2(-3.5, 5.8)
+		]
+		for segment in 4:
+			var next := (segment + 1) % 4
+			for sample in 12:
+				var point: Vector2 = anchors[segment].bezier_interpolate(
+					outgoing[segment], incoming[next], anchors[next], float(sample) / 12.0
+				)
+				pad.append(center + point * unit)
+		draw_colored_polygon(pad, ink)
+		pad.append(pad[0])
+		draw_polyline(pad, ink, 0.35 * unit, true)
+
+	func _draw_toe(center: Vector2, offset: Vector2, angle: float, unit: float, ink: Color) -> void:
+		draw_set_transform(center + offset * unit, angle, Vector2(1.05, 1.25) * unit)
+		draw_circle(Vector2.ZERO, 1.0, ink, true, -1.0, true)
+		draw_set_transform(Vector2.ZERO)
 
 
 class ArrowButton:
 	extends Button
+	const Chevron := preload("res://scripts/ui/foundation/ChevronGeometry.gd")
 	var direction := 1.0
 	var unit := 1.0
 
 	func _draw() -> void:
-		var c := size * 0.5
-		var r := 7.0 * unit
-		var tip := c + Vector2(r * 0.5 * direction, 0)
-		var ink := Color("272925")
-		var stroke := (2.2 if has_focus() else 1.6) * unit
+		var angle := 0.0 if direction < 0.0 else PI
 		draw_polyline(
-			PackedVector2Array(
-				[tip + Vector2(-r * direction, -r), tip, tip + Vector2(-r * direction, r)]
-			),
-			ink,
-			stroke,
+			Chevron.points(size * 0.5, 7.0 * unit, angle),
+			Color("272925"),
+			(2.2 if has_focus() else 1.6) * unit,
 			true
 		)
 
