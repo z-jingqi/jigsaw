@@ -1,6 +1,10 @@
 extends RefCounted
 ## Prepares a runtime board in small batches before enabling gameplay input.
 
+const FrameGate := preload("res://scripts/runtime/CancellableFrame.gd")
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
+const CurvePreparation := preload("res://scripts/gameplay/board/PieceCurvePreparation.gd")
+
 const CREATION_BUDGET_USEC := 7000
 
 var host: Node2D
@@ -18,6 +22,9 @@ func configure(options: Dictionary) -> bool:
 	host.source_image = options.image
 	host.source_size = options.source_size
 	host.piece_visual_style = host._piece_visual_style()
+	var curve_rendering := CurvedEdge.enabled_for_mode(host.current_mode)
+	host.piece_visual_style["curve_rendering"] = curve_rendering
+	host.piece_visual_style["cardboard"] = host.current_mode == "polygon" or curve_rendering
 	host.hud_top_reserved_height = options.top
 	host.hud_bottom_reserved_height = maxf(0.0, options.bottom)
 	host.tray_bounds_override = options.tray
@@ -37,7 +44,7 @@ func configure(options: Dictionary) -> bool:
 func build_progressive() -> bool:
 	var tree: SceneTree = host.get_tree()
 	var generation: int = host.state_controller.generation
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	if host.current_mode == "swap":
@@ -49,25 +56,41 @@ func build_progressive() -> bool:
 	# Piece data and creation share a budget, rather than forcing an idle frame
 	# between cheap stages. Keep layout and saved-state restoration separate.
 	if Time.get_ticks_usec() - started >= CREATION_BUDGET_USEC:
-		await tree.process_frame
+		await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 		if not _current(generation):
 			return false
+		started = Time.get_ticks_usec()
+	var curve_pieces: Array = prepared.pieces if host.current_mode in ["polygon", "knob"] else []
+	if not curve_pieces.is_empty():
+		var ready := await CurvePreparation.prepare_many(
+			curve_pieces,
+			tree,
+			func() -> bool: return _current(generation),
+			host.state_controller.pending_canceled
+		)
+		if not ready or not _current(generation):
+			return false
+		# Never construct mixed old/new faces if preparation or publication failed.
+		for piece in curve_pieces:
+			if not CurvedEdge.is_prepared(piece["polygon"]):
+				push_error("Curved piece field was not prepared; aborting board construction.")
+				return false
 		started = Time.get_ticks_usec()
 	for piece in prepared.pieces:
 		host.session_builder.create_group(piece, prepared.seed_ids.has(str(piece.get("id", ""))))
 		host.groups.back().node.modulate.a = 0.0
 		if Time.get_ticks_usec() - started >= CREATION_BUDGET_USEC:
-			await tree.process_frame
+			await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 			if not _current(generation):
 				return false
 			started = Time.get_ticks_usec()
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	host.session_builder.finish_pieces()
 	# Let layout settle before the coordinator restores saved groups and tray order.
 	# Both stages rebuild visual geometry and must not occupy the same frame.
-	await tree.process_frame
+	await FrameGate.wait(tree.process_frame, host.state_controller.pending_canceled)
 	if not _current(generation):
 		return false
 	for group in host.groups:

@@ -1,12 +1,11 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/screens/GameplayScreen.gd" id="1_screen"]
 [ext_resource type="Script" path="res://scripts/screens/gameplay/GameplayHudButton.gd" id="2_hud_button"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/TrayView.tscn" id="3_tray"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/SwapActionBar.tscn" id="4_swap"]
-[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="5_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_heading_font.tres" id="5_font"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="6_cloud"]
-[ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="7_background"]
 
 [node name="GameplayScreen" type="Control"]
 layout_mode = 3
@@ -18,7 +17,7 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("1_screen")
 
-[node name="Background" type="TextureRect" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 z_index = -2
 layout_mode = 1
 anchors_preset = 15
@@ -27,8 +26,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("7_background")
-expand_mode = 1
+color = Color(0.980392, 0.968627, 0.937255, 1)
 
 [node name="BoardHost" type="CanvasGroup" parent="."]
 z_index = -1
@@ -47,7 +45,7 @@ offset_left = 68.0
 offset_top = 70.0
 offset_right = 216.0
 offset_bottom = 218.0
-focus_mode = 0
+focus_mode = 2
 mouse_default_cursor_shape = 2
 script = ExtResource("2_hud_button")
 kind = 2
@@ -60,7 +58,7 @@ offset_left = 253.0
 offset_top = 70.0
 offset_right = 953.0
 offset_bottom = 218.0
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.152941, 0.160784, 0.145098, 1)
 theme_override_fonts/font = ExtResource("5_font")
 theme_override_font_sizes/font_size = 74
 horizontal_alignment = 1
@@ -90,7 +88,7 @@ offset_left = 990.0
 offset_top = 70.0
 offset_right = 1138.0
 offset_bottom = 218.0
-focus_mode = 0
+focus_mode = 2
 mouse_default_cursor_shape = 2
 script = ExtResource("2_hud_button")
 kind = 2
@@ -111,3 +109,20 @@ layout_mode = 1
 
 [node name="SwapActionBar" parent="BottomHost" instance=ExtResource("4_swap")]
 layout_mode = 1
+
+[node name="LoadingLabel" type="Label" parent="."]
+visible = false
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.38
+anchor_right = 0.5
+anchor_bottom = 0.38
+offset_left = -200.0
+offset_top = -30.0
+offset_right = 200.0
+offset_bottom = 30.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.40, 0.40, 0.38, 1)
+theme_override_font_sizes/font_size = 40
+horizontal_alignment = 1
+vertical_alignment = 1

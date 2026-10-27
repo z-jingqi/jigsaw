@@ -19,6 +19,10 @@ var _screen_stack: Array[Dictionary] = []
 var _modal_entry: Dictionary = {}
 var _active_transaction: Variant
 var _reduced_motion := false
+var _handoff_in_progress := false
+var _pending_unlock := false
+var _preparation_lock_active := false
+var _discarding_unavailable_routes := false
 
 @onready var _screen_host: Control = get_node(screen_host_path) as Control
 @onready var _modal_host: Node = get_node(modal_host_path)
@@ -44,7 +48,10 @@ func route_contracts() -> Array[StringName]:
 
 
 func is_input_locked() -> bool:
-	return is_instance_valid(_transition_host) and _transition_host.active_count() > 0
+	return (
+		is_instance_valid(_transition_host)
+		and _transition_host.snapshot().get("motion_phase") == "preparing"
+	)
 
 
 func set_reduced_motion(enabled: bool) -> void:
@@ -84,6 +91,17 @@ func set_root(route: StringName, payload: Dictionary = {}) -> Dictionary:
 
 
 func push(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	if (
+		route == &"themes"
+		and _transition_host.active_count() > 0
+		and _transition_host.snapshot().get("transition_kind") == "themes_to_home"
+	):
+		_transition_host.reverse_active_to_source()
+		return _success(route)
+	var current := current_screen_entry()
+	if _same_destination(current, route, payload):
+		_transition_host.resume_active_to_target()
+		return _success(route)
 	var preparation := _prepare_navigation(false)
 	if not bool(preparation.get("ok", false)):
 		return preparation
@@ -148,7 +166,7 @@ func push_from_modal(
 	route: StringName, payload: Dictionary = {}, prepared_view: Control = null
 ) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return push(route, payload)
 	var built := _build_entry(route, payload, prepared_view)
@@ -180,7 +198,7 @@ func push_from_modal(
 
 func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return replace(route, payload)
 	var built := _build_entry(route, payload)
@@ -217,7 +235,14 @@ func replace_from_modal(route: StringName, payload: Dictionary = {}) -> Dictiona
 
 func pop() -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		var motion: Dictionary = _transition_host.snapshot()
+		if motion.get("transition_kind") == "themes_to_home":
+			_transition_host.resume_active_to_target()
+			return _success(current_route())
+		if motion.get("reason") == "push" and _modal_entry.is_empty():
+			_transition_host.reverse_active_to_source()
+			return _success(current_route())
+		_interrupt_for_navigation()
 	if not _modal_entry.is_empty():
 		return close_modal({"action": &"dismiss", "payload": {}})
 	if _screen_stack.size() < 2:
@@ -249,6 +274,8 @@ func pop() -> Dictionary:
 
 
 func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
+	if _same_destination(_modal_entry, route, payload):
+		return _success(route)
 	var preparation := _prepare_navigation(false)
 	if not bool(preparation.get("ok", false)):
 		return preparation
@@ -274,13 +301,18 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 			_free_entry(entry)
 			_set_entry_active(current_screen_entry(), true)
 	)
-	_begin_transition(transaction, &"modal", "show_modal")
+	var animated_modal: Control = (
+		entry.view
+		if entry.view.has_method("needs_box_close") and entry.view.needs_box_close()
+		else null
+	)
+	_begin_transition(transaction, &"modal", "show_modal", null, animated_modal)
 	return _success(route)
 
 
 func pop_from_modal() -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return pop()
 	if _screen_stack.size() < 2:
@@ -317,7 +349,7 @@ func pop_from_modal() -> Dictionary:
 
 func close_modal(result: Dictionary = {}) -> Dictionary:
 	if _transition_host.active_count() > 0:
-		_transition_host.finish_active_to_target()
+		_interrupt_for_navigation()
 	if _modal_entry.is_empty():
 		return _failure(&"invalid_payload", {"reason": "missing_modal"})
 	var normalized_result := _normalize_modal_result(result)
@@ -347,11 +379,80 @@ func cancel_active_transition() -> Dictionary:
 	return {"ok": true, "cancelled": true, "state": debug_state_snapshot()}
 
 
+func interrupt_active_transition() -> Dictionary:
+	if _transition_host.active_count() == 0:
+		return {"ok": true, "interrupted": false}
+	_interrupt_for_navigation()
+	return {"ok": true, "interrupted": true, "state": debug_state_snapshot()}
+
+
 func finish_active_transition() -> Dictionary:
 	if _transition_host.active_count() == 0:
 		return {"ok": true, "finished": false, "state": debug_state_snapshot()}
 	_transition_host.finish_active_to_target()
 	return {"ok": true, "finished": true, "state": debug_state_snapshot()}
+
+
+func discard_unavailable_routes(routes: Array[StringName]) -> Dictionary:
+	var unavailable := routes.duplicate()
+	# A root is never invalidated by a contextual collection becoming empty.
+	unavailable.erase(&"home")
+	if not _screen_stack.is_empty():
+		unavailable.erase(StringName(_screen_stack[0].route))
+	if unavailable.is_empty() or not _has_unavailable_route(unavailable):
+		return {"ok": true, "discarded": false}
+	_discarding_unavailable_routes = true
+	_handoff_in_progress = true
+	# Restore edge-preview bookkeeping before detaching any referenced views.
+	for edge in get_tree().get_nodes_in_group("runtime_edge_back"):
+		if edge.get("navigator") == self:
+			edge.cancel()
+	var remove_modal := unavailable.has(StringName(current_screen_entry().get("route", &"")))
+	if _transition_host.active_count() > 0:
+		# Resolve once to the target. A later cancel must not resurrect an entry
+		# captured by a push/pop transaction's rollback closure.
+		_transition_host.finish_active_to_target()
+	remove_modal = (
+		remove_modal
+		or unavailable.has(StringName(current_screen_entry().get("route", &"")))
+		or unavailable.has(StringName(_modal_entry.get("route", &"")))
+	)
+	if remove_modal and not _modal_entry.is_empty():
+		var modal := _modal_entry
+		_modal_entry = {}
+		_free_entry(modal)
+	for index in range(_screen_stack.size() - 1, 0, -1):
+		if unavailable.has(StringName(_screen_stack[index].route)):
+			var entry: Dictionary = _screen_stack[index]
+			_screen_stack.remove_at(index)
+			_free_entry(entry)
+	_restore_active_view()
+	_handoff_in_progress = false
+	_pending_unlock = false
+	_preparation_lock_active = false
+	_discarding_unavailable_routes = false
+	input_lock_changed.emit(false)
+	_emit_route_changed()
+	return {"ok": true, "discarded": true, "state": debug_state_snapshot()}
+
+
+func _has_unavailable_route(routes: Array[StringName]) -> bool:
+	for entry in _screen_stack:
+		if routes.has(StringName(entry.route)):
+			return true
+	if routes.has(StringName(_modal_entry.get("route", &""))):
+		return true
+	if _transition_host.active_count() > 0:
+		# Pop/replace/set_root can hold outgoing entries only in rollback closures.
+		# Their views remain mounted until the transaction is resolved.
+		for host in [_screen_host, _modal_host]:
+			for view in host.get_children():
+				if (
+					not view.is_queued_for_deletion()
+					and routes.has(view.get_meta("navigation_route", &""))
+				):
+					return true
+	return false
 
 
 func reveal_prepared_screen(screen: Control) -> void:
@@ -364,9 +465,31 @@ func mount_prepared_screen(screen: Control) -> void:
 	_screen_host.add_child(screen)
 
 
-func wait_until_idle() -> void:
+func wait_until_idle(canceled: Signal = Signal()) -> bool:
 	while is_instance_valid(_transition_host) and _transition_host.active_count() > 0:
-		await _transition_host.transition_settled
+		if canceled.is_null():
+			await _transition_host.transition_settled
+		else:
+			var continued := await preload("res://scripts/runtime/CancellableFrame.gd").wait(
+				get_tree().process_frame, canceled
+			)
+			if not continued:
+				return false
+	return true
+
+
+func edge_back_context() -> Dictionary:
+	var view := current_route_view()
+	if view != null and view.has_method("edge_back_allowed") and not view.edge_back_allowed():
+		return {}
+	if current_route() == &"themes":
+		return {}
+	if is_input_locked():
+		return {}
+	var behind := current_screen_view() if not _modal_entry.is_empty() else previous_screen_view()
+	if not is_instance_valid(behind):
+		return {}
+	return {"source": current_route_view(), "previous": behind, "transition": _transition_host}
 
 
 func current_route() -> StringName:
@@ -415,13 +538,27 @@ func debug_state_snapshot() -> Dictionary:
 	}
 
 
-func _prepare_navigation(allow_finish_active: bool) -> Dictionary:
-	if _transition_host.active_count() == 0:
-		return {"ok": true}
-	if allow_finish_active:
-		_transition_host.finish_active_to_target()
-		return {"ok": true}
-	return _failure(&"transition_busy", {})
+func _interrupt_for_navigation() -> void:
+	_handoff_in_progress = true
+	_transition_host.interrupt_at_current_pose()
+	_handoff_in_progress = false
+	_pending_unlock = true
+
+
+func _same_destination(entry: Dictionary, route: StringName, payload: Dictionary) -> bool:
+	if entry.is_empty() or entry.route != route:
+		return false
+	# Fresh view models and moving source rectangles do not make a new route.
+	for key in ["theme_id", "level_id", "mode", "focus_level_id"]:
+		if entry.payload.get(key) != payload.get(key):
+			return false
+	return true
+
+
+func _prepare_navigation(_allow_finish_active: bool) -> Dictionary:
+	if _transition_host.active_count() > 0:
+		_interrupt_for_navigation()
+	return {"ok": true}
 
 
 func _build_entry(
@@ -437,6 +574,7 @@ func _build_entry(
 		return _failure(
 			&"not_found", {"route": String(route), "reason": "scene_root_is_not_control"}
 		)
+	view.set_meta("navigation_route", route)
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return {
 		"ok": true,
@@ -557,10 +695,17 @@ func _begin_transition(
 		reason != "pop" and bool(payload.get("_prepare_before_motion", false))
 	)
 	_transition_host.play(kind, context)
-	input_lock_changed.emit(true)
+	if is_input_locked() or _pending_unlock:
+		_pending_unlock = false
+		_preparation_lock_active = is_input_locked()
+		input_lock_changed.emit(_preparation_lock_active)
 
 
 func _on_motion_started(kind: StringName) -> void:
+	# Assets/board are now ready. The following visual entrance is not an input lock.
+	if _preparation_lock_active and not is_input_locked():
+		_preparation_lock_active = false
+		input_lock_changed.emit(false)
 	var entry := _modal_entry if not _modal_entry.is_empty() else current_screen_entry()
 	if not entry.is_empty():
 		transition_started.emit(entry.route, kind)
@@ -571,7 +716,9 @@ func _on_transition_settled(committed: bool) -> void:
 	_active_transaction = null
 	if transaction != null:
 		transaction.resolve(committed)
-	input_lock_changed.emit(false)
+	if not _handoff_in_progress:
+		_preparation_lock_active = false
+		input_lock_changed.emit(false)
 
 
 func _navigation_context(reason: String) -> Dictionary:
@@ -628,6 +775,8 @@ func _failure(error: StringName, details: Dictionary) -> Dictionary:
 
 
 func _emit_route_changed() -> void:
+	if _discarding_unavailable_routes:
+		return
 	var entry := _modal_entry if not _modal_entry.is_empty() else current_screen_entry()
 	if entry.is_empty():
 		return

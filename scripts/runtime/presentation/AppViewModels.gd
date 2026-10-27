@@ -80,7 +80,6 @@ class HomeViewModel:
 	var total_themes: int
 	var can_go_previous: bool
 	var can_go_next: bool
-	var show_home_guide: bool
 
 	func _init(data: Dictionary) -> void:
 		revision = int(data["revision"])
@@ -91,11 +90,12 @@ class HomeViewModel:
 		total_themes = themes.size()
 		can_go_previous = selected_index > 0
 		can_go_next = selected_index + 1 < total_themes
-		show_home_guide = bool(data["show_home_guide"])
 
 
 class LevelCardViewModel:
 	extends RefCounted
+	var theme_id: String
+	var level_number: int
 	var level_id: String
 	var title: String
 	var thumbnail: Texture2D
@@ -107,6 +107,8 @@ class LevelCardViewModel:
 	var modes: Array[ModeStatusViewModel]
 
 	func _init(data: Dictionary) -> void:
+		theme_id = str(data.get("theme_id", ""))
+		level_number = int(data.get("level_number", 1))
 		level_id = str(data["level_id"])
 		title = str(data["title"])
 		thumbnail = data.get("thumbnail") as Texture2D
@@ -209,6 +211,7 @@ class CompletionViewModel:
 	var completion_event_id: String
 	var level_title: String
 	var level_description: String
+	var description_variants: PackedStringArray
 	var completed_texture: Texture2D
 	var source_rect: Rect2
 	var primary_action_text: String
@@ -223,6 +226,9 @@ class CompletionViewModel:
 		completion_event_id = str(data["completion_event_id"])
 		level_title = str(data["level_title"])
 		level_description = str(data.get("level_description", ""))
+		description_variants = PackedStringArray(
+			data.get("description_variants", [level_description])
+		)
 		completed_texture = data["completed_texture"]
 		source_rect = data.get("source_rect", Rect2())
 		primary_action_text = str(data["primary_action_text"])

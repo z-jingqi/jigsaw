@@ -1,83 +1,55 @@
 extends RefCounted
-## Responsive home composition, independent of browsing state.
+## Editorial home layout: one clear heading, artwork, and one primary action.
 
 const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 
 static func apply(host: Control) -> void:
 	var s := host.size
 	var u := minf(s.x / 390.0, s.y / 844.0)
-	var width := minf(s.x - 40.0 * u, 370.0 * u)
-	var left := (s.x - width) * 0.5
-	var button := Vector2.ONE * 46.0 * u
+	var canvas := Clean.canvas_scale(s, host.get_window())
+	var safe := Clean.safe_insets(s)
+	var usable_width := s.x - safe.x - safe.z
+	var width := minf(usable_width - 48.0 * u, 370.0 * u)
+	var left := safe.x + (usable_width - width) * 0.5
 	Buttons.place_navigation(host.get_node("AlbumButton"), host)
 	Buttons.place_navigation(host.get_node("MenuButton"), host, true)
 	Buttons.place_navigation(host.get_node("ThemesButton"), host, true, 1)
-	var title := host.get_node("ThemeName") as Label
-	title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	title.max_lines_visible = 1
-	var title_font := title.get_theme_font("font")
-	var largest_font_size := maxi(1, int(42.0 * u))
-	var cloud_width := 64.0 * u
-	var cloud_gap := 8.0 * u
-	var left_cloud := host.get_node("TitleCloudLeft") as TextureRect
-	var cloud_texture_size := left_cloud.texture.get_size()
-	var cloud_size := Vector2(
-		cloud_width, cloud_width * cloud_texture_size.y / cloud_texture_size.x
-	)
-	var maximum_title_width := maxf(1.0, width - 2.0 * (cloud_size.x + cloud_gap))
-	var title_height := 58.0 * u
-	var title_bounds := Vector2(maximum_title_width, title_height)
-	var font_size := TitleLayout.fit(title, title_bounds, largest_font_size)
-	var measured_title_width := minf(
-		maximum_title_width,
-		title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size).x
-	)
-	var title_size := Vector2(measured_title_width, title_height)
-	var group_width := title_size.x + 2.0 * (cloud_size.x + cloud_gap)
-	var group_left := (s.x - group_width) * 0.5
-	var title_top := 103.0 * u
-	var cloud_top := title_top + (title_size.y - cloud_size.y) * 0.5
-	_place(left_cloud, Vector2(group_left, cloud_top), cloud_size)
-	var right_cloud := host.get_node("TitleCloudRight") as TextureRect
-	_place(
-		right_cloud,
-		Vector2(group_left + cloud_size.x + cloud_gap + title_size.x + cloud_gap, cloud_top),
-		cloud_size
-	)
-	right_cloud.rotation = 0.0
-	right_cloud.flip_h = true
-	_place(title, Vector2(group_left + cloud_size.x + cloud_gap, title_top), title_size)
-	var incoming_title := host.get_node("IncomingThemeName") as Label
-	incoming_title.autowrap_mode = TextServer.AUTOWRAP_OFF
-	incoming_title.max_lines_visible = 1
-	var incoming_font := incoming_title.get_theme_font("font")
-	var incoming_font_size := TitleLayout.fit(incoming_title, title_bounds, largest_font_size)
-	var incoming_width := minf(
-		maximum_title_width,
-		(
-			incoming_font
-			. get_string_size(
-				incoming_title.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, incoming_font_size
-			)
-			. x
-		)
-	)
-	_place(
-		incoming_title,
-		Vector2((s.x - incoming_width) * 0.5, title_top),
-		Vector2(incoming_width, title_height)
-	)
+	var top := safe.y + maxf(100.0 * u, Buttons.header_center_y(s) + 50.0 * u)
+	for name in ["ThemeName", "IncomingThemeName"]:
+		var title := host.get_node(name) as Label
+		title.autowrap_mode = TextServer.AUTOWRAP_OFF
+		title.max_lines_visible = 1
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_place(title, Vector2(left, top), Vector2(width - 48.0 * u, 54.0 * u))
+		Clean.label(title, roundi(maxf(32.0 * u, 24.0 * canvas)))
+		TitleLayout.fit(title, title.size, roundi(maxf(32.0 * u, 24.0 * canvas)))
+	_place(host.get_node("Botanical"), Vector2(left + width - 43.0 * u, top), Vector2(43, 54) * u)
+	var deck_top := top + 76.0 * u
+	var pager_side := maxf(44.0 * u, 44.0 * canvas)
+	var action_height := maxf(54.0 * u, 44.0 * canvas)
+	var footer_height := maxf(170.0 * u, 56.0 * u + pager_side + action_height)
+	var deck_height := minf(s.y - safe.w - deck_top - footer_height, width * 1.42)
 	var deck := host.get_node("Deck") as Control
-	var deck_h := minf(s.y - 340.0 * u, width * 1.42)
-	_place(deck, Vector2(left, 195.0 * u), Vector2(width, deck_h))
-	_place(host.get_node("UndoButton"), Vector2(left + 8.0 * u, 206.0 * u + deck_h), button)
+	_place(deck, Vector2(left, deck_top), Vector2(width, maxf(100.0 * u, deck_height)))
+	var pager_top := deck_top + deck.size.y + 4.0 * u
+	var undo := host.get_node("UndoButton") as Button
+	_place(undo, Vector2(left, pager_top), Vector2(maxf(96.0 * u, 96.0 * canvas), pager_side))
+	undo.add_theme_font_size_override("font_size", roundi(maxf(16.0 * u, 16.0 * canvas)))
 	var start := host.get_node("StartButton") as Button
-	_place(start, Vector2(s.x * 0.5 - 104.0 * u, s.y - 83.0 * u), Vector2(208.0, 51.0) * u)
-	start.add_theme_font_size_override("font_size", int(23.0 * u))
+	_place(start, Vector2(left, 0), Vector2(width, action_height))
+	start.position.y = s.y - safe.w - 34.0 * u - start.size.y
+	start.add_theme_font_size_override("font_size", roundi(maxf(18.0 * u, 16.0 * canvas)))
+	var empty := host.get_node("EmptyState") as Label
+	_place(empty, Vector2(left, deck_top + deck.size.y * 0.35), Vector2(width, 100.0 * u))
+	Clean.label(empty, roundi(maxf(18.0 * u, 16.0 * canvas)), true)
 
 
 static func _place(node: Control, point: Vector2, dimensions: Vector2) -> void:
 	node.position = point
-	node.size = dimensions
+	if node is Button:
+		Buttons.apply_size(node, dimensions)
+	else:
+		node.size = dimensions

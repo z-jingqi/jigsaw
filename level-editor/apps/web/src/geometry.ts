@@ -1,4 +1,5 @@
 import { Delaunay } from "d3-delaunay";
+import { sharedBoundaryLength, SHARED_BOUNDARY_EPSILON } from "./sharedBoundary";
 import polygonClipping from "polygon-clipping";
 import type { MultiPolygon, Pair, Polygon, Ring } from "polygon-clipping";
 import puzzleRules from "../../../../config/puzzle_rules.json";
@@ -554,30 +555,9 @@ export function withNeighbors(pieces: LevelPiece[]): LevelPiece[] {
 }
 
 export function areAdjacent(a: LevelPiece, b: LevelPiece) {
-  const cellsA = new Set(a.cells || []);
-  const cellsB = new Set(b.cells || []);
-  if (cellsA.size && cellsB.size) {
-    for (const cell of cellsA) {
-      const [row, col] = cell.split(":").map(Number);
-      for (const candidate of [`${row - 1}:${col}`, `${row + 1}:${col}`, `${row}:${col - 1}`, `${row}:${col + 1}`]) {
-        if (cellsB.has(candidate)) return true;
-      }
-    }
-  }
-  let shared = 0;
-  for (const pa of a.points) {
-    for (const pb of b.points) {
-      if (distance(pa, pb) < 2) shared++;
-    }
-  }
-  if (shared >= 2) return true;
-  const tolerance = Math.max(8, Math.min(boundsFor(a.points).width + boundsFor(a.points).height, boundsFor(b.points).width + boundsFor(b.points).height) * 0.035);
-  for (const edgeA of polygonEdges(a.points)) {
-    for (const edgeB of polygonEdges(b.points)) {
-      if (segmentDistance(edgeA[0], edgeA[1], edgeB[0], edgeB[1]) <= tolerance) return true;
-    }
-  }
-  return false;
+  // Cell provenance and near vertices do not imply a surviving common edge
+  // after curved boundaries/merges. Use the final authored outlines only.
+  return sharedBoundaryLength(a.points, b.points) > SHARED_BOUNDARY_EPSILON;
 }
 
 export function mergePieces(a: LevelPiece, b: LevelPiece): LevelPiece {
@@ -623,29 +603,6 @@ function rectTuple(rect: { x: number; y: number; width: number; height: number }
 
 function distance(a: Point, b: Point) {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
-
-function polygonEdges(points: Point[]): Array<[Point, Point]> {
-  return points.map((point, index) => [point, points[(index + 1) % points.length]]);
-}
-
-function segmentDistance(a1: Point, a2: Point, b1: Point, b2: Point) {
-  if (segmentsIntersect(a1, a2, b1, b2)) return 0;
-  return Math.min(
-    pointSegmentDistance(a1, b1, b2),
-    pointSegmentDistance(a2, b1, b2),
-    pointSegmentDistance(b1, a1, a2),
-    pointSegmentDistance(b2, a1, a2),
-  );
-}
-
-function pointSegmentDistance(point: Point, start: Point, end: Point) {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const lengthSq = dx * dx + dy * dy;
-  if (lengthSq === 0) return distance(point, start);
-  const t = clamp(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSq, 0, 1);
-  return distance(point, [start[0] + t * dx, start[1] + t * dy]);
 }
 
 function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point) {

@@ -2,15 +2,14 @@
 
 [ext_resource type="Script" path="res://scripts/modals/CompletionModal.gd" id="1_modal"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="2_paper"]
-[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="3_font"]
+[ext_resource type="FontVariation" path="res://themes/clean_heading_font.tres" id="3_font"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="4_shader"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="5_button"]
 [ext_resource type="Script" path="res://scripts/modals/CompletionImageMotion.gd" id="7_motion"]
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="8_body"]
 
-[sub_resource type="FontVariation" id="Font_description"]
-base_font = ExtResource("8_body")
-variation_opentype = {"wght": 450.0}
+[ext_resource type="Script" path="res://scripts/screens/gameplay/GameplayHudButton.gd" id="8_back"]
+
+[ext_resource type="Texture2D" path="res://assets/ui/completion/xuanmao-happy.png" id="9_cat"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_image"]
 resource_local_to_scene = true
@@ -27,7 +26,7 @@ tracks/1/type = "value"
 tracks/1/path = NodePath("Canvas/Header:modulate:a")
 tracks/1/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 tracks/2/type = "value"
-tracks/2/path = NodePath("Canvas/CardStage/CompletedImage:modulate:a")
+tracks/2/path = NodePath("Canvas/Body/Content/CardStage/CompletedImage:modulate:a")
 tracks/2/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 tracks/3/type = "value"
 tracks/3/path = NodePath("ImageMotion:image_progress")
@@ -36,36 +35,30 @@ tracks/4/type = "value"
 tracks/4/path = NodePath("Canvas/Confirm:modulate:a")
 tracks/4/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 tracks/5/type = "value"
-tracks/5/path = NodePath("Canvas/Description:modulate:a")
+tracks/5/path = NodePath("Canvas/Return:modulate:a")
 tracks/5/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
-tracks/6/type = "value"
-tracks/6/path = NodePath("Canvas/Return:modulate:a")
-tracks/6/keys = {"times": PackedFloat32Array(0), "transitions": PackedFloat32Array(1), "update": 0, "values": [1.0]}
 
 [sub_resource type="Animation" id="Animation_open"]
 resource_name = "open"
 length = 0.96
 tracks/0/type = "value"
 tracks/0/path = NodePath("Background:modulate:a")
-tracks/0/keys = {"times": PackedFloat32Array(0, 0.2, 0.32), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
+tracks/0/keys = {"times": PackedFloat32Array(0, 0.2, 0.32), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [1.0, 1.0, 1.0]}
 tracks/1/type = "value"
 tracks/1/path = NodePath("Canvas/Header:modulate:a")
-tracks/1/keys = {"times": PackedFloat32Array(0, 0.32, 0.56), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
+tracks/1/keys = {"times": PackedFloat32Array(0, 0.32, 0.56), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [1.0, 1.0, 1.0]}
 tracks/2/type = "value"
-tracks/2/path = NodePath("Canvas/CardStage/CompletedImage:modulate:a")
+tracks/2/path = NodePath("Canvas/Body/Content/CardStage/CompletedImage:modulate:a")
 tracks/2/keys = {"times": PackedFloat32Array(0, 0.2), "transitions": PackedFloat32Array(1, 1), "update": 0, "values": [0.0, 1.0]}
 tracks/3/type = "value"
 tracks/3/path = NodePath("ImageMotion:image_progress")
 tracks/3/keys = {"times": PackedFloat32Array(0, 0.34, 0.94), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
 tracks/4/type = "value"
 tracks/4/path = NodePath("Canvas/Confirm:modulate:a")
-tracks/4/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
+tracks/4/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [1.0, 1.0, 1.0]}
 tracks/5/type = "value"
-tracks/5/path = NodePath("Canvas/Description:modulate:a")
-tracks/5/keys = {"times": PackedFloat32Array(0, 0.66, 0.94), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
-tracks/6/type = "value"
-tracks/6/path = NodePath("Canvas/Return:modulate:a")
-tracks/6/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [0.0, 0.0, 1.0]}
+tracks/5/path = NodePath("Canvas/Return:modulate:a")
+tracks/5/keys = {"times": PackedFloat32Array(0, 0.68, 0.96), "transitions": PackedFloat32Array(1, 1, 1), "update": 0, "values": [1.0, 1.0, 1.0]}
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_completion"]
 _data = {&"RESET": SubResource("Animation_reset"), &"open": SubResource("Animation_open")}
@@ -79,7 +72,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_modal")
 
-[node name="Background" type="TextureRect" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 1
 anchors_preset = 15
@@ -88,10 +81,8 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-texture = ExtResource("2_paper")
-expand_mode = 1
-stretch_mode = 0
 
+color = Color(0.9804, 0.9686, 0.9373, 1)
 [node name="Canvas" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -109,16 +100,27 @@ mouse_filter = 2
 [node name="LevelTitle" type="Label" parent="Canvas/Header"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("3_font")
 horizontal_alignment = 1
 vertical_alignment = 1
+text_overrun_behavior = 3
 
-[node name="CardStage" type="Control" parent="Canvas"]
+[node name="Body" type="ScrollContainer" parent="Canvas"]
+layout_mode = 0
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 0
+
+[node name="Content" type="Control" parent="Canvas/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="CardStage" type="Control" parent="Canvas/Body/Content"]
 layout_mode = 0
 mouse_filter = 2
 
-[node name="CompletedImage" type="TextureRect" parent="Canvas/CardStage"]
+[node name="CompletedImage" type="TextureRect" parent="Canvas/Body/Content/CardStage"]
 modulate = Color(1, 1, 1, 0)
 material = SubResource("ShaderMaterial_image")
 layout_mode = 0
@@ -126,20 +128,24 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 0
 
-[node name="Description" type="Label" parent="Canvas"]
-modulate = Color(1, 1, 1, 0)
+[node name="Description" type="Label" parent="Canvas/Body/Content"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.33, 0.43, 0.38, 1)
-theme_override_fonts/font = SubResource("Font_description")
-theme_override_constants/line_spacing = 10
 horizontal_alignment = 1
 autowrap_mode = 3
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
+
+[node name="Cat" type="TextureRect" parent="Canvas"]
+texture = ExtResource("9_cat")
+layout_mode = 0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
 
 [node name="Confirm" type="Button" parent="Canvas"]
 modulate = Color(1, 1, 1, 0)
 layout_mode = 0
-focus_mode = 0
+focus_mode = 2
 script = ExtResource("5_button")
 kind = 1
 
@@ -151,30 +157,17 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("3_font")
 horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="Return" type="Button" parent="Canvas"]
-modulate = Color(1, 1, 1, 0)
 layout_mode = 0
-focus_mode = 0
-script = ExtResource("5_button")
-kind = 1
-
-[node name="Label" type="Label" parent="Canvas/Return"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.0980392, 0.309804, 0.278431, 1)
-theme_override_fonts/font = ExtResource("3_font")
-horizontal_alignment = 1
-vertical_alignment = 1
+focus_mode = 2
+script = ExtResource("8_back")
+kind = 2
+symbol = "back"
 
 [node name="ImageMotion" type="Node" parent="."]
 script = ExtResource("7_motion")

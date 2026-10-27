@@ -1,5 +1,5 @@
 extends RefCounted
-## Keeps the home screen fixed while the theme library covers or reveals it.
+## Only the sheet moves; the real home remains fixed underneath.
 
 
 static func configure(
@@ -8,45 +8,26 @@ static func configure(
 	target: Control,
 	context: Dictionary,
 	duration: float,
-	reduced_motion: bool
+	reduced_motion: bool,
+	opening_from_current := false,
+	source_rest := Vector2.ZERO,
+	target_rest := Vector2.ZERO
 ) -> void:
-	var closing := str(context.get("reason", "")) == "pop"
-	if closing:
-		_configure_close(tween, source, target, duration, reduced_motion)
+	var closing: bool = context.get("reason") == "pop"
+	var sheet := source if closing else target
+	var rest := source_rest if closing else target_rest
+	var hidden_y := rest.y - maxf(source.size.y, target.size.y)
+	sheet.z_index = 50
+	var destination := hidden_y if closing else rest.y
+	if not closing and not opening_from_current:
+		sheet.position.y = hidden_y
+	if reduced_motion:
+		sheet.position.y = destination
+		tween.tween_interval(duration)
 	else:
-		_configure_open(tween, source, target, duration, reduced_motion)
-
-
-static func _configure_open(
-	tween: Tween, source: Control, target: Control, duration: float, reduced_motion: bool
-) -> void:
-	target.z_index = 50
-	if reduced_motion:
-		tween.tween_interval(duration)
-		return
-	var final_y := target.position.y
-	var distance := maxf(source.size.y, target.size.y)
-	target.position.y = final_y - distance
-	(
-		tween
-		. tween_property(target, "position:y", final_y, duration)
-		. set_trans(Tween.TRANS_CUBIC)
-		. set_ease(Tween.EASE_OUT)
-	)
-
-
-static func _configure_close(
-	tween: Tween, source: Control, target: Control, duration: float, reduced_motion: bool
-) -> void:
-	source.z_index = 50
-	if reduced_motion:
-		source.position.y += maxf(source.size.y, target.size.y)
-		tween.tween_interval(duration)
-		return
-	var final_y := source.position.y + maxf(source.size.y, target.size.y)
-	(
-		tween
-		. tween_property(source, "position:y", final_y, duration)
-		. set_trans(Tween.TRANS_QUAD)
-		. set_ease(Tween.EASE_IN)
-	)
+		(
+			tween
+			. tween_property(sheet, "position:y", destination, duration)
+			. set_trans(Tween.TRANS_CUBIC)
+			. set_ease(Tween.EASE_OUT)
+		)

@@ -6,6 +6,8 @@
 	"title_i18n": {
 		"zh": "雨后漫步",
 		"zh-Hans": "雨后漫步",
+		"en": "A Walk after the Rain",
+		"ja": "雨上がりの散歩",
 		"_": "雨后漫步"
 	},
 	"description": "边牧走过雨后的老街，脚边水洼映着天空。自行车、绿伞与窗台花枝，在阳光里重新鲜亮起来。",
@@ -132,7 +134,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_4",
-						"piece_5",
 						"piece_23",
 						"piece_24"
 					],
@@ -192,7 +193,6 @@
 						"piece_2",
 						"piece_4",
 						"piece_5",
-						"piece_8",
 						"piece_9",
 						"piece_11",
 						"piece_24"
@@ -319,7 +319,6 @@
 						1391.5268335237893
 					],
 					"neighbors": [
-						"piece_2",
 						"piece_3",
 						"piece_4",
 						"piece_8",
@@ -523,7 +522,6 @@
 						1385.3900261965757
 					],
 					"neighbors": [
-						"piece_3",
 						"piece_5",
 						"piece_11",
 						"piece_14"
@@ -583,7 +581,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_11",
-						"piece_17",
 						"piece_21",
 						"piece_24",
 						"piece_27"
@@ -814,7 +811,6 @@
 						"piece_17",
 						"piece_19",
 						"piece_20",
-						"piece_21",
 						"piece_28"
 					],
 					"visible_bounds": [
@@ -1055,7 +1051,6 @@
 						826.4564215786897
 					],
 					"neighbors": [
-						"piece_9",
 						"piece_13",
 						"piece_20",
 						"piece_21",
@@ -1350,7 +1345,6 @@
 					"neighbors": [
 						"piece_9",
 						"piece_12",
-						"piece_13",
 						"piece_17",
 						"piece_20",
 						"piece_24",
@@ -1956,9 +1950,11 @@
 			"assist": {
 				"outline": true,
 				"seed": {
-					"mode": "auto",
+					"mode": "manual",
 					"count": 1,
-					"piece_ids": []
+					"piece_ids": [
+						"piece_10"
+					]
 				}
 			}
 		},

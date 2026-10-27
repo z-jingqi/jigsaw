@@ -9,8 +9,10 @@ signal move_swap_left_requested
 signal move_swap_right_requested
 
 const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLayout.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Composition := preload("res://scripts/screens/gameplay/GameplaySceneComposition.gd")
 
+@onready var loading_label: Label = $LoadingLabel
 @onready var back_button: ActionButton = $Hud/BackButton
 @onready var title_label: Label = $Hud/Title
 @onready var hint_button: ActionButton = $Hud/HintButton
@@ -22,6 +24,7 @@ const Composition := preload("res://scripts/screens/gameplay/GameplaySceneCompos
 var _view_model: Variant
 var _input_live := false
 var _board_ready := false
+var _preparing_board := true
 var _navigation_active := false
 var _navigation_locked := false
 var _composition := Composition.new()
@@ -42,12 +45,16 @@ func _ready() -> void:
 
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
+	_preparing_board = true
+	loading_label.text = GameStrings.ui_text("loading_puzzle")
 	if payload.has("view_model"):
 		set_view_model(payload["view_model"])
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
 
 
 func navigation_exit(_context: Dictionary) -> void:
+	_navigation_active = false
+	_preparing_board = false
 	_board_ready = false
 	_set_input_live(false)
 	_composition.release()
@@ -72,6 +79,11 @@ func set_view_model(view_model: Variant) -> void:
 	_view_model = view_model
 	if not is_node_ready():
 		return
+	back_button.accessibility_label = GameStrings.ui_text("back")
+	back_button.accessibility_name = back_button.accessibility_label
+	hint_button.accessibility_label = GameStrings.ui_text("hint")
+	hint_button.accessibility_name = hint_button.accessibility_label
+	swap_action_bar.refresh_accessibility()
 	title_label.text = str(_read("level_title", ""))
 	var mode := String(_read("mode", ""))
 	tray_view.visible = mode == "polygon" or mode == "knob"
@@ -89,8 +101,27 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func mark_board_live() -> void:
+	_preparing_board = false
 	_board_ready = true
 	_set_input_live(_navigation_active and not _navigation_locked)
+
+
+func mark_board_preparing() -> void:
+	_preparing_board = true
+	_board_ready = false
+	loading_label.text = GameStrings.ui_text("loading_puzzle")
+	_set_input_live(false)
+
+
+func mark_board_failed() -> void:
+	_board_ready = false
+	_preparing_board = true
+	loading_label.text = GameStrings.ui_text("puzzle_load_failed")
+	_set_input_live(false)
+
+
+func has_live_board() -> bool:
+	return _board_ready
 
 
 func is_board_input_enabled() -> bool:
@@ -98,6 +129,7 @@ func is_board_input_enabled() -> bool:
 
 
 func prepare_completion() -> void:
+	_preparing_board = false
 	_board_ready = false
 	_set_input_live(false)
 
@@ -128,6 +160,13 @@ func _apply_layout_scale(value: float) -> void:
 func _apply_current_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
+	var unit := Clean.canvas_scale(size, get_window())
+	loading_label.add_theme_font_size_override("font_size", roundi(16 * unit))
+	loading_label.add_theme_font_override("font", Clean.FONT)
+	loading_label.add_theme_color_override("font_color", Clean.INK)
+	loading_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	loading_label.position = Vector2(24 * unit, size.y * 0.38 - 24 * unit)
+	loading_label.size = Vector2(size.x - 48 * unit, 48 * unit)
 	(
 		_layout
 		. apply(
@@ -156,7 +195,9 @@ func bottom_reserved_height() -> float:
 
 func _set_input_live(enabled: bool) -> void:
 	_input_live = enabled
-	for button in [back_button, hint_button]:
+	loading_label.visible = _navigation_active and _preparing_board
+	back_button.disabled = not _navigation_active
+	for button in [hint_button]:
 		button.disabled = not enabled
 		if not enabled:
 			button.cancel_motion()

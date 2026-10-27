@@ -2,6 +2,8 @@ extends RefCounted
 class_name PieceVisualFactory
 
 const PieceReliefScript := preload("res://scripts/gameplay/board/PieceRelief.gd")
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
+const CardboardShadow := preload("res://scripts/gameplay/board/PieceCardboardShadow.gd")
 const PieceSurfaceScript := preload("res://scripts/gameplay/board/PieceSurface.gd")
 
 const CUT_LINE_COLOR := Color(0.26, 0.20, 0.14, 0.70)
@@ -12,28 +14,46 @@ const SEAM_LINE_COLOR := Color(0.0, 0.0, 0.0, 0.22)
 
 
 static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := {}) -> Node2D:
+	var cardboard: bool = style.get("cardboard", false)
 	var node := Node2D.new()
 	node.name = piece["id"] + "_visual"
 	var cut_line_color: Color = style.get("cut_line_color", CUT_LINE_COLOR)
 	var cut_line_lift_color: Color = style.get("cut_line_lift_color", CUT_LINE_LIFT_COLOR)
+	node.set_meta("cardboard", cardboard)
 	node.set_meta("seam_line_color", style.get("seam_line_color", SEAM_LINE_COLOR))
-	node.add_child(_piece_lift_shadow(piece["polygon"]))
+	if cardboard:
+		var shadow := CardboardShadow.new()
+		shadow.name = "piece_lift_shadow"
+		shadow.setup(piece["polygon"])
+		node.add_child(shadow)
+	else:
+		node.add_child(_piece_lift_shadow(piece["polygon"]))
 	var side := PieceReliefScript.new()
 	side.name = "piece_side"
-	side.setup(piece["polygon"], false)
-	side.modulate.a = 0.0
+	side.setup(piece["polygon"], false, SEAM_LINE_COLOR, cardboard)
+	side.modulate.a = 1.0 if cardboard else 0.0
 	node.add_child(side)
 	var poly := PieceSurfaceScript.new()
 	poly.name = "piece_texture"
+	poly.antialiased = cardboard
 	poly.texture = texture
 	poly.polygon = piece["polygon"]
 	poly.uv = piece["uv"]
 	poly.z_index = 0
 	node.add_child(poly)
-	var bevel := PieceReliefScript.new()
-	bevel.name = "piece_bevel"
-	bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR))
-	node.add_child(bevel)
+	var curved: bool = style.get("curve_rendering", false)
+	if curved and not CurvedEdge.apply(poly):
+		# Preparation must succeed before creating a playable board. Never show
+		# the old flat face as an implicit error fallback.
+		poly.hide()
+		push_error("Missing prepared curved piece material.")
+	if not curved:
+		# Swap keeps its existing flat-tile relief; curved puzzle pieces have no
+		# decorative legacy bevel node at all.
+		var bevel := PieceReliefScript.new()
+		bevel.name = "piece_bevel"
+		bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR), false)
+		node.add_child(bevel)
 	cut_line_color.a = minf(cut_line_color.a, 0.24)
 	cut_line_lift_color.a = minf(cut_line_lift_color.a, 0.32)
 	for cut_line in piece["cut_lines"]:
@@ -48,6 +68,9 @@ static func settle_group_edges(group) -> void:
 		var visual: Node2D = member.get("visual", null)
 		if visual == null or not is_instance_valid(visual):
 			continue
+		if bool(visual.get_meta("cardboard", false)):
+			visual.set_meta("cardboard_settled", true)
+			visual.get_node("piece_lift_shadow").visible = false
 		# Every face already owns one seam; joining must not add another outline.
 		var side := visual.get_node_or_null("piece_side")
 		if side != null:
@@ -75,6 +98,18 @@ static func set_visual_lifted(
 	visual.scale = Vector2.ONE
 	var shadow := visual.get_node_or_null("piece_lift_shadow")
 	var side := visual.get_node_or_null("piece_side")
+	if bool(visual.get_meta("cardboard", false)):
+		var settled := bool(visual.get_meta("cardboard_settled", false))
+		shadow.visible = not settled
+		side.modulate.a = 0.0 if settled else 1.0
+		if not animate:
+			shadow.lift = 1.0 if lifted else 0.0
+			return
+		var cardboard_tween := tween_owner.create_tween().bind_node(visual)
+		visual.set_meta("lift_tween", cardboard_tween)
+		cardboard_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+		cardboard_tween.tween_property(shadow, "lift", 1.0 if lifted else 0.0, 0.10)
+		return
 	if not animate:
 		if shadow != null:
 			shadow.modulate.a = 1.0 if lifted else 0.0

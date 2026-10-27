@@ -6,6 +6,8 @@ signal move_down_requested
 signal move_left_requested
 signal move_right_requested
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const BUTTON_SIZE := 156.0
 const BUTTON_GAP := 40.0
 
@@ -25,8 +27,17 @@ func _ready() -> void:
 	move_down.pressed.connect(move_down_requested.emit)
 	move_left.pressed.connect(move_left_requested.emit)
 	move_right.pressed.connect(move_right_requested.emit)
+	refresh_accessibility()
 	resized.connect(_apply_layout)
 	_apply_layout()
+
+
+func refresh_accessibility() -> void:
+	var keys := ["shift_row_left", "shift_row_up", "shift_row_down", "shift_row_right"]
+	var buttons := [move_left, move_up, move_down, move_right]
+	for index in buttons.size():
+		buttons[index].accessibility_label = GameStrings.ui_text(keys[index])
+		buttons[index].accessibility_name = buttons[index].accessibility_label
 
 
 func configure_layout(scale: float) -> void:
@@ -52,7 +63,7 @@ func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
 	var scale := float(get_meta(&"gameplay_layout_scale", 1.0))
-	var button_size := maxf(44.0, BUTTON_SIZE * scale)
+	var button_size := maxf(Clean.minimum_touch_size(self).x, BUTTON_SIZE * scale)
 	var gap := BUTTON_GAP * scale
 	var total_width := button_size * 4.0 + gap * 3.0
 	var top := maxf(0.0, (size.y - button_size) * 0.5)
@@ -70,3 +81,8 @@ func _configure_group(group: Control, position: Vector2, button_size: float) -> 
 	group.position = position
 	group.size = Vector2.ONE * button_size
 	group.pivot_offset = group.size * 0.5
+	var target := group.get_node("HitTarget") as Button
+	# This layout owns the full hit target, rather than stretched scene anchors.
+	target.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	target.position = Vector2.ZERO
+	Buttons.apply_size(target, group.size)

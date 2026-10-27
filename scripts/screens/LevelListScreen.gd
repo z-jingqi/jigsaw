@@ -4,9 +4,9 @@ extends Control
 signal back_requested
 signal level_selected(level_id: String)
 
-const VirtualGridScript := preload("res://scripts/screens/levels/VirtualLevelGrid.gd")
+const DotPager := preload("res://scripts/ui/navigation/WindowedDotPager.gd")
 const UnlockSequenceScript := preload("res://scripts/screens/levels/LevelUnlockSequence.gd")
-const LevelCardScene := preload("res://scenes/ui/foundation/LevelCard.tscn")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
 @onready var back_button: Button = $SafeArea/Content/Header/BackButton
@@ -16,8 +16,7 @@ const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 @onready var title_right_ornament: TextureRect = $SafeArea/Content/Header/TitleRightOrnament
 @onready var progress: Control = $SafeArea/Content/Header/Progress
 @onready var progress_count: Label = $SafeArea/Content/Header/Progress/Count
-@onready var scroll: NaturalScrollContainer = $SafeArea/Content/Scroll
-@onready var grid_content: Control = $SafeArea/Content/Scroll/GridContent
+@onready var scroll: Control = $SafeArea/Content/Scroll
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 
 var _view_model: Variant
@@ -25,15 +24,43 @@ var _grid: Variant
 var _reduced_motion := false
 var _unlock_sequence = UnlockSequenceScript.new()
 var _played_unlocks: Dictionary = {}
+var _empty_label: Label
+var _pager: Control
+var _initial_focus_applied := false
 
 
 func _ready() -> void:
-	_grid = VirtualGridScript.new(scroll, grid_content, LevelCardScene)
+	Clean.icon_button(back_button)
+	back_button.accessibility_name = GameStrings.ui_text("return_topics")
+	_empty_label = Label.new()
+	_empty_label.text = GameStrings.ui_text("no_levels")
+	_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$SafeArea/Content.add_child(_empty_label)
+	_grid = scroll
+	_pager = DotPager.new()
+	_pager.name = "PageDots"
+	$SafeArea/Content.add_child(_pager)
+	_pager.page_requested.connect(set_page)
+	_grid.page_changed.connect(_on_page_changed)
+	_grid.gesture_progress.connect(
+		func(value: float) -> void:
+			if _pager.has_method("preview_gesture"):
+				_pager.preview_gesture(value)
+	)
+	_grid.gesture_finished.connect(
+		func(committed: bool, target: int) -> void:
+			if _pager.has_method("finish_gesture"):
+				_pager.finish_gesture(committed, target)
+	)
 	_grid.level_selected.connect(_on_level_selected)
 	_grid.card_visible.connect(_on_card_visible)
 	_grid.card_hidden.connect(_unlock_sequence.cancel)
 	back_button.pressed.connect(_on_back_pressed)
 	resized.connect(_apply_layout)
+	$SafeArea/Content.resized.connect(_apply_layout, CONNECT_DEFERRED)
+	scroll.resized.connect(_apply_layout)
 	header.resized.connect(_apply_header_layout)
 	animation_player.play(&"RESET")
 	animation_player.advance(0.0)
@@ -50,7 +77,7 @@ func navigation_exit(_context: Dictionary) -> void:
 	scroll.set_interaction_enabled(false)
 	_unlock_sequence.clear()
 	if _grid != null:
-		_grid.clear()
+		_grid.stop_motion()
 	animation_player.play(&"exit")
 
 
@@ -64,13 +91,15 @@ func navigation_set_active(is_active: bool) -> void:
 	visible = is_active
 	mouse_filter = Control.MOUSE_FILTER_STOP if is_active else Control.MOUSE_FILTER_IGNORE
 	scroll.set_interaction_enabled(is_active)
+	_pager.set_interaction_enabled(is_active)
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
 	if _grid != null:
-		for card in _grid.visible_cards():
-			card.set_reduced_motion(enabled)
+		_grid.set_reduced_motion(enabled)
+	if _pager != null:
+		_pager.set_reduced_motion(enabled)
 
 
 func set_view_model(view_model: Variant) -> void:
@@ -81,6 +110,8 @@ func set_view_model(view_model: Variant) -> void:
 		% [view_model.theme_progress.completed_modes, view_model.theme_progress.total_modes]
 	)
 	_apply_header_layout()
+	if _initial_focus_applied:
+		_grid.refresh_items(view_model.levels)
 	call_deferred("_apply_layout")
 
 
@@ -97,22 +128,28 @@ func refresh_view_model(view_model: Variant) -> void:
 	if title_changed:
 		_apply_header_layout()
 	_grid.refresh_items(view_model.levels)
+	_apply_layout()
 
 
 func active_motion_count() -> int:
-	return (1 if animation_player.is_playing() else 0) + _unlock_sequence.active_count()
+	return (
+		(1 if animation_player.is_playing() else 0)
+		+ _unlock_sequence.active_count()
+		+ (_grid.active_motion_count() if _grid != null else 0)
+	)
 
 
 func debug_grid_column_count() -> int:
-	return _grid.column_count() if _grid != null else 0
+	return 2
 
 
 func debug_active_card_count() -> int:
-	return _grid.active_card_count() if _grid != null else 0
+	return _grid.visible_cards().size() if _grid != null else 0
 
 
 func debug_scroll_position() -> int:
-	return scroll.scroll_vertical
+	# Compatibility: this is now the page index, not a pixel scroll offset.
+	return debug_page_index()
 
 
 func debug_card_rect(level_id: String) -> Rect2:
@@ -120,8 +157,23 @@ func debug_card_rect(level_id: String) -> Rect2:
 	return card.get_global_rect() if is_instance_valid(card) else Rect2()
 
 
-static func grid_column_count_for_width(available_width: float) -> int:
-	return 3 if available_width >= 1440.0 else 2
+func debug_box_rect(level_id: String) -> Rect2:
+	var card: Control = _grid.card_for_level_id(level_id) as Control if _grid != null else null
+	return card.prototype_box_rect() if is_instance_valid(card) else Rect2()
+
+
+func set_box_transition_source(level_id: String, hidden: bool) -> void:
+	if _grid != null:
+		_grid.set_box_transition_source(level_id, hidden)
+
+
+func prepare_box_return(level_id: String) -> void:
+	if _grid != null:
+		_grid.prepare_box_return(level_id)
+
+
+static func grid_column_count_for_width(_available_width: float) -> int:
+	return 2
 
 
 func play_enter() -> void:
@@ -133,83 +185,79 @@ func play_enter() -> void:
 
 
 func _apply_layout() -> void:
-	_apply_header_layout()
-	if _view_model == null or _grid == null:
+	if not is_node_ready() or _grid == null:
 		return
-	var available_width := maxf(1.0, scroll.size.x)
-	var columns := grid_column_count_for_width(available_width)
-	var regular := columns == 3
-	var horizontal_gap := 22.0 if regular else 28.0
-	var vertical_gap := 30.0
-	var card_width := (available_width - horizontal_gap * float(columns - 1)) / float(columns)
-	var card_size := Vector2(card_width, card_width * 4.0 / 3.0 + 72.0)
-	var background_reveal_space := clampf(size.y * 0.07, 140.0, 220.0)
-	_grid.configure(
-		_view_model.levels,
-		columns,
-		Vector2(horizontal_gap, vertical_gap),
-		card_size,
-		background_reveal_space
-	)
-	if not str(_view_model.focus_level_id).is_empty():
-		_grid.scroll_to_item(str(_view_model.focus_level_id))
+	_apply_header_layout()
+	var content: Control = $SafeArea/Content
+	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var top := 80.0 * native
+	var footer := (44.0 + Clean.SPACE_16 * 2.0) * native
+	scroll.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	scroll.position = Vector2(0, top)
+	scroll.size = Vector2(content.size.x, maxf(100 * native, content.size.y - top - footer))
+	_pager.position = Vector2(0, content.size.y - (44.0 + Clean.SPACE_16) * native)
+	_pager.size = Vector2(content.size.x, 44 * native)
+	if _view_model == null:
+		return
+	_empty_label.visible = _view_model.levels.is_empty()
+	_empty_label.position = scroll.position
+	_empty_label.size = scroll.size
+	Clean.label(_empty_label, roundi(18 * native), true)
+	if not _initial_focus_applied:
+		_initial_focus_applied = true
+		_grid.configure(_view_model.levels, str(_view_model.focus_level_id))
+	_on_page_changed(_grid.page_index())
 
 
 func _apply_header_layout() -> void:
 	if not is_node_ready() or header.size.x <= 0.0:
 		return
-	var available_width := header.size.x
+	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
 	Buttons.place_navigation(back_button, self)
-	var center_y := back_button.position.y + back_button.size.y * 0.5
-	progress.size = Vector2(232.0, 82.0)
-	progress.position = Vector2(available_width - progress.size.x - 4.0, center_y - 41.0)
-	var reserved_side := maxf(
-		back_button.position.x + back_button.size.x, available_width - progress.position.x
+	title_left_ornament.hide()
+	title_right_ornament.hide()
+	progress.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	progress.size = Vector2(64, 32) * native
+	progress.position = Vector2(
+		header.size.x - progress.size.x, back_button.position.y + 6 * native
 	)
-	var group_width := maxf(320.0, available_width - reserved_side * 2.0 - 20.0)
-	var font := theme_title.get_theme_font("font")
-	var font_size := 58
-	var ornament_gap := 10.0
-	var ornament_width := 104.0
-	var measured_width := (
-		font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
-	)
-	while font_size > 36 and (group_width - measured_width) * 0.5 - ornament_gap < 52.0:
-		font_size -= 2
-		measured_width = (
-			font.get_string_size(theme_title.text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
-		)
-	var multiline := measured_width + 2.0 * (52.0 + ornament_gap) > group_width
-	var title_height := 104.0
-	var title_top := center_y - title_height * 0.5
-	if multiline:
-		font_size = 30
-		ornament_gap = 8.0
-		ornament_width = 36.0
-		measured_width = group_width - 2.0 * (ornament_width + ornament_gap)
-		title_height = 112.0
-		title_top = center_y - title_height * 0.5
-		theme_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		theme_title.max_lines_visible = 2
-	else:
-		ornament_width = clampf((group_width - measured_width) * 0.5 - ornament_gap, 52.0, 104.0)
-		theme_title.autowrap_mode = TextServer.AUTOWRAP_OFF
-		theme_title.max_lines_visible = 1
-	theme_title.add_theme_font_size_override("font_size", font_size)
-	var ornament_size := Vector2(ornament_width, ornament_width * 0.36)
-	var actual_group_width := measured_width + (ornament_size.x + ornament_gap) * 2.0
-	var group_left := (available_width - actual_group_width) * 0.5
-	title_left_ornament.position = Vector2(
-		group_left, title_top + (title_height - ornament_size.y) * 0.5
-	)
-	title_left_ornament.size = ornament_size
-	theme_title.position = Vector2(group_left + ornament_size.x + ornament_gap, title_top)
-	theme_title.size = Vector2(measured_width, title_height)
-	title_right_ornament.position = Vector2(
-		theme_title.position.x + theme_title.size.x + ornament_gap,
-		title_top + (title_height - ornament_size.y) * 0.5
-	)
-	title_right_ornament.size = ornament_size
+	progress.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	Clean.label(progress_count, roundi(13 * native), true)
+	theme_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	theme_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	theme_title.max_lines_visible = 1
+	theme_title.position = Vector2(48 * native, back_button.position.y)
+	theme_title.size = Vector2(maxf(0, header.size.x - 120 * native), 44 * native)
+	Clean.label(theme_title, roundi(23 * native))
+
+
+func set_page(index: int) -> void:
+	_grid.request_page(index)
+
+
+func debug_page_index() -> int:
+	return _grid.page_index() if _grid != null else 0
+
+
+func debug_page_count() -> int:
+	return _grid.page_count() if _grid != null else 0
+
+
+func debug_pagination_snapshot() -> Dictionary:
+	var result: Dictionary = _grid.debug_snapshot()
+	result["page_index"] = debug_page_index()
+	result["page_count"] = debug_page_count()
+	result["level_ids"] = []
+	for card in _grid.visible_cards():
+		result.level_ids.append(str(card.level_id))
+	result["animating"] = _grid.active_motion_count() > 0
+	result["active_card_count"] = _grid.visible_cards().size()
+	return result
+
+
+func _on_page_changed(index: int) -> void:
+	if _pager != null:
+		_pager.configure(_grid.page_count(), index)
 
 
 func _on_card_visible(card: Control, view_model: Variant) -> void:

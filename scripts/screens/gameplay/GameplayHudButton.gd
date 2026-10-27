@@ -4,24 +4,31 @@ extends ActionButton
 
 @export_enum("back", "hint", "left", "up", "down", "right") var symbol := "back"
 
+const Chevron := preload("res://scripts/ui/foundation/ChevronGeometry.gd")
 const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
 
 func _ready() -> void:
 	super()
-	Style.apply_button(self)
+	Style.apply_button(self, symbol == "back")
+	if symbol == "hint" or symbol == "back":
+		Style.Clean.icon_button(self)
 	icon = null
 	resized.connect(queue_redraw)
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 	queue_redraw()
 
 
 func _draw() -> void:
 	var ink := Style.INK
 	if disabled:
-		ink.a = 0.38
+		ink = Style.Clean.MUTED
 	var center := size * 0.5
 	var unit := minf(size.x, size.y) / 148.0
 	var stroke := maxf(2.0, 7.0 * unit)
+	if has_focus() and symbol in ["back", "hint"]:
+		stroke *= 1.35
 	match symbol:
 		"hint":
 			_draw_hint(center, unit, stroke, ink)
@@ -29,39 +36,27 @@ func _draw() -> void:
 			draw_polyline(
 				PackedVector2Array(
 					[
-						center + Vector2(12, -27) * unit,
-						center + Vector2(-14, 0) * unit,
-						center + Vector2(12, 27) * unit,
+						center + Vector2(0, -24) * unit,
+						center + Vector2(-25, 0) * unit,
+						center + Vector2(0, 24) * unit,
 					]
 				),
 				ink,
 				stroke,
 				true,
 			)
+			draw_line(
+				center + Vector2(-25, 0) * unit, center + Vector2(28, 0) * unit, ink, stroke, true
+			)
 		_:
 			_draw_direction(center, unit, stroke, ink)
 
 
 func _draw_direction(center: Vector2, unit: float, stroke: float, ink: Color) -> void:
-	var angle := 0.0
-	match symbol:
-		"left":
-			angle = -PI * 0.5
-		"down":
-			angle = PI
-		"right":
-			angle = PI * 0.5
-	var points := PackedVector2Array()
-	for point in [Vector2(-23, -5), Vector2(0, -28), Vector2(23, -5)]:
-		points.append(center + point.rotated(angle) * unit)
-	draw_polyline(points, ink, stroke, true)
-	draw_line(
-		center + Vector2(0, -27).rotated(angle) * unit,
-		center + Vector2(0, 28).rotated(angle) * unit,
-		ink,
-		stroke,
-		true,
+	var angle: float = {"left": 0.0, "up": PI * 0.5, "right": PI, "down": -PI * 0.5}.get(
+		symbol, 0.0
 	)
+	draw_polyline(Chevron.points(center, 27 * unit, angle), ink, stroke, true)
 
 
 func _draw_hint(center: Vector2, unit: float, stroke: float, ink: Color) -> void:

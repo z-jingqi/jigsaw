@@ -15,14 +15,11 @@ func _ready() -> void:
 func _apply_safe_area() -> void:
 	var viewport_rect := get_viewport_rect()
 	var viewport_size := viewport_rect.size
-	var safe_rect := get_viewport().get_visible_rect()
-	if (
-		safe_rect.position.x < viewport_rect.position.x
-		or safe_rect.position.y < viewport_rect.position.y
-		or safe_rect.end.x > viewport_rect.end.x
-		or safe_rect.end.y > viewport_rect.end.y
-	):
-		safe_rect = viewport_rect
+	var insets := preload("res://scripts/ui/foundation/CleanTheme.gd").safe_insets(viewport_size)
+	var safe_rect := Rect2(
+		Vector2(insets.x, insets.y),
+		viewport_size - Vector2(insets.x + insets.z, insets.y + insets.w)
+	)
 	var safe_width := maxf(0.0, safe_rect.size.x)
 	var side_margin := compact_horizontal_margin
 	if safe_width >= compact_breakpoint:

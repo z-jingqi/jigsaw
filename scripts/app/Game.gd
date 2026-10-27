@@ -2,20 +2,33 @@ class_name Game
 extends Node2D
 
 const RuntimeAppCoordinatorScript := preload("res://scripts/runtime/RuntimeAppCoordinator.gd")
-const DebugCommandRouterScript := preload("res://scripts/debug/DebugCommandRouter.gd")
+const GestureArena := preload("res://scripts/ui/navigation/GestureArena.gd")
 
 var _runtime: RuntimeAppCoordinator
-var _debug_router: DebugCommandRouter
+var _debug_router: RefCounted
+var _startup: CanvasLayer
 
 
 func _ready() -> void:
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
-	_runtime = RuntimeAppCoordinatorScript.new(self)
+	_startup = preload("res://scripts/app/startup/StartupPreparation.gd").new()
+	_startup.ready_to_start.connect(_start_prepared_runtime, CONNECT_ONE_SHOT)
+	add_child(_startup)
+
+
+func _start_prepared_runtime() -> void:
+	_runtime = RuntimeAppCoordinatorScript.new(self, _startup.prepared_content)
 	_runtime.start()
-	_debug_router = DebugCommandRouterScript.new(_runtime)
+	move_child(_startup, get_child_count() - 1)
+	_startup.reveal_home()
+	if OS.is_debug_build() and ResourceLoader.exists("res://scripts/debug/DebugCommandRouter.gd"):
+		var router := load("res://scripts/debug/DebugCommandRouter.gd") as GDScript
+		_debug_router = router.new(_runtime)
 
 
 func _exit_tree() -> void:
+	if is_instance_valid(_startup):
+		_startup.cancel()
 	if _runtime != null:
 		_runtime.shutdown()
 	_runtime = null
@@ -23,6 +36,9 @@ func _exit_tree() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if GestureArena.block_secondary(get_viewport(), event):
+		get_viewport().set_input_as_handled()
+		return
 	if (
 		event is InputEventKey
 		and event.pressed
@@ -57,14 +73,16 @@ func debug_state_snapshot() -> Dictionary:
 
 
 func debug_level_options() -> Array:
-	return _runtime.debug_level_options() if _runtime != null else []
+	return _runtime.debug_level_options() if OS.is_debug_build() and _runtime != null else []
 
 
 func debug_runtime_metrics() -> Dictionary:
-	return _runtime.runtime_metrics() if _runtime != null else {}
+	return _runtime.runtime_metrics() if OS.is_debug_build() and _runtime != null else {}
 
 
 func debug_enter_level(option_index: int, play_mode: String) -> void:
+	if not OS.is_debug_build():
+		return
 	var options := debug_level_options()
 	if option_index >= 0 and option_index < options.size():
 		var option: Dictionary = options[option_index]
@@ -72,6 +90,8 @@ func debug_enter_level(option_index: int, play_mode: String) -> void:
 
 
 func debug_restart_current_level() -> void:
+	if not OS.is_debug_build():
+		return
 	var state := debug_state_snapshot()
 	if str(state.get("level_id", "")).is_empty():
 		return
@@ -79,35 +99,51 @@ func debug_restart_current_level() -> void:
 
 
 func debug_apply_viewport_preset(size: Vector2i) -> void:
+	if not OS.is_debug_build():
+		return
 	if size.x > 0 and size.y > 0:
 		get_window().size = size
 
 
 func debug_trigger_hint() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.trigger_hint()
 
 
 func debug_clear_hint() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.debug_board(&"debug_clear_hint")
 
 
 func debug_reset_tray() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.debug_board(&"debug_reset_tray")
 
 
 func debug_scroll_tray_left() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.debug_board(&"debug_scroll_tray_left")
 
 
 func debug_scroll_tray_right() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.debug_board(&"debug_scroll_tray_right")
 
 
 func debug_toggle_bounds_overlay() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.debug_board(&"debug_toggle_bounds_overlay")
 
 
 func debug_preview_complete() -> void:
+	if not OS.is_debug_build():
+		return
 	_runtime.preview_complete()
 
 

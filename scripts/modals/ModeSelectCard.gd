@@ -8,10 +8,12 @@ const ICONS := {
 	&"knob": preload("res://assets/ui/levels/mode-icons/knob.svg"),
 	&"swap": preload("res://assets/ui/levels/mode-icons/swap.svg"),
 }
+const Glyphs := preload("res://scripts/ui/foundation/ModeCompletionGlyphs.gd")
 const IconShader := preload("res://shaders/ui/mode_icon_state.gdshader")
 const MotionScene := preload("res://scenes/modals/ModeSelectMotion.tscn")
-const FONT := preload("res://themes/douyin_ui_font.tres")
-const INK := Color("194F47")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const FONT := Clean.FONT
+const INK := Clean.INK
 
 var _model: Variant
 var _selected := false
@@ -30,7 +32,7 @@ func _ready() -> void:
 	add_child(_motion)
 	_motion.bind(self)
 	_icon_material.shader = IconShader
-	_icon.material = _icon_material
+	_icon.material = null
 	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -43,8 +45,9 @@ func _ready() -> void:
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.add_theme_font_override("font", FONT)
 		add_child(label)
+	_name_label.add_theme_font_override("font", Clean.HEADING)
 	_name_label.add_theme_color_override("font_color", INK)
-	_status_label.add_theme_color_override("font_color", Color("69897B"))
+	_status_label.add_theme_color_override("font_color", Clean.MUTED)
 	pressed.connect(func(): selection_requested.emit(mode(), StringName(_read("action", &"start"))))
 	resized.connect(_layout)
 	_refresh()
@@ -127,7 +130,7 @@ func presentation_snapshot() -> Dictionary:
 func _refresh() -> void:
 	_name_label.text = str(_read("short_label", _read("label", "")))
 	var status := StringName(_read("status", &"not_started"))
-	_icon.texture = ICONS.get(mode())
+	_icon.texture = Glyphs.COMPLETE.get(mode())
 	_icon_material.set_shader_parameter("not_started", status == &"not_started")
 	(
 		_status_label
@@ -135,11 +138,11 @@ func _refresh() -> void:
 			"font_color",
 			(
 				{
-					&"not_started": Color("69897B"),
-					&"in_progress": Color("B87516"),
-					&"completed": Color("268573"),
+					&"not_started": Clean.MUTED,
+					&"in_progress": Color("86613D"),
+					&"completed": Color("526447"),
 				}
-				. get(status, Color("69897B"))
+				. get(status, Clean.MUTED)
 			)
 		)
 	)
@@ -155,7 +158,7 @@ func _refresh() -> void:
 	accessibility_name = (
 		"%s，%s%s" % [_name_label.text, _status_label.text, "，已选中" if _selected else ""]
 	)
-	tooltip_text = accessibility_name
+	tooltip_text = ""
 	_layout()
 
 
@@ -164,21 +167,27 @@ func _layout() -> void:
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = (
-			Color("E3E9D6") if _read("status", &"") == &"completed" else Color("FAF8EF")
+			{&"polygon": Clean.SAGE, &"knob": Clean.APRICOT, &"swap": Clean.LAVENDER}
+			. get(mode(), Clean.SAGE)
 		)
-		style.border_color = INK if _selected or state == "focus" else Color("DDE3CF")
-		style.set_border_width_all(maxi(1, int(1.0 * unit)))
-		style.set_corner_radius_all(int(12.0 * unit))
+		style.border_color = INK if _selected or state == "focus" else Color.TRANSPARENT
+		style.set_border_width_all(maxi(2, int(2.0 * unit)) if _selected or state == "focus" else 0)
+		style.set_corner_radius_all(int(20.0 * unit))
 		add_theme_stylebox_override(state, style)
 	_name_label.position = Vector2(0, size.y * 0.61)
 	_name_label.size = Vector2(size.x, size.y * 0.16)
-	_status_label.position = Vector2(0, size.y * 0.81)
-	_status_label.size = Vector2(size.x, size.y * 0.13)
+	_status_label.position = Vector2(0, size.y * 0.78)
+	_status_label.size = Vector2(size.x, size.y * 0.18)
 	_name_label.add_theme_font_size_override("font_size", maxi(12, int(16.0 * unit)))
-	_status_label.add_theme_font_size_override("font_size", maxi(10, int(11.0 * unit)))
+	var native_scale := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	_status_label.add_theme_font_size_override(
+		"font_size", maxi(ceili(12 * native_scale), int(12.0 * unit))
+	)
 	pivot_offset = size * 0.5
-	var icon_size := minf(size.x * 0.56, size.y * 0.44)
-	_icon.position = Vector2((size.x - icon_size) * 0.5, size.y * 0.15)
+	_name_label.hide()
+	_status_label.hide()
+	var icon_size := 38 * Clean.minimum_touch_size(self).y / 44.0
+	_icon.position = (size - Vector2.ONE * icon_size) * 0.5
 	_icon.size = Vector2.ONE * icon_size
 	_icon.pivot_offset = _icon.size * 0.5
 

@@ -1,33 +1,25 @@
 extends Button
 ## Shared flat controls; vector strokes stay sharp at every display scale.
-@export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album")
+@export_enum("none", "back", "forward", "grid", "settings", "undo", "close", "album", "more")
 var symbol := "none"
-const GridIcon := preload("res://assets/ui/icons/themes-grid.svg")
-const GearIcon := preload("res://assets/ui/icons/settings-gear.svg")
-const AlbumIcon := preload("res://assets/ui/icons/album.svg")
-const INK := Color("194F47")
+@export var primary := false
+@export var icon_only := false
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const INK := Clean.INK
 
 
 func _ready() -> void:
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color("DDE3CF")
-		if state == "pressed":
-			style.bg_color = Color("BCCDAF")
-		if state == "disabled":
-			style.bg_color = Color("E7E8DD")
-		style.set_corner_radius_all(200)
-		if state == "focus":
-			style.bg_color = Color.TRANSPARENT
-			style.set_border_width_all(3)
-			style.border_color = INK
-		add_theme_stylebox_override(state, style)
-	add_theme_color_override("font_color", INK)
-	add_theme_color_override("font_hover_color", INK)
-	add_theme_color_override("font_pressed_color", INK)
-	add_theme_color_override("font_disabled_color", Color("8C9B8A"))
+	focus_mode = Control.FOCUS_ALL
+	if accessibility_name.is_empty():
+		accessibility_name = text
+	if icon_only:
+		Clean.icon_button(self)
+	else:
+		Clean.button(self, primary)
 	resized.connect(queue_redraw)
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 
 
 func _draw() -> void:
@@ -36,31 +28,62 @@ func _draw() -> void:
 	var c := size * 0.5
 	var r := minf(size.x, size.y) * 0.21
 	var w := maxf(1.5, r * 0.13)
-	var ink := Color("94A28F") if disabled else INK
+	if icon_only and has_focus():
+		w *= 1.5
+	var ink := Clean.MUTED if disabled else (Clean.PAPER if primary else INK)
 	match symbol:
 		"back", "forward":
-			var direction := -1.0 if symbol == "forward" else 1.0
+			var direction := -1.0 if symbol == "back" else 1.0
+			var tip := c + Vector2(r * direction * (1.0 if icon_only else 0.45), 0)
+			var wing := r * (0.75 if icon_only else 0.9)
+			if icon_only:
+				draw_line(c - Vector2(r * direction, 0), tip, ink, w, true)
 			draw_polyline(
 				PackedVector2Array(
 					[
-						c + Vector2(r * 0.45 * direction, -r * 0.9),
-						c + Vector2(-r * 0.45 * direction, 0.0),
-						c + Vector2(r * 0.45 * direction, r * 0.9),
+						tip + Vector2(-wing * direction, -wing),
+						tip,
+						tip + Vector2(-wing * direction, wing),
 					]
 				),
 				ink,
 				w,
 				true
 			)
+		"more":
+			for offset in [-0.8, 0.0, 0.8]:
+				draw_circle(c + Vector2(offset * r, 0), w * 0.9, ink, true, -1.0, true)
 		"close":
 			draw_line(c - Vector2.ONE * r, c + Vector2.ONE * r, ink, w, true)
 			draw_line(c + Vector2(-r, r), c + Vector2(r, -r), ink, w, true)
 		"grid":
-			var icon_size := Vector2.ONE * r * 3.0
-			draw_texture_rect(GridIcon, Rect2(c - icon_size * 0.5, icon_size), false)
+			for x in [-1, 1]:
+				for y in [-1, 1]:
+					var center := c + Vector2(x, y) * r * 0.65
+					draw_rect(
+						Rect2(center - Vector2.ONE * r * 0.4, Vector2.ONE * r * 0.8),
+						ink,
+						false,
+						w,
+						true
+					)
 		"album":
-			var icon_size := Vector2.ONE * r * 3.0
-			draw_texture_rect(AlbumIcon, Rect2(c - icon_size * 0.5, icon_size), false)
+			draw_rect(Rect2(c - Vector2.ONE * r, Vector2.ONE * r * 2.0), ink, false, w, true)
+			draw_polyline(
+				PackedVector2Array(
+					[
+						c + Vector2(-0.8, 0.65) * r,
+						c + Vector2(-0.2, -0.1) * r,
+						c + Vector2(0.2, 0.3) * r,
+						c + Vector2(0.6, -0.25) * r,
+						c + Vector2(0.9, 0.2) * r,
+					]
+				),
+				ink,
+				w,
+				true
+			)
+			draw_circle(c + Vector2(-0.4, -0.5) * r, r * 0.13, ink)
 		"undo":
 			draw_arc(c, r, -PI * 0.85, PI * 0.75, 32, ink, w, true)
 			var tip := c + Vector2.from_angle(-PI * 0.85) * r
@@ -71,5 +94,9 @@ func _draw() -> void:
 				true
 			)
 		"settings":
-			var icon_size := Vector2.ONE * r * 2.5
-			draw_texture_rect(GearIcon, Rect2(c - icon_size * 0.5, icon_size), false)
+			for i in 3:
+				var y := c.y + float(i - 1) * r * 0.75
+				draw_line(Vector2(c.x - r, y), Vector2(c.x + r, y), ink, w, true)
+				var knob := Vector2(c.x + (-0.35 if i % 2 == 0 else 0.35) * r, y)
+				draw_circle(knob, r * 0.22, Clean.PAPER)
+				draw_circle(knob, r * 0.22, ink, false, w, true)

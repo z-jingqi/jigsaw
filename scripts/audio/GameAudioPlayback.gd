@@ -27,10 +27,14 @@ var _last_cue: Dictionary = {}
 var _played: Dictionary = {}
 var _suppressed := 0
 var _stopped := false
+var _window: Window
 
 
 func configure(settings: SettingsRepository) -> void:
 	_settings = settings
+	_window = get_window()
+	if _window != null and not _window.close_requested.is_connected(shutdown):
+		_window.close_requested.connect(shutdown)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for kind in Palette.CUES:
 		_streams[kind] = load(Palette.cue_path(kind)) as AudioStream
@@ -50,8 +54,17 @@ func configure(settings: SettingsRepository) -> void:
 	_on_settings_changed(_settings.snapshot(), _settings.revision())
 
 
+func _exit_tree() -> void:
+	shutdown()
+
+
 func shutdown() -> void:
+	if _stopped:
+		return
 	_stopped = true
+	if is_instance_valid(_window) and _window.close_requested.is_connected(shutdown):
+		_window.close_requested.disconnect(shutdown)
+	_window = null
 	if _settings != null and _settings.changed.is_connected(_on_settings_changed):
 		_settings.changed.disconnect(_on_settings_changed)
 	_settings = null
@@ -59,7 +72,10 @@ func shutdown() -> void:
 	_stop_motion(_effect_motion)
 	_stop_motion(_completion_motion)
 	for player in _all_players():
-		player.stop()
+		if is_instance_valid(player):
+			player.stop()
+			player.stream = null
+	_streams.clear()
 
 
 func set_context(route: StringName) -> void:

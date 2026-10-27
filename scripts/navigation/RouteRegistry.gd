@@ -102,11 +102,6 @@ func _register_runtime_contracts() -> void:
 	)
 	register_definition(
 		RouteDefinitionScript.new(
-			&"home_guide", RouteDefinitionScript.Presentation.OVERLAY, {}, {"initial_step": "swipe"}
-		)
-	)
-	register_definition(
-		RouteDefinitionScript.new(
 			&"completion",
 			RouteDefinitionScript.Presentation.MODAL,
 			{

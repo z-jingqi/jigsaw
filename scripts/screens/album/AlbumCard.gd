@@ -2,6 +2,7 @@ class_name AlbumCard
 extends Button
 ## A recycled card releases its image before being bound to a different artwork.
 
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const RoundedShader := preload("res://shaders/ui/rounded_texture.gdshader")
 const AlbumIcon := preload("res://assets/ui/icons/album.svg")
 const UiFont := preload("res://themes/douyin_ui_font.tres")
@@ -17,14 +18,8 @@ var _material: ShaderMaterial
 
 func _ready() -> void:
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "focus"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color.TRANSPARENT
-		style.set_corner_radius_all(16)
-		if state == "focus":
-			style.set_border_width_all(2)
-			style.border_color = Color("194F47")
-		add_theme_stylebox_override(state, style)
+	Clean.button(self)
+	add_theme_stylebox_override("normal", Clean.panel(Clean.SAGE, 24))
 	_art = TextureRect.new()
 	_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -35,7 +30,7 @@ func _ready() -> void:
 	add_child(_art)
 	_title = _label()
 	_subtitle = _label()
-	_subtitle.add_theme_color_override("font_color", Color("82917D"))
+	_subtitle.add_theme_color_override("font_color", Clean.MUTED)
 	resized.connect(_layout)
 	_sync_model()
 
@@ -72,7 +67,7 @@ func _sync_model() -> void:
 	_subtitle.text = str(model.get("subtitle", ""))
 	_subtitle.visible = not _subtitle.text.is_empty()
 	accessibility_name = _title.text + " " + _subtitle.text
-	tooltip_text = _title.text
+	tooltip_text = ""
 	_layout()
 
 
@@ -80,7 +75,7 @@ func _draw() -> void:
 	if model.is_empty() or _art == null or _art.texture != null:
 		return
 	var frame := StyleBoxFlat.new()
-	frame.bg_color = Color("E5E6D9")
+	frame.bg_color = Clean.LAVENDER
 	frame.set_corner_radius_all(maxi(4, roundi(size.x * 0.035)))
 	draw_style_box(frame, Rect2(_art.position, _art.size))
 	var icon_size := Vector2.ONE * size.x * 0.23
@@ -97,7 +92,7 @@ func _label() -> Label:
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.add_theme_font_override("font", UiFont)
-	label.add_theme_color_override("font_color", Color("194F47"))
+	label.add_theme_color_override("font_color", Clean.INK)
 	add_child(label)
 	return label
 
@@ -105,7 +100,7 @@ func _label() -> Label:
 func _layout() -> void:
 	if _art == null:
 		return
-	var inset := size.x * 0.025
+	var inset := size.x * 0.04
 	_art.position = Vector2.ONE * inset
 	_art.size = Vector2(size.x - inset * 2, (size.x - inset * 2) / 0.75)
 	_material.set_shader_parameter("rect_size", _art.size)

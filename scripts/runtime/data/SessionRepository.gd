@@ -20,7 +20,7 @@ func _init(store: AtomicJsonStore = null, path: String = DEFAULT_PATH) -> void:
 
 
 func load() -> void:
-	_data = _validated(_store.load_dictionary(_path))
+	_data = _validated(_store.load_validated_dictionary(_path, validate_storage))
 	_revision += 1
 	changed.emit(snapshot(), _revision)
 
@@ -63,8 +63,8 @@ func play_state(
 	)
 	if _is_valid_state(state, piece_ids):
 		return state.duplicate(true)
-	if not state.is_empty():
-		clear_play_state(theme_id, level_id, mode)
+	# A read with a different catalog fingerprint must not destroy a saved game.
+	# Explicit clear/save operations remain the only mutations.
 	return {}
 
 
@@ -103,7 +103,7 @@ func clear_play_state(theme_id: String, level_id: String, mode: String) -> Dicti
 	return _commit(next_data)
 
 
-func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool:
+static func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool:
 	if int(state.get("state_version", -1)) != STATE_VERSION:
 		return false
 	if str(state.get("theme_id", "")).is_empty() or str(state.get("level_id", "")).is_empty():
@@ -117,16 +117,23 @@ func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool:
 	):
 		return false
 	if mode == "swap":
-		var slots: Array = state.get("slot_piece_ids", [])
+		if typeof(state.get("slot_piece_ids")) != TYPE_ARRAY:
+			return false
+		var slots: Array = state.slot_piece_ids
 		return (
 			str(state.get("kind", "")) == "swap" and _is_exact_piece_permutation(slots, piece_ids)
 		)
-	var groups: Array = state.get("connected_groups", [])
-	var tray: Array = state.get("tray_order", [])
+	if (
+		typeof(state.get("connected_groups")) != TYPE_ARRAY
+		or typeof(state.get("tray_order")) != TYPE_ARRAY
+	):
+		return false
+	var groups: Array = state.connected_groups
+	var tray: Array = state.tray_order
 	return str(state.get("kind", "")) == "assembly" and _is_valid_assembly(groups, tray, piece_ids)
 
 
-func _is_exact_piece_permutation(values: Array, piece_ids: Array[String]) -> bool:
+static func _is_exact_piece_permutation(values: Array, piece_ids: Array[String]) -> bool:
 	if piece_ids.is_empty() or values.size() != piece_ids.size():
 		return false
 	var seen := {}
@@ -137,7 +144,7 @@ func _is_exact_piece_permutation(values: Array, piece_ids: Array[String]) -> boo
 	return true
 
 
-func _is_valid_assembly(groups: Array, tray: Array, piece_ids: Array[String]) -> bool:
+static func _is_valid_assembly(groups: Array, tray: Array, piece_ids: Array[String]) -> bool:
 	if piece_ids.is_empty():
 		return false
 	var seen := {}
@@ -155,7 +162,7 @@ func _is_valid_assembly(groups: Array, tray: Array, piece_ids: Array[String]) ->
 	return seen.size() == piece_ids.size()
 
 
-func _expected_fingerprint(piece_ids: Array[String]) -> String:
+static func _expected_fingerprint(piece_ids: Array[String]) -> String:
 	if piece_ids.is_empty():
 		return ""
 	var seen := {}
@@ -228,3 +235,42 @@ func _state_key(theme_id: String, level_id: String, mode: String) -> String:
 
 func _defaults() -> Dictionary:
 	return {"schema_version": SCHEMA_VERSION, "current": {}, "play_states": {}}
+
+
+func load_status() -> Dictionary:
+	return _store.load_status(_path)
+
+
+static func validate_storage(value: Dictionary) -> String:
+	if typeof(value.get("schema_version")) not in [TYPE_INT, TYPE_FLOAT]:
+		return "invalid_structure"
+	if float(value.schema_version) != SCHEMA_VERSION:
+		return "unsupported_schema"
+	if typeof(value.get("current")) != TYPE_DICTIONARY:
+		return "invalid_structure"
+	if typeof(value.get("play_states")) != TYPE_DICTIONARY:
+		return "invalid_structure"
+	for key in value.current:
+		if key in ["theme_id", "level_id", "mode"] and typeof(value.current[key]) != TYPE_STRING:
+			return "invalid_structure"
+	for key in value.play_states:
+		var state: Variant = value.play_states[key]
+		if typeof(key) != TYPE_STRING or not state is Dictionary:
+			return "invalid_structure"
+		if typeof(state.get("state_version")) not in [TYPE_INT, TYPE_FLOAT]:
+			return "invalid_structure"
+		if float(state.state_version) != STATE_VERSION:
+			return "unsupported_schema"
+		for field in ["theme_id", "level_id", "mode", "piece_set_fingerprint"]:
+			if typeof(state.get(field)) != TYPE_STRING:
+				return "invalid_structure"
+
+		var ids: Array[String] = []
+		for id in state.piece_set_fingerprint.split("|"):
+			ids.append(id)
+		if not _is_valid_state(state, ids):
+			return "invalid_structure"
+		if key != "%s/%s:%s" % [state.theme_id, state.level_id, state.mode]:
+			return "invalid_structure"
+
+	return ""

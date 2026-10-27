@@ -13,6 +13,7 @@ var _session: Variant
 var _strings: Variant
 var _revision := 0
 var _home_models_revision := -1
+var _home_models_source_key := ""
 var _home_models: Array = []
 
 
@@ -43,7 +44,6 @@ func home(selected_theme_id: String) -> AppViewModels.HomeViewModel:
 				"themes": models,
 				"selected_theme_id": resolved_id,
 				"selected_index": selected_index,
-				"show_home_guide": not _progress.tutorial_seen(&"home_swipe"),
 			}
 		)
 	)
@@ -55,17 +55,13 @@ func level_list(
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var cards: Array[AppViewModels.LevelCardViewModel] = []
 	var focus_id := ""
-	var first_level := true
 	for level in topic.get("levels", []):
 		if typeof(level) != TYPE_DICTIONARY:
 			continue
 		var modes: Array[AppViewModels.ModeStatusViewModel] = _mode_statuses(topic, level)
 		var revealed: bool = (
-			first_level
-			or _progress.is_level_visited(theme_id, str(level["id"]))
-			or _has_played_mode(modes)
+			_progress.is_level_visited(theme_id, str(level["id"])) or _has_played_mode(modes)
 		)
-		first_level = false
 		var is_recommended: bool = requested_focus_level_id == str(level["id"])
 		if focus_id.is_empty() and _has_unfinished_mode(modes):
 			focus_id = str(level["id"])
@@ -78,6 +74,8 @@ func level_list(
 					. new(
 						{
 							"level_id": level["id"],
+							"level_number": cards.size() + 1,
+							"theme_id": theme_id,
 							"title": level["title"],
 							"thumbnail": null,
 							"thumbnail_path": _content.level_thumbnail_path(level),
@@ -267,8 +265,20 @@ func _on_source_changed(_snapshot: Dictionary, _source_revision: int) -> void:
 
 
 func _cached_home_models(themes: Array[Dictionary]) -> Array:
-	if _home_models_revision == _revision:
+	var sources: Array = []
+	for topic in themes:
+		sources.append(
+			[
+				topic.get("id", ""),
+				topic.get("name", ""),
+				topic.get("theme_subject", ""),
+				topic.get("cover", "")
+			]
+		)
+	var source_key := JSON.stringify(sources)
+	if _home_models_revision == _revision and source_key == _home_models_source_key:
 		return _home_models
+	_home_models_source_key = source_key
 	_home_models.clear()
 	for topic in themes:
 		(
@@ -281,7 +291,7 @@ func _cached_home_models(themes: Array[Dictionary]) -> Array:
 						{
 							"theme_id": topic["id"],
 							"title": topic["name"],
-							"cover_texture": _content.topic_cover(topic),
+							"cover_texture": _content.topic_display_texture(topic),
 							"playable": not topic.get("levels", []).is_empty(),
 							"subtitle":
 							(

@@ -1,0 +1,56 @@
+{
+  "tokens": {
+    "viewBox": "0 0 32 32",
+    "incompleteColor": "#888F86",
+    "visibleStrokeWidth": 1.5,
+    "closedStrokeWidthBeforeClip": 3,
+    "lineCap": "butt",
+    "lineJoin": "round",
+    "closedStrokeAlignment": "inner (centered 3 clipped to shared shape)",
+    "openStrokeAlignment": "centered 1.5",
+    "construction": "explicit local segments, no dasharray or dashoffset",
+    "cornerGap": 0.8,
+    "internalGap": 1.6,
+    "targetDashLength": 2.4,
+    "hexSegmentsPerEdge": 2
+  },
+  "closedGeometry": {
+    "polygon": [
+      [
+        "M22.299935 5.790337 L22.299935 13.030779 L16.000000 16.654599 L9.700065 13.030779 L9.700065 5.790337 L16.000000 2.166517 Z",
+        "#89AB98"
+      ],
+      [
+        "M14.796744 19.246221 L14.796744 26.486663 L8.496810 30.110483 L2.196875 26.486663 L2.196875 19.246221 L8.496810 15.622401 Z",
+        "#527F73"
+      ],
+      [
+        "M29.803125 19.246221 L29.803125 26.486663 L23.503190 30.110483 L17.203256 26.486663 L17.203256 19.246221 L23.503190 15.622401 Z",
+        "#B6CAB0"
+      ]
+    ],
+    "knob": [
+      [
+        "M4 10 H10 C8 7 10 4 13 4 C16 4 18 7 16 10 H22 V16 C25 14 28 16 28 19 C28 22 25 24 22 22 V28 H16 C17 25 15.5 24 13 24 C10.5 24 9 25 10 28 H4 V22 C6 23 8 21 8 19 C8 17 6 15 4 16 Z",
+        "#DF9D73"
+      ]
+    ],
+    "swap": [
+      [
+        "M2 10 H14 V22 H2 Z",
+        "#8C78AF"
+      ],
+      [
+        "M18 10 H30 V22 H18 Z",
+        "#B6A0CD"
+      ]
+    ]
+  },
+  "openGeometry": {
+    "swap": [
+      "M5 5 H27 L24 2 M27 5 L24 8",
+      "M27 27 H5 L8 24 M5 27 L8 30"
+    ]
+  },
+  "honeyNormalization": "User-requested gap correction: inset original polygons by 1.115 instead of .425, bake original normalization, then fit to the approved overall honeycomb bounds. All three neighbor gaps exceed 2.3/32 (~1px at14). Colors and overall bounds unchanged; identical corrected geometry in both states. No cream strokes or transforms."
+}

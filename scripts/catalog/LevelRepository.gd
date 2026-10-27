@@ -82,6 +82,7 @@ func build_catalog() -> Array[Dictionary]:
 						"id": str(topic.get("id", "")),
 						"name": localized_named(topic, str(topic.get("name", topic.get("id", "")))),
 						"cover": str(topic.get("cover", "")),
+						"theme_subject": str(topic.get("theme_subject", "")),
 						"cover_thumbnail":
 						str(topic.get("cover_thumbnail", topic.get("cover", ""))),
 						"color": str(topic.get("color", "#D9933F")),

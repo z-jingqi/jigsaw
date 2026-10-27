@@ -8,14 +8,14 @@ enum TextVariant { ON_LIGHT, ON_DARK }
 @export var on_dark_theme: Theme
 
 @export_group("Palette")
-@export var ink_dark := Color("10475B")
-@export var coral := Color("F28A70")
-@export var coral_pressed := Color("E9745E")
-@export var mint := Color("A8DCC6")
-@export var warm_mist := Color("FFF8ED")
-@export var disabled_surface := Color("E8DDCC")
-@export var disabled_ink := Color("A6917D")
-@export var focus_ring := Color("10475B")
+@export var ink_dark := Color("272925")
+@export var coral := Color("272925")
+@export var coral_pressed := Color("454940")
+@export var mint := Color("E5E9D8")
+@export var warm_mist := Color("FAF7EF")
+@export var disabled_surface := Color("E9E6DE")
+@export var disabled_ink := Color("62665D")
+@export var focus_ring := Color("272925")
 
 @export_group("Layout")
 @export var compact_breakpoint := 600.0

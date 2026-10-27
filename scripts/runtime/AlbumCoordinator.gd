@@ -1,112 +1,146 @@
 class_name AlbumCoordinator
 extends RefCounted
-## Owns album routes and preserves the grid state while browsing full artworks.
+## Owns unlocked album selection; positions are UI state, never progress writes.
 
 const AlbumScene := preload("res://scenes/screens/album/AlbumScreen.tscn")
 const DetailScene := preload("res://scenes/screens/album/AlbumDetailScreen.tscn")
-const ThumbnailLoader := preload("res://scripts/screens/album/AlbumThumbnailLoader.gd")
+const ImageCache := preload("res://scripts/screens/album/AlbumImageCache.gd")
 
 var _navigator: AppNavigator
 var _presenter: AlbumPresenter
 var _theme_id := ""
-var _show_themes := true
-var _thumbnails: AlbumThumbnailLoader
-var _scroll_positions: Dictionary = {}
-var _artworks: Array[Dictionary] = []
-var _artwork_index := 0
+var _positions: Dictionary = {}
+var _images: Node
+var _progress: ProgressRepository
 
 
-func _init(navigator: AppNavigator, presenter: AlbumPresenter) -> void:
+func _init(
+	navigator: AppNavigator, presenter: AlbumPresenter, progress: ProgressRepository
+) -> void:
 	_navigator = navigator
 	_presenter = presenter
-	_thumbnails = ThumbnailLoader.new()
-	_navigator.add_child(_thumbnails)
+	_progress = progress
+	_progress.changed.connect(_progress_changed, CONNECT_DEFERRED)
+	_images = ImageCache.new()
+	_navigator.add_child(_images)
 	_navigator.bind_route_scene(&"album", AlbumScene)
 	_navigator.bind_route_scene(&"album_artwork", DetailScene)
+	_navigator.route_changed.connect(_route_changed)
 
 
 func open() -> Dictionary:
-	var payload := {
-		"view_model": _presenter.overview() if _show_themes else _presenter.gallery(_theme_id),
-		"scroll_position": int(_scroll_positions.get(_view_key(), 0)),
-	}
-	var result := (
-		_navigator.push_from_modal(&"album", payload)
-		if _navigator.current_route() == &"home_guide"
-		else _navigator.push(&"album", payload)
-	)
+	if not is_available():
+		return {"ok": false, "error": "not_unlocked"}
+	var model := _focus()
+	var result := _navigator.push(&"album", {"view_model": model})
 	if bool(result.get("ok", false)):
 		var screen := _navigator.current_screen_view() as AlbumScreen
-		screen.set_thumbnail_loader(_thumbnails)
-		screen.back_requested.connect(_back.bind(screen))
-		screen.theme_selected.connect(_select_theme.bind(screen))
-		screen.all_requested.connect(_select_theme.bind("", screen))
-		screen.artwork_selected.connect(open_artwork)
+		screen.set_image_loader(_images)
+		if not screen.has_meta("album_coordinator_bound"):
+			screen.set_meta("album_coordinator_bound", true)
+			screen.back_requested.connect(_navigator.pop)
+			screen.theme_selected.connect(_select_theme)
+			screen.index_selected.connect(_select_index)
+			screen.artwork_selected.connect(open_artwork)
 	return result
+
+
+func is_available() -> bool:
+	return _presenter.has_unlocked_artwork()
+
+
+func _progress_changed(_snapshot: Dictionary, _revision: int) -> void:
+	if not is_instance_valid(_navigator):
+		return
+	var home := _navigator.current_screen_view() as HomeScreen
+	if home != null:
+		home.refresh_album_availability()
+	if not is_available():
+		_navigator.discard_unavailable_routes([&"album", &"album_artwork"])
+		return
+	var route := _navigator.current_route()
+	if route == &"album":
+		var screen := _navigator.current_screen_view() as AlbumScreen
+		if screen != null:
+			screen.render(_focus())
+	elif route == &"album_artwork":
+		var detail := _navigator.current_screen_view() as AlbumDetailScreen
+		if detail != null:
+			detail.render(_focus(), true)
+
+
+func _focus() -> Dictionary:
+	var model := _presenter.focus(_theme_id, int(_positions.get(_theme_id, 0)))
+	_theme_id = str(model.get("theme_id", ""))
+	_positions[_theme_id] = int(model.get("index", 0))
+	return model
+
+
+func _select_theme(theme_id: String) -> void:
+	_theme_id = theme_id
+	var screen := _navigator.current_screen_view() as AlbumScreen
+	if screen != null:
+		screen.render(_focus())
+
+
+func _select_index(index: int) -> void:
+	_positions[_theme_id] = index
+	# Screen owns its current visual pose. Do not render/reset its in-flight drag.
+	if _navigator.current_route() == &"album_artwork":
+		_prepare_album_return()
 
 
 func open_artwork(theme_id: String, level_id: String) -> Dictionary:
-	_artworks = _presenter.artworks(theme_id if _show_themes else _theme_id)
-	for index in _artworks.size():
-		if _artworks[index].theme_id == theme_id and _artworks[index].level_id == level_id:
-			_artwork_index = index
-			return _enter_artwork()
-	return {"ok": false, "error": "not_found"}
-
-
-func _enter_artwork() -> Dictionary:
-	var entry := _artworks[_artwork_index]
-	var model := _presenter.artwork(
-		str(entry.theme_id), str(entry.level_id), _artwork_index, _artworks.size()
-	)
-	if model.is_empty():
-		return {"ok": false, "error": "not_found"}
-	var detail := _navigator.current_screen_view() as AlbumDetailScreen
-	if detail != null:
-		detail.render(model, true)
-		return {"ok": true}
-	var result := (
-		_navigator
-		. push(
-			&"album_artwork",
-			{
-				"theme_id": str(entry.theme_id),
-				"level_id": str(entry.level_id),
-				"view_model": model,
-			}
+	var entries := _presenter.artworks(theme_id)
+	for index in entries.size():
+		if str(entries[index].level_id) != level_id:
+			continue
+		_theme_id = theme_id
+		_positions[theme_id] = index
+		var model := _focus()
+		var detail := _navigator.current_screen_view() as AlbumDetailScreen
+		if detail != null:
+			detail.render(model, true)
+			return {"ok": true}
+		var result := (
+			_navigator
+			. push(
+				&"album_artwork",
+				{
+					"theme_id": theme_id,
+					"level_id": level_id,
+					"view_model": model,
+				}
+			)
 		)
-	)
-	if bool(result.get("ok", false)):
-		detail = _navigator.current_screen_view() as AlbumDetailScreen
-		detail.back_requested.connect(_navigator.pop)
-		detail.browse_requested.connect(_browse)
-	return result
+		if bool(result.get("ok", false)):
+			detail = _navigator.current_screen_view() as AlbumDetailScreen
+			detail.set_image_loader(_images)
+			if not detail.has_meta("album_coordinator_bound"):
+				detail.set_meta("album_coordinator_bound", true)
+				detail.back_requested.connect(_close_artwork)
+				detail.back_preview_requested.connect(_prepare_album_return)
+				detail.index_selected.connect(_select_index)
+		return result
+	return {"ok": false, "error": "not_unlocked"}
 
 
-func _browse(direction: int) -> void:
-	var next_index := clampi(_artwork_index + direction, 0, _artworks.size() - 1)
-	if next_index == _artwork_index:
+func _route_changed(route: StringName, _payload: Dictionary) -> void:
+	if route in [&"album", &"album_artwork"] and not is_available():
+		_navigator.discard_unavailable_routes.call_deferred([&"album", &"album_artwork"])
 		return
-	_artwork_index = next_index
-	_enter_artwork()
+	if route == &"album":
+		var screen := _navigator.current_screen_view() as AlbumScreen
+		if screen != null and screen.has_meta("album_coordinator_bound"):
+			screen.render(_focus())
 
 
-func _select_theme(theme_id: String, screen: AlbumScreen) -> void:
-	_scroll_positions[_view_key()] = screen.scroll_position()
-	_show_themes = false
-	_theme_id = theme_id
-	screen.render(_presenter.gallery(theme_id), int(_scroll_positions.get(_view_key(), 0)))
+func _prepare_album_return() -> void:
+	var previous := _navigator.previous_screen_view() as AlbumScreen
+	if previous != null:
+		previous.prepare_return(int(_positions.get(_theme_id, 0)))
 
 
-func _back(screen: AlbumScreen) -> void:
-	_scroll_positions[_view_key()] = screen.scroll_position()
-	if _show_themes:
-		_navigator.pop()
-	else:
-		_show_themes = true
-		_theme_id = ""
-		screen.render(_presenter.overview(), int(_scroll_positions.get(_view_key(), 0)))
-
-
-func _view_key() -> String:
-	return "themes" if _show_themes else "artworks:" + _theme_id
+func _close_artwork() -> void:
+	_prepare_album_return()
+	_navigator.pop()

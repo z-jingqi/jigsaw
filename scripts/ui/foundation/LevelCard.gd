@@ -1,26 +1,67 @@
 class_name LevelCard
 extends ActionButton
 
-const TITLE_MAX_FONT_SIZE := 40
-const TITLE_MIN_SINGLE_LINE_FONT_SIZE := 28
-const TITLE_WRAP_MIN_FONT_SIZE := 18
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+
+const ThumbnailLoader := preload("res://scripts/ui/box/LevelThumbnailLoader.gd")
+
+const BoxCache := preload("res://scripts/ui/box/BoxThumbnailCache.gd")
 
 @onready var title_label: Label = $Title
 @onready var thumbnail: TextureRect = $Thumbnail
-@onready var completed_modes: CompletedModeStickers = $CompletedModes
+@onready var completed_modes: Control = $CompletedModes
 
 var level_id := ""
 var _view_model: Variant
 var _thumbnail_path := ""
+var _thumbnail_generation := 0
+var _thumbnail_loader: Node
 var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
+var _status: Label
+var _box_preview: TextureRect
+var _box_hidden := false
+var _edge_back_preview := false
+var _cache_key := ""
+var _box_identity := ""
+var _request_token := 0
+var _requested_token := -1
+var _locked := false
+var _shelf_enabled := true
+
+var _box_full_size := Vector2.ZERO
+var _box_used_rect := Rect2()
+var _box_source_texture: Texture2D
 
 
 func _ready() -> void:
 	kind = Kind.CARD
 	super._ready()
+	_status = Label.new()
+	_status.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status.add_theme_stylebox_override("normal", Clean.panel(Clean.PAPER, 18))
+	title_label.hide()
+	completed_modes.hide()
+	add_child(_status)
+	_box_preview = TextureRect.new()
+	var composite := ShaderMaterial.new()
+	composite.shader = preload("res://scripts/ui/box/BoxComposite.gdshader")
+	_box_preview.material = composite
+	_box_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_box_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_box_preview.visible = false
+	add_child(_box_preview)
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	focus_entered.connect(queue_redraw)
+	focus_exited.connect(queue_redraw)
 	set_process(false)
 	resized.connect(_apply_layout)
+	get_viewport().size_changed.connect(_apply_layout)
+	tree_entered.connect(_request_box)
+	tree_entered.connect(_resume_thumbnail_request)
 	_apply_layout()
 	if _view_model != null:
 		_apply_view_model()
@@ -33,55 +74,144 @@ func set_view_model(view_model: Variant) -> void:
 
 
 func _apply_view_model() -> void:
-	level_id = str(_read("level_id"))
-	var next_title := str(_read("title"))
-	var title_changed := title_label.text != next_title
-	if title_changed:
-		title_label.text = next_title
-	var is_locked := bool(_read("locked"))
-	disabled = is_locked
-	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
-	var mode_states: Array = _read("modes", [])
-	completed_modes.set_modes(mode_states, not is_locked)
-	tooltip_text = title_label.text
-	accessibility_name = (
-		"%s, %s"
-		% [
-			title_label.text,
-			(
-				"Locked"
-				if is_locked
-				else (
-					"%d modes completed" % completed_modes.completed_count()
-					if completed_modes.completed_count() > 0
-					else "Available"
-				)
-			)
-		]
+	var next_level_id := str(_read("level_id"))
+	var next_identity := JSON.stringify([_read("theme_id", ""), next_level_id])
+	var modes: Array = []
+	var descriptions: PackedStringArray = []
+	for state in _read("modes", []):
+		var status := StringName(state.get("status"))
+		modes.append({"mode": String(state.get("mode")), "status": String(status)})
+		var mode_label := str(state.get("label"))
+		var detail := GameStrings.ui_text("completed_mode") % mode_label
+		if status != &"completed":
+			var status_key := "in_progress" if status == &"in_progress" else "todo"
+			detail = "%s: %s" % [mode_label, GameStrings.ui_text(status_key)]
+		descriptions.append(detail)
+	_locked = bool(_read("locked", false))
+	completed_modes.set_modes(_read("modes", []), not _locked)
+	var key := (
+		JSON
+		. stringify(
+			[
+				_read("theme_id", ""),
+				next_level_id,
+				_read("thumbnail_path", ""),
+				_read("title", ""),
+				modes,
+				_read("preview_revealed", not _locked),
+				_locked,
+			]
+		)
 	)
-	# Progress refreshes keep the same geometry and typography. Reapplying the
-	# font overrides to every retained card stalls the first return frame.
-	if title_changed:
-		_apply_layout()
-	else:
-		_apply_preview_style()
+	if key != _cache_key:
+		_request_token += 1
+		_requested_token = -1
+		# Retain the last image for this box while state/reveal changes are queued.
+		# A recycled card must never show another level's image or hide state.
+		if _box_identity != next_identity:
+			_box_preview.texture = null
+			_box_source_texture = null
+			_box_preview.visible = false
+			_box_used_rect = Rect2()
+			_box_hidden = false
+	_box_identity = next_identity
+	_cache_key = key
+	level_id = next_level_id
+	title_label.text = str(_read("title"))
+	accessibility_name = title_label.text
+	accessibility_description = ", ".join(descriptions)
+	tooltip_text = ""
+	disabled = _locked or _box_source_texture == null or not _shelf_enabled
+	_status.visible = false
+	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
+	_request_box()
+	_apply_layout()
 
 
-func _process(_delta: float) -> void:
-	if _thumbnail_path.is_empty():
-		set_process(false)
+func _request_box() -> void:
+	if not is_node_ready() or not is_inside_tree() or _cache_key.is_empty():
 		return
-	var status := ResourceLoader.load_threaded_get_status(_thumbnail_path)
-	if status == ResourceLoader.THREAD_LOAD_LOADED:
-		var requested_path := _thumbnail_path
-		var loaded := ResourceLoader.load_threaded_get(requested_path) as Texture2D
-		if requested_path == _thumbnail_path:
-			_thumbnail_path = ""
-			set_process(false)
-			_show_loaded_thumbnail(loaded, true)
-	elif status in [ResourceLoader.THREAD_LOAD_FAILED, ResourceLoader.THREAD_LOAD_INVALID_RESOURCE]:
-		_thumbnail_path = ""
-		set_process(false)
+	if (
+		(thumbnail.texture == null and not _thumbnail_path.is_empty())
+		or _requested_token == _request_token
+	):
+		return
+	_requested_token = _request_token
+	var modes: Array = []
+	for state in _read("modes", []):
+		modes.append({"mode": String(state.get("mode")), "status": String(state.get("status"))})
+	var packaging := {
+		"theme_id": str(_read("theme_id", "")),
+		"title": title_label.text,
+		"modes": modes,
+		"preview_revealed": bool(_read("preview_revealed", not _locked)),
+		"locked": _locked,
+	}
+	BoxCache.shared(get_tree()).request(
+		_cache_key,
+		thumbnail.texture,
+		packaging,
+		_accept_box.bind(_request_token, _cache_key),
+		_box_request_is_current.bind(_request_token, _cache_key)
+	)
+
+
+func _box_request_is_current(token: int, key: String) -> bool:
+	return is_inside_tree() and token == _request_token and key == _cache_key
+
+
+func _accept_box(entry: Dictionary, token: int, key: String) -> void:
+	if not is_inside_tree() or token != _request_token or key != _cache_key:
+		return
+	_box_full_size = entry.full_size
+	_box_used_rect = entry.used_rect
+	_box_source_texture = entry.texture
+	var cropped := AtlasTexture.new()
+	cropped.atlas = entry.texture
+	cropped.region = _box_used_rect
+	_box_preview.texture = cropped
+	disabled = _locked or not _shelf_enabled
+	_apply_layout()
+
+
+func set_shelf_interaction_enabled(enabled: bool) -> void:
+	_shelf_enabled = enabled
+	disabled = _locked or _box_source_texture == null or not enabled
+	if not enabled:
+		set_pressed_no_signal(false)
+
+
+func set_edge_back_preview(enabled: bool) -> void:
+	# Reveal only pixels: retain the shelf's hidden source and opening ownership.
+	_edge_back_preview = enabled
+	_apply_layout()
+
+
+func set_box_transition_hidden(hidden: bool) -> void:
+	_box_hidden = hidden
+	_apply_layout()
+
+
+func cancel_thumbnail_request() -> void:
+	_request_token += 1
+	_requested_token = -1
+	_box_hidden = false
+
+
+func _resume_thumbnail_request() -> void:
+	if _thumbnail_path.is_empty() or not is_inside_tree():
+		return
+	_thumbnail_loader = ThumbnailLoader.shared(get_tree())
+	_thumbnail_loader.watch(
+		self, "level", _thumbnail_path, _on_thumbnail_loaded.bind(_thumbnail_generation), "thumb"
+	)
+
+
+func _on_thumbnail_loaded(path: String, texture: Texture2D, generation: int) -> void:
+	if generation != _thumbnail_generation or path != _thumbnail_path or not is_inside_tree():
+		return
+	_thumbnail_path = ""
+	_show_loaded_thumbnail(texture, true)
 
 
 func _set_thumbnail(texture: Texture2D, path: String) -> void:
@@ -95,6 +225,9 @@ func _set_thumbnail(texture: Texture2D, path: String) -> void:
 		if path == _thumbnail_path:
 			return
 	_cancel_thumbnail_fade()
+	_thumbnail_generation += 1
+	if is_instance_valid(_thumbnail_loader):
+		_thumbnail_loader.unwatch_owner(self)
 	_thumbnail_path = ""
 	_displayed_thumbnail_path = path
 	set_process(false)
@@ -109,20 +242,17 @@ func _set_thumbnail(texture: Texture2D, path: String) -> void:
 		_show_loaded_thumbnail(load(path) as Texture2D, false)
 		return
 	_thumbnail_path = path
-	var request_error := ResourceLoader.load_threaded_request(path, "Texture2D")
-	var status := ResourceLoader.load_threaded_get_status(path)
-	if request_error == OK or status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-		set_process(true)
-		return
-	_thumbnail_path = ""
+	_resume_thumbnail_request()
 
 
 func _show_loaded_thumbnail(texture: Texture2D, animate: bool) -> void:
 	if texture == null:
 		thumbnail.texture = null
 		thumbnail.modulate = Color(1, 1, 1, 0)
+		_request_box()
 		return
 	thumbnail.texture = texture
+	_request_box()
 	if not animate or _reduced_motion:
 		thumbnail.modulate = Color.WHITE
 		return
@@ -141,64 +271,67 @@ func _cancel_thumbnail_fade() -> void:
 func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0:
 		return
-	var inset := maxf(4.0, size.x * 0.012)
-	var image_height := minf(size.y - 64.0, (size.x - inset * 2.0) * 4.0 / 3.0)
-	thumbnail.position = Vector2(inset, inset)
-	thumbnail.size = Vector2(size.x - inset * 2.0, image_height)
-	var remaining := maxf(0.0, size.y - image_height)
-	var title_height := minf(72.0, maxf(54.0, remaining - inset))
-	title_label.position = Vector2(20.0, image_height + inset + 2.0)
-	title_label.size = Vector2(maxf(0.0, size.x - 40.0), title_height)
-	_fit_title_font(title_label.size.x, title_label.size.y)
-	var icon_size := clampf(size.x * 0.088, 34.0, 48.0) * 1.5
-	var icon_gap := maxf(5.0, icon_size * 0.12)
-	completed_modes.configure(icon_size, icon_gap)
-	completed_modes.size = Vector2(icon_size, icon_size * 3.0 + icon_gap * 2.0)
-	completed_modes.position = (
-		thumbnail.position + thumbnail.size - completed_modes.size - Vector2.ONE * 12.0
+	var inset := 0.0 if bool(get_meta("shelf_layout", false)) else maxf(8.0, size.x * 0.035)
+	var area := Rect2(Vector2.ONE * inset, size - Vector2.ONE * inset * 2.0)
+	thumbnail.position = area.position
+	thumbnail.size = area.size
+	_box_preview.position = area.position
+	_box_preview.size = area.size
+	if bool(get_meta("shelf_layout", false)) and _box_used_rect.has_area():
+		var fit := minf(area.size.x / _box_used_rect.size.x, area.size.y / _box_used_rect.size.y)
+		var drawn := _box_used_rect.size * fit
+		_box_preview.size = drawn
+		_box_preview.position = (
+			area.position + Vector2((area.size.x - drawn.x) * 0.5, area.size.y - drawn.y)
+		)
+	_box_preview.visible = _box_source_texture != null and (not _box_hidden or _edge_back_preview)
+	thumbnail.visible = _box_source_texture == null and (not _box_hidden or _edge_back_preview)
+	title_label.hide()
+	completed_modes.hide()
+	_status.hide()
+	var material := thumbnail.material as ShaderMaterial
+	if material != null:
+		material.set_shader_parameter("rect_aspect", thumbnail.size.x / thumbnail.size.y)
+		material.set_shader_parameter("rect_size", thumbnail.size)
+		material.set_shader_parameter("saturation", 0.0)
+		material.set_shader_parameter("opacity", 0.12)
+	queue_redraw()
+
+
+func _draw() -> void:
+	if not is_node_ready() or not has_focus() or _box_hidden:
+		return
+	var native := Clean.minimum_touch_size(self).x / 44.0
+	var center := Vector2(size.x * 0.5, size.y - 3.0 * native)
+	draw_line(
+		center - Vector2(12, 0) * native, center + Vector2(12, 0) * native, Clean.INK, native, true
 	)
-	var shader_material := thumbnail.material as ShaderMaterial
-	if shader_material != null and image_height > 0.0:
-		shader_material.set_shader_parameter("rect_aspect", thumbnail.size.x / thumbnail.size.y)
-		shader_material.set_shader_parameter("rect_size", thumbnail.size)
-	_apply_preview_style()
 
 
-func _apply_preview_style() -> void:
-	var shader_material := thumbnail.material as ShaderMaterial
-	if shader_material != null:
-		var revealed := bool(_read("preview_revealed", not disabled))
-		shader_material.set_shader_parameter("saturation", 1.0 if revealed else 0.16)
-		shader_material.set_shader_parameter("opacity", 1.0 if revealed else 0.56)
+func prototype_box_rect() -> Rect2:
+	if not _box_used_rect.has_area():
+		return Rect2()
+	var area := _box_preview.get_global_rect()
+	var scale_factor := minf(
+		area.size.x / _box_used_rect.size.x, area.size.y / _box_used_rect.size.y
+	)
+	var drawn := _box_used_rect.size * scale_factor
+	var origin := area.position + (area.size - drawn) * 0.5
+	return Rect2(origin - _box_used_rect.position * scale_factor, _box_full_size * scale_factor)
 
 
-func _fit_title_font(max_width: float, max_height: float) -> void:
-	var font := title_label.get_theme_font("font")
-	var single_line_size := TITLE_MAX_FONT_SIZE
-	while single_line_size >= TITLE_MIN_SINGLE_LINE_FONT_SIZE:
-		var text_width := (
-			font
-			. get_string_size(title_label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, single_line_size)
-			. x
-		)
-		if text_width <= max_width:
-			title_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-			title_label.max_lines_visible = 1
-			title_label.add_theme_font_size_override("font_size", single_line_size)
-			return
-		single_line_size -= 2
-
-	var wrapped_size := TITLE_MAX_FONT_SIZE
-	while wrapped_size > TITLE_WRAP_MIN_FONT_SIZE:
-		var text_block := font.get_multiline_string_size(
-			title_label.text, HORIZONTAL_ALIGNMENT_CENTER, max_width, wrapped_size
-		)
-		if text_block.x <= max_width and text_block.y <= max_height:
-			break
-		wrapped_size -= 2
-	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_label.max_lines_visible = 2
-	title_label.add_theme_font_size_override("font_size", wrapped_size)
+func set_box_preview(texture: Texture2D) -> void:
+	if not is_node_ready() or texture == null:
+		return
+	_accept_box(
+		{
+			"texture": texture,
+			"full_size": texture.get_size(),
+			"used_rect": Rect2(texture.get_image().get_used_rect()),
+		},
+		_request_token,
+		_cache_key
+	)
 
 
 func _read(field: String, fallback: Variant = null) -> Variant:
@@ -216,5 +349,9 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func _exit_tree() -> void:
+	_thumbnail_generation += 1
+	if is_instance_valid(_thumbnail_loader):
+		_thumbnail_loader.unwatch_owner(self)
+	cancel_thumbnail_request()
 	_cancel_thumbnail_fade()
 	super._exit_tree()

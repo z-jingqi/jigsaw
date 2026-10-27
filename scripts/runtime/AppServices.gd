@@ -43,13 +43,38 @@ func load() -> void:
 	settings.load()
 
 
+func storage_status() -> Dictionary:
+	var result := {"state": "ready", "repositories": {}}
+	for entry in [["progress", progress], ["session", session], ["settings", settings]]:
+		var status: Dictionary = entry[1].load_status()
+		result.repositories[entry[0]] = status
+		if str(status.get("state", "")) == "blocked":
+			result.state = "blocked"
+		elif (
+			(not bool(status.get("backup_ok", true)) or not bool(status.get("repair_ok", true)))
+			and result.state != "blocked"
+		):
+			result.state = "backup_warning"
+		elif str(status.get("state", "")) == "recovered" and result.state == "ready":
+			result.state = "recovered"
+	return result
+
+
 func complete_mode(theme_id: String, level_id: String, mode: String) -> Dictionary:
 	var progress_result := progress.mark_mode_completed(theme_id, level_id, mode)
 	if not bool(progress_result.get("ok", false)):
 		return progress_result
+	# Queued is not durable. Confirm the completion record before erasing the
+	# resumable session, including retries where the in-memory mark is a no-op.
+	var progress_saved := progress.flush()
+	if not bool(progress_saved.get("ok", false)):
+		return progress_saved
 	var clear_result := session.clear_play_state(theme_id, level_id, mode)
 	if not bool(clear_result.get("ok", false)):
 		return clear_result
+	var session_saved := session.flush()
+	if not bool(session_saved.get("ok", false)):
+		return session_saved
 	return {"ok": true, "changed": bool(progress_result.get("changed", false))}
 
 

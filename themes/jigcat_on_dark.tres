@@ -1,6 +1,6 @@
 [gd_resource type="Theme" load_steps=3 format=3]
 
-[ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSansSC[wght].ttf" id="1_sans"]
+[ext_resource type="FontVariation" path="res://themes/clean_body_font.tres" id="1_sans"]
 [ext_resource type="FontFile" path="res://assets/fonts/noto/NotoSerifSC[wght].ttf" id="2_serif"]
 
 [resource]

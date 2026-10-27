@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "levels": {
+    "shanhai_v2_01": {
+      "subject_intro_i18n": {
+        "zh": "《山海经》记载，九尾狐居于青丘，长有九条尾巴，叫声如婴儿，是中国古代神话中的异兽。",
+        "en": "In Chinese myth, the nine-tailed fox lives in Qingqiu. The Classic of Mountains and Seas describes nine tails and an infant-like cry.",
+        "ja": "九尾の狐は中国神話の霊獣です。『山海経』では青丘にすみ、九本の尾をもち、赤ん坊のように鳴くとされます。"
+      }
+    }
+  }
+}

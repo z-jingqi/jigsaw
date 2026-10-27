@@ -11,7 +11,7 @@ func _init(runtime: RuntimeAppCoordinator) -> void:
 func execute(command: String, args: Dictionary = {}) -> Dictionary:
 	if not OS.is_debug_build():
 		return _failure(command, "debug_only", "Debug commands are disabled in release exports.")
-	if command != "state":
+	if command not in ["state", "close_modal"]:
 		_runtime.settle_navigation()
 	var result: Dictionary = {"ok": true}
 	match command:
@@ -35,8 +35,6 @@ func execute(command: String, args: Dictionary = {}) -> Dictionary:
 			if not _strings(args, ["topic_id", "level_id"]):
 				return _failure(command, "invalid_argument", "topic_id and level_id are required.")
 			result = _runtime.show_album_artwork(str(args.topic_id), str(args.level_id))
-		"show_home_guide":
-			result = _runtime.show_home_guide()
 		"enter_level":
 			if not _strings(args, ["topic_id", "level_id", "mode"]):
 				return _failure(

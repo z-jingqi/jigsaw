@@ -4,7 +4,7 @@
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/ui/foundation/ActionButton.gd" id="4"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/page.webp" id="5"]
-[ext_resource type="FontVariation" path="res://themes/douyin_ui_font.tres" id="6"]
+[ext_resource type="FontVariation" path="res://themes/clean_body_font.tres" id="6"]
 [ext_resource type="Shader" path="res://shaders/ui/rounded_texture.gdshader" id="7"]
 [ext_resource type="Texture2D" path="res://assets/ui/home/library/title-cloud.webp" id="8"]
 [sub_resource type="ShaderMaterial" id="PreviewMaterial"]
@@ -18,14 +18,13 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1")
-[node name="Background" type="TextureRect" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-texture = ExtResource("5")
-expand_mode = 1
+color = Color(0.9804, 0.9686, 0.9373, 1)
 [node name="SafeArea" parent="." instance=ExtResource("2")]
 layout_mode = 1
 compact_horizontal_margin = 0.0
@@ -38,12 +37,12 @@ layout_mode = 0
 layout_mode = 0
 script = ExtResource("3")
 symbol = "back"
-tooltip_text = "返回关卡列表"
+icon_only = true
 accessibility_name = "返回关卡列表"
 [node name="Title" type="Label" parent="SafeArea/Content/Header"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("6")
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -71,7 +70,7 @@ stretch_mode = 5
 [node name="ModeHeading" type="Label" parent="SafeArea/Content"]
 layout_mode = 0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("6")
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -86,7 +85,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.098, 0.31, 0.278, 1)
+theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 theme_override_fonts/font = ExtResource("6")
 horizontal_alignment = 1
 vertical_alignment = 1

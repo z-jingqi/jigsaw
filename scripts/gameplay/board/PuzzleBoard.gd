@@ -382,6 +382,10 @@ func start_runtime(
 	return await session_preparation.build_progressive()
 
 
+func cancel_pending_preparation() -> void:
+	state_controller.cancel_pending()
+
+
 func clear() -> void:
 	state_controller.cancel_pending()
 	_clear_hint_highlights()

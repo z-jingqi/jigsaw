@@ -20,6 +20,7 @@ var _pool: Array[Control] = []
 var _pending: Array[int] = []
 var _pending_tree: SceneTree
 var _scroll_changed: Callable
+var _hidden_box_level_id := ""
 
 
 func _init(scroll: ScrollContainer, content: Control, card_scene: PackedScene) -> void:
@@ -50,8 +51,8 @@ func configure(
 	_relayout()
 	for index in _visible:
 		var card: Control = _visible[index]
-		card.size = _card_size
 		card.custom_minimum_size = _card_size
+		card.size = _card_size
 		card.position = _item_position(int(index))
 	if retain_position:
 		var target := int(floor(float(top_index) / _columns) * (_card_size.y + _gap.y))
@@ -70,6 +71,7 @@ func refresh_items(items: Array) -> void:
 			var card: Control = _visible[index]
 			if is_instance_valid(card):
 				card.call(&"set_view_model", _items[int(index)])
+				_apply_box_transition_state(card)
 				card_visible.emit(card, _items[int(index)])
 	render_visible()
 
@@ -182,11 +184,25 @@ func card_for_level_id(level_id: String) -> Control:
 	return null
 
 
+func set_box_transition_source(level_id: String, hidden: bool) -> void:
+	if hidden:
+		_hidden_box_level_id = level_id
+	elif _hidden_box_level_id == level_id:
+		_hidden_box_level_id = ""
+	for card in visible_cards():
+		_apply_box_transition_state(card)
+
+
+func _apply_box_transition_state(card: Control) -> void:
+	# This grid also hosts album cards, which have no box presentation.
+	if card.has_method(&"set_box_transition_hidden"):
+		card.call(&"set_box_transition_hidden", str(card.get("level_id")) == _hidden_box_level_id)
+
+
 func _relayout() -> void:
 	var row_count := _row_count()
-	var content_width := float(_columns) * _card_size.x + float(_columns - 1) * _gap.x
 	_content.custom_minimum_size = Vector2(
-		content_width,
+		0.0,
 		maxf(
 			0.0,
 			(
@@ -211,10 +227,11 @@ func _acquire_index(index: int) -> void:
 	card.visible = true
 	var button := card as Button
 	button.disabled = false
-	card.size = _card_size
 	card.custom_minimum_size = _card_size
+	card.size = _card_size
 	card.position = _item_position(index)
 	card.call(&"set_view_model", _items[index])
+	_apply_box_transition_state(card)
 	if not card.has_meta(&"virtual_grid_wired"):
 		button.pressed.connect(_on_card_pressed.bind(button))
 		card.set_meta(&"virtual_grid_wired", true)

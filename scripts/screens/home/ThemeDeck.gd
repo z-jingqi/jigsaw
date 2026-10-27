@@ -125,16 +125,20 @@ func _cancel_gesture() -> void:
 
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED]:
-		cancel()
+		pause_at_current_pose()
+	elif what in [NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED]:
+		if is_node_ready() and is_visible_in_tree():
+			resume_to_rest()
 
 
 func begin(point: Vector2, pointer := -1) -> void:
-	if _tween != null or themes.size() < 2 or _dragging:
+	if themes.size() < 2 or _dragging:
 		return
+	_stop_motion()
+	_committing = false
 	_dragging = true
 	_pointer = pointer
-	_start = point
-	_offset = Vector2.ZERO
+	_start = point - Vector2(_offset.x, _offset.y / 0.35)
 	_velocity = 0.0
 	_last_time = Time.get_ticks_usec()
 
@@ -190,19 +194,39 @@ func _dismiss(direction: float) -> void:
 
 
 func undo() -> void:
-	if history.is_empty() or _tween != null or _dragging:
+	if _committing:
+		_stop_motion()
+		_dragging = false
+		_pointer = -2
+		_committing = false
+		_animate_to(Vector2.ZERO, 0.24, func() -> void: selected.emit(index))
 		return
+	if history.is_empty():
+		return
+	var interrupted := _tween != null or _dragging
+	var current_offset := _offset
+	var current_shift := _stack_shift
+	_stop_motion()
+	_dragging = false
+	_pointer = -2
 	var previous: Dictionary = history.pop_back()
 	index = int(previous.index)
 	_refresh()
-	_stack_shift = 1.0
-	_pose(Vector2(float(previous.direction) * size.x * 1.45, size.y * 0.42))
+	_stack_shift = current_shift if interrupted else 1.0
+	_pose(
+		(
+			current_offset
+			if interrupted
+			else Vector2(float(previous.direction) * size.x * 1.45, size.y * 0.42)
+		)
+	)
 	selected.emit(index)
 	theme_switch_started.emit()
 	_animate_to(Vector2.ZERO, 0.32, func() -> void: pass)
 
 
 func _animate_to(target: Vector2, duration: float, done: Callable, falling := false) -> void:
+	_stop_motion()
 	_tween = create_tween()
 	if reduced_motion:
 		_tween.tween_property(_cards[0], "modulate:a", 0.4, 0.08)
@@ -234,10 +258,32 @@ func _set_stack_shift(value: float) -> void:
 	_pose(_offset)
 
 
-func cancel() -> void:
+func _stop_motion() -> void:
 	if _tween != null:
 		_tween.kill()
 		_tween = null
+
+
+func pause_at_current_pose() -> void:
+	_stop_motion()
+	_dragging = false
+	_pointer = -2
+	_committing = false
+
+
+func resume_to_rest() -> void:
+	pause_at_current_pose()
+	if themes.is_empty() or (_offset.is_zero_approx() and is_zero_approx(_stack_shift)):
+		return
+	if reduced_motion:
+		_stack_shift = 0.0
+		_pose(Vector2.ZERO)
+		return
+	_animate_to(Vector2.ZERO, 0.22, func() -> void: pass)
+
+
+func cancel() -> void:
+	_stop_motion()
 	_dragging = false
 	_pointer = -2
 	_committing = false
@@ -260,8 +306,17 @@ func _emit_browse_motion() -> void:
 
 
 func _resize() -> void:
-	cancel()
+	var previous_size := _card_size / Vector2(0.9, 0.92)
+	var offset := _offset
+	if previous_size.x > 0.0 and previous_size.y > 0.0:
+		offset *= size / previous_size
+	var shift := _stack_shift
+	pause_at_current_pose()
 	_refresh()
+	_stack_shift = shift
+	_pose(offset)
+	if is_visible_in_tree():
+		resume_to_rest()
 
 
 func active_motion_count() -> int:

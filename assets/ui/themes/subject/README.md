@@ -1,0 +1,5 @@
+# Transparent theme subjects — restored approved assets
+
+Eight user-approved image_gen single-subject assets from 2026-10-27, recovered byte-identically from Library after workspace loss. Only theme display uses these; original topic covers and all level/box artwork are unchanged. Full1254×1254 RGBA source PNGs and recovered SHA/alpha provenance are archived outside runtime in jigsaw_recovery_20261027/assets and asset-validation.json. Runtime768×768 WebPquality95 made with existing tools/resize_image.py and tools/compress_images.py, proportional resizing without cropping, stretching, recoloring or new generation. True alpha0..255; extremely faint alpha1 fringes may remain, not white backgrounds. Main bodies/ears/tails retain margins. New catalog theme_subject field is independently cached.
+
+Mapping: topic_01 fox; topic_02 Greekbust; topic_03 cat; topic_04 dog; theme_flowers flower; theme_ocean shell; theme_birds bird; theme_forest tree. All eight share the same original generation family; source/model attribution does not assert third-party logos or copyrighted characters.
