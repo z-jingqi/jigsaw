@@ -39,6 +39,18 @@ func _ready() -> void:
 	_renderer.call("set_rendering", false)
 
 
+func cached_entry(key: String, packaging: Dictionary) -> Dictionary:
+	key = _entry_key(key, packaging)
+	if not _entries.has(key):
+		return {}
+	_touch(key)
+	return _entries[key]
+
+
+func _entry_key(key: String, packaging: Dictionary) -> String:
+	return JSON.stringify([key, Packaging.title_signature(packaging), RENDER_SIZE])
+
+
 func request(
 	key: String,
 	texture: Texture2D,
@@ -48,7 +60,7 @@ func request(
 ) -> void:
 	# Callers may reuse their semantic key across locale/layout updates. The renderer
 	# owns the print-layout signature so title/theme/width cannot return stale pixels.
-	key = JSON.stringify([key, Packaging.title_signature(packaging), RENDER_SIZE])
+	key = _entry_key(key, packaging)
 	if _entries.has(key):
 		_touch(key)
 		callback.call_deferred(_entries[key])
