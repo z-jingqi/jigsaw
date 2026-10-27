@@ -29,6 +29,15 @@ func configure(title: String, font_size: int, native: float) -> void:
 	_shape_key = key
 	var available := maxf(1, size.x - 30 * native)
 	_shown = title
+	var minimum := roundi(preload("res://scripts/ui/foundation/UiMetrics.gd").CAPTION * native)
+	while (
+		font_size > minimum
+		and (
+			Clean.FONT.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+			> available
+		)
+	):
+		font_size -= 1
 	if Clean.FONT.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > available:
 		var low := 0
 		var high := title.length()

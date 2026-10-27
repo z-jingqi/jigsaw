@@ -53,6 +53,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 		_phase = "entering"
 		_apply_layout()
 		_open_lid()
+		_refresh_selection(true)
 
 
 func _reconcile_options() -> void:
@@ -62,14 +63,17 @@ func _reconcile_options() -> void:
 	for child in options.get_children():
 		options.remove_child(child)
 		child.queue_free()
+	var available: Array = []
 	for model in _read("options", []):
 		if not bool(model.enabled):
 			continue
 		var option := BoxOption.new()
 		options.add_child(option)
 		option.set_view_model(model)
+		option.set_reduced_motion(_reduced_motion)
 		option.selection_requested.connect(_on_option_selected)
-	_selected_option = null
+		available.append(model)
+	_selected_option = _default_option(available)
 	_refresh_selection()
 
 
@@ -137,10 +141,23 @@ func request_close() -> void:
 	if _closing:
 		return
 	_closing = true
+	# Mark the local close complete before emitting: the coordinator re-enters
+	# close_modal() and must proceed to navigation instead of requesting it again.
+	_closed = true
 	_active = false
 	_phase = "closing"
 	box_returned.emit()
 	close_requested.emit()
+
+
+func navigation_set_active(is_active: bool) -> void:
+	if is_active:
+		_closing = false
+		_closed = false
+		_phase = "ready"
+		if is_instance_valid(_box):
+			_box.set_rendering(true)
+	super.navigation_set_active(is_active)
 
 
 func _apply_layout() -> void:

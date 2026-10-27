@@ -44,7 +44,7 @@ func present(themes: Array, visual_page: float, selected: int, enabled: bool) ->
 	var progress := clampf(visual_page, 0, count - 1)
 	var index := clampi(roundi(progress), 0, count - 1)
 	$ThemeName.text = str(themes[index].title)
-	TitleLayout.fit($ThemeName, $ThemeName.size, _font_size)
+	TitleLayout.fit($ThemeName, $ThemeName.size, _font_size, 2)
 	# Fade to zero at the midpoint, then reveal the next title in the same slot.
 	$ThemeName.modulate.a = smoothstep(0.0, 1.0, absf(1.0 - 2.0 * (progress - floorf(progress))))
 	$PageCount.text = "%d / %d" % [selected + 1, count]

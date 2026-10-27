@@ -34,6 +34,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	title.name = "PrintedLevelTitle"
 	var full_title := str(data.get("title", ""))
 	var fitted := _fit_title(full_title, Packaging.title_width(data))
+	var wrapped := str(fitted.text).contains("\n")
 	title.text = fitted.text
 	title.set_meta("full_title", full_title)
 	_set_accessible_title(full_title)
@@ -44,14 +45,15 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var title_ink: Color = colors.ink
 	title.modulate = title_ink.darkened(0.60) if title_ink.get_luminance() > 0.40 else title_ink
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.position = Vector3(-0.90, 2.84, 0.255)
+	title.position = Vector3(-0.90, 2.76 if wrapped else 2.84, 0.255)
 	title.shaded = false
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	add_child(title)
 	var revealed := bool(data.get("preview_revealed", true))
 	if texture != null:
 		var dimensions := texture.get_size()
-		var factor := minf(1.80 / dimensions.x, 2.40 / dimensions.y)
+		var art_height := 2.20 if wrapped else 2.40
+		var factor := minf(1.80 / dimensions.x, art_height / dimensions.y)
 		var material: Material = _image(texture)
 		if not revealed:
 			var faded := ShaderMaterial.new()
@@ -59,7 +61,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 			faded.set_shader_parameter("artwork", texture)
 			material = faded
 		var art := _quad("FullArtwork", dimensions * factor, material, self)
-		art.position = Vector3(0, 1.47, 0.253)
+		art.position = Vector3(0, 1.37 if wrapped else 1.47, 0.253)
 	else:
 		var placeholder := _quad("MissingArtwork", Vector2(1.80, 2.40), _ink(Color("efede7")), self)
 		placeholder.position = Vector3(0, 1.47, 0.253)
@@ -83,6 +85,9 @@ func _fit_title(full_title: String, width: float) -> Dictionary:
 		font_size -= 1
 	if _title_measure(text, font_size) <= max_pixels:
 		return {"text": text, "font_size": font_size}
+	var wrapped := _wrap_title(text, font_size, max_pixels)
+	if not wrapped.is_empty():
+		return {"text": wrapped, "font_size": font_size}
 	# Preserve a readable floor. Truncate only the printed label; never the model/a11y name.
 	var low := 0
 	var high := text.length()
@@ -97,6 +102,22 @@ func _fit_title(full_title: String, width: float) -> Dictionary:
 
 func _title_measure(text: String, font_size: int) -> float:
 	return TitleFont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+
+
+func _wrap_title(text: String, font_size: int, max_pixels: float) -> String:
+	var best := ""
+	var balance := INF
+	for index in range(1, text.length()):
+		if text.contains(" ") and text[index] != " ":
+			continue
+		var first := text.left(index).strip_edges()
+		var second := text.substr(index).strip_edges()
+		var left := _title_measure(first, font_size)
+		var right := _title_measure(second, font_size)
+		if maxf(left, right) <= max_pixels and absf(left - right) < balance:
+			balance = absf(left - right)
+			best = first + "\n" + second
+	return best
 
 
 func _set_accessible_title(full_title: String) -> void:

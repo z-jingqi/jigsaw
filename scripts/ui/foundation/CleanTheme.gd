@@ -30,11 +30,13 @@ static func panel(fill: Color, radius: float = 24.0) -> StyleBoxFlat:
 
 
 static func button(control: Button, primary: bool = false) -> void:
+	var u := Metrics.unit(control.get_viewport_rect().size) if control.is_inside_tree() else 1.0
 	control.focus_mode = Control.FOCUS_ALL
 	control.flat = false
 	var fill := INK if primary else SAGE
 	var ink := PAPER if primary else INK
 	control.add_theme_font_override("font", FONT)
+	control.add_theme_font_size_override("font_size", roundi(Metrics.BODY * u))
 	for state in ["normal", "hover", "pressed", "disabled"]:
 		var color := fill
 		if state == "hover":
@@ -43,20 +45,17 @@ static func button(control: Button, primary: bool = false) -> void:
 			color = fill.lightened(0.14) if primary else fill.darkened(0.08)
 		elif state == "disabled":
 			color = DISABLED
-		var style := panel(color, 28.0)
-		style.content_margin_left = 16.0
-		style.content_margin_right = 16.0
+		var style := panel(color, Metrics.BUTTON_RADIUS * u)
+		style.content_margin_left = Metrics.GAP * u
+		style.content_margin_right = Metrics.GAP * u
 		control.add_theme_stylebox_override(state, style)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		control.add_theme_color_override(state, ink)
 	control.add_theme_color_override("font_disabled_color", MUTED)
-	var focus := panel(Color.TRANSPARENT, 28.0)
-	focus.set_border_width_all(3)
+	var focus := panel(Color.TRANSPARENT, Metrics.BUTTON_RADIUS * u)
+	focus.set_border_width_all(maxi(1, roundi(2 * u)))
 	focus.border_color = MUTED
-	focus.expand_margin_left = 4.0
-	focus.expand_margin_right = 4.0
-	focus.expand_margin_top = 4.0
-	focus.expand_margin_bottom = 4.0
+	focus.set_expand_margin_all(4 * u)
 	control.add_theme_stylebox_override("focus", focus)
 	control.custom_minimum_size = control.custom_minimum_size.max(minimum_touch_size(control))
 

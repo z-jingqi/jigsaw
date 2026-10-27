@@ -1,29 +1,30 @@
 extends RefCounted
-## Fits complete single-line theme titles using active font metrics.
+## Shrink before truncating, with a shared readable floor and optional wrapping.
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 
 
-static func fit(label: Label, bounds: Vector2, max_size: int) -> int:
+static func fit(label: Label, bounds: Vector2, max_size: int, lines := 1) -> int:
 	var font := label.get_theme_font("font")
-	var safe_width := maxf(1.0, bounds.x)
-	var safe_height := maxf(1.0, bounds.y)
-	label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	label.max_lines_visible = 1
+	var area := bounds.max(Vector2.ONE)
+	var minimum := mini(
+		max_size, maxi(1, roundi(Metrics.CAPTION * Metrics.unit(label.get_viewport_rect().size)))
+	)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if lines > 1 else TextServer.AUTOWRAP_OFF
+	label.max_lines_visible = lines
 	label.clip_text = true
-	label.update_minimum_size()
-	label.size = Vector2(safe_width, safe_height)
-	var minimum := maxi(1, roundi(max_size * 18.0 / 26.0))
 	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.tooltip_text = label.text
+	var chosen := minimum
 	for font_size in range(max_size, minimum - 1, -1):
-		var single_line := font.get_string_size(
-			label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size
-		)
-		if single_line.x <= safe_width and single_line.y <= safe_height:
-			label.add_theme_font_size_override("font_size", font_size)
-			label.update_minimum_size()
-			label.size = Vector2(safe_width, safe_height)
-			return font_size
-	# Preserve readable body size for exceptionally long titles.
-	label.add_theme_font_size_override("font_size", minimum)
-	label.size = Vector2(safe_width, safe_height)
-	return minimum
+		var measured := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		if lines > 1:
+			measured = font.get_multiline_string_size(
+				label.text, HORIZONTAL_ALIGNMENT_CENTER, area.x, font_size
+			)
+		if measured.x <= area.x and measured.y <= minf(area.y, font.get_height(font_size) * lines):
+			chosen = font_size
+			break
+	label.add_theme_font_size_override("font_size", chosen)
+	label.update_minimum_size()
+	label.size = area
+	return chosen

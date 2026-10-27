@@ -222,7 +222,7 @@ func _layout() -> void:
 	var margin := Metrics.EDGE * u
 	Buttons.place_navigation(_back, self)
 	_theme.position = Vector2(_back.position.x + _back.size.x + 8 * u, _back.position.y)
-	_theme.size = Vector2(size.x - 2 * (_back.position.x + _back.size.x + 8 * u), _back.size.y)
+	_theme.size = Vector2(size.x - safe.z - margin - _theme.position.x, _back.size.y)
 	_theme.configure(str(_model.get("theme_title", "")), roundi(Metrics.TITLE * native), native)
 	var strip_h := minf(116 * u, 104 * native)
 	_strip.position = Vector2(margin, size.y - safe.w - 24 * u - strip_h)
@@ -233,6 +233,9 @@ func _layout() -> void:
 	_position.position = Vector2(_title.position.x + _title.size.x, _title.position.y)
 	_position.size = Vector2((size.x - 2 * margin) * 0.27, caption_h)
 	Clean.label(_title, roundi(Metrics.BODY * native))
+	preload("res://scripts/screens/home/ThemeTitleLayout.gd").fit(
+		_title, _title.size, roundi(Metrics.BODY * u), 2
+	)
 	Clean.label(_position, roundi(Metrics.CAPTION * native), true)
 	var top := _back.position.y + _back.size.y + 24 * u
 	_focus.position = Vector2(margin, top)

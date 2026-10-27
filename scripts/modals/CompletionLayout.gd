@@ -26,7 +26,9 @@ func apply(view: Control) -> Rect2:
 		width - (Metrics.EDGE + Metrics.TOUCH + Metrics.SMALL_GAP) * unit - margin, 48 * unit
 	)
 	view.level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_fit_title(view.level_label, roundi(Metrics.TITLE * unit), roundi(Metrics.BODY * unit))
+	preload("res://scripts/screens/home/ThemeTitleLayout.gd").fit(
+		view.level_label, view.level_label.size, roundi(Metrics.TITLE * unit), 2
+	)
 	view.return_button.position = Vector2(safe.x + Metrics.EDGE * unit, safe.y + Metrics.TOP * unit)
 	view.return_button.size = Vector2.ONE * 48 * unit
 	view.return_button.custom_minimum_size = Clean.minimum_touch_size(view.return_button)
@@ -77,17 +79,3 @@ func apply(view: Control) -> Rect2:
 	view.body_content.custom_minimum_size = Vector2(content_width, row_y + row_height + 8 * unit)
 	view.body_content.size = view.body_content.custom_minimum_size
 	return target
-
-
-func _fit_title(label: Label, maximum: int, minimum: int) -> void:
-	var font := label.get_theme_font("font")
-	var font_size := maximum
-	while (
-		font_size > minimum
-		and (
-			font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size).x
-			> label.size.x
-		)
-	):
-		font_size -= 1
-	label.add_theme_font_size_override("font_size", font_size)

@@ -160,8 +160,9 @@ func _apply_layout_scale(value: float) -> void:
 func _apply_current_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
-	var unit := Clean.canvas_scale(size, get_window())
-	loading_label.add_theme_font_size_override("font_size", roundi(16 * unit))
+	var Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
+	var unit := Metrics.unit(size)
+	loading_label.add_theme_font_size_override("font_size", roundi(Metrics.BODY * unit))
 	loading_label.add_theme_font_override("font", Clean.FONT)
 	loading_label.add_theme_color_override("font_color", Clean.INK)
 	loading_label.set_anchors_preset(Control.PRESET_TOP_LEFT)

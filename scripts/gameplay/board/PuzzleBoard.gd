@@ -394,6 +394,9 @@ func clear() -> void:
 	for child in get_children():
 		if child.name in [&"WorldRoot", &"TrayRoot", &"VisualHost", &"InputHost"]:
 			for runtime_child in child.get_children():
+				# A synchronous relayout may recreate pieces before queue_free runs.
+				# Release names now so stable session IDs never become @Node2D@ names.
+				child.remove_child(runtime_child)
 				runtime_child.queue_free()
 			continue
 		child.queue_free()

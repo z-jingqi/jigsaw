@@ -154,7 +154,7 @@ func _extra_header_height(width: float, canvas: float) -> float:
 		return 0.0
 	_storage_notice.text = GameStrings.ui_text(_storage_key)
 	_storage_notice.accessibility_name = _storage_notice.text
-	var font_size := roundi(16.0 * canvas)
+	var font_size := roundi(Metrics.CAPTION * canvas)
 	Clean.label(_storage_notice, font_size)
 	return (
 		(

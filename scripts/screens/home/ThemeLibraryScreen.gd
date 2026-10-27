@@ -186,9 +186,9 @@ func _layout() -> void:
 	$Title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	$Title.position = Vector2(left + $CloseButton.size.x, $CloseButton.position.y)
 	$Title.size = Vector2(width - $CloseButton.size.x, $CloseButton.size.y)
-	Clean.label($Title, roundi(maxf(26.0 * u, 26.0 * canvas)))
+	Clean.label($Title, roundi(Metrics.TITLE * u))
 	var pages_top := top + _extra_header_height(width, canvas)
-	var pager_height := 44.0 * canvas
+	var pager_height := Metrics.TOUCH * u
 	_pager.position = Vector2(left, size.y - safe.w - pager_height - 16.0 * u)
 	_pager.size = Vector2(width, pager_height)
 	_pager.configure(_page_count(), _page)
@@ -197,7 +197,7 @@ func _layout() -> void:
 	$Pages.size = Vector2(width, maxf(1, _pager.position.y - pages_top - 16.0 * u))
 	$EmptyState.position = Vector2(left, pages_top + 80.0 * u)
 	$EmptyState.size = Vector2(width, 100.0 * u)
-	Clean.label($EmptyState, roundi(maxf(18.0 * u, 14.0 * canvas)), true)
+	Clean.label($EmptyState, roundi(Metrics.BODY * u), true)
 	var gap := 16.0 * u
 	var row_gap := 16.0 * u
 	var columns := 1 if _page_size() == 1 else 2
@@ -221,9 +221,9 @@ func _extra_header_height(_width: float, _canvas: float) -> float:
 	return 0.0
 
 
-func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
+func _layout_tile(tile: Button, cell: Vector2, u: float, _canvas: float) -> void:
 	var title_height := Metrics.BODY * 5.0 * u
-	var status_height := maxf(23.0 * u, 20.0 * canvas)
+	var status_height := 24.0 * u
 	var caption_height := (
 		title_height + (status_height if tile.get_node("Status").visible else 0.0) + 32.0 * u
 	)
@@ -250,11 +250,12 @@ func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	Clean.label(title, roundi(Metrics.BODY * u))
+	TitleLayout.fit(title, title.size, roundi(Metrics.BODY * u), 3)
 	var status := tile.get_node("Status") as Label
 	status.position = Vector2(16.0 * u, title.position.y + title_height)
 	status.size = Vector2(cell.x - 32.0 * u, status_height)
 	status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Clean.label(status, roundi(maxf(12.0 * u, 12.0 * canvas)), true)
+	Clean.label(status, roundi(Metrics.CAPTION * u), true)
 
 
 func _request_page(index: int) -> void:

@@ -12,6 +12,8 @@ const PRIMARY_HEIGHT := 52.0
 const TITLE := 26.0
 const BODY := 18.0
 const CAPTION := 14.0
+const BUTTON_RADIUS := 12.0
+const ICON_STROKE := 1.5
 const LOGO := Vector2(144, 48)
 const MENU_WIDTH := 224.0
 
