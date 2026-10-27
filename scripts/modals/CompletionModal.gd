@@ -17,7 +17,7 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 @onready var body: ScrollContainer = $Canvas/Body
 @onready var body_content: Control = $Canvas/Body/Content
 @onready var description_label: Label = $Canvas/Body/Content/Description
-@onready var cat: TextureRect = $Canvas/Body/Content/Cat
+@onready var cat: TextureRect = $Canvas/Cat
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var image_motion: Node = $ImageMotion
 

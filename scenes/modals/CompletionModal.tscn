@@ -109,7 +109,7 @@ text_overrun_behavior = 3
 [node name="Body" type="ScrollContainer" parent="Canvas"]
 layout_mode = 0
 horizontal_scroll_mode = 0
-vertical_scroll_mode = 1
+vertical_scroll_mode = 0
 
 [node name="Content" type="Control" parent="Canvas/Body"]
 layout_mode = 2
@@ -135,7 +135,7 @@ horizontal_alignment = 1
 autowrap_mode = 3
 theme_override_colors/font_color = Color(0.153, 0.161, 0.145, 1)
 
-[node name="Cat" type="TextureRect" parent="Canvas/Body/Content"]
+[node name="Cat" type="TextureRect" parent="Canvas"]
 texture = ExtResource("9_cat")
 layout_mode = 0
 mouse_filter = 2

@@ -3,9 +3,9 @@
   "levels": {
     "shanhai_v2_01": {
       "subject_intro_i18n": {
-        "zh": "九尾狐是中国古代神话中的异兽。《山海经》记载它居于青丘，形似狐狸而有九尾，叫声像婴儿，并非现实中的狐狸品种。",
-        "en": "The nine-tailed fox is a creature of ancient Chinese mythology. The Classic of Mountains and Seas places it in Qingqiu, describing nine tails and an infant-like cry—not a real breed of fox.",
-        "ja": "九尾の狐は中国古代の神話に登場する霊獣です。『山海経』では青丘にすみ、九本の尾をもち、赤ん坊のように鳴くとされます。実在する狐の品種ではありません。"
+        "zh": "《山海经》记载，九尾狐居于青丘，长有九条尾巴，叫声如婴儿，是中国古代神话中的异兽。",
+        "en": "In Chinese myth, the nine-tailed fox lives in Qingqiu. The Classic of Mountains and Seas describes nine tails and an infant-like cry.",
+        "ja": "九尾の狐は中国神話の霊獣です。『山海経』では青丘にすみ、九本の尾をもち、赤ん坊のように鳴くとされます。"
       }
     }
   }
