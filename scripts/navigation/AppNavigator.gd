@@ -416,6 +416,9 @@ func wait_until_idle(canceled: Signal = Signal()) -> bool:
 
 
 func edge_back_context() -> Dictionary:
+	var view := current_route_view()
+	if view != null and view.has_method("edge_back_allowed") and not view.edge_back_allowed():
+		return {}
 	if current_route() == &"themes":
 		return {}
 	if is_input_locked():

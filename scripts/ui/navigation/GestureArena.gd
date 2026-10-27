@@ -31,6 +31,13 @@ static func block_secondary(viewport: Viewport, event: InputEvent) -> bool:
 		_quarantined[key] = blocked
 		return true
 	if not current.is_empty() and int(current.pointer) != pointer:
+		var owner: Node = current.owner.get_ref()
+		if (
+			is_instance_valid(owner)
+			and owner.has_method("gesture_accepts_secondary")
+			and owner.gesture_accepts_secondary(pointer, event)
+		):
+			return false
 		if pressed:
 			blocked[pointer] = true
 			_quarantined[key] = blocked

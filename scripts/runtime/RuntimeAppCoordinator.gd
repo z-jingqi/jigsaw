@@ -81,7 +81,9 @@ func start() -> void:
 	_world_host = _game.get_node("WorldHost") as Node2D
 	_completion_flow = CompletionFlowScript.new(_navigator, content, self)
 	_bind_routes()
-	_album = AlbumCoordinatorScript.new(_navigator, AlbumPresenterScript.new(content, _strings))
+	_album = AlbumCoordinatorScript.new(
+		_navigator, AlbumPresenterScript.new(content, _strings, progress), show_home
+	)
 	_navigator.route_changed.connect(_on_route_changed)
 	_navigator.input_lock_changed.connect(_on_navigation_input_lock_changed)
 	_services.motion_preferences.changed.connect(_on_motion_preference_changed)
@@ -389,6 +391,8 @@ func close_modal() -> Dictionary:
 	if view != null and view.has_method("needs_box_close") and view.needs_box_close():
 		view.request_close()
 		return {"ok": true}
+	if _navigator.current_route() in [&"album", &"album_artwork"]:
+		return _navigator.pop()
 	if _navigator.current_route() == &"completion":
 		return _return_to_levels()
 	if _navigator.current_route() == &"mode_select":
