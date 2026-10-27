@@ -9,6 +9,7 @@ signal play_requested
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const FreshButton := preload("res://scripts/screens/home/FreshButton.gd")
+const ThemeButton := preload("res://scripts/screens/album/AlbumThemeButton.gd")
 const FocusPager := preload("res://scripts/screens/album/AlbumFocusPager.gd")
 const ThumbnailStrip := preload("res://scripts/screens/album/AlbumThumbnailStrip.gd")
 const Chooser := preload("res://scripts/screens/album/AlbumThemeChooser.gd")
@@ -48,7 +49,7 @@ func _ready() -> void:
 	_back.icon_only = true
 	add_child(_back)
 	_back.pressed.connect(_back_pressed)
-	_theme = Button.new()
+	_theme = ThemeButton.new()
 	_theme.name = "ThemeButton"
 	Clean.icon_button(_theme)
 	add_child(_theme)
@@ -110,7 +111,7 @@ func render(model: Dictionary, _legacy_position := 0) -> void:
 	_focus.set_reduced_motion(_reduced)
 	_strip.set_reduced_motion(_reduced)
 	_back.accessibility_name = str(model.get("back_label", GameStrings.ui_text("back")))
-	_theme.text = str(model.get("theme_title", "")) + "  ⌄"
+	_theme.caption = str(model.get("theme_title", ""))
 	_theme.accessibility_name = str(model.get("theme_title", ""))
 	_empty.text = str(model.get("empty_label", _empty_text()))
 	_play.text = str(model.get("play_label", _play_text()))
@@ -235,9 +236,7 @@ func _layout() -> void:
 	Buttons.place_navigation(_back, self)
 	_theme.position = Vector2(_back.position.x + _back.size.x + 8 * u, _back.position.y)
 	_theme.size = Vector2(size.x - 2 * (_back.position.x + _back.size.x + 8 * u), _back.size.y)
-	_theme.add_theme_font_override("font", Clean.FONT)
-	_theme.add_theme_font_size_override("font_size", roundi(22 * native))
-	_theme.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_theme.configure(str(_model.get("theme_title", "")), roundi(22 * native), native)
 	var strip_h := minf(116 * u, 104 * native)
 	_strip.position = Vector2(margin, size.y - safe.w - 24 * u - strip_h)
 	_strip.size = Vector2(size.x - 2 * margin, strip_h)
