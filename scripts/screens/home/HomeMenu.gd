@@ -69,9 +69,9 @@ func reposition(anchor: Rect2) -> void:
 	var panel := Clean.panel(Color("FFFCF5"), 12.0 * unit)
 	panel.set_border_width_all(maxi(1, roundi(unit)))
 	panel.border_color = Color("E1DDD3")
-	panel.shadow_color = Color(0.12, 0.11, 0.08, 0.08)
-	panel.shadow_size = roundi(6 * unit)
-	panel.shadow_offset = Vector2(0, 2 * unit)
+	panel.shadow_color = Color(0.12, 0.11, 0.08, 0.025)
+	panel.shadow_size = roundi(3 * unit)
+	panel.shadow_offset = Vector2(0, unit)
 	$Panel.add_theme_stylebox_override("panel", panel)
 	var row := 48.0 * unit
 	var width := minf(220.0 * unit, size.x - 32.0 * unit)
