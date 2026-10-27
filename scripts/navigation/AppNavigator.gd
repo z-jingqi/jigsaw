@@ -301,7 +301,9 @@ func show_modal(route: StringName, payload: Dictionary = {}) -> Dictionary:
 			_free_entry(entry)
 			_set_entry_active(current_screen_entry(), true)
 	)
-	if entry.view is SettingsModal:
+	# These surfaces own their entrance timeline. In particular, completion
+	# expands the artwork from the board bounds without translating the page.
+	if entry.view is SettingsModal or entry.view is CompletionModal:
 		_begin_transition(transaction, &"modal", "show_modal")
 	else:
 		_begin_transition(transaction, &"modal", "show_modal", current_screen_view(), entry.view)
