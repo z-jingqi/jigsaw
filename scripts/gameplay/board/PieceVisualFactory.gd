@@ -41,15 +41,19 @@ static func create_piece_visual(piece: Dictionary, texture: Texture2D, style := 
 	poly.uv = piece["uv"]
 	poly.z_index = 0
 	node.add_child(poly)
-	var curved := (
-		cardboard
-		and CurvedEdge.apply(poly, str(piece["id"]), bool(style.get("curve_preview", false)))
-	)
-	var bevel := PieceReliefScript.new()
-	bevel.name = "piece_bevel"
-	bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR), cardboard)
-	node.add_child(bevel)
-	bevel.visible = not curved
+	var curved: bool = style.get("curve_rendering", false)
+	if curved and not CurvedEdge.apply(poly):
+		# Preparation must succeed before creating a playable board. Never show
+		# the old flat face as an implicit error fallback.
+		poly.hide()
+		push_error("Missing prepared curved piece material.")
+	if not curved:
+		# Swap keeps its existing flat-tile relief; curved puzzle pieces have no
+		# decorative legacy bevel node at all.
+		var bevel := PieceReliefScript.new()
+		bevel.name = "piece_bevel"
+		bevel.setup(piece["polygon"], true, style.get("seam_line_color", SEAM_LINE_COLOR), false)
+		node.add_child(bevel)
 	cut_line_color.a = minf(cut_line_color.a, 0.24)
 	cut_line_lift_color.a = minf(cut_line_lift_color.a, 0.32)
 	for cut_line in piece["cut_lines"]:

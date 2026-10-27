@@ -1,9 +1,9 @@
-# Opt-in curved cardboard preview
+# Curved cardboard rendering
 
-Default rendering remains unchanged. `JIGSAW_CURVED_EDGE_PREVIEW=1` enables all
-pieces in polygon and knob modes only (never swap). The earlier single-piece
-selector `JIGSAW_CURVED_EDGE_PIECE=piece_7` is also retained. These are development
-launch switches, not saved settings; piece IDs can repeat between levels.
+Polygon and knob use this renderer on both board and tray. It is the only
+production face style for these modes, not an optional preview. There are no
+legacy style or per-piece environment switches. Swap remains its separate
+flat-tile rendering because its mechanics differ.
 
 The original Polygon2D coverage, texture coordinates, artwork, input geometry,
 snap rules and gray backgrounds remain unchanged. Separate local-space slope
@@ -25,10 +25,11 @@ not a fragment loop over high-point-count knob outlines. Dragging and tray/board
 scale changes reuse the same field, with fixed screen-space light orientation.
 The displayed face and hit silhouette still use the original polygon.
 
-Old decorative bevel lines are hidden only on prototype pieces. Existing
+Old decorative bevel lines are hidden on curved pieces. Existing
 settled-group handling removes the external side/contact shadow on snapped
 pieces; their two adjoining curved faces remain visible as a narrow seam.
-This is still a visual preview: no physical mobile GPU performance claim.
+The approved visual path is now active by default; no physical mobile GPU
+performance claim is made.
 
 References:
 - https://docs.godotengine.org/en/4.6/tutorials/shaders/shader_reference/canvas_item_shader.html
@@ -55,12 +56,12 @@ are misses; rebuild uses the same 192px calculation. Disk bounds:64 entries and
 catalog has at most30 pieces per mode; larger future catalogs need batch pinning
 or segmented preparation before exceeding the64-field batch capacity.
 
-The opt-in preview enters a cancellable gameplay page immediately with concise
+The curved-rendering path enters a cancellable gameplay page immediately with concise
 localized preparation feedback rather than holding an input-locked modal.
 Only Back is available before the complete board is restored; puzzle actions
-remain disabled. Unmodified/default-off rendering remains the default.
+remain disabled. This path is now the default for polygon and knob.
 
-Observed desktop Compatibility cold run with empty disk+memory:30 knob fields,
+Historical prototype desktop Compatibility cold run with empty disk+memory:30 knob fields,
 0 disk hits,3.000s asynchronous batch wall time,5.562s summed worker time across
 two lanes,0.235ms maximum main-thread texture publication,22.904ms maximum frame
 interval while workers were active. This removes the earlier213ms per-piece
@@ -78,7 +79,9 @@ synchronously wakes CPU-preparation, layout, navigation-idle and post-draw waits
 before freeing their owners. This releases full-art references even if shutdown
 stops the next frame; worker cancellation/reaping remains separate. The previous
 pending-exit artwork/RID and suspended preparation coroutine leak is fixed in
-both effect-on/off abrupt controls. A no-inspection-driver product run, pointer
+the historical effect-on/off abrupt controls. A no-inspection-driver product run, pointer
 Start then title-bar X, exited cleanly. The artificial two-frame abrupt harness
 can still report Dummy Audio Ogg/WAV resources, distinguished from the now-fixed
 artwork lifecycle; no logging suppression or added harness drain was used.
+
+If a curve field fails preparation/publication, board construction aborts rather than silently displaying a legacy face.

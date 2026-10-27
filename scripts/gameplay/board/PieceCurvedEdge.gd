@@ -1,13 +1,25 @@
 extends RefCounted
-## Opt-in cached curvature preview. No save/config changes or per-frame CPU work.
+## Cached curved cardboard for polygon and knob. No per-frame CPU generation.
 
 const Field := preload("res://scripts/gameplay/board/PieceCurveField.gd")
 const Surface := preload("res://shaders/PieceCurvedEdge.gdshader")
 
 
-static func apply(face: Polygon2D, piece_id: String, preview_all := false) -> bool:
-	if not preview_all and OS.get_environment("JIGSAW_CURVED_EDGE_PIECE") != piece_id:
+static func enabled_for_mode(mode: String) -> bool:
+	return mode in ["polygon", "knob"]
+
+
+static func is_prepared(points: PackedVector2Array) -> bool:
+	if points.size() < 3:
 		return false
+	var bounds := Rect2(points[0], Vector2.ZERO)
+	for point in points:
+		bounds = bounds.expand(point)
+	var field := Field.get_cached(points, minf(bounds.size.x, bounds.size.y) * 0.065)
+	return not field.is_empty() and field.texture != null and field.bounds.has_area()
+
+
+static func apply(face: Polygon2D) -> bool:
 	if face.polygon.size() < 3:
 		return false
 	var bounds := Rect2(face.polygon[0], Vector2.ZERO)

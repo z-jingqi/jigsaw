@@ -1,6 +1,7 @@
 extends RefCounted
 class_name BoardSessionBuilder
 
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
 const KnobGeometry := preload("res://scripts/gameplay/board/KnobSourceGeometry.gd")
 
 const SWAP_FALLBACK_COLS := 5
@@ -19,6 +20,9 @@ func _start_play_session(play_mode: String) -> bool:
 	var prepared := prepare_pieces(play_mode)
 	if prepared.is_empty():
 		return false
+	for piece in prepared.pieces:
+		if not CurvedEdge.is_prepared(piece["polygon"]):
+			return false
 	for piece in prepared.pieces:
 		create_group(piece, prepared.seed_ids.has(str(piece.get("id", ""))))
 	finish_pieces()

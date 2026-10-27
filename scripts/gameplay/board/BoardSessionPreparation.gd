@@ -2,6 +2,7 @@ extends RefCounted
 ## Prepares a runtime board in small batches before enabling gameplay input.
 
 const FrameGate := preload("res://scripts/runtime/CancellableFrame.gd")
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
 const CurvePreparation := preload("res://scripts/gameplay/board/PieceCurvePreparation.gd")
 
 const CREATION_BUDGET_USEC := 7000
@@ -21,12 +22,9 @@ func configure(options: Dictionary) -> bool:
 	host.source_image = options.image
 	host.source_size = options.source_size
 	host.piece_visual_style = host._piece_visual_style()
-	var curve_preview: bool = (
-		OS.get_environment("JIGSAW_CURVED_EDGE_PREVIEW") == "1"
-		and host.current_mode in ["polygon", "knob"]
-	)
-	host.piece_visual_style["curve_preview"] = curve_preview
-	host.piece_visual_style["cardboard"] = host.current_mode == "polygon" or curve_preview
+	var curve_rendering := CurvedEdge.enabled_for_mode(host.current_mode)
+	host.piece_visual_style["curve_rendering"] = curve_rendering
+	host.piece_visual_style["cardboard"] = host.current_mode == "polygon" or curve_rendering
 	host.hud_top_reserved_height = options.top
 	host.hud_bottom_reserved_height = maxf(0.0, options.bottom)
 	host.tray_bounds_override = options.tray
@@ -62,16 +60,7 @@ func build_progressive() -> bool:
 		if not _current(generation):
 			return false
 		started = Time.get_ticks_usec()
-	var curve_pieces: Array = []
-	for piece in prepared.pieces:
-		if (
-			bool(host.piece_visual_style.get("curve_preview", false))
-			or (
-				host.current_mode == "polygon"
-				and OS.get_environment("JIGSAW_CURVED_EDGE_PIECE") == str(piece.get("id", ""))
-			)
-		):
-			curve_pieces.append(piece)
+	var curve_pieces: Array = prepared.pieces if host.current_mode in ["polygon", "knob"] else []
 	if not curve_pieces.is_empty():
 		var ready := await CurvePreparation.prepare_many(
 			curve_pieces,
@@ -81,6 +70,11 @@ func build_progressive() -> bool:
 		)
 		if not ready or not _current(generation):
 			return false
+		# Never construct mixed old/new faces if preparation or publication failed.
+		for piece in curve_pieces:
+			if not CurvedEdge.is_prepared(piece["polygon"]):
+				push_error("Curved piece field was not prepared; aborting board construction.")
+				return false
 		started = Time.get_ticks_usec()
 	for piece in prepared.pieces:
 		host.session_builder.create_group(piece, prepared.seed_ids.has(str(piece.get("id", ""))))

@@ -9,6 +9,7 @@ signal move_swap_left_requested
 signal move_swap_right_requested
 
 const GameplayLayoutScript := preload("res://scripts/screens/gameplay/GameplayLayout.gd")
+const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Composition := preload("res://scripts/screens/gameplay/GameplaySceneComposition.gd")
 
 @onready var loading_label: Label = $LoadingLabel
@@ -45,7 +46,7 @@ func _ready() -> void:
 
 func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	_preparing_board = true
-	loading_label.text = preload("res://scripts/app/GameStrings.gd").ui_text("loading_puzzle")
+	loading_label.text = GameStrings.ui_text("loading_puzzle")
 	if payload.has("view_model"):
 		set_view_model(payload["view_model"])
 	set_reduced_motion(bool(context.get("reduced_motion", false)))
@@ -100,6 +101,13 @@ func mark_board_live() -> void:
 	_set_input_live(_navigation_active and not _navigation_locked)
 
 
+func mark_board_failed() -> void:
+	_board_ready = false
+	_preparing_board = true
+	loading_label.text = GameStrings.ui_text("puzzle_load_failed")
+	_set_input_live(false)
+
+
 func has_live_board() -> bool:
 	return _board_ready
 
@@ -140,6 +148,13 @@ func _apply_layout_scale(value: float) -> void:
 func _apply_current_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
+	var unit := Clean.canvas_scale(size, get_window())
+	loading_label.add_theme_font_size_override("font_size", roundi(16 * unit))
+	loading_label.add_theme_font_override("font", Clean.FONT)
+	loading_label.add_theme_color_override("font_color", Clean.INK)
+	loading_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	loading_label.position = Vector2(24 * unit, size.y * 0.38 - 24 * unit)
+	loading_label.size = Vector2(size.x - 48 * unit, 48 * unit)
 	(
 		_layout
 		. apply(

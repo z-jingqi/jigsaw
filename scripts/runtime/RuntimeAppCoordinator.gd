@@ -1,6 +1,7 @@
 class_name RuntimeAppCoordinator
 extends RefCounted
 
+const CurvedEdge := preload("res://scripts/gameplay/board/PieceCurvedEdge.gd")
 const AppServicesScript := preload("res://scripts/runtime/AppServices.gd")
 const AppStateScript := preload("res://scripts/runtime/state/AppState.gd")
 const ContentRepositoryScript := preload("res://scripts/runtime/data/ContentRepository.gd")
@@ -29,6 +30,7 @@ const SettingsScene := preload("res://scenes/modals/SettingsModal.tscn")
 const CompletionScene := preload("res://scenes/modals/CompletionModal.tscn")
 const ViewModels := preload("res://scripts/runtime/presentation/AppViewModels.gd")
 
+var _board_start_sequence := 0
 var _edge_back: Node
 
 var _game: Node2D
@@ -299,10 +301,7 @@ func enter_level(
 		"_prepare_before_motion":
 		(
 			_navigator.current_route() in [&"mode_select", &"completion"]
-			and not (
-				OS.get_environment("JIGSAW_CURVED_EDGE_PREVIEW") == "1"
-				and mode in ["polygon", "knob"]
-			)
+			and not CurvedEdge.enabled_for_mode(mode)
 		),
 	}
 	var result: Dictionary
@@ -331,11 +330,20 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		or _current_mode.is_empty()
 	):
 		return
+	_board_start_sequence += 1
+	var request_sequence := _board_start_sequence
 	_apply_feedback_preferences()
 	var loaded: bool = await _gameplay_preparation.prepare_live(
 		screen, _current_theme_id, _current_level_id, _current_mode
 	)
-	if not loaded or not is_instance_valid(screen) or _navigator.current_screen_view() != screen:
+	if (
+		request_sequence != _board_start_sequence
+		or not is_instance_valid(screen)
+		or _navigator.current_screen_view() != screen
+	):
+		return
+	if not loaded:
+		screen.mark_board_failed()
 		return
 	screen.mark_board_live()
 	_refresh_board_blockers()
