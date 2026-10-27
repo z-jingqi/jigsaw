@@ -52,8 +52,9 @@ func prepare_pieces(play_mode: String) -> Dictionary:
 
 func finish_pieces() -> void:
 	host.tray_scroll_offset = 0.0
-	host._layout_tray(true)
+	# Tray scale and equal-column width must use the final board baseline from frame one.
 	host.fit_view_to_pieces(false)
+	host._layout_tray(true)
 	for group in host.locked_groups:
 		host.PieceVisualFactoryScript.settle_group_edges(group)
 

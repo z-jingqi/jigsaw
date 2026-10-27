@@ -54,6 +54,7 @@ var _dev_panel: Control
 var _returning_to_levels := false
 var _gameplay_preparation: Variant
 var _completion_flow: Variant
+var _completion_saves: Variant
 var _audio_bindings: GameAudioBindings
 
 
@@ -71,6 +72,7 @@ func start() -> void:
 	var motion := MotionPreferencesScript.new(settings)
 	_services = AppServicesScript.new(content, progress, session, settings, motion)
 	_services.load()
+	_completion_saves = preload("res://scripts/runtime/CompletionSaveQueue.gd").new(_services)
 	_catalog = CatalogPresenterScript.new(content, progress, session, _strings)
 	_system = SystemPresenterScript.new(settings, motion, _strings)
 	_navigator = _game.get_node("AppNavigator") as AppNavigator
@@ -109,6 +111,8 @@ func start() -> void:
 
 
 func shutdown() -> void:
+	if _completion_saves != null:
+		_completion_saves.retry_pending()
 	if is_instance_valid(_audio_bindings):
 		_audio_bindings.shutdown()
 	if _services != null and is_instance_valid(_services.audio):
@@ -292,6 +296,7 @@ func enter_level(
 	var level := _services.content.level_by_id(theme_id, level_id)
 	if level.is_empty() or not _services.content.available_modes(level).has(mode):
 		return {"ok": false, "error": "invalid_argument"}
+	_completion_saves.retry_pending()
 	_current_theme_id = theme_id
 	_current_level_id = level_id
 	_current_mode = mode
@@ -323,6 +328,8 @@ func enter_level(
 	else:
 		result = _navigator.push(&"gameplay", payload)
 	if bool(result.get("ok", false)):
+		# Next/direct entry also discovers its picture, independently of completion.
+		_services.progress.mark_level_visited(theme_id, level_id)
 		var screen := _navigator.current_screen_view() as GameplayScreen
 		_bind_gameplay(screen)
 		_game.call_deferred("_start_runtime_board", screen)
@@ -339,6 +346,7 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		return
 	_board_start_sequence += 1
 	var request_sequence := _board_start_sequence
+	var preparation_size := screen.size
 	_apply_feedback_preferences()
 	var loaded: bool = await _gameplay_preparation.prepare_live(
 		screen, _current_theme_id, _current_level_id, _current_mode
@@ -353,6 +361,8 @@ func start_runtime_board(screen: GameplayScreen) -> void:
 		screen.mark_board_failed()
 		return
 	screen.mark_board_live()
+	if screen.size != preparation_size:
+		_refresh_gameplay_layout()
 	_refresh_board_blockers()
 	# Preparation has already rendered the complete board behind the mode page.
 	if is_instance_valid(screen):
@@ -693,7 +703,19 @@ func _on_board_completed() -> void:
 	_completion_event_id = (
 		"%s:%s:%s:%d" % [_current_theme_id, _current_level_id, _current_mode, Time.get_ticks_msec()]
 	)
-	_services.complete_mode(_current_theme_id, _current_level_id, _current_mode)
+	(
+		_completion_saves
+		. submit(
+			{
+				"theme_id": _current_theme_id,
+				"level_id": _current_level_id,
+				"mode": _current_mode,
+				"completion_event_id": _completion_event_id,
+			},
+			_board.session_snapshot(_current_theme_id, _current_level_id),
+			_board.session_piece_ids()
+		)
+	)
 	if screen != null:
 		screen.prepare_completion()
 	var event_id := _completion_event_id
@@ -766,6 +788,18 @@ func _show_completion() -> void:
 	if bool(result.get("ok", false)):
 		var modal := _navigator.current_route_view() as CompletionModal
 		_completion_flow.bind(modal, view_model)
+		modal.set_save_pending(
+			has_pending_completion(_completion_event_id),
+			_completion_saves.recovery_saved(_completion_event_id)
+		)
+
+
+func has_pending_completion(event_id: String) -> bool:
+	return _completion_saves.has_pending(event_id)
+
+
+func retry_completion_save(event_id: String) -> Dictionary:
+	return _completion_saves.retry(event_id)
 
 
 func restore_completion_context(context: Dictionary) -> void:
@@ -782,6 +816,8 @@ func _dismiss_modal() -> void:
 
 
 func _return_to_levels() -> Dictionary:
+	if has_pending_completion(_completion_event_id):
+		retry_completion_save(_completion_event_id)
 	# Resolve entry ownership before marking return, without completing its visual
 	# pose. Back must also interrupt a board/HUD that is still entering.
 	_navigator.interrupt_active_transition()
@@ -831,9 +867,14 @@ func _refresh_board_blockers() -> void:
 
 func _refresh_gameplay_layout() -> void:
 	var screen := _navigator.current_screen_view() as GameplayScreen
-	if screen == null:
-		return
-	preload("res://scripts/gameplay/board/BoardViewportLayout.gd").refresh(_board, screen)
+	preload("res://scripts/gameplay/board/BoardViewportLayout.gd").request(
+		_board,
+		screen,
+		func() -> bool: return _navigator.current_screen_view() == screen,
+		_persist_board,
+		_on_board_completed,
+		_navigator.wait_until_idle,
+	)
 
 
 func _apply_feedback_preferences() -> void:

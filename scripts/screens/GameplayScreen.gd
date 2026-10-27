@@ -101,6 +101,13 @@ func mark_board_live() -> void:
 	_set_input_live(_navigation_active and not _navigation_locked)
 
 
+func mark_board_preparing() -> void:
+	_preparing_board = true
+	_board_ready = false
+	loading_label.text = GameStrings.ui_text("loading_puzzle")
+	_set_input_live(false)
+
+
 func mark_board_failed() -> void:
 	_board_ready = false
 	_preparing_board = true

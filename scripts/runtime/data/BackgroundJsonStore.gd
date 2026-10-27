@@ -20,16 +20,13 @@ func write_dictionary(path: String, data: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "invalid_path"}
 	var snapshot := data.duplicate(true)
 	_mutex.lock()
-	if not _last_failure.is_empty():
-		var failure := _last_failure.duplicate()
-		_mutex.unlock()
-		return failure
-	# Coalesce snapshots while preserving the order of their latest writes.
-	# A completed record must reach disk before the subsequent session clear.
-	_pending.erase(path)
+	# Coalesce without moving a queued path behind its dependent writes.
+	# In particular, a retained failed progress record stays ahead of cleanup.
 	_pending[path] = snapshot
 	var start_worker := not _working
 	_working = true
+	if start_worker:
+		_last_failure = {}
 	_mutex.unlock()
 	if start_worker:
 		if _task_id >= 0:
@@ -39,6 +36,17 @@ func write_dictionary(path: String, data: Dictionary) -> Dictionary:
 
 
 func flush() -> Dictionary:
+	# A later explicit flush retries retained failures once. The flush that joins
+	# a failed task still reports that failure instead of hiding it with a retry.
+	if _task_id < 0:
+		_mutex.lock()
+		var retry := not _working and not _pending.is_empty()
+		if retry:
+			_working = true
+			_last_failure = {}
+		_mutex.unlock()
+		if retry:
+			_task_id = WorkerThreadPool.add_task(_drain, false, "JIGCAT save retry")
 	if _task_id >= 0:
 		WorkerThreadPool.wait_for_task_completion(_task_id)
 		_task_id = -1
@@ -63,5 +71,14 @@ func _drain() -> void:
 		if not bool(saved.get("ok", false)):
 			_mutex.lock()
 			_last_failure = saved.duplicate()
+			_last_failure["path"] = path
+			# Never lose the failed payload or pass it with a dependent session
+			# clear. A newer queued snapshot for this path supersedes the old one.
+			var retained := {path: _pending.get(path, snapshot)}
+			for queued_path in _pending:
+				if queued_path != path:
+					retained[queued_path] = _pending[queued_path]
+			_pending = retained
+			_working = false
 			_mutex.unlock()
-			push_error("Save failed: %s" % str(saved.get("error", "unknown")))
+			return

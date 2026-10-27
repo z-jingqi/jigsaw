@@ -65,6 +65,7 @@ func _request_images() -> void:
 	if is_instance_valid(_loader):
 		_loader.unwatch_owner(self)
 	var previous := _textures.duplicate()
+	var previous_quality := _quality.duplicate()
 	_textures.clear()
 	_quality.clear()
 	for offset in [-1, 0, 1]:
@@ -74,6 +75,7 @@ func _request_images() -> void:
 			continue
 		if previous.has(path):
 			_textures[path] = previous[path]
+			_quality[path] = previous_quality.get(path, "thumbnail")
 		if is_instance_valid(_loader):
 			_request_slot(str(offset), entry, _generation)
 		elif offset == 0 and _model.get("texture") is Texture2D:
@@ -125,6 +127,9 @@ func _request_slot(slot: String, entry: Dictionary, generation: int) -> void:
 
 func _apply_loaded(path: String, texture: Texture2D, generation: int, full: bool) -> void:
 	if generation != _generation or not _active:
+		return
+	# A cached/late thumbnail must never replace a full image still held by this view.
+	if not full and _quality.get(path, "") == "full" and _textures.has(path):
 		return
 	if texture != null:
 		_textures[path] = texture

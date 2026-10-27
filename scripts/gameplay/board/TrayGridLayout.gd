@@ -39,7 +39,9 @@ func metrics(area: Rect2) -> Dictionary:
 	}
 
 
-func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dictionary:
+func arrange(
+	items: Array, area: Rect2, offset: float, base_scale: float, fixed_cell_width := 0.0
+) -> Dictionary:
 	var layout := metrics(area)
 	var unit: float = layout["unit"]
 	var gap: float = layout["row_gap"]
@@ -54,15 +56,19 @@ func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dic
 	var cursor := padding
 	for column in range(ceili(items.size() / float(row_count))):
 		var pair: Array[Dictionary] = []
-		var width := float(config["minimum_cell_width_units"]) * unit
+		var width := maxf(float(config["minimum_cell_width_units"]) * unit, fixed_cell_width)
 		for row in row_count:
 			var index := column * row_count + row
 			if index >= items.size():
 				break
 			var bounds: Rect2 = items[index].bounds
 			var scale := minf(base_scale, maximum_piece_height / maxf(1.0, bounds.size.y))
+			if fixed_cell_width > 0.0:
+				# A large restored group fits the same session-wide slot, never widens its neighbors.
+				scale = minf(scale, fixed_cell_width / maxf(1.0, bounds.size.x))
 			var size := bounds.size * scale
-			width = maxf(width, size.x)
+			if fixed_cell_width <= 0.0:
+				width = maxf(width, size.x)
 			pair.append({"id": items[index].id, "size": size, "scale": scale, "row": row})
 		for cell in pair:
 			cell.slot = Rect2(
@@ -73,13 +79,23 @@ func arrange(items: Array, area: Rect2, offset: float, base_scale: float) -> Dic
 		cursor += width + gap
 	var content_width := maxf(0.0, cursor - gap + padding) if not cells.is_empty() else 0.0
 	if ids != previous_ids:
+		var fallback := NAN
 		for cell in cells:
 			if not previous_slots.has(cell.id):
 				continue
 			var old: Rect2 = previous_slots[cell.id]
-			if old.intersects(area):
-				offset = area.position.x + cell.slot.position.x - old.position.x
+			if not old.intersects(area):
+				continue
+			var candidate: float = area.position.x + cell.slot.position.x - old.position.x
+			if is_nan(fallback):
+				fallback = candidate
+			# Prefer a surviving stationary column. Anchoring a shifted row's
+			# first piece instead would unnecessarily move the untouched row.
+			if is_equal_approx(candidate, offset):
+				fallback = candidate
 				break
+		if not is_nan(fallback):
+			offset = fallback
 	offset = clampf(offset, 0.0, maxf(0.0, content_width - area.size.x))
 	previous_slots.clear()
 	for cell in cells:

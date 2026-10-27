@@ -47,12 +47,20 @@ func bind(modal: CompletionModal, model: AppViewModels.CompletionViewModel) -> v
 func _advance(event_id: String) -> void:
 	if not _valid_action(event_id):
 		return
+	var coordinator: Object = _coordinator.get_ref()
+	if coordinator.has_pending_completion(event_id):
+		var saved: Dictionary = coordinator.retry_completion_save(event_id)
+		var modal: CompletionModal = _modal.get_ref()
+		modal.set_save_pending(
+			not bool(saved.get("ok", false)), bool(saved.get("recovery_saved", false))
+		)
+		modal.restore_actions()
+		return
 	var following := next_level(_context.theme_id, _context.level_id, _context.mode)
 	if following.is_empty():
 		_restore()
 		return
 	_advancing = true
-	var coordinator: Object = _coordinator.get_ref()
 	var result: Dictionary = coordinator.enter_level(
 		_context.theme_id, following.id, _context.mode, "resume"
 	)

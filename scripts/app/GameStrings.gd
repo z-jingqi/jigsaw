@@ -65,6 +65,9 @@ const TEXT := {
 		"complete": "Puzzle complete",
 		"completion_done": "Done",
 		"completion_next": "Next level",
+		"completion_retry_save": "Retry save",
+		"completion_save_failed": "Progress not saved",
+		"completion_exit_unsaved": "Quitting may lose progress",
 		"completed_mode": "Completed: %s",
 		"next": "Next",
 		"switch_mode": "Other mode"
@@ -132,6 +135,9 @@ const TEXT := {
 		"complete": "拼图完成",
 		"completion_done": "完成",
 		"completion_next": "下一关",
+		"completion_retry_save": "重试保存",
+		"completion_save_failed": "进度未保存",
+		"completion_exit_unsaved": "退出游戏可能丢失进度",
 		"completed_mode": "已完成：%s",
 		"next": "下一关",
 		"switch_mode": "换个模式"
@@ -199,6 +205,9 @@ const TEXT := {
 		"complete": "パズル完成",
 		"completion_done": "完了",
 		"completion_next": "次のパズル",
+		"completion_retry_save": "保存を再試行",
+		"completion_save_failed": "進行状況が未保存です",
+		"completion_exit_unsaved": "終了すると進行状況が失われる場合があります",
 		"completed_mode": "完成：%s",
 		"next": "次へ",
 		"switch_mode": "別モード"

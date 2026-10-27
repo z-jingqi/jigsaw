@@ -6,6 +6,7 @@ const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
 var host: Node2D
 var grid_layout := preload("res://scripts/gameplay/board/TrayGridLayout.gd").new()
 var grid_cells: Dictionary = {}
+var _piece_bounds_cache: Dictionary = {}
 var scroll_physics := preload("res://scripts/gameplay/board/TrayScrollPhysics.gd").new()
 var grab_gesture := preload("res://scripts/gameplay/board/TrayGrabGesture.gd").new()
 var drag_clearance := preload("res://scripts/gameplay/board/TrayDragClearance.gd").new()
@@ -57,7 +58,11 @@ func _layout_tray_items(instant := false) -> void:
 		items.append({"id": group.node.get_instance_id(), "bounds": _group_local_bounds(group)})
 		visible_groups.append(group)
 	var result: Dictionary = grid_layout.arrange(
-		items, _tray_area(), host.tray_scroll_offset, _tray_original_screen_scale()
+		items,
+		_tray_area(),
+		host.tray_scroll_offset,
+		_tray_original_screen_scale(),
+		_fixed_tray_cell_width()
 	)
 	host.tray_scroll_offset = result.offset
 	host.tray_content_width = result.width
@@ -67,6 +72,37 @@ func _layout_tray_items(instant := false) -> void:
 		grid_cells[group.node.get_instance_id()] = result.cells[index]
 		if group.in_tray:
 			_move_group_to_tray(group, index, instant)
+
+
+func _fixed_tray_cell_width() -> float:
+	# Include every original member, including locked/merged pieces. Successful
+	# removal therefore cannot shrink columns; reopening derives the same width.
+	var metrics := tray_layout_metrics()
+	var unit: float = metrics.unit
+	var max_height := maxf(
+		1.0, metrics.row_height - float(host.tray_config["piece_margin_units"]) * unit * 2
+	)
+	var width := float(host.tray_config["minimum_cell_width_units"]) * unit
+	var current_bounds: Dictionary = {}
+	for group in host.groups:
+		for member in group.members:
+			var id: int = member["visual"].get_instance_id()
+			var bounds: Rect2
+			if _piece_bounds_cache.has(id):
+				bounds = _piece_bounds_cache[id]
+			else:
+				var minimum := Vector2(INF, INF)
+				var maximum := Vector2(-INF, -INF)
+				for points in host._member_bounds_points_list(member):
+					for point in points:
+						minimum = minimum.min(point)
+						maximum = maximum.max(point)
+				bounds = Rect2(minimum, maximum - minimum)
+			current_bounds[id] = bounds
+			var scale := minf(_tray_original_screen_scale(), max_height / maxf(1, bounds.size.y))
+			width = maxf(width, bounds.size.x * scale)
+	_piece_bounds_cache = current_bounds
+	return width
 
 
 func _clamp_tray_scroll() -> void:

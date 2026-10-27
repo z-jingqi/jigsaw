@@ -4,6 +4,8 @@ class_name BoardSnapController
 var host: Node2D
 const READY_EXIT_MARGIN_PIXELS := 4.0
 
+const TrayOrder := preload("res://scripts/gameplay/board/TrayRowOrder.gd")
+
 const Presentation := preload("res://scripts/gameplay/board/BoardSnapPresentation.gd")
 
 var _presentation: Node2D
@@ -175,7 +177,7 @@ func _lock_group(group) -> void:
 	if not host.locked_groups.has(group):
 		host.locked_groups.append(group)
 	if host.tray_groups.has(group):
-		host.tray_groups.erase(group)
+		TrayOrder.remove_group(host.tray_groups, group)
 		_reindex_tray()
 		host._layout_tray(false)
 

@@ -27,6 +27,7 @@ var _view_model: AppViewModels.CompletionViewModel
 var _layout := Layout.new()
 var _reduced_motion := false
 var _closing := false
+var _save_pending := false
 
 
 func _ready() -> void:
@@ -115,9 +116,48 @@ func request_dismiss() -> void:
 	dismissed.emit(_view_model.completion_event_id)
 
 
+func set_save_pending(pending: bool, recovery_saved := true) -> void:
+	_save_pending = pending
+	if _view_model == null:
+		return
+	confirm_label.text = (
+		GameStrings.ui_text("completion_retry_save")
+		if pending
+		else (
+			_view_model.primary_action_text
+			if _view_model.has_next_level
+			else GameStrings.ui_text("completion_done")
+		)
+	)
+	confirm_button.accessibility_name = confirm_label.text
+	description_label.text = (
+		GameStrings.ui_text("completion_save_failed") if pending else _view_model.level_description
+	)
+	if pending and not recovery_saved:
+		description_label.text += "\n" + GameStrings.ui_text("completion_exit_unsaved")
+	description_variants = (
+		_save_error_variants(recovery_saved) if pending else _view_model.description_variants
+	)
+	description_label.visible = not description_label.text.is_empty()
+	_apply_layout()
+
+
+func _save_error_variants(recovery_saved: bool) -> PackedStringArray:
+	var variants := PackedStringArray()
+	for locale in ["zh", "en", "ja"]:
+		var table: Dictionary = GameStrings.TEXT[locale]
+		var message := str(table.completion_save_failed)
+		if not recovery_saved:
+			message += "\n" + str(table.completion_exit_unsaved)
+		variants.append(message)
+	return variants
+
+
 func restore_actions() -> void:
 	_closing = false
-	_finish_open()
+	# Failed retries may arrive during entrance. Re-enable without seeking the
+	# image timeline to its end; the current entrance remains uninterrupted.
+	_set_buttons_enabled(true)
 
 
 func active_motion_count() -> int:
@@ -131,7 +171,7 @@ func active_motion_count() -> int:
 func _request_confirm() -> void:
 	if _closing or _view_model == null:
 		return
-	if not _view_model.has_next_level:
+	if not _view_model.has_next_level and not _save_pending:
 		request_dismiss()
 		return
 	_closing = true
