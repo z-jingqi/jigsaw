@@ -15,9 +15,19 @@ func load_dictionary(path: String) -> Dictionary:
 	return _writer.load_dictionary(path)
 
 
+func load_validated_dictionary(path: String, validator: Callable) -> Dictionary:
+	flush()
+	return _writer.load_validated_dictionary(path, validator)
+
+
+func load_status(path: String) -> Dictionary:
+	return _writer.load_status(path)
+
+
 func write_dictionary(path: String, data: Dictionary) -> Dictionary:
-	if path.is_empty():
-		return {"ok": false, "error": "invalid_path"}
+	var permitted := _writer.can_write(path, data)
+	if not permitted.ok:
+		return permitted
 	var snapshot := data.duplicate(true)
 	_mutex.lock()
 	# Coalesce without moving a queued path behind its dependent writes.

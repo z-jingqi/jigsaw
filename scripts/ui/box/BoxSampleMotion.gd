@@ -3,6 +3,7 @@ extends RefCounted
 
 signal stopped
 
+const FrameGate := preload("res://scripts/runtime/CancellableFrame.gd")
 const Pieces := preload("res://scripts/ui/box/BoxPieceMeshes.gd")
 const HIDDEN_Y := 2.50
 var phase: StringName = &"idle"
@@ -37,7 +38,8 @@ func show(
 	_clear_children()
 	phase = &"waiting_for_lid"
 	while _current(token) and (_gesture_paused or not bool(opening_ready.call())):
-		await _host.get_tree().process_frame
+		if not await FrameGate.wait(_host.get_tree().process_frame, stopped):
+			return
 	if not _current(token):
 		return
 	_build(mode, data, texture)
@@ -147,7 +149,8 @@ func _pause_new_tween() -> void:
 
 func _wait_gesture(token: int) -> bool:
 	while _current(token) and _gesture_paused:
-		await _host.get_tree().process_frame
+		if not await FrameGate.wait(_host.get_tree().process_frame, stopped):
+			return false
 	return _current(token)
 
 
@@ -190,7 +193,8 @@ func _lower(token: int) -> void:
 func _wait(token: int) -> bool:
 	# Never await Tween.finished: kill() does not emit it. Cancellation/exit must wake.
 	while _current(token) and (_tween != null or _gesture_paused):
-		await _host.get_tree().process_frame
+		if not await FrameGate.wait(_host.get_tree().process_frame, stopped):
+			return false
 	return _current(token)
 
 

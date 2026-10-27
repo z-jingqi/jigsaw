@@ -22,6 +22,8 @@
 			"name_i18n": {
 				"zh": "山海经",
 				"zh-Hans": "山海经",
+				"en": "Classic of Mountains and Seas",
+				"ja": "山海経",
 				"_": "山海经"
 			},
 			"cover": "res://assets/ui/home/library/shanhai.webp",
@@ -97,6 +99,8 @@
 			"name_i18n": {
 				"zh": "希腊神话",
 				"zh-Hans": "希腊神话",
+				"en": "Greek Mythology",
+				"ja": "ギリシャ神話",
 				"_": "希腊神话"
 			},
 			"cover": "res://levels/topic_02/cover.webp",
@@ -172,6 +176,8 @@
 			"name_i18n": {
 				"zh": "猫",
 				"zh-Hans": "猫",
+				"en": "Cats",
+				"ja": "猫",
 				"_": "猫"
 			},
 			"cover": "res://levels/topic_03/cover.webp",
@@ -247,6 +253,8 @@
 			"name_i18n": {
 				"zh": "狗",
 				"zh-Hans": "狗",
+				"en": "Dogs",
+				"ja": "犬",
 				"_": "狗"
 			},
 			"cover": "res://levels/topic_04/cover.webp",
@@ -322,6 +330,8 @@
 			"name_i18n": {
 				"zh": "花间集",
 				"zh-Hans": "花间集",
+				"en": "Among the Flowers",
+				"ja": "花のあいだ",
 				"_": "花间集"
 			},
 			"cover": "res://assets/ui/home/library/flowers.webp",
@@ -388,6 +398,8 @@
 			"name_i18n": {
 				"zh": "海之境",
 				"zh-Hans": "海之境",
+				"en": "Ocean Realm",
+				"ja": "海の世界",
 				"_": "海之境"
 			},
 			"cover": "res://assets/ui/home/library/ocean.webp",
@@ -454,6 +466,8 @@
 			"name_i18n": {
 				"zh": "飞羽",
 				"zh-Hans": "飞羽",
+				"en": "Wings in Flight",
+				"ja": "空を舞う翼",
 				"_": "飞羽"
 			},
 			"cover": "res://assets/ui/home/library/birds.webp",
@@ -520,6 +534,8 @@
 			"name_i18n": {
 				"zh": "林间",
 				"zh-Hans": "林间",
+				"en": "In the Woods",
+				"ja": "森のなか",
 				"_": "林间"
 			},
 			"cover": "res://assets/ui/home/library/forest.webp",

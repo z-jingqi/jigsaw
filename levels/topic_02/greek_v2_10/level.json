@@ -6,6 +6,8 @@
 	"title_i18n": {
 		"zh": "缪斯的剧场",
 		"zh-Hans": "缪斯的剧场",
+		"en": "The Muses' Theater",
+		"ja": "ムーサたちの劇場",
 		"_": "缪斯的剧场"
 	},
 	"description": "三位缪斯在临海石廊中奏乐。琴弦、笛声与手鼓相和，鲜花和蓝色海湾为这场演出铺开背景。",
@@ -132,7 +134,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_4",
-						"piece_5",
 						"piece_23",
 						"piece_24"
 					],
@@ -192,7 +193,6 @@
 						"piece_2",
 						"piece_4",
 						"piece_5",
-						"piece_8",
 						"piece_9",
 						"piece_11",
 						"piece_24"
@@ -319,7 +319,6 @@
 						1391.5268335237893
 					],
 					"neighbors": [
-						"piece_2",
 						"piece_3",
 						"piece_4",
 						"piece_8",
@@ -523,7 +522,6 @@
 						1385.3900261965757
 					],
 					"neighbors": [
-						"piece_3",
 						"piece_5",
 						"piece_11",
 						"piece_14"
@@ -583,7 +581,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_11",
-						"piece_17",
 						"piece_21",
 						"piece_24",
 						"piece_27"
@@ -814,7 +811,6 @@
 						"piece_17",
 						"piece_19",
 						"piece_20",
-						"piece_21",
 						"piece_28"
 					],
 					"visible_bounds": [
@@ -1055,7 +1051,6 @@
 						826.4564215786897
 					],
 					"neighbors": [
-						"piece_9",
 						"piece_13",
 						"piece_20",
 						"piece_21",
@@ -1350,7 +1345,6 @@
 					"neighbors": [
 						"piece_9",
 						"piece_12",
-						"piece_13",
 						"piece_17",
 						"piece_20",
 						"piece_24",
@@ -1956,9 +1950,11 @@
 			"assist": {
 				"outline": true,
 				"seed": {
-					"mode": "auto",
+					"mode": "manual",
 					"count": 1,
-					"piece_ids": []
+					"piece_ids": [
+						"piece_10"
+					]
 				}
 			}
 		},

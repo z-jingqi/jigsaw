@@ -518,6 +518,7 @@ func _bind_routes() -> void:
 func _bind_home(screen: HomeScreen) -> void:
 	if screen != null:
 		screen.album_available = _album.is_available
+		screen.set_storage_status(_services.storage_status())
 	if screen == null or screen.has_meta("runtime_coordinator_bound"):
 		return
 	screen.set_meta("runtime_coordinator_bound", true)

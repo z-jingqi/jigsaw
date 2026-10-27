@@ -18,7 +18,7 @@ func _init(store: AtomicJsonStore = null, path: String = DEFAULT_PATH) -> void:
 
 
 func load() -> void:
-	var loaded := _store.load_dictionary(_path)
+	var loaded := _store.load_validated_dictionary(_path, validate_storage)
 	_data = _validated(loaded)
 	_revision += 1
 	changed.emit(snapshot(), _revision)
@@ -78,3 +78,22 @@ func _defaults() -> Dictionary:
 		"snap_preview_enabled": true,
 		"reduced_motion_enabled": false,
 	}
+
+
+func load_status() -> Dictionary:
+	return _store.load_status(_path)
+
+
+static func validate_storage(value: Dictionary) -> String:
+	if typeof(value.get("schema_version")) not in [TYPE_INT, TYPE_FLOAT]:
+		return "invalid_structure"
+	if float(value.schema_version) != SCHEMA_VERSION:
+		return "unsupported_schema"
+	if typeof(value.get("music_enabled")) != TYPE_BOOL:
+		return "invalid_structure"
+	for key in [
+		"haptics_enabled", "sound_effects_enabled", "snap_preview_enabled", "reduced_motion_enabled"
+	]:
+		if value.has(key) and typeof(value[key]) != TYPE_BOOL:
+			return "invalid_structure"
+	return ""

@@ -6,6 +6,8 @@
 	"title_i18n": {
 		"zh": "海马花园",
 		"zh-Hans": "海马花园",
+		"en": "Seahorse Garden",
+		"ja": "タツノオトシゴの庭",
 		"_": "海马花园"
 	},
 	"description": "金色海马蜷在珊瑚枝间，周围是紫色海扇与青碧水草。细小气泡缓缓上升，海底花园安静而繁盛。",
@@ -132,7 +134,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_4",
-						"piece_5",
 						"piece_23",
 						"piece_24"
 					],
@@ -192,7 +193,6 @@
 						"piece_2",
 						"piece_4",
 						"piece_5",
-						"piece_8",
 						"piece_9",
 						"piece_11",
 						"piece_24"
@@ -319,7 +319,6 @@
 						1391.5268335237893
 					],
 					"neighbors": [
-						"piece_2",
 						"piece_3",
 						"piece_4",
 						"piece_8",
@@ -523,7 +522,6 @@
 						1385.3900261965757
 					],
 					"neighbors": [
-						"piece_3",
 						"piece_5",
 						"piece_11",
 						"piece_14"
@@ -583,7 +581,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_11",
-						"piece_17",
 						"piece_21",
 						"piece_24",
 						"piece_27"
@@ -814,7 +811,6 @@
 						"piece_17",
 						"piece_19",
 						"piece_20",
-						"piece_21",
 						"piece_28"
 					],
 					"visible_bounds": [
@@ -1055,7 +1051,6 @@
 						826.4564215786897
 					],
 					"neighbors": [
-						"piece_9",
 						"piece_13",
 						"piece_20",
 						"piece_21",
@@ -1350,7 +1345,6 @@
 					"neighbors": [
 						"piece_9",
 						"piece_12",
-						"piece_13",
 						"piece_17",
 						"piece_20",
 						"piece_24",
@@ -1956,9 +1950,11 @@
 			"assist": {
 				"outline": true,
 				"seed": {
-					"mode": "auto",
+					"mode": "manual",
 					"count": 1,
-					"piece_ids": []
+					"piece_ids": [
+						"piece_10"
+					]
 				}
 			}
 		},

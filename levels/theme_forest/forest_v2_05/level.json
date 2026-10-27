@@ -6,6 +6,8 @@
 	"title_i18n": {
 		"zh": "蘑菇微光",
 		"zh-Hans": "蘑菇微光",
+		"en": "Mushrooms in Soft Light",
+		"ja": "ほのかな光のキノコ",
 		"_": "蘑菇微光"
 	},
 	"description": "树根拱起一处微小花园，斑纹蘑菇与嫩蕨相伴。露珠、落叶和小甲虫，闪着林地细碎的光。",
@@ -124,7 +126,6 @@
 						109.4521404070305
 					],
 					"neighbors": [
-						"piece_3",
 						"piece_7",
 						"piece_10"
 					],
@@ -177,7 +178,6 @@
 						99.24572095573183
 					],
 					"neighbors": [
-						"piece_2",
 						"piece_7",
 						"piece_11",
 						"piece_28"
@@ -452,7 +452,6 @@
 						"piece_2",
 						"piece_3",
 						"piece_10",
-						"piece_11",
 						"piece_16",
 						"piece_28"
 					],
@@ -655,7 +654,6 @@
 						"piece_2",
 						"piece_6",
 						"piece_7",
-						"piece_14",
 						"piece_15",
 						"piece_16"
 					],
@@ -713,7 +711,6 @@
 					],
 					"neighbors": [
 						"piece_3",
-						"piece_7",
 						"piece_28"
 					],
 					"visible_bounds": [
@@ -868,7 +865,6 @@
 						"piece_8",
 						"piece_12",
 						"piece_17",
-						"piece_19",
 						"piece_23",
 						"piece_24"
 					],
@@ -931,7 +927,6 @@
 					"neighbors": [
 						"piece_1",
 						"piece_5",
-						"piece_10",
 						"piece_15",
 						"piece_16",
 						"piece_21",
@@ -1176,8 +1171,7 @@
 						"piece_4",
 						"piece_12",
 						"piece_23",
-						"piece_25",
-						"piece_26"
+						"piece_25"
 					],
 					"visible_bounds": [
 						0,
@@ -1234,7 +1228,6 @@
 					"neighbors": [
 						"piece_8",
 						"piece_12",
-						"piece_13",
 						"piece_25"
 					],
 					"visible_bounds": [
@@ -1693,7 +1686,6 @@
 						"piece_4",
 						"piece_5",
 						"piece_14",
-						"piece_18",
 						"piece_23"
 					],
 					"visible_bounds": [
@@ -1848,9 +1840,11 @@
 			"assist": {
 				"outline": true,
 				"seed": {
-					"mode": "auto",
+					"mode": "manual",
 					"count": 1,
-					"piece_ids": []
+					"piece_ids": [
+						"piece_27"
+					]
 				}
 			}
 		},

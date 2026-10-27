@@ -3,6 +3,8 @@ extends ActionButton
 
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
+const ThumbnailLoader := preload("res://scripts/ui/box/LevelThumbnailLoader.gd")
+
 const BoxCache := preload("res://scripts/ui/box/BoxThumbnailCache.gd")
 
 @onready var title_label: Label = $Title
@@ -12,6 +14,8 @@ const BoxCache := preload("res://scripts/ui/box/BoxThumbnailCache.gd")
 var level_id := ""
 var _view_model: Variant
 var _thumbnail_path := ""
+var _thumbnail_generation := 0
+var _thumbnail_loader: Node
 var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 var _status: Label
@@ -57,6 +61,7 @@ func _ready() -> void:
 	resized.connect(_apply_layout)
 	get_viewport().size_changed.connect(_apply_layout)
 	tree_entered.connect(_request_box)
+	tree_entered.connect(_resume_thumbnail_request)
 	_apply_layout()
 	if _view_model != null:
 		_apply_view_model()
@@ -193,22 +198,20 @@ func cancel_thumbnail_request() -> void:
 	_box_hidden = false
 
 
-func _process(_delta: float) -> void:
-	if _thumbnail_path.is_empty():
-		set_process(false)
+func _resume_thumbnail_request() -> void:
+	if _thumbnail_path.is_empty() or not is_inside_tree():
 		return
-	var status := ResourceLoader.load_threaded_get_status(_thumbnail_path)
-	if status == ResourceLoader.THREAD_LOAD_LOADED:
-		var requested_path := _thumbnail_path
-		var loaded := ResourceLoader.load_threaded_get(requested_path) as Texture2D
-		if requested_path == _thumbnail_path:
-			_thumbnail_path = ""
-			set_process(false)
-			_show_loaded_thumbnail(loaded, true)
-	elif status in [ResourceLoader.THREAD_LOAD_FAILED, ResourceLoader.THREAD_LOAD_INVALID_RESOURCE]:
-		_thumbnail_path = ""
-		set_process(false)
-		_request_box()
+	_thumbnail_loader = ThumbnailLoader.shared(get_tree())
+	_thumbnail_loader.watch(
+		self, "level", _thumbnail_path, _on_thumbnail_loaded.bind(_thumbnail_generation), "thumb"
+	)
+
+
+func _on_thumbnail_loaded(path: String, texture: Texture2D, generation: int) -> void:
+	if generation != _thumbnail_generation or path != _thumbnail_path or not is_inside_tree():
+		return
+	_thumbnail_path = ""
+	_show_loaded_thumbnail(texture, true)
 
 
 func _set_thumbnail(texture: Texture2D, path: String) -> void:
@@ -222,6 +225,9 @@ func _set_thumbnail(texture: Texture2D, path: String) -> void:
 		if path == _thumbnail_path:
 			return
 	_cancel_thumbnail_fade()
+	_thumbnail_generation += 1
+	if is_instance_valid(_thumbnail_loader):
+		_thumbnail_loader.unwatch_owner(self)
 	_thumbnail_path = ""
 	_displayed_thumbnail_path = path
 	set_process(false)
@@ -236,12 +242,7 @@ func _set_thumbnail(texture: Texture2D, path: String) -> void:
 		_show_loaded_thumbnail(load(path) as Texture2D, false)
 		return
 	_thumbnail_path = path
-	var request_error := ResourceLoader.load_threaded_request(path, "Texture2D")
-	var status := ResourceLoader.load_threaded_get_status(path)
-	if request_error == OK or status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-		set_process(true)
-		return
-	_thumbnail_path = ""
+	_resume_thumbnail_request()
 
 
 func _show_loaded_thumbnail(texture: Texture2D, animate: bool) -> void:
@@ -348,6 +349,9 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func _exit_tree() -> void:
+	_thumbnail_generation += 1
+	if is_instance_valid(_thumbnail_loader):
+		_thumbnail_loader.unwatch_owner(self)
 	cancel_thumbnail_request()
 	_cancel_thumbnail_fade()
 	super._exit_tree()

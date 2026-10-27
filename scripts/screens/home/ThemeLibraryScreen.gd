@@ -186,7 +186,7 @@ func _layout() -> void:
 	$Title.position = Vector2(left + $CloseButton.size.x, $CloseButton.position.y)
 	$Title.size = Vector2(width - $CloseButton.size.x, $CloseButton.size.y)
 	Clean.label($Title, roundi(maxf(26.0 * u, 26.0 * canvas)))
-	var pages_top := top
+	var pages_top := top + _extra_header_height(width, canvas)
 	var pager_height := 44.0 * canvas
 	_pager.position = Vector2(left, size.y - safe.w - pager_height - 16.0 * u)
 	_pager.size = Vector2(width, pager_height)
@@ -214,6 +214,10 @@ func _layout() -> void:
 				(index % columns) * (cell.x + gap), (index / columns) * (cell.y + row_gap)
 			)
 	_apply_visual_page(_visual_page)
+
+
+func _extra_header_height(_width: float, _canvas: float) -> float:
+	return 0.0
 
 
 func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:

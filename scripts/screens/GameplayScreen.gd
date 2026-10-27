@@ -79,6 +79,11 @@ func set_view_model(view_model: Variant) -> void:
 	_view_model = view_model
 	if not is_node_ready():
 		return
+	back_button.accessibility_label = GameStrings.ui_text("back")
+	back_button.accessibility_name = back_button.accessibility_label
+	hint_button.accessibility_label = GameStrings.ui_text("hint")
+	hint_button.accessibility_name = hint_button.accessibility_label
+	swap_action_bar.refresh_accessibility()
 	title_label.text = str(_read("level_title", ""))
 	var mode := String(_read("mode", ""))
 	tray_view.visible = mode == "polygon" or mode == "knob"

@@ -103,13 +103,18 @@ static func bake_data(
 		disk["bake_usec"] = Time.get_ticks_usec() - started
 		return disk
 	var edges := _edges(points)
-	var cell_size := maxf(width * 2.0, longest / 16.0)
+	# Fine conservative cells avoid projecting every texel onto distant knob
+	# samples. Keep the complete original blend support, in original edge order.
+	var cell_size := maxf(width * 0.5, longest / 64.0)
 	var grid_size := Vector2i(ceilf(bounds.size.x / cell_size), ceilf(bounds.size.y / cell_size))
-	var bins := _bins(edges, bounds, width, cell_size, grid_size)
+	var bins := _bins(edges, bounds, width * (1.0 + 4.0 * CORNER_BLEND_RATIO), cell_size, grid_size)
+	# Beyond the nearest-edge rim the exact field is zero; skip those cells
+	# without evaluating the wider corner-blend candidates at every texel.
+	var near_bins := _bins(edges, bounds, width, cell_size, grid_size)
 	var image := Image.create(dimensions.x, dimensions.y, false, Image.FORMAT_RGH)
 	image.fill(Color(0, 0, 0, 1))
 	var pixel_size := bounds.size / Vector2(dimensions)
-	var empty_indices: Array = []
+	var empty_indices := PackedInt32Array()
 	for y in dimensions.y:
 		if _cancelled(cancel_probe):
 			return {"image": null, "cancelled": true}
@@ -118,7 +123,10 @@ static func bake_data(
 		for x in dimensions.x:
 			var px := bounds.position.x + (x + 0.5) * pixel_size.x
 			var column := mini(grid_size.x - 1, int((px - bounds.position.x) / cell_size))
-			var indices: Array = bins.get(row * grid_size.x + column, empty_indices)
+			var cell_index := row * grid_size.x + column
+			if not near_bins.has(cell_index):
+				continue
+			var indices: PackedInt32Array = bins.get(cell_index, empty_indices)
 			if indices.is_empty():
 				continue
 			var slope := _slope(Vector2(px, py), edges, indices, width)
@@ -306,35 +314,63 @@ static func _edges(points: PackedVector2Array) -> EdgeData:
 
 
 static func _bins(
-	edges: EdgeData, bounds: Rect2, width: float, cell: float, grid: Vector2i
+	edges: EdgeData, bounds: Rect2, reach: float, cell: float, grid: Vector2i
 ) -> Dictionary:
 	var bins: Dictionary = {}
 	for index in edges.starts.size():
 		var a := edges.starts[index]
-		var area := Rect2(a, Vector2.ZERO).expand(a + edges.deltas[index]).grow(
-			width * (1.0 + 4.0 * CORNER_BLEND_RATIO)
-		)
+		var delta := edges.deltas[index]
+		var diagonal := absf(delta.x) > cell and absf(delta.y) > cell
+		var area := Rect2(a, Vector2.ZERO).expand(a + delta).grow(reach)
 		var first := Vector2i((area.position - bounds.position) / cell)
 		var last := Vector2i((area.end - bounds.position) / cell)
 		for row in range(maxi(0, first.y), mini(grid.y - 1, last.y) + 1):
 			for column in range(maxi(0, first.x), mini(grid.x - 1, last.x) + 1):
+				var tile := Rect2(bounds.position + Vector2(column, row) * cell, Vector2.ONE * cell)
+				if diagonal and not _segment_meets_box(a, delta, tile.grow(reach)):
+					continue
 				var key := row * grid.x + column
 				if not bins.has(key):
-					bins[key] = []
+					bins[key] = PackedInt32Array()
 				bins[key].append(index)
 	return bins
 
 
-static func _slope(point: Vector2, edges: EdgeData, indices: Array, width: float) -> Vector2:
+static func _segment_meets_box(start: Vector2, delta: Vector2, box: Rect2) -> bool:
+	# Expanded square is a conservative superset of the circular distance band.
+	# Slab clipping rejects only distant cells, including long diagonal AABB gaps.
+	var low := 0.0
+	var high := 1.0
+	for axis in 2:
+		if absf(delta[axis]) <= 0.000001:
+			if start[axis] < box.position[axis] or start[axis] > box.end[axis]:
+				return false
+			continue
+		var first: float = (box.position[axis] - start[axis]) / delta[axis]
+		var last: float = (box.end[axis] - start[axis]) / delta[axis]
+		low = maxf(low, minf(first, last))
+		high = minf(high, maxf(first, last))
+		if low > high:
+			return false
+	return true
+
+
+static func _slope(
+	point: Vector2, edges: EdgeData, indices: PackedInt32Array, width: float
+) -> Vector2:
+	var starts := edges.starts
+	var deltas := edges.deltas
+	var inverse_squared := edges.inverse_squared
+	var sample_deltas := edges.sample_deltas
 	var nearest_squared := width * width
 	var nearest := -1
-	for index in indices:
-		var a := edges.starts[index]
-		var delta := edges.deltas[index]
-		var t := clampf((point - a).dot(delta) * edges.inverse_squared[index], 0.0, 1.0)
+	for index: int in indices:
+		var a := starts[index]
+		var delta := deltas[index]
+		var t := clampf((point - a).dot(delta) * inverse_squared[index], 0.0, 1.0)
 		var sample_delta := point - (a + delta * t)
 		var distance_squared := sample_delta.length_squared()
-		edges.sample_deltas[index] = sample_delta
+		sample_deltas[index] = sample_delta
 		if distance_squared < nearest_squared:
 			nearest_squared = distance_squared
 			nearest = index
@@ -344,8 +380,8 @@ static func _slope(point: Vector2, edges: EdgeData, indices: Array, width: float
 	var blend_radius := width * CORNER_BLEND_RATIO
 	var normal_sum := Vector2.ZERO
 	var weight_sum := 0.0
-	for index in indices:
-		var delta := edges.sample_deltas[index]
+	for index: int in indices:
+		var delta := sample_deltas[index]
 		var candidate_distance := delta.length()
 		if candidate_distance > distance + blend_radius * 4.0:
 			continue

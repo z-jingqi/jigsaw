@@ -27,8 +27,17 @@ func _ready() -> void:
 	move_down.pressed.connect(move_down_requested.emit)
 	move_left.pressed.connect(move_left_requested.emit)
 	move_right.pressed.connect(move_right_requested.emit)
+	refresh_accessibility()
 	resized.connect(_apply_layout)
 	_apply_layout()
+
+
+func refresh_accessibility() -> void:
+	var keys := ["shift_row_left", "shift_row_up", "shift_row_down", "shift_row_right"]
+	var buttons := [move_left, move_up, move_down, move_right]
+	for index in buttons.size():
+		buttons[index].accessibility_label = GameStrings.ui_text(keys[index])
+		buttons[index].accessibility_name = buttons[index].accessibility_label
 
 
 func configure_layout(scale: float) -> void:

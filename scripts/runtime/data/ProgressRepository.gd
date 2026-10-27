@@ -19,7 +19,7 @@ func _init(store: AtomicJsonStore = null, path: String = DEFAULT_PATH) -> void:
 
 
 func load() -> void:
-	_data = _validated(_store.load_dictionary(_path))
+	_data = _validated(_store.load_validated_dictionary(_path, validate_storage))
 	_revision += 1
 	changed.emit(snapshot(), _revision)
 
@@ -186,3 +186,38 @@ func _defaults() -> Dictionary:
 		"visited_levels": {},
 		"tutorials_seen": {"home_swipe": false, "home_enter": false},
 	}
+
+
+func load_status() -> Dictionary:
+	return _store.load_status(_path)
+
+
+static func validate_storage(value: Dictionary) -> String:
+	if typeof(value.get("schema_version")) not in [TYPE_INT, TYPE_FLOAT]:
+		return "invalid_structure"
+	if float(value.schema_version) != SCHEMA_VERSION:
+		return "unsupported_schema"
+	if typeof(value.get("completed_modes")) != TYPE_DICTIONARY:
+		return "invalid_structure"
+	for key in ["visited_levels", "tutorials_seen"]:
+		if value.has(key) and typeof(value[key]) != TYPE_DICTIONARY:
+			return "invalid_structure"
+	for theme_id in value.completed_modes:
+		var levels: Variant = value.completed_modes[theme_id]
+		if typeof(theme_id) != TYPE_STRING or not levels is Dictionary:
+			return "invalid_structure"
+		for level_id in levels:
+			if typeof(level_id) != TYPE_STRING or not levels[level_id] is Array:
+				return "invalid_structure"
+			for mode in levels[level_id]:
+				if typeof(mode) != TYPE_STRING or not PLAY_MODES.has(mode):
+					return "invalid_structure"
+	for theme_id in value.get("visited_levels", {}):
+		var visits: Variant = value.visited_levels[theme_id]
+		if typeof(theme_id) != TYPE_STRING or not visits is Array:
+			return "invalid_structure"
+		for level_id in visits:
+			if typeof(level_id) != TYPE_STRING:
+				return "invalid_structure"
+
+	return ""

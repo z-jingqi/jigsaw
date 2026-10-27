@@ -6,6 +6,8 @@
 	"title_i18n": {
 		"zh": "贝湾的诞生",
 		"zh-Hans": "贝湾的诞生",
+		"en": "Birth at Shell Bay",
+		"ja": "貝の入り江での誕生",
 		"_": "贝湾的诞生"
 	},
 	"description": "白色衣裙与珍珠般的贝壳相映，海风掠过花枝。鸽子飞向澄澈海湾，晨光温柔地落在石阶上。",
@@ -132,7 +134,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_4",
-						"piece_5",
 						"piece_23",
 						"piece_24"
 					],
@@ -192,7 +193,6 @@
 						"piece_2",
 						"piece_4",
 						"piece_5",
-						"piece_8",
 						"piece_9",
 						"piece_11",
 						"piece_24"
@@ -319,7 +319,6 @@
 						1391.5268335237893
 					],
 					"neighbors": [
-						"piece_2",
 						"piece_3",
 						"piece_4",
 						"piece_8",
@@ -523,7 +522,6 @@
 						1385.3900261965757
 					],
 					"neighbors": [
-						"piece_3",
 						"piece_5",
 						"piece_11",
 						"piece_14"
@@ -583,7 +581,6 @@
 					"neighbors": [
 						"piece_3",
 						"piece_11",
-						"piece_17",
 						"piece_21",
 						"piece_24",
 						"piece_27"
@@ -814,7 +811,6 @@
 						"piece_17",
 						"piece_19",
 						"piece_20",
-						"piece_21",
 						"piece_28"
 					],
 					"visible_bounds": [
@@ -1055,7 +1051,6 @@
 						826.4564215786897
 					],
 					"neighbors": [
-						"piece_9",
 						"piece_13",
 						"piece_20",
 						"piece_21",
@@ -1350,7 +1345,6 @@
 					"neighbors": [
 						"piece_9",
 						"piece_12",
-						"piece_13",
 						"piece_17",
 						"piece_20",
 						"piece_24",
@@ -1956,9 +1950,11 @@
 			"assist": {
 				"outline": true,
 				"seed": {
-					"mode": "auto",
+					"mode": "manual",
 					"count": 1,
-					"piece_ids": []
+					"piece_ids": [
+						"piece_10"
+					]
 				}
 			}
 		},

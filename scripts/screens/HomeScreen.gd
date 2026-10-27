@@ -12,10 +12,18 @@ const MenuScene := preload("res://scenes/screens/home/HomeMenu.tscn")
 var album_available: Callable
 var _selected_index := 0
 var _menu: Control
+var _storage_notice: Label
+var _storage_key := ""
 
 
 func _ready() -> void:
 	super._ready()
+	_storage_notice = Label.new()
+	_storage_notice.name = "StorageNotice"
+	_storage_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_storage_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_storage_notice.hide()
+	add_child(_storage_notice)
 	$CloseButton.hide()
 	$Title.hide()
 	$MoreButton.accessibility_name = GameStrings.ui_text("more_actions")
@@ -87,8 +95,49 @@ func _layout() -> void:
 		safe.x + 24.0 * unit, $MoreButton.position.y + ($MoreButton.size.y - 40.0 * unit) * 0.5
 	)
 	$BrandLogo.size = Vector2(120.0, 40.0) * unit
+	if _storage_notice != null and _storage_notice.visible:
+		var note_height := _extra_header_height($Pages.size.x, unit)
+		_storage_notice.position = Vector2($Pages.position.x, $Pages.position.y - note_height)
+		_storage_notice.size.x = $Pages.size.x
+		_storage_notice.set_deferred("size", Vector2($Pages.size.x, note_height - 16.0 * unit))
 	if _menu != null and _menu.visible:
 		_menu.reposition($MoreButton.get_global_rect())
+
+
+func set_storage_status(status: Dictionary) -> void:
+	match str(status.get("state", "ready")):
+		"blocked":
+			_storage_key = "storage_unreadable"
+		"backup_warning":
+			_storage_key = "storage_backup_warning"
+		"recovered":
+			_storage_key = "storage_recovered"
+		_:
+			_storage_key = ""
+	_layout()
+
+
+func _extra_header_height(width: float, canvas: float) -> float:
+	if _storage_notice == null:
+		return 0.0
+	_storage_notice.visible = not _storage_key.is_empty()
+	if not _storage_notice.visible:
+		return 0.0
+	_storage_notice.text = GameStrings.ui_text(_storage_key)
+	_storage_notice.accessibility_name = _storage_notice.text
+	var font_size := roundi(16.0 * canvas)
+	Clean.label(_storage_notice, font_size)
+	return (
+		(
+			Clean
+			. FONT
+			. get_multiline_string_size(
+				_storage_notice.text, HORIZONTAL_ALIGNMENT_LEFT, width, font_size
+			)
+			. y
+		)
+		+ 16.0 * canvas
+	)
 
 
 func _layout_tile(tile: Button, cell: Vector2, u: float, canvas: float) -> void:
