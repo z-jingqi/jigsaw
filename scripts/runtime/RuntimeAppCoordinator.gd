@@ -690,7 +690,8 @@ func _show_completion() -> void:
 				"mode": _current_mode,
 				"completion_event_id": _completion_event_id,
 				"level_title": level.get("title", ""),
-				"level_description": level.get("description", ""),
+				"level_description":
+				_services.content.subject_intro(_current_level_id, _strings.locale),
 				"completed_texture": presentation.get("texture"),
 				"source_rect": presentation.get("rect", Rect2()),
 				"primary_action_text": _strings.text("completion_next"),

@@ -9,12 +9,15 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 @onready var header: Control = $Canvas/Header
 @onready var level_label: Label = $Canvas/Header/LevelTitle
-@onready var card_stage: Control = $Canvas/CardStage
-@onready var image_rect: TextureRect = $Canvas/CardStage/CompletedImage
+@onready var card_stage: Control = $Canvas/Body/Content/CardStage
+@onready var image_rect: TextureRect = $Canvas/Body/Content/CardStage/CompletedImage
 @onready var confirm_button: ActionButton = $Canvas/Confirm
 @onready var confirm_label: Label = $Canvas/Confirm/Label
 @onready var return_button: ActionButton = $Canvas/Return
-@onready var return_label: Label = $Canvas/Return/Label
+@onready var body: ScrollContainer = $Canvas/Body
+@onready var body_content: Control = $Canvas/Body/Content
+@onready var description_label: Label = $Canvas/Body/Content/Description
+@onready var cat: TextureRect = $Canvas/Body/Content/Cat
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var image_motion: Node = $ImageMotion
 
@@ -31,8 +34,7 @@ func _ready() -> void:
 	resized.connect(_apply_layout)
 	Clean.button(confirm_button, true)
 	confirm_label.add_theme_color_override("font_color", Clean.PAPER)
-	Clean.button(return_button)
-	return_label.add_theme_color_override("font_color", Clean.INK)
+	Clean.icon_button(return_button)
 	# Input gating during the entrance must not change either button's surface.
 	for button in [confirm_button, return_button]:
 		button.add_theme_stylebox_override(
@@ -51,14 +53,21 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	image_rect.texture = _view_model.completed_texture
 	confirm_label.text = _view_model.primary_action_text
 	confirm_button.accessibility_name = confirm_label.text
-	return_label.text = _view_model.secondary_action_text
-	return_button.accessibility_name = return_label.text
+	return_button.accessibility_name = _view_model.secondary_action_text
+	description_label.text = _view_model.level_description
+	description_label.visible = not description_label.text.is_empty()
+	description_label.add_theme_color_override("font_color", Clean.INK)
+	description_label.add_theme_font_override("font", Clean.FONT)
+	body.scroll_vertical = 0
+	if not _view_model.has_next_level:
+		confirm_label.text = GameStrings.ui_text("completion_done")
+		confirm_button.accessibility_name = confirm_label.text
 	_closing = false
 	_apply_layout()
 	if _reduced_motion:
 		_finish_open()
 	else:
-		_set_buttons_enabled(false)
+		_set_buttons_enabled(true)
 		animation_player.play(&"open")
 		animation_player.advance(0.0)
 
@@ -78,7 +87,7 @@ func navigation_set_active(is_active: bool) -> void:
 
 
 func navigation_prepare_transition() -> void:
-	_finish_open()
+	animation_player.stop(true)
 	_closing = true
 	_set_buttons_enabled(false)
 	confirm_button.cancel_motion()
@@ -117,7 +126,10 @@ func active_motion_count() -> int:
 
 
 func _request_confirm() -> void:
-	if _closing or _view_model == null or not _view_model.has_next_level:
+	if _closing or _view_model == null:
+		return
+	if not _view_model.has_next_level:
+		request_dismiss()
 		return
 	_closing = true
 	_set_buttons_enabled(false)
@@ -139,18 +151,15 @@ func _finish_open() -> void:
 
 
 func _set_buttons_enabled(enabled: bool) -> void:
-	confirm_button.disabled = not enabled or _view_model == null or not _view_model.has_next_level
-	confirm_label.modulate.a = (
-		0.4 if _view_model != null and not _view_model.has_next_level else 1.0
-	)
+	confirm_button.disabled = not enabled or _view_model == null
 	return_button.disabled = not enabled
 
 
 func _apply_layout() -> void:
 	if not is_node_ready() or _view_model == null or size.x <= 0 or size.y <= 0:
 		return
-	var source := get_global_transform_with_canvas().affine_inverse() * _view_model.source_rect
-	var target := _layout.image_target(size, image_rect.texture, source)
+	var target := _layout.apply(self)
+	var source := (
+		body_content.get_global_transform_with_canvas().affine_inverse() * _view_model.source_rect
+	)
 	image_motion.configure(card_stage, image_rect, source, target)
-	_layout.apply_header(size, header, level_label)
-	_layout.apply_footer(size, confirm_button, confirm_label, return_button, return_label)

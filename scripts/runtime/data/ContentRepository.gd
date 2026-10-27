@@ -108,3 +108,15 @@ func config_with_theme_background(level_config: Dictionary, topic: Dictionary) -
 		"color": str(palette.get("surface", "#F5F0E3")),
 	}
 	return result
+
+
+func subject_intro(level_id: String, locale: String) -> String:
+	var path := "res://levels/subject_intros.json"
+	if not FileAccess.file_exists(path):
+		return ""
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not data is Dictionary:
+		return ""
+	var entry: Dictionary = data.get("levels", {}).get(level_id, {})
+	var text: Dictionary = entry.get("subject_intro_i18n", {})
+	return str(text.get(GameStrings.normalize_locale(locale), ""))
