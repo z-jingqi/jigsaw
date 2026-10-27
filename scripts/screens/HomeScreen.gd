@@ -9,6 +9,7 @@ signal all_themes_requested
 signal album_requested
 
 const MenuScene := preload("res://scenes/screens/home/HomeMenu.tscn")
+var album_available: Callable
 var _selected_index := 0
 var _menu: Control
 
@@ -126,9 +127,18 @@ func _can_open_menu() -> bool:
 func _open_menu() -> void:
 	if not _can_open_menu():
 		return
+	refresh_album_availability()
 	_pause_motion()
 	_pager.set_interaction_enabled(false)
 	_menu.open_menu($MoreButton.get_global_rect())
+
+
+func refresh_album_availability() -> void:
+	if _menu == null:
+		return
+	_menu.set_album_available(album_available.is_valid() and bool(album_available.call()))
+	if _menu.visible:
+		_menu.reposition($MoreButton.get_global_rect())
 
 
 func dismiss_menu() -> bool:

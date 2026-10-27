@@ -55,17 +55,13 @@ func level_list(
 	var topic: Dictionary = _content.topic_by_id(theme_id)
 	var cards: Array[AppViewModels.LevelCardViewModel] = []
 	var focus_id := ""
-	var first_level := true
 	for level in topic.get("levels", []):
 		if typeof(level) != TYPE_DICTIONARY:
 			continue
 		var modes: Array[AppViewModels.ModeStatusViewModel] = _mode_statuses(topic, level)
 		var revealed: bool = (
-			first_level
-			or _progress.is_level_visited(theme_id, str(level["id"]))
-			or _has_played_mode(modes)
+			_progress.is_level_visited(theme_id, str(level["id"])) or _has_played_mode(modes)
 		)
-		first_level = false
 		var is_recommended: bool = requested_focus_level_id == str(level["id"])
 		if focus_id.is_empty() and _has_unfinished_mode(modes):
 			focus_id = str(level["id"])

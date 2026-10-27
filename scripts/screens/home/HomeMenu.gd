@@ -19,12 +19,33 @@ func _ready() -> void:
 		button.accessibility_name = button.text
 		Clean.button(button)
 		button.pressed.connect(_choose.bind(actions[index]))
-		button.focus_neighbor_top = button.get_path_to(buttons[posmod(index - 1, 3)])
-		button.focus_neighbor_bottom = button.get_path_to(buttons[(index + 1) % 3])
+	set_album_available(false)
+
+
+func set_album_available(available: bool) -> void:
+	var restore_focus: bool = not available and $Panel/Album.has_focus()
+	$Panel/Album.visible = available
+	$Panel/Album.disabled = not available
+	$Panel/Album.focus_mode = Control.FOCUS_ALL if available else Control.FOCUS_NONE
+	var buttons := _visible_buttons()
+	for index in buttons.size():
+		var button := buttons[index]
+		button.focus_neighbor_top = button.get_path_to(buttons[posmod(index - 1, buttons.size())])
+		button.focus_neighbor_bottom = button.get_path_to(buttons[(index + 1) % buttons.size()])
 		button.focus_next = button.focus_neighbor_bottom
 		button.focus_previous = button.focus_neighbor_top
 		button.focus_neighbor_left = NodePath(".")
 		button.focus_neighbor_right = NodePath(".")
+	if restore_focus and visible:
+		$Panel/Themes.grab_focus()
+
+
+func _visible_buttons() -> Array[Button]:
+	var buttons: Array[Button] = []
+	for child in $Panel.get_children():
+		if child is Button and child.visible:
+			buttons.append(child)
+	return buttons
 
 
 func open_menu(anchor: Rect2) -> void:
@@ -40,13 +61,14 @@ func reposition(anchor: Rect2) -> void:
 	var unit := Clean.canvas_scale(get_viewport_rect().size, get_window())
 	var row := 48.0 * unit
 	var width := minf(220.0 * unit, size.x - 32.0 * unit)
-	$Panel.size = Vector2(width, row * 3 + 16.0 * unit)
+	var buttons := _visible_buttons()
+	$Panel.size = Vector2(width, row * buttons.size() + 16.0 * unit)
 	var local := get_global_transform().affine_inverse() * Vector2(anchor.end.x, anchor.end.y)
 	$Panel.position = Vector2(
 		clampf(local.x - width, 16.0 * unit, size.x - width - 16.0 * unit), local.y + 8.0 * unit
 	)
-	for index in 3:
-		var button: Button = $Panel.get_child(index)
+	for index in buttons.size():
+		var button := buttons[index]
 		button.position = Vector2(8, 8 + index * 48) * unit
 		button.size = Vector2(width - 16.0 * unit, row)
 		button.add_theme_font_size_override("font_size", roundi(16.0 * unit))
@@ -67,6 +89,8 @@ func is_consuming_pointer() -> bool:
 
 
 func _choose(action: StringName) -> void:
+	if action == &"album" and not $Panel/Album.visible:
+		return
 	if not visible or not can_interact.call():
 		return
 	dismiss(false)

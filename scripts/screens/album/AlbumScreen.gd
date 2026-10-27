@@ -5,7 +5,6 @@ signal back_requested
 signal theme_selected(theme_id: String)
 signal artwork_selected(theme_id: String, level_id: String)
 signal index_selected(index: int)
-signal play_requested
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const FreshButton := preload("res://scripts/screens/home/FreshButton.gd")
@@ -21,8 +20,6 @@ var _back: Button
 var _theme: Button
 var _title: Label
 var _position: Label
-var _empty: Label
-var _play: Button
 var _focus: Control
 var _strip: Control
 var _chooser: Control
@@ -57,14 +54,6 @@ func _ready() -> void:
 	_title = _label("ArtworkTitle")
 	_position = _label("Position")
 	_position.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_empty = _label("EmptyLabel")
-	_empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_play = Button.new()
-	_play.name = "PlayButton"
-	Clean.button(_play, true)
-	add_child(_play)
-	_play.pressed.connect(play_requested.emit)
 	_chooser = Chooser.new()
 	_chooser.name = "ThemeChooser"
 	add_child(_chooser)
@@ -113,13 +102,9 @@ func render(model: Dictionary, _legacy_position := 0) -> void:
 	_back.accessibility_name = str(model.get("back_label", GameStrings.ui_text("back")))
 	_theme.caption = str(model.get("theme_title", ""))
 	_theme.accessibility_name = str(model.get("theme_title", ""))
-	_empty.text = str(model.get("empty_label", _empty_text()))
-	_play.text = str(model.get("play_label", _play_text()))
 	var has_art := not items.is_empty()
 	for control in [_theme, _title, _position, _focus, _strip]:
 		control.visible = has_art
-	_empty.visible = not has_art
-	_play.visible = not has_art
 	_chooser.configure(model.get("themes", []), _loader, _reduced, str(model.get("theme_id", "")))
 	_update_caption(index)
 	_layout()
@@ -250,32 +235,8 @@ func _layout() -> void:
 	var top := _back.position.y + _back.size.y + 24 * u
 	_focus.position = Vector2(margin, top)
 	_focus.size = Vector2(size.x - 2 * margin, maxf(1, _title.position.y - top - 12 * u))
-	_empty.position = Vector2(margin, size.y * 0.38)
-	_empty.size = Vector2(size.x - 2 * margin, 60 * native)
-	Clean.label(_empty, roundi(18 * native), true)
-	_play.position = Vector2(margin, size.y * 0.55)
-	Buttons.apply_size(_play, Vector2(size.x - 2 * margin, 52 * native))
-	_play.add_theme_font_size_override("font_size", roundi(18 * native))
 	_chooser.position = Vector2.ZERO
 	_chooser.size = size
-
-
-func _empty_text() -> String:
-	var locale := TranslationServer.get_locale()
-	return (
-		"まだ作品がありません"
-		if locale.begins_with("ja")
-		else ("No artworks yet" if locale.begins_with("en") else "暂无解锁作品")
-	)
-
-
-func _play_text() -> String:
-	var locale := TranslationServer.get_locale()
-	return (
-		"パズルへ"
-		if locale.begins_with("ja")
-		else ("Play puzzles" if locale.begins_with("en") else "去拼图")
-	)
 
 
 func gesture_pause_motion() -> void:

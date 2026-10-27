@@ -11,13 +11,16 @@ var _presenter: AlbumPresenter
 var _theme_id := ""
 var _positions: Dictionary = {}
 var _images: Node
-var _play: Callable
+var _progress: ProgressRepository
 
 
-func _init(navigator: AppNavigator, presenter: AlbumPresenter, play: Callable) -> void:
+func _init(
+	navigator: AppNavigator, presenter: AlbumPresenter, progress: ProgressRepository
+) -> void:
 	_navigator = navigator
 	_presenter = presenter
-	_play = play
+	_progress = progress
+	_progress.changed.connect(_progress_changed, CONNECT_DEFERRED)
 	_images = ImageCache.new()
 	_navigator.add_child(_images)
 	_navigator.bind_route_scene(&"album", AlbumScene)
@@ -26,6 +29,8 @@ func _init(navigator: AppNavigator, presenter: AlbumPresenter, play: Callable) -
 
 
 func open() -> Dictionary:
+	if not is_available():
+		return {"ok": false, "error": "not_unlocked"}
 	var model := _focus()
 	var result := _navigator.push(&"album", {"view_model": model})
 	if bool(result.get("ok", false)):
@@ -37,8 +42,31 @@ func open() -> Dictionary:
 			screen.theme_selected.connect(_select_theme)
 			screen.index_selected.connect(_select_index)
 			screen.artwork_selected.connect(open_artwork)
-			screen.play_requested.connect(_play)
 	return result
+
+
+func is_available() -> bool:
+	return _presenter.has_unlocked_artwork()
+
+
+func _progress_changed(_snapshot: Dictionary, _revision: int) -> void:
+	if not is_instance_valid(_navigator):
+		return
+	var home := _navigator.current_screen_view() as HomeScreen
+	if home != null:
+		home.refresh_album_availability()
+	if not is_available():
+		_navigator.discard_unavailable_routes([&"album", &"album_artwork"])
+		return
+	var route := _navigator.current_route()
+	if route == &"album":
+		var screen := _navigator.current_screen_view() as AlbumScreen
+		if screen != null:
+			screen.render(_focus())
+	elif route == &"album_artwork":
+		var detail := _navigator.current_screen_view() as AlbumDetailScreen
+		if detail != null:
+			detail.render(_focus(), true)
 
 
 func _focus() -> Dictionary:
@@ -98,6 +126,9 @@ func open_artwork(theme_id: String, level_id: String) -> Dictionary:
 
 
 func _route_changed(route: StringName, _payload: Dictionary) -> void:
+	if route in [&"album", &"album_artwork"] and not is_available():
+		_navigator.discard_unavailable_routes.call_deferred([&"album", &"album_artwork"])
+		return
 	if route == &"album":
 		var screen := _navigator.current_screen_view() as AlbumScreen
 		if screen != null and screen.has_meta("album_coordinator_bound"):

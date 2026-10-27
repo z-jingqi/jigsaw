@@ -22,6 +22,7 @@ var _reduced_motion := false
 var _handoff_in_progress := false
 var _pending_unlock := false
 var _preparation_lock_active := false
+var _discarding_unavailable_routes := false
 
 @onready var _screen_host: Control = get_node(screen_host_path) as Control
 @onready var _modal_host: Node = get_node(modal_host_path)
@@ -392,6 +393,68 @@ func finish_active_transition() -> Dictionary:
 	return {"ok": true, "finished": true, "state": debug_state_snapshot()}
 
 
+func discard_unavailable_routes(routes: Array[StringName]) -> Dictionary:
+	var unavailable := routes.duplicate()
+	# A root is never invalidated by a contextual collection becoming empty.
+	unavailable.erase(&"home")
+	if not _screen_stack.is_empty():
+		unavailable.erase(StringName(_screen_stack[0].route))
+	if unavailable.is_empty() or not _has_unavailable_route(unavailable):
+		return {"ok": true, "discarded": false}
+	_discarding_unavailable_routes = true
+	_handoff_in_progress = true
+	# Restore edge-preview bookkeeping before detaching any referenced views.
+	for edge in get_tree().get_nodes_in_group("runtime_edge_back"):
+		if edge.get("navigator") == self:
+			edge.cancel()
+	var remove_modal := unavailable.has(StringName(current_screen_entry().get("route", &"")))
+	if _transition_host.active_count() > 0:
+		# Resolve once to the target. A later cancel must not resurrect an entry
+		# captured by a push/pop transaction's rollback closure.
+		_transition_host.finish_active_to_target()
+	remove_modal = (
+		remove_modal
+		or unavailable.has(StringName(current_screen_entry().get("route", &"")))
+		or unavailable.has(StringName(_modal_entry.get("route", &"")))
+	)
+	if remove_modal and not _modal_entry.is_empty():
+		var modal := _modal_entry
+		_modal_entry = {}
+		_free_entry(modal)
+	for index in range(_screen_stack.size() - 1, 0, -1):
+		if unavailable.has(StringName(_screen_stack[index].route)):
+			var entry: Dictionary = _screen_stack[index]
+			_screen_stack.remove_at(index)
+			_free_entry(entry)
+	_restore_active_view()
+	_handoff_in_progress = false
+	_pending_unlock = false
+	_preparation_lock_active = false
+	_discarding_unavailable_routes = false
+	input_lock_changed.emit(false)
+	_emit_route_changed()
+	return {"ok": true, "discarded": true, "state": debug_state_snapshot()}
+
+
+func _has_unavailable_route(routes: Array[StringName]) -> bool:
+	for entry in _screen_stack:
+		if routes.has(StringName(entry.route)):
+			return true
+	if routes.has(StringName(_modal_entry.get("route", &""))):
+		return true
+	if _transition_host.active_count() > 0:
+		# Pop/replace/set_root can hold outgoing entries only in rollback closures.
+		# Their views remain mounted until the transaction is resolved.
+		for host in [_screen_host, _modal_host]:
+			for view in host.get_children():
+				if (
+					not view.is_queued_for_deletion()
+					and routes.has(view.get_meta("navigation_route", &""))
+				):
+					return true
+	return false
+
+
 func reveal_prepared_screen(screen: Control) -> void:
 	_transition_host.reveal_prepared_view(screen)
 
@@ -511,6 +574,7 @@ func _build_entry(
 		return _failure(
 			&"not_found", {"route": String(route), "reason": "scene_root_is_not_control"}
 		)
+	view.set_meta("navigation_route", route)
 	view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return {
 		"ok": true,
@@ -711,6 +775,8 @@ func _failure(error: StringName, details: Dictionary) -> Dictionary:
 
 
 func _emit_route_changed() -> void:
+	if _discarding_unavailable_routes:
+		return
 	var entry := _modal_entry if not _modal_entry.is_empty() else current_screen_entry()
 	if entry.is_empty():
 		return

@@ -1,6 +1,6 @@
 class_name AlbumPresenter
 extends RefCounted
-## Metadata-only album models. Any completed mode unlocks the original artwork.
+## Metadata-only album models. Discovered pictures are available independently of completion.
 
 var _content: ContentRepository
 var _strings: GameStrings
@@ -13,6 +13,14 @@ func _init(
 	_content = content
 	_strings = strings
 	_progress = progress
+
+
+func has_unlocked_artwork() -> bool:
+	for topic in _content.topics():
+		for level in topic.get("levels", []):
+			if _unlocked(str(topic.id), str(level.id)):
+				return true
+	return false
 
 
 func focus(theme_id := "", index := 0) -> Dictionary:
@@ -136,7 +144,11 @@ func artwork(theme_id: String, level_id: String, index: int, total: int) -> Dict
 
 func _unlocked(theme_id: String, level_id: String) -> bool:
 	return (
-		_progress != null and not _progress.completed_modes_for_level(theme_id, level_id).is_empty()
+		_progress != null
+		and (
+			_progress.is_level_visited(theme_id, level_id)
+			or not _progress.completed_modes_for_level(theme_id, level_id).is_empty()
+		)
 	)
 
 
@@ -148,8 +160,6 @@ func _model(kind: String, theme_id: String, cards: Array, title: String) -> Dict
 		"title": title,
 		"summary": _strings.text("album_count") % cards.size(),
 		"back_label": _strings.text("back"),
-		"empty_label": _strings.text("album_empty"),
-		"play_label": _strings.text("album_play"),
 		"choose_theme_label": _strings.text("album_choose_theme"),
 		"close_label": _strings.text("close"),
 		"total": cards.size(),

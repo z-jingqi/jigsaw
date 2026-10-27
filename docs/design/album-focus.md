@@ -2,7 +2,8 @@
 
 ## Product flow
 
-- An artwork unlocks when any recognized polygon/knob/swap mode is completed in the existing ProgressRepository. Visited levels and unfinished sessions do not unlock it. Progress persistence is unchanged.
+- A picture is discovered when its theme is first entered (that theme’s first picture only), or its playable level is clicked. Discovery uses existing visited_levels and is independent of mode completion; canceling the box does not undo it. Existing completed_modes also remain visible for legacy compatibility. No synthetic first-picture unlock is assigned to unvisited themes, and the progress schema is unchanged.
+- With no unlocked artworks, Home omits the Album menu item entirely. There is no empty-album page or Play CTA. Availability follows discovery, and updates on progress changes and each menu opening; direct album entries reject unavailable data. If progress becomes empty while browsing, invalid album history is discarded atomically back to the nearest valid page.
 - The album opens directly on one artwork. The theme menu contains only nonempty unlocked themes; there is no aggregate all-artworks collection.
 - The focus page keeps a per-theme selected index in its coordinator. The thumbnail strip scrolls independently, and tapping a thumbnail selects that artwork. Returning from pure viewing preserves the latest selection.
 - The theme chooser is a reversible top sheet with Close/Escape/outside dismissal. A dismissal tap cannot activate the picture underneath.
@@ -34,3 +35,9 @@ Normal, non-headless desktop windows at 430x900 and 320x568. External QA harness
 - Initial data harness immediate DummyAudio shutdown retained the pre-existing Ogg music resources. An isolated audio-disabled image-only run exited cleanly, as did the final normal visual/input runs. This task does not claim an audio-engine fix.
 
 Input gestures were injected native Godot InputEvents in a real rendered window, not physical iPhone testing. Unlocks used isolated completion fixtures, not claims of natural puzzle solving. Cold timings mean empty application image cache; OS filesystem caches were not flushed. An initial empty-array type error and missing initial viewer identity were fixed and the original failed evidence retained externally.
+
+### Discovery rule correction
+
+The later user clarification supersedes completion-only unlocking: entering a theme discovers its first picture, and clicking any playable level discovers that picture immediately, even if its box is canceled. Mode completion stamps remain independent. Existing visited records and historical completions are honored; unvisited themes do not receive synthetic first-picture migration.
+
+The corrected flow was checked in normal 430x900/320x568 windows with isolated saves: fresh menu omission, first-theme isolation, a real injected pointer click on an unlit second card, cancel without losing discovery, two album pictures without completion, another theme, disk reload, legacy completion-only records for all three modes, zero-data invalidation during edge/entry, and application reconstruction. External fixtures were used only to construct legacy/reset states; this is not natural puzzle completion. Earlier completion-only QA results above describe the preceding version, not the current availability rule.

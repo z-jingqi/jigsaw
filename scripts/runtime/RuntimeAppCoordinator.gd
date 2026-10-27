@@ -82,7 +82,7 @@ func start() -> void:
 	_completion_flow = CompletionFlowScript.new(_navigator, content, self)
 	_bind_routes()
 	_album = AlbumCoordinatorScript.new(
-		_navigator, AlbumPresenterScript.new(content, _strings, progress), show_home
+		_navigator, AlbumPresenterScript.new(content, _strings, progress), progress
 	)
 	_navigator.route_changed.connect(_on_route_changed)
 	_navigator.input_lock_changed.connect(_on_navigation_input_lock_changed)
@@ -208,7 +208,12 @@ func show_levels(
 		_navigator.replace(&"levels", payload) if replace else _navigator.push(&"levels", payload)
 	)
 	if bool(result.get("ok", false)):
-		_bind_levels(_navigator.current_screen_view() as RuntimeLevelListScreen)
+		# Discover the first picture only after this theme is actually entered.
+		_services.progress.mark_level_visited(theme_id, str(topic.levels[0].id))
+		var screen := _navigator.current_screen_view() as RuntimeLevelListScreen
+		_bind_levels(screen)
+		if screen != null:
+			screen.refresh_view_model(_catalog.level_list(theme_id, focus_level_id))
 	return result
 
 
@@ -501,6 +506,8 @@ func _bind_routes() -> void:
 
 
 func _bind_home(screen: HomeScreen) -> void:
+	if screen != null:
+		screen.album_available = _album.is_available
 	if screen == null or screen.has_meta("runtime_coordinator_bound"):
 		return
 	screen.set_meta("runtime_coordinator_bound", true)
