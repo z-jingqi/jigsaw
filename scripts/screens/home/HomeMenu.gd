@@ -6,18 +6,18 @@ const Arena := preload("res://scripts/ui/navigation/GestureArena.gd")
 var can_interact: Callable
 var _blocked_pointer := -2
 var _return_focus: Control
+var _keyboard_mode := false
 
 
 func _ready() -> void:
 	var buttons := [$Panel/Themes, $Panel/Album, $Panel/Settings]
 	var keys := ["all_themes", "album_title", "settings_title"]
 	var actions := [&"themes", &"album", &"settings"]
-	$Panel.add_theme_stylebox_override("panel", Clean.panel(Clean.PAPER, 16))
 	for index in 3:
 		var button: Button = buttons[index]
 		button.text = GameStrings.ui_text(keys[index])
 		button.accessibility_name = button.text
-		Clean.button(button)
+		button.configure(actions[index], 1.0)
 		button.pressed.connect(_choose.bind(actions[index]))
 	set_album_available(false)
 
@@ -37,7 +37,10 @@ func set_album_available(available: bool) -> void:
 		button.focus_neighbor_left = NodePath(".")
 		button.focus_neighbor_right = NodePath(".")
 	if restore_focus and visible:
-		$Panel/Themes.grab_focus()
+		if _keyboard_mode:
+			$Panel/Themes.grab_focus()
+		else:
+			get_viewport().gui_release_focus()
 
 
 func _visible_buttons() -> Array[Button]:
@@ -54,11 +57,22 @@ func open_menu(anchor: Rect2) -> void:
 	_return_focus = get_viewport().gui_get_focus_owner()
 	visible = true
 	reposition(anchor)
-	$Panel/Themes.grab_focus()
+	_refresh_labels()
+	if _keyboard_mode:
+		$Panel/Themes.grab_focus()
+	else:
+		get_viewport().gui_release_focus()
 
 
 func reposition(anchor: Rect2) -> void:
 	var unit := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var panel := Clean.panel(Color("FFFCF5"), 12.0 * unit)
+	panel.set_border_width_all(maxi(1, roundi(unit)))
+	panel.border_color = Color("E1DDD3")
+	panel.shadow_color = Color(0.12, 0.11, 0.08, 0.08)
+	panel.shadow_size = roundi(6 * unit)
+	panel.shadow_offset = Vector2(0, 2 * unit)
+	$Panel.add_theme_stylebox_override("panel", panel)
 	var row := 48.0 * unit
 	var width := minf(220.0 * unit, size.x - 32.0 * unit)
 	var buttons := _visible_buttons()
@@ -71,15 +85,25 @@ func reposition(anchor: Rect2) -> void:
 		var button := buttons[index]
 		button.position = Vector2(8, 8 + index * 48) * unit
 		button.size = Vector2(width - 16.0 * unit, row)
-		button.add_theme_font_size_override("font_size", roundi(16.0 * unit))
+		button.configure(
+			[&"themes", &"album", &"settings"][$Panel.get_children().find(button)], unit
+		)
+		button.set_keyboard_focus_visible(_keyboard_mode)
 
 
 func dismiss(restore_focus := true) -> bool:
 	if not visible:
 		return false
 	hide()
-	if restore_focus and is_instance_valid(_return_focus) and _return_focus.is_visible_in_tree():
+	if (
+		_keyboard_mode
+		and restore_focus
+		and is_instance_valid(_return_focus)
+		and _return_focus.is_visible_in_tree()
+	):
 		_return_focus.grab_focus()
+	elif not _keyboard_mode:
+		get_viewport().gui_release_focus()
 	closed.emit()
 	return true
 
@@ -113,6 +137,20 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
+func _set_keyboard_mode(enabled: bool) -> void:
+	_keyboard_mode = enabled
+	for button in [$Panel/Themes, $Panel/Album, $Panel/Settings]:
+		button.set_keyboard_focus_visible(enabled)
+
+
+func _refresh_labels() -> void:
+	var keys := ["all_themes", "album_title", "settings_title"]
+	for index in 3:
+		var button := $Panel.get_child(index) as Button
+		button.text = GameStrings.ui_text(keys[index])
+		button.accessibility_name = button.text
+
+
 func _input(event: InputEvent) -> void:
 	if _blocked_pointer != -2:
 		var released := false
@@ -125,11 +163,28 @@ func _input(event: InputEvent) -> void:
 			_blocked_pointer = -2
 		get_viewport().set_input_as_handled()
 		return
-	if not visible:
-		return
 	if Arena.block_secondary(get_viewport(), event):
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		_set_keyboard_mode(true)
+	elif (
+		(event is InputEventMouseButton and event.pressed)
+		or (event is InputEventScreenTouch and event.pressed)
+	):
+		_set_keyboard_mode(false)
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and event.keycode in [KEY_TAB, KEY_DOWN, KEY_UP]:
+		var focused := get_viewport().gui_get_focus_owner()
+		if not _visible_buttons().has(focused):
+			var buttons := _visible_buttons()
+			var backwards: bool = (
+				event.keycode == KEY_UP or (event.keycode == KEY_TAB and event.shift_pressed)
+			)
+			buttons[-1 if backwards else 0].grab_focus()
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and event.keycode in [KEY_ESCAPE, KEY_BACK]:
 		dismiss()
 		get_viewport().set_input_as_handled()
