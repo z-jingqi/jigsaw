@@ -6,18 +6,29 @@ const GestureArena := preload("res://scripts/ui/navigation/GestureArena.gd")
 
 var _runtime: RuntimeAppCoordinator
 var _debug_router: RefCounted
+var _startup: CanvasLayer
 
 
 func _ready() -> void:
 	DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
-	_runtime = RuntimeAppCoordinatorScript.new(self)
+	_startup = preload("res://scripts/app/startup/StartupPreparation.gd").new()
+	_startup.ready_to_start.connect(_start_prepared_runtime, CONNECT_ONE_SHOT)
+	add_child(_startup)
+
+
+func _start_prepared_runtime() -> void:
+	_runtime = RuntimeAppCoordinatorScript.new(self, _startup.prepared_content)
 	_runtime.start()
+	move_child(_startup, get_child_count() - 1)
+	_startup.reveal_home()
 	if OS.is_debug_build() and ResourceLoader.exists("res://scripts/debug/DebugCommandRouter.gd"):
 		var router := load("res://scripts/debug/DebugCommandRouter.gd") as GDScript
 		_debug_router = router.new(_runtime)
 
 
 func _exit_tree() -> void:
+	if is_instance_valid(_startup):
+		_startup.cancel()
 	if _runtime != null:
 		_runtime.shutdown()
 	_runtime = null

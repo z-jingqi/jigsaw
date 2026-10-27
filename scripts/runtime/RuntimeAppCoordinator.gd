@@ -37,6 +37,7 @@ var _game: Node2D
 var _navigator: AppNavigator
 var _world_host: Node2D
 var _services: AppServices
+var _prepared_content: ContentRepository
 var _state = AppStateScript.new()
 var _catalog: CatalogPresenter
 var _system: SystemPresenter
@@ -58,13 +59,15 @@ var _completion_saves: Variant
 var _audio_bindings: GameAudioBindings
 
 
-func _init(game: Node2D) -> void:
+func _init(game: Node2D, prepared_content: ContentRepository = null) -> void:
 	_game = game
+	_prepared_content = prepared_content
 
 
 func start() -> void:
 	_strings.set_locale(GameStringsScript.detect_locale())
-	var content := ContentRepositoryScript.new()
+	var content := _prepared_content if _prepared_content != null else ContentRepositoryScript.new()
+	_prepared_content = null
 	var save_store := BackgroundJsonStoreScript.new()
 	var progress := ProgressRepositoryScript.new(save_store)
 	var session := SessionRepositoryScript.new(save_store)
@@ -227,7 +230,6 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 	var level := _services.content.level_by_id(theme_id, level_id)
 	if level.is_empty():
 		return {"ok": false, "error": "not_found"}
-	# Prepare gameplay pixels before either page starts moving.
 	_services.content.level_media(_services.content.level_config(level))
 	_current_theme_id = theme_id
 	_current_level_id = level_id
@@ -267,8 +269,7 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 					func() -> void:
 						var screen: Node = source.get_ref()
 						if is_instance_valid(screen):
-							# Recenter a clicked moving page only behind an opaque modal.
-							# An immediate Back returns to the still-visible frozen source.
+							# Recenter only once opaque; immediate Back preserves the source.
 							if modal.background.modulate.a >= 0.98:
 								screen.prepare_box_return(level_id)
 							modal.update_box_source_rect(screen.debug_box_rect(level_id))
@@ -285,7 +286,6 @@ func show_mode_select(theme_id: String, level_id: String) -> Dictionary:
 func enter_level(
 	theme_id: String, level_id: String, mode: String, start_policy := "start"
 ) -> Dictionary:
-	# Repeated activation during a handoff must not rebuild or clear the same board.
 	if (
 		_navigator.current_route() == &"gameplay"
 		and _current_theme_id == theme_id

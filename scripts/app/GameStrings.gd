@@ -4,6 +4,9 @@ class_name GameStrings
 const TEXT := {
 	"en":
 	{
+		"startup_preparing": "Preparing…",
+		"startup_failed": "Preparation failed. Please try again.",
+		"startup_retry": "Retry",
 		"coming_soon": "Coming soon",
 		"home_title": "Puzzle time",
 		"loading_puzzle": "Preparing…",
@@ -81,6 +84,9 @@ const TEXT := {
 	},
 	"zh":
 	{
+		"startup_preparing": "正在准备…",
+		"startup_failed": "准备失败，请重试。",
+		"startup_retry": "重试",
 		"coming_soon": "敬请期待",
 		"home_title": "拼图时光",
 		"loading_puzzle": "正在准备…",
@@ -156,6 +162,9 @@ const TEXT := {
 	},
 	"ja":
 	{
+		"startup_preparing": "準備中…",
+		"startup_failed": "準備できませんでした。再試行してください。",
+		"startup_retry": "再試行",
 		"coming_soon": "近日公開",
 		"home_title": "パズルの時間",
 		"loading_puzzle": "準備中…",
