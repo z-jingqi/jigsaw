@@ -21,6 +21,8 @@ const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var image_motion: Node = $ImageMotion
 
+var description_variants := PackedStringArray()
+
 var _view_model: AppViewModels.CompletionViewModel
 var _layout := Layout.new()
 var _reduced_motion := false
@@ -54,6 +56,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 	confirm_label.text = _view_model.primary_action_text
 	confirm_button.accessibility_name = confirm_label.text
 	return_button.accessibility_name = _view_model.secondary_action_text
+	description_variants = _view_model.description_variants
 	description_label.text = _view_model.level_description
 	description_label.visible = not description_label.text.is_empty()
 	description_label.add_theme_color_override("font_color", Clean.INK)

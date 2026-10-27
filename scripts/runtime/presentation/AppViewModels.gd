@@ -211,6 +211,7 @@ class CompletionViewModel:
 	var completion_event_id: String
 	var level_title: String
 	var level_description: String
+	var description_variants: PackedStringArray
 	var completed_texture: Texture2D
 	var source_rect: Rect2
 	var primary_action_text: String
@@ -225,6 +226,9 @@ class CompletionViewModel:
 		completion_event_id = str(data["completion_event_id"])
 		level_title = str(data["level_title"])
 		level_description = str(data.get("level_description", ""))
+		description_variants = PackedStringArray(
+			data.get("description_variants", [level_description])
+		)
 		completed_texture = data["completed_texture"]
 		source_rect = data.get("source_rect", Rect2())
 		primary_action_text = str(data["primary_action_text"])

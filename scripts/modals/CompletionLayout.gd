@@ -1,6 +1,6 @@
 class_name CompletionLayout
 extends RefCounted
-## Fixed navigation surrounds a a single-screen editorial artwork and subject introduction.
+## Fixed navigation surrounds a single-screen editorial artwork and subject introduction.
 
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
@@ -12,14 +12,14 @@ func apply(view: Control) -> Rect2:
 	var width := size.x - safe.x - safe.z
 	var margin := 24.0 * unit
 	var compact := size.y / unit < 700
-	var header_height := (104.0 if compact else 112.0) * unit
+	var header_height := (124.0 if compact else 80.0) * unit
 	var footer_height := 76.0 * unit
 	view.header.position = Vector2(safe.x, safe.y)
 	view.header.size = Vector2(width, header_height)
-	view.level_label.position = Vector2(24, 62) * unit
-	view.level_label.size = Vector2(width - margin * 2 - (64 * unit if compact else 0), 42 * unit)
-	view.level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_fit_title(view.level_label, roundi(30 * unit), roundi(20 * unit))
+	view.level_label.position = Vector2(72, 8) * unit
+	view.level_label.size = Vector2(width - 72 * unit - margin, 48 * unit)
+	view.level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_fit_title(view.level_label, roundi(26 * unit), roundi(20 * unit))
 	view.return_button.position = Vector2(safe.x + 12 * unit, safe.y + 8 * unit)
 	view.return_button.size = Vector2.ONE * 48 * unit
 	view.return_button.custom_minimum_size = Clean.minimum_touch_size(view.return_button)
@@ -41,12 +41,14 @@ func apply(view: Control) -> Rect2:
 	var gap := 16.0 * unit
 	var text_width := content_width if compact else content_width - cat_side - gap
 	var font: Font = view.description_label.get_theme_font("font")
-	var description_size := font.get_multiline_string_size(
-		view.description_label.text, HORIZONTAL_ALIGNMENT_LEFT, text_width, font_size
-	)
-	var description_height: float = (
-		0.0 if view.description_label.text.is_empty() else description_size.y + 8 * unit
-	)
+	# Every locale reserves the same largest translated paragraph, not just the active text.
+	var description_height := 0.0
+	for text in view.description_variants:
+		if not text.is_empty():
+			var measured := font.get_multiline_string_size(
+				text, HORIZONTAL_ALIGNMENT_LEFT, text_width, font_size
+			)
+			description_height = maxf(description_height, measured.y + 8 * unit)
 	var row_height := description_height if compact else maxf(description_height, cat_side)
 	# Reserve readable copy first; the unchanged artwork contains in the remaining space.
 	var image_height := maxf(0, view.body.size.y - row_height - gap - 8 * unit)
@@ -60,7 +62,7 @@ func apply(view: Control) -> Rect2:
 	view.description_label.position = Vector2(0, row_y)
 	view.description_label.size = Vector2(text_width, description_height)
 	view.cat.position = (
-		Vector2(safe.x + width - margin - cat_side, safe.y + 48 * unit)
+		Vector2(safe.x + width - margin - cat_side, safe.y + 60 * unit)
 		if compact
 		else view.body.position + Vector2(content_width - cat_side, row_y)
 	)

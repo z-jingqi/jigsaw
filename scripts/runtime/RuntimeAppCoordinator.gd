@@ -692,6 +692,12 @@ func _show_completion() -> void:
 				"level_title": level.get("title", ""),
 				"level_description":
 				_services.content.subject_intro(_current_level_id, _strings.locale),
+				"description_variants":
+				[
+					_services.content.subject_intro(_current_level_id, "zh"),
+					_services.content.subject_intro(_current_level_id, "en"),
+					_services.content.subject_intro(_current_level_id, "ja"),
+				],
 				"completed_texture": presentation.get("texture"),
 				"source_rect": presentation.get("rect", Rect2()),
 				"primary_action_text": _strings.text("completion_next"),
