@@ -368,7 +368,10 @@ func close_modal(result: Dictionary = {}) -> Dictionary:
 			_modal_entry = closing
 			_set_entry_active(closing, true)
 	)
-	if closing.view is SettingsModal:
+	if closing.view.has_method("needs_box_close"):
+		_begin_transition(transaction, &"modal", "close_modal")
+		finish_active_transition()
+	elif closing.view is SettingsModal:
 		_begin_transition(transaction, &"modal", "close_modal")
 	else:
 		_begin_transition(transaction, &"modal", "close_modal", closing.view, current_screen_view())

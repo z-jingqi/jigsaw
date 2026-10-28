@@ -181,6 +181,13 @@ func cancel() -> void:
 
 func _animate_release(accepted: bool) -> void:
 	_stop_release()
+	if _session.uses_local_return():
+		_session.restore()
+		_session = null
+		if accepted:
+			_last_commit_time = Time.get_ticks_msec()
+			commit_back.call()
+		return
 	var target := _width() if accepted else 0.0
 	var reduced: bool = navigator.debug_state_snapshot().get("reduced_motion", false)
 	if reduced:
