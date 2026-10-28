@@ -3,6 +3,8 @@ extends Control
 
 signal sample_motion_stopped
 
+const LID_DURATION := 0.36
+
 const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 
 const Appearance := preload("res://scripts/ui/box/CartonAppearance.gd")
@@ -68,7 +70,9 @@ func set_open(opened: bool, reduced_motion := false) -> void:
 		_open_progress = target
 		return
 	_lid_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	_lid_tween.tween_property(self, "_open_progress", target, 0.62 * absf(target - _open_progress))
+	_lid_tween.tween_property(
+		self, "_open_progress", target, LID_DURATION * absf(target - _open_progress)
+	)
 	_lid_tween.finished.connect(func() -> void: _lid_tween = null)
 	_pause_lid_motion()
 
