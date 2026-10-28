@@ -30,20 +30,21 @@ func apply(
 	var control_size := Buttons.icon_size(viewport_size).x
 	var ui_unit := Metrics.unit(viewport_size)
 	var title_height := Metrics.TOUCH * ui_unit
-	var control_top := Metrics.TOP * ui_unit + safe.y
+	var header_shift := Vector2(0.0, -Metrics.SMALL_GAP * ui_unit)
+	var control_top := Metrics.TOP * ui_unit + safe.y + header_shift.y
 	var side_margin := Metrics.EDGE * ui_unit
 	hud.offset_left = 0.0
 	hud.offset_top = 0.0
 	hud.offset_right = 0.0
-	hud.offset_bottom = control_top + float(_header_config["height"]) * scale
+	hud.offset_bottom = control_top + control_size
 	_apply_header_control(
 		back_button,
-		Buttons.navigation_position(viewport_size) + Vector2(safe.x, safe.y),
+		Buttons.navigation_position(viewport_size) + Vector2(safe.x, safe.y) + header_shift,
 		control_size,
 	)
 	_apply_header_control(
 		hint_button,
-		Buttons.navigation_position(viewport_size, true) + Vector2(-safe.z, safe.y),
+		Buttons.navigation_position(viewport_size, true) + Vector2(-safe.z, safe.y) + header_shift,
 		control_size,
 	)
 	var center := viewport_size.x * 0.5
@@ -61,7 +62,9 @@ func apply(
 			),
 		),
 	)
-	var title_top := Buttons.header_center_y(viewport_size) - title_height * 0.5 + safe.y
+	var title_top := (
+		Buttons.header_center_y(viewport_size) - title_height * 0.5 + safe.y + header_shift.y
+	)
 	var ornaments_width := 0.0
 	var minimum_font := roundi(Metrics.BODY * ui_unit)
 	if (
@@ -86,8 +89,8 @@ func apply(
 		title_cloud_right,
 		ui_unit,
 	)
-	hud.offset_bottom = maxf(
-		hud.offset_bottom, title_top + title_height + board_gap(viewport_size, requested_scale)
+	hud.offset_bottom = (
+		maxf(hud.offset_bottom, title_top + title_height) + Metrics.SMALL_GAP * ui_unit
 	)
 	var bottom := float(_layout_config["bottom_margin"]) * scale
 	# Preserve the upper edge and use the previously empty bottom margin for pieces.

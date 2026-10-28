@@ -373,8 +373,10 @@ func _start_tray_world_drag(group, screen_pos: Vector2) -> void:
 func _update_drag_position(screen_pos: Vector2) -> void:
 	host.last_drag_screen_pos = screen_pos
 	if host.dragging_from_tray:
-		var motion: Dictionary = grab_gesture.advance(screen_pos, _tray_area())
 		drag_clearance.update_pointer(screen_pos, _tray_area(), host.reduced_motion)
+		var motion: Dictionary = grab_gesture.advance(
+			screen_pos, _tray_area(), drag_clearance.lifted
+		)
 		drag_scale.set_lifted(drag_clearance.lifted, host.reduced_motion)
 		if motion.changed:
 			_stop_tray_inertia()

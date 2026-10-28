@@ -156,7 +156,6 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		var initial_screen_scale := _debug_group_screen_scale(picked)
 		var center: Vector2 = picked.tray_slot.get_center()
 		var lift_position := Vector2(center.x, host._tray_area().position.y - 72.0)
-		var reentered_position := Vector2(center.x, host._tray_area().position.y + 48.0)
 		host.handle_input(_debug_mouse_button(center, true), false)
 		host.handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
 		var expected_lifted_scale: float = (
@@ -167,11 +166,19 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 			and not picked.in_tray
 			and is_equal_approx(_debug_group_screen_scale(picked), expected_lifted_scale)
 		)
+		var clearance = host.tray_controller.drag_clearance
+		var reentered_position: Vector2 = (
+			host._tray_area().get_center()
+			- clearance._center_from_pointer
+			+ Vector2(0.0, clearance._lift_distance)
+		)
+		reentered_position.y = minf(reentered_position.y, host._tray_area().end.y - 24.0)
 		host.handle_input(
 			_debug_mouse_motion(reentered_position, reentered_position - lift_position), false
 		)
 		var reentered_at_same_size: bool = (
 			host.dragging == picked
+			and host.tray_controller.is_drag_over_tray()
 			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
 		)
 		host.handle_input(_debug_mouse_button(reentered_position, false), false)

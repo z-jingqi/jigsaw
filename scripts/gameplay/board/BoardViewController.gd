@@ -167,7 +167,7 @@ func _world_view_screen_rect() -> Rect2:
 	var content_bottom: float = (
 		viewport.y - host.hud_bottom_reserved_height
 		if host.current_mode == "swap"
-		else host._tray_area().position.y
+		else viewport.y - host.hud_bottom_reserved_height - host._tray_area().size.y
 	)
 	content_bottom = clampf(content_bottom, content_top, viewport.y)
 	return Rect2(
