@@ -6,6 +6,7 @@ const OpticalLayout := preload("res://scripts/modals/BoxModeOpticalLayout.gd")
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+var _box_motion := preload("res://scripts/modals/BoxModeTransition.gd").new(self)
 var _prototype := false
 var _box: Control
 var _info: Label
@@ -81,43 +82,32 @@ func opening() -> void:
 		super.opening()
 
 
-func configure_box_transition(tween: Tween, duration: float) -> bool:
-	if not _prototype:
-		return false
-	if content.size.y <= 0:
-		content.size = size
-	_apply_layout()
-	background.modulate.a = 0.0
-	options.modulate.a = 0.0
-	var initial := _source_rect
-	if not initial.has_area():
-		initial = _destination
-	else:
-		initial.position -= content.global_position
-	_box.position = initial.position
-	_box.size = initial.size
-	if _reduced_motion:
-		_box.position = _destination.position
-		_box.size = _destination.size
-		_open_lid()
-		background.modulate.a = 1.0
-		options.modulate.a = 1.0
-		tween.tween_interval(0.001)
-		return true
-	tween.tween_property(background, "modulate:a", 1.0, duration)
-	tween.tween_property(_box, "position", _destination.position, duration)
-	tween.tween_property(_box, "size", _destination.size, duration)
-	tween.tween_property(options, "modulate:a", 1.0, duration)
-	tween.tween_callback(_open_lid).set_delay(duration)
-	return true
+func configure_box_transition(tween: Tween, _duration: float) -> bool:
+	return _box_motion.configure(tween)
 
 
 func _open_lid() -> void:
 	if _closing or not is_instance_valid(_box):
 		return
+	_phase = "opening"
+	_apply_layout()
 	_box.set_open(true, _reduced_motion)
+
+
+func _show_choices() -> void:
+	if _closing or not is_instance_valid(_box):
+		return
 	_phase = "ready"
 	_refresh_selection(true)
+
+
+func _settle_open_box() -> void:
+	_box.set_open(true, true)
+	if _phase != "ready":
+		_show_choices()
+	background.modulate.a = 1.0
+	options.modulate.a = 1.0
+	start_button.modulate.a = 1.0
 
 
 func _refresh_selection(user_change := false) -> void:
@@ -138,25 +128,31 @@ func _refresh_selection(user_change := false) -> void:
 
 
 func _on_option_selected(mode: StringName, policy: StringName) -> void:
-	if _prototype and _closing:
+	if _prototype and (_closing or _phase != "ready"):
 		return
 	super._on_option_selected(mode, policy)
 
 
 func _on_start_pressed() -> void:
-	if _prototype and _closing:
+	if _prototype and (_closing or _phase != "ready"):
 		return
 	super._on_start_pressed()
 
 
 func gesture_pause_motion() -> void:
+	_box_motion.pause()
 	if is_instance_valid(_box):
 		_box.gesture_pause_motion()
 
 
 func gesture_resume_motion() -> void:
+	_box_motion.resume()
 	if is_instance_valid(_box):
 		_box.gesture_resume_motion()
+
+
+func edge_back_allowed() -> bool:
+	return not _closing and _phase == "ready"
 
 
 func needs_box_close() -> bool:
@@ -168,23 +164,30 @@ func update_box_source_rect(rect: Rect2) -> void:
 
 
 func request_close() -> void:
+	if not _prototype:
+		super.request_close()
+		return
 	if _closing:
 		return
 	_closing = true
-	# Mark the local close complete before emitting: the coordinator re-enters
-	# close_modal() and must proceed to navigation instead of requesting it again.
-	_closed = true
-	_active = false
 	_phase = "closing"
+	_active = false
+	box_closing.emit()
+	get_tree().root.get_node("Game/AppNavigator").interrupt_active_transition()
+	if not await _box_motion.close():
+		return
+	_closed = true
 	box_returned.emit()
+	_box.hide()
 	close_requested.emit()
 
 
 func navigation_set_active(is_active: bool) -> void:
 	if is_active:
+		if _closing:
+			_phase = "ready"
 		_closing = false
 		_closed = false
-		_phase = "ready"
 		if is_instance_valid(_box):
 			_box.set_rendering(true)
 	super.navigation_set_active(is_active)
@@ -214,13 +217,7 @@ func settle_box_transition(committed: bool) -> void:
 	if not _prototype or _closing:
 		return
 	if committed:
-		if _phase == "entering":
-			_open_lid()
-		_phase = "ready"
-		_apply_layout()
-		background.modulate.a = 1.0
-		options.modulate.a = 1.0
-		_box.set_open(true, _reduced_motion)
+		_settle_open_box()
 	else:
 		_box.cancel_motion()
 		_box.set_rendering(false)
@@ -237,6 +234,7 @@ func set_reduced_motion(enabled: bool) -> void:
 
 
 func navigation_exit(context: Dictionary) -> void:
+	_box_motion.cancel()
 	if is_instance_valid(_box):
 		_box.cancel_motion()
 		_box.set_rendering(false)
@@ -247,7 +245,9 @@ func navigation_exit(context: Dictionary) -> void:
 
 func active_motion_count() -> int:
 	return (
-		super.active_motion_count() + (_box.active_motion_count() if is_instance_valid(_box) else 0)
+		super.active_motion_count()
+		+ _box_motion.active_count()
+		+ (_box.active_motion_count() if is_instance_valid(_box) else 0)
 	)
 
 

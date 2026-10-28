@@ -50,7 +50,7 @@ func begin(view: Control, behind: Control, transition: Control) -> bool:
 
 func apply_offset(value: float) -> void:
 	_offset = value
-	if is_instance_valid(source):
+	if is_instance_valid(source) and not uses_local_return():
 		source.position = _source_position + Vector2(value, 0)
 
 
@@ -78,3 +78,7 @@ func restore(resume: bool = true) -> void:
 	if resume and is_instance_valid(_transition):
 		_transition.gesture_resume_motion(_pause_token)
 	_offset = 0.0
+
+
+func uses_local_return() -> bool:
+	return is_instance_valid(source) and source.has_method("needs_box_close")

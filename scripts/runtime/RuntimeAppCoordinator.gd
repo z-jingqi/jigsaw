@@ -991,8 +991,7 @@ func _commit_edge_back() -> void:
 		&"gameplay", &"completion":
 			_return_to_levels()
 		&"mode_select":
-			_gameplay_preparation.cancel()
-			_navigator.close_modal({"action": &"dismiss", "payload": {}})
+			close_modal()
 		_:
 			if not String(_navigator.debug_state_snapshot().get("modal", "")).is_empty():
 				close_modal()
