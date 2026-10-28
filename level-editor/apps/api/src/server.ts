@@ -20,13 +20,24 @@ import {
   writeCatalog,
   writeLevel,
 } from "./lib.js";
-import { repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath } from "./paths.js";
+import { repoRoot, sourceImagePath, topicCoverPath, topicCoverResPath, topicIconPath, topicIconResPath, resourceDiskPath, sourceResPath } from "./paths.js";
+import { validateCatalogInput, validateLevelInput } from "./validation.js";
+import { replaceSource } from "./source-image.js";
 import { DEFAULT_TINY_PIECE_THRESHOLD_PERCENT, findTinyPieces } from "./tiny-piece-audit.js";
 
 const app = new Hono();
 
 app.use("*", cors());
 app.use("/levels/*", serveStatic({ root: repoRoot }));
+app.use("/assets/*", serveStatic({ root: repoRoot }));
+app.onError((error, c) => c.json({ error: error.message }, 400));
+app.use("/api/*", async (c, next) => {
+  for (const name of ["topicId", "groupId", "levelId"]) {
+    const value = c.req.param(name);
+    if (value && !/^[a-zA-Z0-9_-]+$/.test(value)) return c.json({ error: "无效的资源标识" }, 400);
+  }
+  await next();
+});
 
 app.get("/api/catalog", async (c) => {
   const catalog = await readCatalog();
@@ -37,7 +48,9 @@ app.get("/api/catalog", async (c) => {
 
 app.put("/api/catalog", async (c) => {
   const body = (await c.req.json()) as LevelCatalog | { catalog: LevelCatalog; renames?: unknown };
+  if (!body || typeof body !== "object") return c.json({ error: "目录数据无效" }, 400);
   const payload = "catalog" in body ? body.catalog : body;
+  validateCatalogInput(payload);
   const renames = "catalog" in body && Array.isArray(body.renames) ? body.renames : [];
   const catalog = normalizeCatalog(payload);
   await applyCatalogRenames(renames as CatalogRenameOperation[]);
@@ -128,6 +141,8 @@ app.put("/api/levels/:topicId/:groupId/:levelId", async (c) => {
   const groupId = c.req.param("groupId");
   const levelId = c.req.param("levelId");
   const payload = (await c.req.json()) as LevelConfig;
+  validateLevelInput(payload);
+  resourceDiskPath(payload.image.path);
   await writeLevel({ ...payload, topic_id: topicId, group_id: groupId, id: levelId });
   const level = await readLevel(topicId, groupId, levelId, payload.title);
   await upsertCatalogLevel(level);
@@ -178,12 +193,10 @@ app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
   try {
     const size = readJpegSize(buffer);
     assertPortrait3x4(size.width, size.height);
+    const original = await readLevel(topicId, groupId, levelId);
+    const level = replaceSource(original, sourceResPath(topicId, groupId, levelId), size.width, size.height);
     await ensureLevelDir(topicId, groupId, levelId);
     await fs.writeFile(sourceImagePath(topicId, groupId, levelId), buffer);
-    const level = await readLevel(topicId, groupId, levelId);
-    level.image.width = size.width;
-    level.image.height = size.height;
-    level.image.aspect_ratio = size.width / size.height;
     await writeLevel(level);
     await upsertCatalogLevel(level);
     return c.json(level);
@@ -193,11 +206,12 @@ app.post("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
 });
 
 app.get("/api/levels/:topicId/:groupId/:levelId/source", async (c) => {
-  const path = sourceImagePath(c.req.param("topicId"), c.req.param("groupId"), c.req.param("levelId"));
+  const level = await readLevel(c.req.param("topicId"), c.req.param("groupId"), c.req.param("levelId"));
+  const source = resourceDiskPath(level.image.path);
   try {
-    const bytes = await fs.readFile(path);
+    const bytes = await fs.readFile(source);
     return new Response(bytes, {
-      headers: { "Content-Type": "image/jpeg" },
+      headers: { "Content-Type": source.endsWith(".webp") ? "image/webp" : source.endsWith(".png") ? "image/png" : "image/jpeg", "Cache-Control": "no-cache" },
     });
   } catch {
     return c.notFound();

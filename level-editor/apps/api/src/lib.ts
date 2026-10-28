@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import type { CatalogGroup, CatalogLevel, CatalogRenameOperation, CatalogTopic, LevelCatalog, LevelConfig, LevelStatus, SeedAssist } from "./types.js";
-import { catalogPath, FLAT_GROUP_ID, groupDir, levelDir, levelJsonPath, levelResPath, sourceImagePath, sourceResPath, topicDir } from "./paths.js";
+import { catalogPath, FLAT_GROUP_ID, groupDir, levelDir, levelJsonPath, levelResPath, sourceResPath, topicDir, resourceDiskPath } from "./paths.js";
 
 export const defaultPreset = {
   id: "mobile_portrait_3x4",
@@ -53,13 +54,15 @@ function normalizeAssist(input: unknown, defaultCount: number, validIds?: Set<st
     ? (raw.seed as Partial<SeedAssist["seed"]>)
     : {};
   const mode = rawSeed.mode === "manual" ? "manual" : "auto";
-  const count = Math.max(0, Math.floor(Number(rawSeed.count ?? defaultCount) || defaultCount));
+  const count = Math.max(1, Math.floor(Number(rawSeed.count ?? defaultCount) || defaultCount));
   const pieceIds = Array.isArray(rawSeed.piece_ids)
     ? rawSeed.piece_ids.map((id: unknown) => String(id)).filter((id) => !validIds || validIds.has(id))
     : [];
   return {
+    ...raw,
     outline: raw.outline !== false,
     seed: {
+      ...rawSeed,
       mode,
       count,
       piece_ids: mode === "manual" ? pieceIds : [],
@@ -108,7 +111,9 @@ function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
   const sourceLevels = Array.isArray(topic.levels)
     ? topic.levels
     : topic.groups?.find((group) => group.id === FLAT_GROUP_ID)?.levels || [];
+  const { levels: _levels, groups: _groups, ...fields } = topic;
   return {
+    ...fields,
     id,
     name: topic.name,
     name_i18n: topic.name_i18n,
@@ -131,6 +136,7 @@ function normalizeTopic(topic: CatalogTopic, index: number): CatalogTopic {
 function normalizeGroup(group: CatalogGroup, topicId: string, index: number): CatalogGroup {
   const id = safeId(group.id, paddedId("group", index));
   return {
+    ...group,
     id,
     name: group.name,
     name_i18n: group.name_i18n,
@@ -145,6 +151,7 @@ function normalizeGroup(group: CatalogGroup, topicId: string, index: number): Ca
 function normalizeLevel(level: CatalogLevel, topicId: string, groupId: string, index: number): CatalogLevel {
   const id = safeId(level.id, paddedId("level", index));
   return {
+    ...level,
     id,
     title: level.title,
     title_i18n: level.title_i18n,
@@ -165,14 +172,21 @@ export function extensionFromFile(file: File, allowed: string[]) {
 export async function readJson<T>(filePath: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await fs.readFile(filePath, "utf8")) as T;
-  } catch {
-    return fallback;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+    throw error;
   }
 }
 
 export async function writeJson(filePath: string, value: unknown) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, "\t")}\n`);
+  const temporary = `${filePath}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, `${JSON.stringify(value, null, "\t")}\n`);
+    await fs.rename(temporary, filePath);
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
 }
 
 export async function readCatalog() {
@@ -188,7 +202,9 @@ function storedCatalog(catalog: LevelCatalog): LevelCatalog {
   return {
     ...normalized,
     topics: normalized.topics.map((topic, topicIndex) => {
+      const { groups: _groups, flat_levels: _flat, levels: _levels, ...fields } = topic;
       const base = {
+        ...fields,
         id: topic.id,
         name: topic.name,
         name_i18n: topic.name_i18n,
@@ -205,6 +221,7 @@ function storedCatalog(catalog: LevelCatalog): LevelCatalog {
         return {
           ...base,
           levels: (group?.levels || []).map((level, levelIndex) => ({
+            ...level,
             id: level.id,
             sort_order: levelIndex,
             path: level.path || levelResPath(topic.id, FLAT_GROUP_ID, level.id),
@@ -214,12 +231,14 @@ function storedCatalog(catalog: LevelCatalog): LevelCatalog {
       return {
         ...base,
         groups: topic.groups.map((group, groupIndex) => ({
+          ...group,
           id: group.id,
           name: group.name,
           name_i18n: group.name_i18n,
           color: group.color,
           sort_order: groupIndex,
           levels: group.levels.map((level, levelIndex) => ({
+            ...level,
             id: level.id,
             sort_order: levelIndex,
             path: level.path || levelResPath(topic.id, group.id, level.id),
@@ -288,6 +307,7 @@ export async function upsertCatalogLevel(config: LevelConfig) {
     topic = normalizeTopic(
       {
         id: config.topic_id,
+        flat_levels: config.group_id === FLAT_GROUP_ID,
         sort_order: catalog.topics.length,
         groups: [],
       },
@@ -314,7 +334,7 @@ export async function upsertCatalogLevel(config: LevelConfig) {
   const existing = existingIndex >= 0 ? group.levels[existingIndex] : null;
   const nextLevel = catalogLevelRef(topic.id, group.id, config.id, existing?.sort_order ?? group.levels.length);
 
-  if (existingIndex >= 0) group.levels[existingIndex] = nextLevel;
+  if (existingIndex >= 0) group.levels[existingIndex] = { ...existing!, ...nextLevel };
   else group.levels.push(nextLevel);
 
   await writeCatalog(catalog);
@@ -418,6 +438,7 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
   const knobRows = Number(raw.modes?.knob?.rows || DEFAULT_KNOB_ROWS);
 		return {
 	    ...base,
+    ...raw,
 	    version: 3,
     id: levelId,
     topic_id: topicId,
@@ -429,19 +450,22 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
 		image: {
 			...base.image,
 			...(raw.image || {}),
-			path: sourceResPath(topicId, groupId, levelId),
+			path: raw.image?.path || sourceResPath(topicId, groupId, levelId),
 			width: imageWidth,
 			height: imageHeight,
 			aspect_ratio: imageAspect,
 			preset: raw.image?.preset || defaultPreset.id,
 		},
     modes: {
+      ...raw.modes,
       polygon: {
+        ...raw.modes?.polygon,
         pieces: polygonPieces,
         generator: raw.modes?.polygon?.generator ?? null,
         assist: normalizeAssist(raw.modes?.polygon?.assist, DEFAULT_POLYGON_SEED_COUNT, polygonSeedIds),
       },
       knob: {
+        ...raw.modes?.knob,
         auto: true,
         cols: knobCols,
         rows: knobRows,
@@ -449,9 +473,10 @@ export function normalizeLevelConfig(input: unknown, topicId: string, groupId: s
         assist: normalizeAssist(raw.modes?.knob?.assist, DEFAULT_KNOB_SEED_COUNT, knobSeedIds(knobCols, knobRows)),
       },
       swap: {
+        ...raw.modes?.swap,
         auto: true,
-        cols: DEFAULT_SWAP_COLS,
-        rows: DEFAULT_SWAP_ROWS,
+        cols: Number(raw.modes?.swap?.cols ?? DEFAULT_SWAP_COLS),
+        rows: Number(raw.modes?.swap?.rows ?? DEFAULT_SWAP_ROWS),
       },
     },
   };
@@ -474,7 +499,7 @@ export async function levelStatuses(catalog: LevelCatalog): Promise<LevelStatus[
     for (const group of topic.groups) {
       for (const level of group.levels) {
         const config = await readLevel(topic.id, group.id, level.id, level.title || level.id);
-        const hasSource = await exists(sourceImagePath(topic.id, group.id, level.id));
+        const hasSource = await exists(resourceDiskPath(config.image.path));
         const pieceCount = config.modes.polygon?.pieces?.length || 0;
         statuses.push({ topicId: topic.id, groupId: group.id, levelId: level.id, hasSource, hasPolygon: pieceCount > 0, pieceCount });
       }
