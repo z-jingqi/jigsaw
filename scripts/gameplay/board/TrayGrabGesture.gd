@@ -17,12 +17,13 @@ func begin(pointer: Vector2) -> void:
 	scroll_locked = false
 
 
-func advance(pointer: Vector2, area: Rect2) -> Dictionary:
+func advance(pointer: Vector2, area: Rect2, carrying := false) -> Dictionary:
 	var unit := area.size.x / float(config["reference_width"])
 	var vertical := absf(pointer.y - origin.y)
 	var was_locked := scroll_locked
 	if (
-		pointer.y < area.position.y
+		carrying
+		or pointer.y < area.position.y
 		or pointer.y > area.end.y
 		or vertical >= float(config["scroll_lock_distance_units"]) * unit
 	):

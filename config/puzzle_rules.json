@@ -33,7 +33,6 @@
 			"drag_exit_margin_units": 4.0,
 			"drag_reentry_margin_units": 10.0,
 			"drag_lift_settle_time": 0.22,
-			"drag_lift_tray_edge_ratio": 6.0,
 			"inertia_sample_window_ms": 100,
 			"inertia_stationary_ms": 80,
 			"inertia_min_speed": 35.0,
@@ -43,7 +42,7 @@
 			"corner_radius_units": 22.0
 		},
 		"bottom_margin": 168.0,
-		"board_gap": 36.0,
+		"board_gap": 48.0,
 		"swap_action_height": 320.0
 	},
 	"polygon_generation": {

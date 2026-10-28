@@ -172,7 +172,7 @@ uses the settled layout immediately.
 ## Shared navigation motion
 
 Only All Themes uses a top sheet: drop down to open, retract upward to close.
-Other full route pages, including mode selection, enter from the right
+Other full route pages enter from the right
 and leave to the right on Back. The navigation host owns these transitions;
 page-local content animations must not add another route entrance or exit.
 Reduced Motion settles the route immediately. Settings remains a popup with its
@@ -184,3 +184,19 @@ qualified rightward fling commits, otherwise it returns to its starting position
 GestureArena reserves the pointer on press: edge gestures cannot page content,
 and a paging drag cannot become Back when it reaches the edge. All Themes keeps
 its sheet close control and does not claim horizontal edge Back.
+
+## Gameplay working space
+
+The gameplay header uses the shared button sizes, side margins, and safe insets,
+with its entire title/action row raised by one SMALL_GAP (8 design units).
+The space below the header is SMALL_GAP; the board-to-tray reserve is separate
+and is honored by the final board fitting pass. The tray stays anchored at the
+bottom and the board remains stationary throughout a drag.
+
+A carried tray piece keeps its board scale and finger-clearance offset across
+the tray lip. Return requires downward movement of the carried piece's center
+into the tray's inset area. Finger position alone must not trigger shrinking,
+offset changes, or tray scrolling while aligning the bottom row.
+
+Mode selection uses its own selected-box travel/open/reveal sequence and the
+reverse close/return sequence; it does not use full-page lateral navigation.
