@@ -128,6 +128,12 @@ static func _is_valid_state(state: Dictionary, piece_ids: Array[String]) -> bool
 		or typeof(state.get("tray_order")) != TYPE_ARRAY
 	):
 		return false
+	if state.has("tray_scroll_ratio"):
+		var ratio = state.tray_scroll_ratio
+		if typeof(ratio) not in [TYPE_INT, TYPE_FLOAT]:
+			return false
+		if not is_finite(float(ratio)) or float(ratio) < 0.0 or float(ratio) > 1.0:
+			return false
 	var groups: Array = state.connected_groups
 	var tray: Array = state.tray_order
 	return str(state.get("kind", "")) == "assembly" and _is_valid_assembly(groups, tray, piece_ids)

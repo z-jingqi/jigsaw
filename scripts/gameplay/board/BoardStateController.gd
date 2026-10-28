@@ -138,6 +138,10 @@ func session_snapshot(theme_id: String, level_id: String) -> Dictionary:
 	result["kind"] = "assembly"
 	result["connected_groups"] = connected_groups
 	result["tray_order"] = tray_order
+	var max_scroll := maxf(0.0, board.tray_content_width - board._tray_area().size.x)
+	result["tray_scroll_ratio"] = (
+		clampf(board.tray_scroll_offset / max_scroll, 0.0, 1.0) if max_scroll > 0.0 else 0.0
+	)
 	return result
 
 
@@ -192,7 +196,13 @@ func _apply_session_state(snapshot: Dictionary) -> void:
 		var groups: Array = []
 		for ids in snapshot.get("connected_groups", []):
 			groups.append({"members": ids, "seed": false})
-		restore_group_state({"groups": groups, "tray_order": snapshot.get("tray_order", [])})
+		restore_group_state(
+			{
+				"groups": groups,
+				"tray_order": snapshot.get("tray_order", []),
+				"tray": {"scroll_ratio": snapshot.get("tray_scroll_ratio", 0.0)},
+			}
+		)
 	board._check_complete()
 	board._check_swap_complete()
 
