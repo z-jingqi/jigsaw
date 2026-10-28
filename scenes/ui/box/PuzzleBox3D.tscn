@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/box/PuzzleBox3D.gd" id="1"]
 
 [ext_resource type="PackedScene" path="res://assets/ui/box/tuck-carton.glb" id="2"]
 
 [ext_resource type="Shader" path="res://scripts/ui/box/BoxComposite.gdshader" id="3_composite"]
+[ext_resource type="Script" path="res://scripts/ui/box/BoxShadow.gd" id="4_shadow"]
 
 [sub_resource type="ShaderMaterial" id="Composite"]
 shader = ExtResource("3_composite")
@@ -56,6 +57,16 @@ far = 16.0
 [node name="Carton" parent="Viewport/World" instance=ExtResource("2")]
 
 [node name="Samples" type="Node3D" parent="Viewport/World"]
+
+[node name="Shadow" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_shadow")
 
 [node name="Display" type="TextureRect" parent="."]
 material = SubResource("Composite")

@@ -1,7 +1,7 @@
 extends RefCounted
 ## Theme identity only: never derives symbols or colors from an individual level.
 
-const TITLE_STYLE_VERSION := 3
+const TITLE_STYLE_VERSION := 4
 const TITLE_DEFAULT_SIZE := 80
 const TITLE_MIN_SIZE := 56
 const TITLE_PIXEL_SIZE := 0.003

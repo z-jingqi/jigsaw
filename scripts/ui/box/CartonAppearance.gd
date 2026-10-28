@@ -4,6 +4,7 @@ extends Node3D
 const InkLineShader := preload("res://scripts/ui/box/CartonInkLine.gdshader")
 const RevealShader := preload("res://scripts/ui/box/CartonArtwork.gdshader")
 const Packaging := preload("res://scripts/ui/box/ThemePackaging.gd")
+const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 const TitleFont := preload("res://assets/fonts/noto/NotoSerifSC[wght].ttf")
 var _top_print: Node3D
 var _side_print: Node3D
@@ -28,7 +29,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var colors := Packaging.palette(str(data.get("theme_id", "")))
 	var ink := _ink(colors.ink)
 	var accent := _ink(colors.accent)
-	_print_wrap(ink)
+	_print_wrap(ink, colors.ink)
 	_print_motif(StringName(colors.motif), accent)
 	var title := Label3D.new()
 	title.name = "PrintedLevelTitle"
@@ -129,15 +130,31 @@ func _set_accessible_title(full_title: String) -> void:
 		ancestor = ancestor.get_parent()
 
 
-func _print_wrap(ink: Material) -> void:
+func _print_wrap(ink: Material, color: Color) -> void:
 	var front := _quad("FrontBinding", Vector2(0.05, 3), ink, self)
 	front.position = Vector3(1.10, 1.5, 0.253)
-	var spine := _quad("SpineBinding", Vector2(0.48, 3), ink, self)
+	var spine := _quad("SpineBinding", Vector2(0.48, 3), _paper(color.darkened(0.08)), self)
 	spine.position = Vector3(1.136, 1.5, 0)
 	spine.rotation.y = PI / 2
-	var top := _quad("TopBinding", Vector2(2.25, 0.48), ink, _top_print)
+	var top := _quad("TopBinding", Vector2(2.25, 0.48), _paper(color), _top_print)
 	top.position = Vector3(0, 0.012, 0.24)
 	top.rotation.x = -PI / 2
+	# A narrow fold alongside the printed spine separates the paper layers.
+	var seam := _quad("SpineFold", Vector2(0.010, 2.98), _ink(color.darkened(0.28)), self)
+	seam.position = Vector3(1.138, 1.5, 0.218)
+	seam.rotation.y = PI / 2
+	var lip := _quad("SpineLip", Vector2(0.007, 2.98), _ink(Color("e5dfd2")), self)
+	lip.position = Vector3(1.138, 1.5, 0.231)
+	lip.rotation.y = PI / 2
+	var closure := _quad("LidFold", Vector2(2.22, 0.010), _ink(Color("b1a99a")), self)
+	closure.position = Vector3(0, 2.995, 0.251)
+
+
+func _paper(color: Color) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = PaperShader
+	material.set_shader_parameter("paper_color", color)
+	return material
 
 
 func _print_motif(motif: StringName, material: Material) -> void:

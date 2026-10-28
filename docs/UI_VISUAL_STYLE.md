@@ -111,6 +111,16 @@ intrinsic edge shading inside the material. Gameplay buttons and tray surfaces
 use no runtime drop shadows; puzzle pieces retain their existing intrinsic
 side faces and bevels.
 
+The approved B carton treatment is an exception for puzzle boxes only. Keep the
+global background unchanged. Use restrained off-white matte paper, fine fibers
+that fade at thumbnail scale, fold/lip definition, and a slightly deeper printed
+spine. Both shelf thumbnails and the live mode box share `BoxShadow.gdshader`:
+a short, soft, low-opacity silhouette shadow directed down-right. It is composed
+at runtime, outside the 3D viewport texture, never baked into artwork or cached
+box images. Shadow bounds follow the full uncropped box projection, including
+press scaling and transition hiding; they must not affect input or cache keys.
+Material/print revisions invalidate the box cache through its style signature.
+
 Do not generate concentric rims, doubled borders, or inset copies for mode
 icons. Shared SVG glyphs use one clear contour and only the cuts or arrows
 needed to identify each mode.

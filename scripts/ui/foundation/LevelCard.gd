@@ -20,6 +20,7 @@ var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 var _status: Label
 var _box_preview: TextureRect
+var _box_shadow: TextureRect
 var _box_hidden := false
 var _edge_back_preview := false
 var _cache_key := ""
@@ -44,6 +45,9 @@ func _ready() -> void:
 	title_label.hide()
 	completed_modes.hide()
 	add_child(_status)
+	_box_shadow = preload("res://scripts/ui/box/BoxShadow.gd").new()
+	_box_shadow.visible = false
+	add_child(_box_shadow)
 	_box_preview = TextureRect.new()
 	var composite := ShaderMaterial.new()
 	composite.shader = preload("res://scripts/ui/box/BoxComposite.gdshader")
@@ -301,6 +305,12 @@ func _apply_layout() -> void:
 			area.position + Vector2((area.size.x - drawn.x) * 0.5, area.size.y - drawn.y)
 		)
 	_box_preview.visible = _box_source_texture != null and (not _box_hidden or _edge_back_preview)
+	_box_shadow.visible = _box_preview.visible
+	if _box_shadow.visible:
+		var shadow_rect: Rect2 = get_global_transform().affine_inverse() * prototype_box_rect()
+		_box_shadow.texture = _box_source_texture
+		_box_shadow.position = shadow_rect.position
+		_box_shadow.size = shadow_rect.size
 	thumbnail.visible = _box_source_texture == null and (not _box_hidden or _edge_back_preview)
 	title_label.hide()
 	completed_modes.hide()

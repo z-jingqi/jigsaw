@@ -33,6 +33,7 @@ var _open_progress := 0.0:
 
 func _ready() -> void:
 	display.texture = viewport.get_texture()
+	$Shadow.texture = display.texture
 	_sample_motion = SampleMotion.new(self, samples)
 	_sample_motion.stopped.connect(func() -> void: sample_motion_stopped.emit())
 	$Viewport/World/Camera.look_at(Vector3(0, 1.8, 0), Vector3.UP)
@@ -186,6 +187,7 @@ func _apply_paper_materials(node: Node) -> void:
 				var material := ShaderMaterial.new()
 				material.shader = PaperShader
 				material.set_shader_parameter("paper_color", source.albedo_color)
+				material.set_shader_parameter("front_panel", node.name == "FrontBoard")
 				node.set_surface_override_material(index, material)
 	for child in node.get_children():
 		_apply_paper_materials(child)
