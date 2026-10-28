@@ -1,5 +1,8 @@
 extends RefCounted
 ## Owns the selected carton's forward and reverse travel, without moving pages.
+const MOVE_DURATION := 0.26
+const CHOICE_FADE_DURATION := 0.12
+
 var host: Control
 var _return_tween: Tween
 var _cancelled := false
@@ -31,15 +34,15 @@ func configure(tween: Tween) -> bool:
 		tween.tween_interval(0.001)
 		return true
 	# Keep the layout from snapping the box to its destination during resizing.
-	var duration := 0.42
+	var duration := MOVE_DURATION
 	tween.tween_property(host.background, "modulate:a", 1.0, duration)
 	tween.tween_property(host._box, "position", host._destination.position, duration)
 	tween.tween_property(host._box, "size", host._destination.size, duration)
 	tween.chain().tween_callback(host._open_lid)
-	tween.chain().tween_interval(0.62)
+	tween.chain().tween_interval(host._box.LID_DURATION)
 	tween.chain().tween_callback(host._show_choices)
-	tween.chain().tween_property(host.options, "modulate:a", 1.0, 0.18)
-	tween.parallel().tween_property(host.start_button, "modulate:a", 1.0, 0.18)
+	tween.chain().tween_property(host.options, "modulate:a", 1.0, CHOICE_FADE_DURATION)
+	tween.parallel().tween_property(host.start_button, "modulate:a", 1.0, CHOICE_FADE_DURATION)
 	return true
 
 
@@ -47,7 +50,7 @@ func close() -> bool:
 	_cancelled = false
 	host.gesture_resume_motion()
 	_return_tween = host.create_tween().set_parallel(true)
-	var fade := 0.001 if host._reduced_motion else 0.16
+	var fade := 0.001 if host._reduced_motion else CHOICE_FADE_DURATION
 	_return_tween.tween_property(host.options, "modulate:a", 0.0, fade)
 	_return_tween.tween_property(host.start_button, "modulate:a", 0.0, fade)
 	await host._box.retract_mode(host._reduced_motion)
@@ -79,7 +82,7 @@ func close() -> bool:
 	var duration := (
 		0.001
 		if host._reduced_motion
-		else 0.42 * clampf(remaining / maxf(full_distance, 0.001), 0.05, 1.0)
+		else MOVE_DURATION * clampf(remaining / maxf(full_distance, 0.001), 0.05, 1.0)
 	)
 	_return_tween = host.create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(
 		Tween.EASE_IN_OUT
