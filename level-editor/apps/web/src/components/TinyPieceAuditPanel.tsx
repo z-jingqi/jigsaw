@@ -36,12 +36,12 @@ export function TinyPieceAuditPanel(props: {
       </div>
       {props.summary ? (
         <div
-          className="mt-2 text-center text-sm font-semibold text-destructive"
+          className="mt-2 text-center text-sm font-semibold"
           role="status"
           data-testid="tiny-piece-audit-summary"
           aria-label={`异常关卡 ${props.summary.abnormalCount}，检测关卡 ${props.summary.checkedCount}`}
         >
-          {props.summary.abnormalCount} / {props.summary.checkedCount}
+          已检查 {props.summary.checkedCount} 关 · 异常 {props.summary.abnormalCount} 关
         </div>
       ) : null}
     </div>

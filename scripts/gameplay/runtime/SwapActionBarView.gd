@@ -8,8 +8,7 @@ signal move_right_requested
 
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
-const BUTTON_SIZE := 156.0
-const BUTTON_GAP := 40.0
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 
 @onready var move_up_group: Control = $Actions/MoveUpGroup
 @onready var move_down_group: Control = $Actions/MoveDownGroup
@@ -62,9 +61,9 @@ func set_actions_enabled(enabled: bool) -> void:
 func _apply_layout() -> void:
 	if not is_node_ready() or size.x <= 0.0 or size.y <= 0.0:
 		return
-	var scale := float(get_meta(&"gameplay_layout_scale", 1.0))
-	var button_size := maxf(Clean.minimum_touch_size(self).x, BUTTON_SIZE * scale)
-	var gap := BUTTON_GAP * scale
+	var unit := Metrics.unit(get_viewport_rect().size)
+	var button_size := Metrics.TOUCH * unit
+	var gap := Metrics.GAP * unit
 	var total_width := button_size * 4.0 + gap * 3.0
 	var top := maxf(0.0, (size.y - button_size) * 0.5)
 	var groups := [move_left_group, move_up_group, move_down_group, move_right_group]

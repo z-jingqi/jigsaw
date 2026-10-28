@@ -1,5 +1,6 @@
 extends RefCounted
 ## Optical spacing uses projected carton bounds, not its transparent viewport quad.
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 
@@ -24,19 +25,19 @@ static func _project_bottom(node: Node, camera: Camera3D) -> float:
 
 
 static func apply(box: Control, options: Control, start: Button, available: Vector2) -> Rect2:
-	var u := Clean.canvas_scale(available, box.get_window())
+	var u := Metrics.unit(box.get_viewport_rect().size)
 	var old_width := maxf(120 * u, minf(available.x - 32 * u, (available.y - 320 * u) * 0.75))
 	var old_height := old_width / 0.75
 	var top := 78 * u
 	var bottom_fraction := carton_bottom_fraction(box)
 	var count := options.get_child_count()
-	options.size = Vector2(available.x - 48 * u, 60 * u)
+	options.size = Vector2(available.x - 48 * u, 88 * u)
 	var visual_top := 30 * u
 	var visual_bottom := 30 * u
 	for index in count:
 		var option: Control = options.get_child(index)
-		option.custom_minimum_size = Vector2(44, 60) * u
-		option.size = Vector2(options.size.x / count - 6 * u, 60 * u)
+		option.custom_minimum_size = Vector2(Metrics.TOUCH, 88) * u
+		option.size = Vector2(options.size.x / count - 6 * u, 88 * u)
 		option.position = Vector2(float(index) * options.size.x / count, 0)
 		var bounds: Rect2 = option.icon_visible_rect()
 		visual_top = minf(visual_top, bounds.position.y)

@@ -1,6 +1,7 @@
 class_name SettingsRow
 extends HBoxContainer
 
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 signal value_changed(key: StringName, enabled: bool)
@@ -64,10 +65,10 @@ func set_visual_scale(unit: float) -> void:
 	_unit = unit
 	custom_minimum_size.y = maxf(66 * unit, Clean.minimum_touch_size(toggle).y + 12 * unit)
 	glyph.custom_minimum_size = Vector2.ONE * 28 * unit
-	var native_unit := Clean.minimum_touch_size(toggle).y / 44.0
+	var native_unit := Clean.minimum_touch_size(toggle).y / Metrics.TOUCH
 	var switch_unit := maxf(unit, native_unit)
-	toggle.custom_minimum_size = Vector2(58, 44) * switch_unit
-	label.add_theme_font_size_override("font_size", roundi(16 * unit))
+	toggle.custom_minimum_size = Vector2(58, Metrics.TOUCH) * switch_unit
+	label.add_theme_font_size_override("font_size", roundi(Metrics.BODY * unit))
 	add_theme_constant_override("separation", roundi(12 * unit))
 	_ensure_thumb()
 	_thumb.size = Vector2.ONE * 32 * switch_unit
@@ -134,7 +135,7 @@ func _move_thumb(enabled: bool, animate: bool) -> void:
 	if not is_instance_valid(_thumb):
 		return
 	var track := toggle.size.max(toggle.custom_minimum_size)
-	var inset := 4 * maxf(_unit, Clean.minimum_touch_size(toggle).y / 44.0)
+	var inset := 4 * maxf(_unit, Clean.minimum_touch_size(toggle).y / Metrics.TOUCH)
 	var target := Vector2(
 		track.x - _thumb.size.x - inset if enabled else inset, (track.y - _thumb.size.y) * 0.5
 	)

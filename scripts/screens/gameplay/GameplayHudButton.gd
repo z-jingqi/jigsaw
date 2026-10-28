@@ -5,6 +5,7 @@ extends ActionButton
 @export_enum("back", "hint", "left", "up", "down", "right") var symbol := "back"
 
 const Chevron := preload("res://scripts/ui/foundation/ChevronGeometry.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Style := preload("res://scripts/screens/gameplay/GameplayStyle.gd")
 
 
@@ -26,28 +27,14 @@ func _draw() -> void:
 		ink = Style.Clean.MUTED
 	var center := size * 0.5
 	var unit := minf(size.x, size.y) / 148.0
-	var stroke := maxf(2.0, 7.0 * unit)
+	var stroke := Metrics.ICON_STROKE * minf(size.x, size.y) / Metrics.TOUCH
 	if has_focus() and symbol in ["back", "hint"]:
 		stroke *= 1.35
 	match symbol:
 		"hint":
 			_draw_hint(center, unit, stroke, ink)
 		"back":
-			draw_polyline(
-				PackedVector2Array(
-					[
-						center + Vector2(0, -24) * unit,
-						center + Vector2(-25, 0) * unit,
-						center + Vector2(0, 24) * unit,
-					]
-				),
-				ink,
-				stroke,
-				true,
-			)
-			draw_line(
-				center + Vector2(-25, 0) * unit, center + Vector2(28, 0) * unit, ink, stroke, true
-			)
+			preload("res://scripts/ui/foundation/NavigationGlyph.gd").draw_arrow(self, -1.0, ink)
 		_:
 			_draw_direction(center, unit, stroke, ink)
 

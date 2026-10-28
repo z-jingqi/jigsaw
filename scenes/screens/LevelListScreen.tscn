@@ -68,7 +68,7 @@ color = Color(0.980392, 0.968627, 0.937255, 1)
 
 [node name="SafeArea" parent="." instance=ExtResource("2_safe")]
 layout_mode = 1
-compact_horizontal_margin = 52.0
+compact_horizontal_margin = 24.0
 compact_breakpoint = 9999.0
 
 [node name="Content" type="Control" parent="SafeArea"]

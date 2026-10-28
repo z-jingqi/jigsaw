@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 [ext_resource type="PackedScene" path="res://scenes/screens/home/ThemeLibraryScreen.tscn" id="1"]
 [ext_resource type="Script" path="res://scripts/screens/HomeScreen.gd" id="2"]
 [ext_resource type="Script" path="res://scripts/screens/home/FreshButton.gd" id="3"]
 [ext_resource type="Texture2D" path="res://assets/ui/brand/jigcat-wordmark.png" id="4_logo"]
+[ext_resource type="Script" path="res://scripts/screens/home/HomeFixedContent.gd" id="5_fixed"]
 [node name="HomeScreen" instance=ExtResource("1")]
 script = ExtResource("2")
 close_as_sheet = false
@@ -21,3 +22,21 @@ accessibility_name = "jigcat"
 texture = ExtResource("4_logo")
 expand_mode = 1
 stretch_mode = 5
+
+[node name="FixedContent" type="Control" parent="."]
+layout_mode = 0
+mouse_filter = 2
+script = ExtResource("5_fixed")
+[node name="ThemeName" type="Label" parent="FixedContent"]
+layout_mode = 0
+mouse_filter = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+[node name="PageCount" type="Label" parent="FixedContent"]
+layout_mode = 0
+mouse_filter = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+[node name="EnterButton" type="Button" parent="FixedContent"]
+layout_mode = 0
+mouse_default_cursor_shape = 2

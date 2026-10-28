@@ -2,6 +2,7 @@ extends RefCounted
 ## Quiet artwork-led composition with a separate, thumb-friendly decision area.
 
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 
 
@@ -9,9 +10,7 @@ static func apply(host: Control) -> void:
 	var content: Control = host.get_node("SafeArea/Content")
 	var available := content.size
 	var landscape := available.x > available.y * 1.15
-	var unit := minf(available.x / 390.0, available.y / 844.0)
-	if landscape:
-		unit = minf(available.x / 844.0, available.y / 390.0)
+	var unit := Metrics.unit(host.size)
 	var width := minf(available.x - 48 * unit, 560 * unit)
 	var left := (available.x - width) * 0.5
 	var header: Control = content.get_node("Header")
@@ -20,7 +19,7 @@ static func apply(host: Control) -> void:
 	Clean.icon_button(header.get_node("BackButton") as Button)
 	var title: Label = header.get_node("Title")
 	_place(title, Vector2(left + 48 * unit, 22 * unit), Vector2(width - 96 * unit, 40 * unit))
-	Clean.label(title, int(24 * unit))
+	Clean.label(title, int(Metrics.TITLE * unit))
 	for side in ["Left", "Right"]:
 		header.get_node("Cloud" + side).visible = false
 	var preview: TextureRect = content.get_node("Preview")
@@ -49,7 +48,7 @@ static func apply(host: Control) -> void:
 		heading_y = 102 * unit
 	_place(heading, Vector2(controls_left, heading_y), Vector2(controls_width, 34 * unit))
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	Clean.label(heading, int(22 * unit))
+	Clean.label(heading, int(Metrics.BODY * unit))
 	var options: Control = content.get_node("Options")
 	_place(options, Vector2(controls_left, heading_y), Vector2(controls_width, 72 * unit))
 	var count := options.get_child_count()
@@ -63,16 +62,11 @@ static func apply(host: Control) -> void:
 	_place(
 		start,
 		Vector2(controls_left, available.y - 80 * unit),
-		Vector2(
-			controls_width, maxf(52 * Clean.canvas_scale(available, host.get_window()), 54 * unit)
-		)
+		Vector2(controls_width, Metrics.PRIMARY_HEIGHT * unit)
 	)
 	Clean.button(start, true)
 	var start_label: Label = start.get_node("Label")
-	Clean.label(
-		start_label,
-		maxi(int(20 * unit), ceili(18 * Clean.canvas_scale(available, host.get_window())))
-	)
+	Clean.label(start_label, roundi(Metrics.BODY * unit))
 	start_label.add_theme_color_override(
 		"font_color", Clean.MUTED if start.disabled else Clean.PAPER
 	)

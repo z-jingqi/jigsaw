@@ -454,7 +454,7 @@ function renumberPieces(pieces: LevelPiece[]) {
   return withNeighbors(pieces.map((piece, index) => pieceFromPolygon(`piece_${index + 1}`, cleanRing(piece.points))));
 }
 
-function isSimplePolygon(points: Point[]) {
+export function isSimplePolygon(points: Point[]) {
   if (points.length < 3 || polygonAreaAbs(points) < 4) return false;
   for (let first = 0; first < points.length; first += 1) {
     const firstEnd = (first + 1) % points.length;
@@ -562,23 +562,24 @@ export function areAdjacent(a: LevelPiece, b: LevelPiece) {
 
 export function mergePieces(a: LevelPiece, b: LevelPiece): LevelPiece {
   const cells = [...new Set([...(a.cells || []), ...(b.cells || [])])];
-  const points = unionOuterPolygon(a.points, b.points) || convexHull([...a.points, ...b.points]);
+  if (!areAdjacent(a, b)) throw new Error("只能合并共享边的相邻碎片");
+  const union = polygonClipping.union([closedRing(a.points)], [closedRing(b.points)]) as MultiPolygon;
+  if (union.length !== 1 || union[0].length !== 1) throw new Error("合并会产生分离区域或孔洞，已取消");
+  const points = cleanRing(union[0][0] as Point[]);
+  if (!isSimplePolygon(points)) throw new Error("合并后轮廓无效，已取消");
   return pieceFromPolygon(`${a.id}_${b.id}`, points, cells);
 }
 
-function unionOuterPolygon(a: Point[], b: Point[]) {
-  const union = polygonClipping.union([closedRing(a)], [closedRing(b)]) as MultiPolygon;
-  let best: Point[] = [];
-  let bestArea = 0;
-  for (const polygon of union) {
-    const outer = cleanRing(polygon[0] as Point[]);
-    const area = polygonAreaAbs(outer);
-    if (outer.length >= 3 && area > bestArea) {
-      best = outer;
-      bestArea = area;
-    }
+export function mergeConnectedPieces(pieces: LevelPiece[]): LevelPiece {
+  if (!pieces.length) throw new Error("请选择碎片");
+  let merged = pieces[0];
+  const pending = pieces.slice(1);
+  while (pending.length) {
+    const index = pending.findIndex((piece) => areAdjacent(merged, piece));
+    if (index < 0) throw new Error("只能合并相互连通的碎片");
+    merged = mergePieces(merged, pending.splice(index, 1)[0]);
   }
-  return best.length >= 3 ? best : null;
+  return merged;
 }
 
 export function polygonCenter(points: Point[]): Point {
@@ -612,23 +613,4 @@ function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point) {
   const d3 = direction(b1, b2, a1);
   const d4 = direction(b1, b2, a2);
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
-}
-
-function convexHull(points: Point[]): Point[] {
-  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  if (sorted.length <= 3) return sorted;
-  const cross = (o: Point, a: Point, b: Point) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lower: Point[] = [];
-  for (const point of sorted) {
-    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
-    lower.push(point);
-  }
-  const upper: Point[] = [];
-  for (const point of sorted.reverse()) {
-    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
-    upper.push(point);
-  }
-  upper.pop();
-  lower.pop();
-  return lower.concat(upper);
 }

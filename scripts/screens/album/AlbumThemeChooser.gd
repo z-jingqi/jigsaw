@@ -1,7 +1,9 @@
 extends Control
-## Local, reversible top sheet. It does not add a route or an all-artworks collection.
+## Local, reversible popup. It does not add a route or an all-artworks collection.
 signal theme_selected(theme_id: String)
 const LibraryScene := preload("res://scenes/screens/home/ThemeLibraryScreen.tscn")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
+const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 var _sheet: Control
 var _shade: ColorRect
@@ -47,7 +49,7 @@ func configure(themes: Array, loader: Node, reduced: bool, current_theme := "") 
 	if _reduced and visible:
 		if _motion != null and _motion.is_valid():
 			_motion.kill()
-		_sheet.position.y = 0 if _open else -_sheet.size.y
+		modulate.a = 1.0 if _open else 0.0
 		_finish()
 
 
@@ -72,7 +74,7 @@ func show_sheet() -> void:
 		_sheet.get_node("Title").text = GameStrings.ui_text("album_choose_theme")
 		_sheet.get_node("CloseButton").accessibility_name = GameStrings.ui_text("close")
 		_layout()
-		_sheet.position.y = -_sheet.size.y
+		modulate.a = 0.0
 		visible = true
 		for index in _themes.size():
 			var theme: Dictionary = _themes[index]
@@ -83,14 +85,14 @@ func show_sheet() -> void:
 				)
 	_sheet.navigation_set_active(true)
 	_open = true
-	_animate(0.0)
+	_animate(1.0)
 
 
 func close() -> void:
 	if not visible:
 		return
 	_open = false
-	_animate(-_sheet.size.y)
+	_animate(0.0)
 
 
 func is_presented() -> bool:
@@ -116,16 +118,11 @@ func _animate(target: float) -> void:
 	if _motion != null and _motion.is_valid():
 		_motion.kill()
 	if _reduced:
-		_sheet.position.y = target
+		modulate.a = target
 		_finish()
 		return
 	_motion = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_motion.tween_property(
-		_sheet,
-		"position:y",
-		target,
-		clampf(absf(target - _sheet.position.y) / maxf(1, _sheet.size.y) * 0.3, 0.06, 0.3)
-	)
+	_motion.tween_property(self, "modulate:a", target, 0.18)
 	_motion.finished.connect(_finish)
 
 
@@ -162,9 +159,8 @@ func _layout() -> void:
 	if _sheet == null:
 		return
 	_sheet.size = Vector2(size.x, size.y * 0.79)
+	_sheet.position.y = (size.y - _sheet.size.y) * 0.5
 	_layout_header()
-	if not visible:
-		_sheet.position.y = -_sheet.size.y
 
 
 func active_motion_count() -> int:
@@ -182,15 +178,15 @@ func _exit_tree() -> void:
 func _layout_header() -> void:
 	if not is_instance_valid(_sheet) or not _sheet.is_node_ready():
 		return
-	var native := Clean.canvas_scale(get_viewport_rect().size, get_window())
+	var native := Metrics.unit(get_viewport_rect().size)
 	var button := _sheet.get_node("CloseButton") as Button
-	button.position = Vector2(18, 22) * native
-	button.size = Vector2.ONE * 44 * native
+	button.position = Vector2(Metrics.EDGE, Metrics.TOP) * native
+	Buttons.apply_size(button, Vector2.ONE * Metrics.TOUCH * native)
 	var title := _sheet.get_node("Title") as Label
-	title.position = Vector2(70, 22) * native
-	title.size = Vector2(_sheet.size.x - 140 * native, 44 * native)
+	title.position = Vector2(Metrics.EDGE + Metrics.TOUCH + Metrics.SMALL_GAP, Metrics.TOP) * native
+	title.size = Vector2(_sheet.size.x - 140 * native, Metrics.TOUCH * native)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	Clean.label(title, roundi(23 * native))
+	Clean.label(title, roundi(Metrics.TITLE * native))
 
 	var pages := _sheet.get_node("Pages")
 	for page_index in pages.get_child_count():

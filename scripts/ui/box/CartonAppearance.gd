@@ -4,6 +4,7 @@ extends Node3D
 const InkLineShader := preload("res://scripts/ui/box/CartonInkLine.gdshader")
 const RevealShader := preload("res://scripts/ui/box/CartonArtwork.gdshader")
 const Packaging := preload("res://scripts/ui/box/ThemePackaging.gd")
+const PaperShader := preload("res://scripts/ui/box/CartonPaper.gdshader")
 const TitleFont := preload("res://assets/fonts/noto/NotoSerifSC[wght].ttf")
 var _top_print: Node3D
 var _side_print: Node3D
@@ -28,12 +29,13 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var colors := Packaging.palette(str(data.get("theme_id", "")))
 	var ink := _ink(colors.ink)
 	var accent := _ink(colors.accent)
-	_print_wrap(ink)
+	_print_wrap(ink, colors.ink)
 	_print_motif(StringName(colors.motif), accent)
 	var title := Label3D.new()
 	title.name = "PrintedLevelTitle"
 	var full_title := str(data.get("title", ""))
 	var fitted := _fit_title(full_title, Packaging.title_width(data))
+	var wrapped := str(fitted.text).contains("\n")
 	title.text = fitted.text
 	title.set_meta("full_title", full_title)
 	_set_accessible_title(full_title)
@@ -44,14 +46,15 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 	var title_ink: Color = colors.ink
 	title.modulate = title_ink.darkened(0.60) if title_ink.get_luminance() > 0.40 else title_ink
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	title.position = Vector3(-0.90, 2.84, 0.255)
+	title.position = Vector3(-0.90, 2.76 if wrapped else 2.84, 0.255)
 	title.shaded = false
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	add_child(title)
 	var revealed := bool(data.get("preview_revealed", true))
 	if texture != null:
 		var dimensions := texture.get_size()
-		var factor := minf(1.80 / dimensions.x, 2.40 / dimensions.y)
+		var art_height := 2.20 if wrapped else 2.40
+		var factor := minf(1.80 / dimensions.x, art_height / dimensions.y)
 		var material: Material = _image(texture)
 		if not revealed:
 			var faded := ShaderMaterial.new()
@@ -59,7 +62,7 @@ func configure(carton: Node3D, lid: Node3D, texture: Texture2D, data: Dictionary
 			faded.set_shader_parameter("artwork", texture)
 			material = faded
 		var art := _quad("FullArtwork", dimensions * factor, material, self)
-		art.position = Vector3(0, 1.47, 0.253)
+		art.position = Vector3(0, 1.37 if wrapped else 1.47, 0.253)
 	else:
 		var placeholder := _quad("MissingArtwork", Vector2(1.80, 2.40), _ink(Color("efede7")), self)
 		placeholder.position = Vector3(0, 1.47, 0.253)
@@ -83,6 +86,9 @@ func _fit_title(full_title: String, width: float) -> Dictionary:
 		font_size -= 1
 	if _title_measure(text, font_size) <= max_pixels:
 		return {"text": text, "font_size": font_size}
+	var wrapped := _wrap_title(text, font_size, max_pixels)
+	if not wrapped.is_empty():
+		return {"text": wrapped, "font_size": font_size}
 	# Preserve a readable floor. Truncate only the printed label; never the model/a11y name.
 	var low := 0
 	var high := text.length()
@@ -99,6 +105,22 @@ func _title_measure(text: String, font_size: int) -> float:
 	return TitleFont.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 
+func _wrap_title(text: String, font_size: int, max_pixels: float) -> String:
+	var best := ""
+	var balance := INF
+	for index in range(1, text.length()):
+		if text.contains(" ") and text[index] != " ":
+			continue
+		var first := text.left(index).strip_edges()
+		var second := text.substr(index).strip_edges()
+		var left := _title_measure(first, font_size)
+		var right := _title_measure(second, font_size)
+		if maxf(left, right) <= max_pixels and absf(left - right) < balance:
+			balance = absf(left - right)
+			best = first + "\n" + second
+	return best
+
+
 func _set_accessible_title(full_title: String) -> void:
 	var ancestor: Node = get_parent()
 	while ancestor != null:
@@ -108,15 +130,31 @@ func _set_accessible_title(full_title: String) -> void:
 		ancestor = ancestor.get_parent()
 
 
-func _print_wrap(ink: Material) -> void:
+func _print_wrap(ink: Material, color: Color) -> void:
 	var front := _quad("FrontBinding", Vector2(0.05, 3), ink, self)
 	front.position = Vector3(1.10, 1.5, 0.253)
-	var spine := _quad("SpineBinding", Vector2(0.48, 3), ink, self)
+	var spine := _quad("SpineBinding", Vector2(0.48, 3), _paper(color.darkened(0.08)), self)
 	spine.position = Vector3(1.136, 1.5, 0)
 	spine.rotation.y = PI / 2
-	var top := _quad("TopBinding", Vector2(2.25, 0.48), ink, _top_print)
+	var top := _quad("TopBinding", Vector2(2.25, 0.48), _paper(color), _top_print)
 	top.position = Vector3(0, 0.012, 0.24)
 	top.rotation.x = -PI / 2
+	# A narrow fold alongside the printed spine separates the paper layers.
+	var seam := _quad("SpineFold", Vector2(0.010, 2.98), _ink(color.darkened(0.28)), self)
+	seam.position = Vector3(1.138, 1.5, 0.218)
+	seam.rotation.y = PI / 2
+	var lip := _quad("SpineLip", Vector2(0.007, 2.98), _ink(Color("e5dfd2")), self)
+	lip.position = Vector3(1.138, 1.5, 0.231)
+	lip.rotation.y = PI / 2
+	var closure := _quad("LidFold", Vector2(2.22, 0.010), _ink(Color("b1a99a")), self)
+	closure.position = Vector3(0, 2.995, 0.251)
+
+
+func _paper(color: Color) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = PaperShader
+	material.set_shader_parameter("paper_color", color)
+	return material
 
 
 func _print_motif(motif: StringName, material: Material) -> void:

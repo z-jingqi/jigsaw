@@ -1,5 +1,7 @@
 import type { CatalogRenameOperation, LevelCatalog, LevelConfig, LevelStatus, SelectedLevel, TinyPieceAuditResponse } from "./types";
 
+let resourceRevision = 0;
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -52,7 +54,7 @@ export function uploadSource(target: { topicId: string; groupId: string; levelId
   return request<LevelConfig>(`/api/levels/${target.topicId}/${target.groupId}/${target.levelId}/source`, {
     method: "POST",
     body,
-  });
+  }).then((result) => { resourceRevision += 1; return result; });
 }
 
 export function uploadTopicAsset(topicId: string, asset: "cover" | "icon", file: File) {
@@ -61,14 +63,14 @@ export function uploadTopicAsset(topicId: string, asset: "cover" | "icon", file:
   return request<{ path: string }>(`/api/topics/${topicId}/${asset}`, {
     method: "POST",
     body,
-  });
+  }).then((result) => { resourceRevision += 1; return result; });
 }
 
 export function sourceUrl(target: { topicId: string; groupId: string; levelId: string }) {
-  return `/api/levels/${target.topicId}/${target.groupId}/${target.levelId}/source?mtime=${Date.now()}`;
+  return `/api/levels/${target.topicId}/${target.groupId}/${target.levelId}/source?mtime=${resourceRevision}`;
 }
 
 export function assetUrl(path: string) {
   if (!path) return "";
-  return `${path.replace("res://levels/", "/levels/")}?mtime=${Date.now()}`;
+  return `${path.replace("res://", "/")}?mtime=${resourceRevision}`;
 }

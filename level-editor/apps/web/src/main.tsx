@@ -47,8 +47,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import { fillCoverageGaps, generatePieces, mergePieces, PIECE_DIMENSION_RULE, sequentialId, withNeighbors, zhI18n } from "./geometry";
+import { isSimplePolygon, generatePieces, mergeConnectedPieces, PIECE_DIMENSION_RULE, sequentialId, withNeighbors, zhI18n } from "./geometry";
 import { cn } from "./lib/utils";
+import { findShortEdges } from "./short-edges";
+import { ShortEdgeOverlay, ShortEdgePanel } from "./components/ShortEdgeAudit";
 import { findTinyPieceIds } from "./tiny-piece";
 import { useEditorDirtyState } from "./hooks/use-editor-dirty-state";
 import { useTinyPieceAudit } from "./hooks/use-tiny-piece-audit";
@@ -100,7 +102,7 @@ function defaultAssist(count: number): SeedAssist {
 
 function normalizeAssist(input: SeedAssist | undefined, defaultCount: number, validIds?: Set<string>): SeedAssist {
   const mode = input?.seed.mode === "manual" ? "manual" : "auto";
-  const count = Math.max(0, Math.floor(Number(input?.seed.count ?? defaultCount) || defaultCount));
+  const count = Math.max(1, Math.floor(Number(input?.seed.count ?? defaultCount) || defaultCount));
   const pieceIds = Array.isArray(input?.seed.piece_ids)
     ? input.seed.piece_ids.filter((id) => !validIds || validIds.has(id))
     : [];
@@ -153,6 +155,8 @@ function App() {
   const [editingPolygon, setEditingPolygon] = React.useState(false);
   const [editingKnob, setEditingKnob] = React.useState(false);
   const [editMode, setEditMode] = React.useState(false);
+  const [catalogSaving, setCatalogSaving] = React.useState(false);
+  const catalogSaveInFlight = React.useRef(false);
   const [renames, setRenames] = React.useState<CatalogRenameOperation[]>([]);
   const [catalogPast, setCatalogPast] = React.useState<LevelCatalog[]>([]);
   const [catalogFuture, setCatalogFuture] = React.useState<LevelCatalog[]>([]);
@@ -210,6 +214,9 @@ function App() {
   }
 
   async function persistCatalog(next: LevelCatalog) {
+    if (catalogSaveInFlight.current) return;
+    catalogSaveInFlight.current = true;
+    setCatalogSaving(true);
     try {
       const data = await saveCatalog(next, renames);
       setCatalog(data.catalog);
@@ -218,6 +225,9 @@ function App() {
       toast.success("已保存关卡结构");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      catalogSaveInFlight.current = false;
+      setCatalogSaving(false);
     }
   }
 
@@ -387,12 +397,13 @@ function App() {
   return (
     <main className="h-screen bg-background text-foreground">
       <Toaster />
+      {catalogSaving && <div role="status" className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 text-sm font-medium">正在保存目录…</div>}
       <UnsavedChangesDialog
         open={unsavedChanges.confirmationOpen}
         onCancel={unsavedChanges.cancelNavigation}
         onDiscard={unsavedChanges.discardAndContinue}
       />
-      <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+      <header className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-2">
         <div>
           <div className="text-lg font-semibold">JigCat 关卡编辑器</div>
         </div>
@@ -402,7 +413,7 @@ function App() {
           </Button>
         </div>
       </header>
-      <div className="grid h-[calc(100vh-56px)] grid-cols-[340px_1fr] overflow-hidden">
+      <div className="grid h-[calc(100vh-56px)] grid-cols-[320px_minmax(0,1fr)] overflow-hidden">
         <aside className="min-h-0 overflow-y-auto border-r border-border bg-card">
           <TreePanel
             catalog={catalog}
@@ -687,28 +698,10 @@ function TreePanel(props: {
   function addTopic() {
     const name = `主题 ${catalog.topics.length + 1}`;
     const id = sequentialId("topic", catalog.topics.map((topic) => topic.id));
-    onChange({ ...catalog, topics: [...catalog.topics, { id, name, name_i18n: zhI18n(name), cover: "", color: DEFAULT_TOPIC_COLOR, icon: "", sort_order: catalog.topics.length, groups: [] }] });
+    onChange({ ...catalog, topics: [...catalog.topics, { id, name, name_i18n: zhI18n(name), cover: "", color: DEFAULT_TOPIC_COLOR, icon: "", sort_order: catalog.topics.length, flat_levels: true, groups: [{ id: FLAT_GROUP_ID, name: "关卡", name_i18n: zhI18n("关卡"), sort_order: 0, levels: [] }] }] });
     onExpanded({ ...expanded, [`topic:${id}`]: true });
     onSelect({ kind: "topic", topicId: id });
     toast.success("已添加主题");
-  }
-
-  function withLevelPaths(topicId: string, groupId: string, level: CatalogLevel): CatalogLevel {
-    const base = `res://levels/${topicId}/${groupId === FLAT_GROUP_ID ? "" : `${groupId}/`}${level.id}`;
-    return {
-      ...level,
-      path: `${base}/level.json`,
-      source: `${base}/source.jpg`,
-    };
-  }
-
-  function remapResPath(value: string | undefined, fromPrefix: string, toPrefix: string) {
-    if (!value) return "";
-    return value.startsWith(fromPrefix) ? value.replace(fromPrefix, toPrefix) : value;
-  }
-
-  function fixedOrderId(prefix: string, index: number) {
-    return `${prefix}_${String(index + 1).padStart(2, "0")}`;
   }
 
   function remapExpandedKeys(current: Record<string, boolean>, maps: { topic?: Map<string, string>; group?: { topicId: string; ids: Map<string, string> } }) {
@@ -734,52 +727,17 @@ function TreePanel(props: {
     return next;
   }
 
+  // Order is presentation only: stable IDs are also used by runtime saves.
   function renumberTopics(topics: CatalogTopic[]) {
-    const topicIdMap = new Map(topics.map((topic, index) => [topic.id, fixedOrderId("topic", index)]));
-    const renames: CatalogRenameOperation[] = [];
-    const nextTopics = topics.map((topic, index) => {
-      const id = topicIdMap.get(topic.id) || topic.id;
-      if (id !== topic.id) renames.push({ kind: "topic", fromTopicId: topic.id, toTopicId: id });
-      return {
-        ...topic,
-        id,
-        sort_order: index,
-        cover: remapResPath(topic.cover, `res://levels/${topic.id}/`, `res://levels/${id}/`),
-        icon: remapResPath(topic.icon, `res://levels/${topic.id}/`, `res://levels/${id}/`),
-        groups: topic.groups.map((group) => ({
-          ...group,
-          levels: group.levels.map((level) => withLevelPaths(id, group.id, level)),
-        })),
-      };
-    });
-    return { topics: nextTopics, renames, topicIdMap };
+    return { topics: topics.map((topic, index) => ({ ...topic, sort_order: index })), renames: [] as CatalogRenameOperation[], topicIdMap: new Map(topics.map((topic) => [topic.id, topic.id])) };
   }
 
-  function renumberGroups(topic: CatalogTopic, groups: CatalogGroup[]) {
-    const groupIdMap = new Map(groups.map((group, index) => [group.id, fixedOrderId("group", index)]));
-    const renames: CatalogRenameOperation[] = [];
-    const nextGroups = groups.map((group, index) => {
-      const id = groupIdMap.get(group.id) || group.id;
-      if (id !== group.id) renames.push({ kind: "group", topicId: topic.id, fromGroupId: group.id, toGroupId: id });
-      return {
-        ...group,
-        id,
-        sort_order: index,
-        levels: group.levels.map((level) => withLevelPaths(topic.id, id, level)),
-      };
-    });
-    return { groups: nextGroups, renames, groupIdMap };
+  function renumberGroups(_topic: CatalogTopic, groups: CatalogGroup[]) {
+    return { groups: groups.map((group, index) => ({ ...group, sort_order: index })), renames: [] as CatalogRenameOperation[], groupIdMap: new Map(groups.map((group) => [group.id, group.id])) };
   }
 
-  function renumberLevels(topic: CatalogTopic, group: CatalogGroup, levels: CatalogLevel[]) {
-    const levelIdMap = new Map(levels.map((level, index) => [level.id, fixedOrderId("level", index)]));
-    const renames: CatalogRenameOperation[] = [];
-    const nextLevels = levels.map((level, index) => {
-      const id = levelIdMap.get(level.id) || level.id;
-      if (id !== level.id) renames.push({ kind: "level", topicId: topic.id, groupId: group.id, fromLevelId: level.id, toLevelId: id });
-      return withLevelPaths(topic.id, group.id, { ...level, id, sort_order: index });
-    });
-    return { levels: nextLevels, renames, levelIdMap };
+  function renumberLevels(_topic: CatalogTopic, _group: CatalogGroup, levels: CatalogLevel[]) {
+    return { levels: levels.map((level, index) => ({ ...level, sort_order: index })), renames: [] as CatalogRenameOperation[], levelIdMap: new Map(levels.map((level) => [level.id, level.id])) };
   }
 
   function selectionWithMaps(maps: { topic?: Map<string, string>; group?: Map<string, string>; level?: Map<string, string> }) {
@@ -820,14 +778,14 @@ function TreePanel(props: {
       title,
       title_i18n: zhI18n(title),
       sort_order: group.levels.length,
-      path: `res://levels/${topic.id}/${group.id}/${id}/level.json`,
-      source: `res://levels/${topic.id}/${group.id}/${id}/source.jpg`,
+      path: `res://levels/${topic.id}/${group.id === FLAT_GROUP_ID ? "" : `${group.id}/`}${id}/level.json`,
+      source: `res://levels/${topic.id}/${group.id === FLAT_GROUP_ID ? "" : `${group.id}/`}${id}/source.jpg`,
     };
     onChange({
       ...catalog,
       topics: catalog.topics.map((item) =>
         item.id === topic.id
-          ? { ...item, groups: item.groups.map((candidate) => (candidate.id === group.id ? { ...candidate, levels: [...candidate.levels, level] } : candidate)) }
+          ? { ...item, groups: (item.groups.length ? item.groups : [group]).map((candidate) => (candidate.id === group.id ? { ...candidate, levels: [...candidate.levels, level] } : candidate)) }
           : item,
       ),
     });
@@ -837,13 +795,13 @@ function TreePanel(props: {
   }
 
   function renameTopic(topic: CatalogTopic, name: string) {
-    onChange({ ...catalog, topics: catalog.topics.map((item) => (item.id === topic.id ? { ...item, name, name_i18n: zhI18n(name) } : item)) });
+    onChange({ ...catalog, topics: catalog.topics.map((item) => (item.id === topic.id ? { ...item, name, name_i18n: { ...item.name_i18n, ...zhI18n(name) } } : item)) });
   }
 
   function renameGroup(topic: CatalogTopic, group: CatalogGroup, name: string) {
     onChange({
       ...catalog,
-      topics: catalog.topics.map((item) => (item.id === topic.id ? { ...item, groups: item.groups.map((candidate) => (candidate.id === group.id ? { ...candidate, name, name_i18n: zhI18n(name) } : candidate)) } : item)),
+      topics: catalog.topics.map((item) => (item.id === topic.id ? { ...item, groups: item.groups.map((candidate) => (candidate.id === group.id ? { ...candidate, name, name_i18n: { ...candidate.name_i18n, ...zhI18n(name) } } : candidate)) } : item)),
     });
   }
 
@@ -1083,9 +1041,9 @@ function TreePanel(props: {
                             toast.error(error instanceof Error ? error.message : "上传失败");
                           }
                         }}
-                        onAdd={() => addGroup(topic)}
+                        onAdd={() => topic.flat_levels ? addLevel(topic, topic.groups[0] || { id: FLAT_GROUP_ID, name: "关卡", sort_order: 0, levels: [] }) : addGroup(topic)}
                         onDelete={() => setDeleteTarget({ kind: "topic", topic })}
-                        addTitle="新增分组"
+                        addTitle={topic.flat_levels ? "新增关卡" : "新增分组"}
                       />
                     )}
                   </SortableTreeRow>
@@ -1333,7 +1291,7 @@ function TreeRow(props: {
             {props.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </button>
           <TreeMarker color={props.color} icon={props.strong ? props.icon : undefined} strong={props.strong} />
-          <button className={cn("h-8 min-w-0 flex-1 truncate px-2 text-left", props.strong && "font-medium")} onClick={props.onSelect}>
+          <button className={cn("min-h-8 min-w-0 flex-1 whitespace-normal break-words px-2 py-1 text-left leading-snug", props.strong && "font-medium")} onClick={props.onSelect}>
             {props.name}
           </button>
           <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={props.onAdd} title={props.addTitle}>
@@ -1353,7 +1311,7 @@ function TreeRow(props: {
         {props.expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
       </button>
       <TreeMarker color={props.color} icon={props.strong ? props.icon : undefined} strong={props.strong} />
-      <button className={cn("min-w-0 flex-1 truncate px-2 text-left", props.strong && "font-medium")} onClick={props.onSelect}>
+      <button className={cn("min-w-0 flex-1 whitespace-normal break-words px-2 py-1 text-left leading-snug", props.strong && "font-medium")} onClick={props.onSelect}>
         {props.name}
       </button>
     </div>
@@ -1448,7 +1406,7 @@ function LevelTreeRow(props: {
         </span>
         <span className="h-0.5 w-6 rounded-full" style={{ backgroundColor: props.level.background_color || DEFAULT_GROUP_COLOR }} />
       </span>
-      <button className="min-w-0 flex-1 truncate text-left" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
+      <button className="min-w-0 flex-1 whitespace-normal break-words text-left leading-snug" onClick={props.onSelect}>{props.level.title || props.level.id}</button>
       {props.tinyPieceCount > 0 && (
         <span className="min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-destructive-foreground" aria-label={`${props.tinyPieceCount} 块小碎片`}>
           {props.tinyPieceCount}
@@ -1515,7 +1473,7 @@ function TopicDetails(props: {
         <div className="space-y-4">
           <label className="block text-sm font-medium">
             主题名称
-            <Input className="mt-1" value={props.topic.name || ""} disabled={!props.editMode} onChange={(event) => updateTopic({ name: event.target.value, name_i18n: zhI18n(event.target.value) })} />
+            <Input className="mt-1" value={props.topic.name || ""} disabled={!props.editMode} onChange={(event) => updateTopic({ name: event.target.value, name_i18n: { ...props.topic.name_i18n, ...zhI18n(event.target.value) } })} />
           </label>
           <label className="block text-sm font-medium">
             主题色
@@ -1577,7 +1535,7 @@ function GroupDetails(props: {
       <div className="max-w-xl space-y-4">
         <label className="block text-sm font-medium">
           分组名称
-          <Input className="mt-1" value={props.group.name || ""} disabled={!props.editMode} onChange={(event) => updateGroup({ name: event.target.value, name_i18n: zhI18n(event.target.value) })} />
+          <Input className="mt-1" value={props.group.name || ""} disabled={!props.editMode} onChange={(event) => updateGroup({ name: event.target.value, name_i18n: { ...props.group.name_i18n, ...zhI18n(event.target.value) } })} />
         </label>
         <label className="block text-sm font-medium">
           分组色
@@ -1668,7 +1626,7 @@ function CoverCropDialog(props: {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>取消</Button>
-          <Button disabled={!area || saving} onClick={() => void save()}>{saving ? "保存中..." : "保存封面"}</Button>
+          <Button disabled={!area || saving} onClick={() => void save().catch((error) => toast.error(error instanceof Error ? error.message : "保存失败"))}>{saving ? "保存中..." : "保存封面"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1717,10 +1675,10 @@ function LevelDetails(props: {
 }) {
   const { catalog, target, level, status, editMode, onLevel, onCatalog, onUpload, onSave, onEditPolygon, onEditKnob } = props;
   const sourceInputRef = React.useRef<HTMLInputElement | null>(null);
-  const sourceImageUrl = React.useMemo(() => sourceUrl(target), [target.topicId, target.groupId, target.levelId, status?.hasSource, level.image.width, level.image.height]);
+  const sourceImageUrl = sourceUrl(target);
 
   function updateTitle(title: string) {
-    onLevel({ ...level, title, title_i18n: zhI18n(title) });
+    onLevel({ ...level, title, title_i18n: { ...level.title_i18n, ...zhI18n(title) } });
     onCatalog({
       ...catalog,
       topics: catalog.topics.map((topic) =>
@@ -1729,7 +1687,7 @@ function LevelDetails(props: {
               ...topic,
               groups: topic.groups.map((group) =>
                 group.id === target.groupId
-                  ? { ...group, levels: group.levels.map((item) => (item.id === target.levelId ? { ...item, title, title_i18n: zhI18n(title) } : item)) }
+                  ? { ...group, levels: group.levels.map((item) => (item.id === target.levelId ? { ...item, title, title_i18n: { ...item.title_i18n, ...zhI18n(title) } } : item)) }
                   : group,
               ),
             }
@@ -1743,7 +1701,7 @@ function LevelDetails(props: {
       <div className="mb-5 flex items-center justify-between border-b border-border pb-3">
         <div>
           <h1 className="text-2xl font-semibold">关卡详情</h1>
-          <p className="text-sm text-muted-foreground">这里只管理关卡基础信息和 polygon 数据。</p>
+          <p className="text-sm text-muted-foreground">管理关卡信息、多边形与凹凸 Seed；保留游戏中的其他模式参数。</p>
         </div>
         <div className="flex items-center gap-3">
           {editMode && (
@@ -1810,12 +1768,12 @@ function LevelDetails(props: {
             />
             <ModeDataLine
               label="凹凸"
-              value={`Godot 自动生成 ${DEFAULT_KNOB_COLS} x ${DEFAULT_KNOB_ROWS} · ${seedSummary(level.modes.knob?.assist, DEFAULT_KNOB_SEED_COUNT)}`}
+              value={`Godot 自动生成 ${level.modes.knob?.cols || DEFAULT_KNOB_COLS} x ${level.modes.knob?.rows || DEFAULT_KNOB_ROWS} · ${seedSummary(level.modes.knob?.assist, DEFAULT_KNOB_SEED_COUNT)}`}
               actionLabel="编辑凹凸"
               disabled={!status?.hasSource}
               onAction={onEditKnob}
             />
-            <StatusLine label="Swap" value={`Godot 自动生成 ${DEFAULT_SWAP_COLS} x ${DEFAULT_SWAP_ROWS}`} />
+            <StatusLine label="Swap" value={`Godot 自动生成 ${level.modes.swap?.cols || DEFAULT_SWAP_COLS} x ${level.modes.swap?.rows || DEFAULT_SWAP_ROWS}`} />
           </div>
         </div>
         <div className="space-y-4">
@@ -1912,7 +1870,7 @@ function SeedSettingsPanel(props: {
           <Input
             className="mt-1 h-8"
             type="number"
-            min={0}
+            min={1}
             max={99}
             disabled={disabled}
             value={assist.seed.count}
@@ -2123,6 +2081,7 @@ function KnobEditor(props: {
       modes: {
         ...level.modes,
         knob: {
+          ...knob,
           auto: true as const,
           cols,
           rows,
@@ -2147,13 +2106,13 @@ function KnobEditor(props: {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+      <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-2">
         <div>
           <div className="font-semibold">{title}</div>
           <div className="text-xs text-muted-foreground">凹凸 Seed 编辑</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button disabled={!hasChanges} onClick={() => void save()}>
+          <Button disabled={!hasChanges} onClick={() => void save().catch((error) => toast.error(error instanceof Error ? error.message : "保存失败"))}>
             <Save size={16} />保存
           </Button>
           <Button variant="outline" onClick={onBack}>返回</Button>
@@ -2161,7 +2120,7 @@ function KnobEditor(props: {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
         <div className="min-h-0 overflow-auto bg-secondary p-4">
-          <div className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white">
+          <div className="relative mx-auto aspect-[3/4] w-full max-w-[720px] min-w-[260px] bg-white">
             <img className="absolute inset-0 h-full w-full object-contain" src={sourceUrl(target)} alt="" draggable={false} />
             <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${width} ${height}`}>
               {Array.from({ length: rows * cols }, (_, index) => {
@@ -2299,8 +2258,8 @@ function PolygonEditor(props: {
   const width = level.image.width || 1080;
   const height = level.image.height || 1440;
   const initialPieces = React.useMemo(
-    () => withNeighbors(fillCoverageGaps(level.modes.polygon?.pieces || [], width, height)),
-    [height, level.modes.polygon?.pieces, width],
+    () => structuredClone(level.modes.polygon?.pieces || []),
+    [level.modes.polygon?.pieces],
   );
   const [pieces, setPieces] = React.useState<LevelPiece[]>(() => initialPieces);
   const [past, setPast] = React.useState<PolygonEditorSnapshot[]>([]);
@@ -2316,6 +2275,11 @@ function PolygonEditor(props: {
     if (Number.isFinite(configured) && configured >= 4) return Math.round(configured);
     return level.modes.polygon?.pieces?.length || DEFAULT_POLYGON_TARGET_COUNT;
   });
+  const [edgeThreshold, setEdgeThreshold] = React.useState(Math.round(width * 0.01 * 10) / 10);
+  const [includeSampling, setIncludeSampling] = React.useState(false);
+  const [activeEdgeKey, setActiveEdgeKey] = React.useState<string | null>(null);
+  const shortEdges = React.useMemo(() => findShortEdges(pieces, edgeThreshold), [pieces, edgeThreshold]);
+  const visibleShortEdges = shortEdges.filter((edge) => includeSampling || !edge.sampling);
   const [lineColor, setLineColor] = React.useState("#FFF6E6");
   const [drag, setDrag] = React.useState<{ pieceId: string; pointIndex: number; before: PolygonEditorSnapshot; moved: boolean } | null>(null);
   const svgRef = React.useRef<SVGSVGElement | null>(null);
@@ -2379,7 +2343,7 @@ function PolygonEditor(props: {
   }
 
   function normalizedPieces(nextPieces: LevelPiece[]) {
-    return withNeighbors(fillCoverageGaps(nextPieces, width, height));
+    return withNeighbors(nextPieces);
   }
 
   function commitPieces(nextPieces: LevelPiece[]) {
@@ -2445,26 +2409,33 @@ function PolygonEditor(props: {
     if (selectedIds.length < 2) return;
     const selectedPieces = selectedIds.map((id) => pieces.find((piece) => piece.id === id)).filter((piece): piece is LevelPiece => Boolean(piece));
     if (selectedPieces.length < 2) return;
-    const merged = selectedPieces.slice(1).reduce((acc, piece) => mergePieces(acc, piece), selectedPieces[0]);
-    commitPieces([...pieces.filter((piece) => !selectedIds.includes(piece.id)), merged]);
-    setSelectedIds([merged.id]);
+    try {
+      const merged = mergeConnectedPieces(selectedPieces);
+      commitPieces([...pieces.filter((piece) => !selectedIds.includes(piece.id)), merged]);
+      setSelectedIds([merged.id]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "无法合并这些碎片");
+    }
   }
 
   function movePoint(point: Point) {
     if (!drag) return;
+    const original = pieces.find((piece) => piece.id === drag.pieceId)?.points[drag.pointIndex];
+    if (!original) return;
+    const nextPoint: Point = [Math.max(0, Math.min(width, point[0])), Math.max(0, Math.min(height, point[1]))];
+    if (Math.hypot(nextPoint[0] - original[0], nextPoint[1] - original[1]) < 0.0001) return;
+    // Move every occurrence of a shared vertex together, keeping authored boundaries joined.
+    const next = pieces.map((piece) => ({ ...piece, points: piece.points.map((candidate) =>
+      Math.hypot(candidate[0] - original[0], candidate[1] - original[1]) < 0.0001 ? nextPoint : candidate) }));
+    if (next.some((piece, index) => piece.points.some((p, i) => p !== pieces[index].points[i]) && !isSimplePolygon(piece.points))) return;
     setDrag({ ...drag, moved: true });
-    setPieces(
-      normalizedPieces(pieces.map((piece) =>
-        piece.id === drag.pieceId
-          ? { ...piece, points: piece.points.map((candidate, index) => (index === drag.pointIndex ? point : candidate)) }
-          : piece,
-      )),
-    );
+    setPieces(next);
   }
 
   function finishDrag() {
-    if (drag) {
+    if (drag?.moved) {
       recordHistory(drag.before);
+      setPieces(normalizedPieces(pieces));
     }
     setDrag(null);
   }
@@ -2497,12 +2468,12 @@ function PolygonEditor(props: {
       polygonAssist: savedAssist,
       targetCount,
     });
-    const knob = level.modes.knob || { auto: true as const, cols: DEFAULT_KNOB_COLS, rows: DEFAULT_KNOB_ROWS, knob_size: DEFAULT_KNOB_SIZE, assist: defaultAssist(DEFAULT_KNOB_SEED_COUNT) };
     const nextLevel = {
       ...level,
       modes: {
         ...level.modes,
         polygon: {
+          ...level.modes.polygon,
           pieces: savedPieces,
           generator: {
             version: PIECE_DIMENSION_RULE.version,
@@ -2518,14 +2489,7 @@ function PolygonEditor(props: {
           },
           assist: savedAssist,
         },
-        knob: {
-          auto: true as const,
-          cols: knob.cols || DEFAULT_KNOB_COLS,
-          rows: knob.rows || DEFAULT_KNOB_ROWS,
-          knob_size: knob.knob_size || DEFAULT_KNOB_SIZE,
-          assist: normalizeAssist(knob.assist, DEFAULT_KNOB_SEED_COUNT, knobSeedIds(knob.cols || DEFAULT_KNOB_COLS, knob.rows || DEFAULT_KNOB_ROWS)),
-        },
-        swap: { auto: true as const, cols: DEFAULT_SWAP_COLS, rows: DEFAULT_SWAP_ROWS },
+
       },
     };
     await onSave(nextLevel);
@@ -2581,7 +2545,7 @@ function PolygonEditor(props: {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+      <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-2">
         <div>
           <div className="font-semibold">{title}</div>
           <div className="text-xs text-muted-foreground">多边形编辑</div>
@@ -2601,7 +2565,7 @@ function PolygonEditor(props: {
             <Redo2 size={16} />重做
           </Button>
           <Button variant="outline" disabled={selectedIds.length < 2} onClick={mergeSelected}>合并</Button>
-          <Button disabled={!hasChanges} onClick={() => void save()}>
+          <Button disabled={!hasChanges} onClick={() => void save().catch((error) => toast.error(error instanceof Error ? error.message : "保存失败"))}>
             <Save size={16} />保存
           </Button>
           <Button variant="outline" onClick={onBack}>返回</Button>
@@ -2609,7 +2573,7 @@ function PolygonEditor(props: {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] overflow-hidden">
         <div className="min-h-0 overflow-auto bg-secondary p-4">
-          <div className="relative mx-auto aspect-[3/4] w-[min(72vw,720px)] min-w-[420px] bg-white">
+          <div className="relative mx-auto aspect-[3/4] w-full max-w-[720px] min-w-[260px] bg-white">
             <img className="absolute inset-0 h-full w-full object-contain" src={sourceUrl(target)} alt="" draggable={false} />
             <svg
               ref={svgRef}
@@ -2662,6 +2626,7 @@ function PolygonEditor(props: {
                         strokeWidth={4}
                         onPointerDown={(event) => {
                           event.stopPropagation();
+                          event.currentTarget.setPointerCapture(event.pointerId);
                           setDrag({ pieceId: piece.id, pointIndex, before: snapshotEditorState(), moved: false });
                         }}
                       />
@@ -2669,6 +2634,7 @@ function PolygonEditor(props: {
                   </g>
                 );
               })}
+              <ShortEdgeOverlay edges={visibleShortEdges} activeKey={activeEdgeKey} />
             </svg>
           </div>
         </div>
@@ -2676,6 +2642,7 @@ function PolygonEditor(props: {
           <div className="mb-2 text-sm font-semibold text-foreground">编辑说明</div>
           <p className="mb-4 text-muted-foreground">点击碎片选择，按住 Cmd/Ctrl 可多选并合并。选中碎片后拖动圆点微调轮廓。</p>
           <PolygonPieceLegend tinyPieceCount={tinyPieceIds.size} />
+          <ShortEdgePanel edges={shortEdges} threshold={edgeThreshold} onThreshold={(value) => setEdgeThreshold(Number.isFinite(value) ? Math.max(0.01, Math.min(1000, value)) : 0.01)} includeSampling={includeSampling} onIncludeSampling={setIncludeSampling} activeKey={activeEdgeKey} onSelect={(edge) => { setActiveEdgeKey(edge.key); setSelectedIds([...new Set(edge.owners.map((owner) => owner.pieceId))]); }} />
           <div className="mb-4 border-y border-border py-4">
             <div className="mb-2 text-sm font-semibold text-foreground">线条颜色</div>
             <div className="flex flex-wrap gap-2">

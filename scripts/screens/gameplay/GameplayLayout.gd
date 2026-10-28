@@ -2,6 +2,8 @@ extends RefCounted
 class_name GameplayLayout
 
 const PuzzleRulesScript := preload("res://scripts/config/PuzzleRules.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
+const TitleLayout := preload("res://scripts/screens/home/ThemeTitleLayout.gd")
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
 const Buttons := preload("res://scripts/ui/foundation/ButtonMetrics.gd")
 
@@ -26,9 +28,10 @@ func apply(
 	var hint_button := header_buttons[1]
 	var scale := _layout_scale(viewport_size) * maxf(1.0, requested_scale)
 	var control_size := Buttons.icon_size(viewport_size).x
-	var title_height := float(_header_config["control_size"]) * scale
-	var control_top := float(_header_config["top"]) * scale + safe.y
-	var side_margin := float(_header_config["side_margin"]) * scale
+	var ui_unit := Metrics.unit(viewport_size)
+	var title_height := Metrics.TOUCH * ui_unit
+	var control_top := Metrics.TOP * ui_unit + safe.y
+	var side_margin := Metrics.EDGE * ui_unit
 	hud.offset_left = 0.0
 	hud.offset_top = 0.0
 	hud.offset_right = 0.0
@@ -44,7 +47,7 @@ func apply(
 		control_size,
 	)
 	var center := viewport_size.x * 0.5
-	var title_gap := float(_header_config["title_side_gap"]) * scale
+	var title_gap := Metrics.SMALL_GAP * ui_unit
 	var title_area_width := minf(
 		float(_header_config["title_max_width"]) * scale,
 		maxf(
@@ -60,7 +63,7 @@ func apply(
 	)
 	var title_top := Buttons.header_center_y(viewport_size) - title_height * 0.5 + safe.y
 	var ornaments_width := 0.0
-	var minimum_font := maxi(12, roundi(float(_header_config["title_min_font_size"]) * scale))
+	var minimum_font := roundi(Metrics.BODY * ui_unit)
 	if (
 		(
 			title_label
@@ -71,7 +74,7 @@ func apply(
 		> title_area_width - ornaments_width * scale
 	):
 		# Long names use the full-width title row rather than colliding with actions.
-		title_top = control_top + title_height + float(_header_config["title_row_gap"]) * scale
+		title_top = control_top + title_height + Metrics.SMALL_GAP * ui_unit
 		title_area_width = viewport_size.x - side_margin * 2.0
 	_layout_title(
 		viewport_size.x,
@@ -81,7 +84,7 @@ func apply(
 		title_label,
 		title_cloud_left,
 		title_cloud_right,
-		scale,
+		ui_unit,
 	)
 	hud.offset_bottom = maxf(
 		hud.offset_bottom, title_top + title_height + board_gap(viewport_size, requested_scale)
@@ -128,24 +131,8 @@ func _layout_title(
 	# Retain the nodes for scene compatibility; remove ornamental title clutter.
 	left_cloud.visible = false
 	right_cloud.visible = false
-	var text_limit := maxf(1.0, area_width)
-	var font := label.get_theme_font("font")
-	var font_size := roundi(float(_header_config["title_max_font_size"]) * scale)
-	while (
-		font_size > 1
-		and (
-			font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size).x
-			> text_limit
-		)
-	):
-		font_size -= 1
-	label.add_theme_font_size_override("font_size", font_size)
-	var text_width := minf(
-		text_limit,
-		font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_CENTER, -1.0, font_size).x,
-	)
-	label.position = Vector2((viewport_width - text_width) * 0.5, top)
-	label.size = Vector2(text_width, height)
+	label.position = Vector2((viewport_width - area_width) * 0.5, top)
+	TitleLayout.fit(label, Vector2(area_width, height), roundi(Metrics.TITLE * scale))
 
 
 func _configure_bottom_panel(panel: Control, height: float, bottom: float, margin: float) -> void:

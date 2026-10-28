@@ -5,13 +5,12 @@ signal transition_settled(committed: bool)
 signal motion_started(kind: StringName)
 
 const CardMotion := preload("res://scripts/navigation/CardPageMotion.gd")
-const GameplayMotion := preload("res://scripts/navigation/GameplayPageMotion.gd")
 const SheetCloseOverlay := preload("res://scripts/navigation/ThemeLibraryCloseOverlay.gd")
 var _sheet_close := SheetCloseOverlay.new()
 const ThemeLibraryMotion := preload("res://scripts/navigation/ThemeLibraryMotion.gd")
-const NORMAL_DURATION := 0.40
-const HOME_TO_LEVELS_DURATION := 0.56
-const LEVELS_TO_HOME_DURATION := 0.42
+const NORMAL_DURATION := 0.32
+const HOME_TO_LEVELS_DURATION := 0.32
+const LEVELS_TO_HOME_DURATION := 0.32
 const THEME_LIBRARY_OPEN_DURATION := 0.44
 const THEME_LIBRARY_CLOSE_DURATION := 0.32
 const REDUCED_MOTION_DURATION := 0.12
@@ -194,17 +193,21 @@ func _configure_continuation(duration: float) -> bool:
 		return true
 	if not is_instance_valid(_target_view):
 		return false
-	if not _target_carried:
-		_target_view.modulate.a = 0.0
+	var returning := str(_active_context.get("reason")) in ["pop", "close_modal"]
+	var width := _target_view.size.x
+	if not _target_carried and not returning:
+		_target_view.position.x = _target_state.position.x + width
 	_tween_view_to(_target_view, _target_state, duration)
 	if is_instance_valid(_source_view):
-		_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
-	if is_instance_valid(_target_companion):
-		if not _target_companion_carried:
-			_target_companion.modulate.a = 0.0
-		_tween_companion_to(_target_companion, _target_companion_state, duration)
-	if is_instance_valid(_source_companion):
-		_active_tween.tween_property(_source_companion, "modulate:a", 0.0, duration)
+		var destination := _source_state.duplicate()
+		if returning:
+			destination.position.x += width
+			_source_view.z_index = 50
+		elif _active_context.get("reason") == "push_from_modal":
+			destination.position.x -= width
+		else:
+			_target_view.z_index = 50
+		_tween_view_to(_source_view, destination, duration)
 	return true
 
 
@@ -275,7 +278,7 @@ func _duration_for(kind: StringName, reduced_motion: bool) -> float:
 				# second tap before the exposed level cards accept input.
 				return REDUCED_MOTION_DURATION
 			return 0.001
-		return REDUCED_MOTION_DURATION
+		return 0.001
 	match kind:
 		&"home_to_levels":
 			return HOME_TO_LEVELS_DURATION
@@ -316,37 +319,22 @@ func _settle(sequence: int, committed: bool, settle_custom := true) -> void:
 func _configure_motion(kind: StringName, duration: float) -> bool:
 	if not is_instance_valid(_target_view):
 		return false
-	if (
-		_active_context.get("reason") == "show_modal"
-		and _target_view.has_method("configure_box_transition")
-	):
-		if _target_view.configure_box_transition(_active_tween, duration):
-			return true
 	var reduced := bool(_active_context.get("reduced_motion", false))
 	if kind in [&"home_to_themes", &"themes_to_home"] and is_instance_valid(_source_view):
 		_configure_theme_sheet(duration, false)
 		return true
-	if reduced:
-		if kind == &"gameplay_page":
-			_target_view.modulate.a = 1.0
-			if is_instance_valid(_source_view):
-				_source_view.modulate.a = 0.0
-			return false
-		_target_view.modulate.a = 0.0
-		_active_tween.tween_property(_target_view, "modulate:a", 1.0, duration)
-		if is_instance_valid(_source_view):
-			_active_tween.tween_property(_source_view, "modulate:a", 0.0, duration)
-		return true
 	if (
-		kind == &"gameplay_page"
-		and _active_context.get("reason") in ["pop", "push_from_modal"]
-		and is_instance_valid(_source_view)
+		kind == &"modal"
+		and _active_context.get("reason") == "show_modal"
+		and _target_view.has_method("configure_box_transition")
 	):
-		# A mode page lives on the higher modal canvas. Move that page out so
-		# the already prepared game is revealed throughout the entrance.
-		GameplayMotion.configure(_active_tween, _source_view, _target_view, duration)
-		return true
-	if kind in [&"home_to_levels", &"levels_to_home", &"screen", &"gameplay_page"]:
+		return _target_view.configure_box_transition(_active_tween, duration)
+	if reduced:
+		_target_view.modulate.a = 1.0
+		if is_instance_valid(_source_view):
+			_source_view.modulate.a = 0.0
+		return false
+	if kind in [&"home_to_levels", &"levels_to_home", &"screen", &"gameplay_page", &"modal"]:
 		if is_instance_valid(_source_view):
 			CardMotion.configure(
 				_active_tween, _source_view, _target_view, _active_context, duration

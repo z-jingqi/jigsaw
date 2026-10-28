@@ -14,7 +14,6 @@ var _reduced_motion := false
 
 func _ready() -> void:
 	preload("res://scripts/ui/foundation/CleanTheme.gd").button(self, kind == Kind.PRIMARY)
-	custom_minimum_size = custom_minimum_size.max(Vector2(44.0, 44.0))
 	accessibility_name = accessibility_label if not accessibility_label.is_empty() else text
 	tooltip_text = ""
 	accessibility_description = accessibility_detail

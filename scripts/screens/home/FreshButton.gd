@@ -5,6 +5,7 @@ var symbol := "none"
 @export var primary := false
 @export var icon_only := false
 const Clean := preload("res://scripts/ui/foundation/CleanTheme.gd")
+const Metrics := preload("res://scripts/ui/foundation/UiMetrics.gd")
 const INK := Clean.INK
 
 
@@ -27,28 +28,14 @@ func _draw() -> void:
 		return
 	var c := size * 0.5
 	var r := minf(size.x, size.y) * 0.21
-	var w := maxf(1.5, r * 0.13)
+	var w := Metrics.ICON_STROKE * minf(size.x, size.y) / Metrics.TOUCH
 	if icon_only and has_focus():
 		w *= 1.5
 	var ink := Clean.MUTED if disabled else (Clean.PAPER if primary else INK)
 	match symbol:
 		"back", "forward":
-			var direction := -1.0 if symbol == "back" else 1.0
-			var tip := c + Vector2(r * direction * (1.0 if icon_only else 0.45), 0)
-			var wing := r * (0.75 if icon_only else 0.9)
-			if icon_only:
-				draw_line(c - Vector2(r * direction, 0), tip, ink, w, true)
-			draw_polyline(
-				PackedVector2Array(
-					[
-						tip + Vector2(-wing * direction, -wing),
-						tip,
-						tip + Vector2(-wing * direction, wing),
-					]
-				),
-				ink,
-				w,
-				true
+			preload("res://scripts/ui/foundation/NavigationGlyph.gd").draw_arrow(
+				self, -1.0 if symbol == "back" else 1.0, ink, icon_only
 			)
 		"more":
 			for offset in [-0.8, 0.0, 0.8]:

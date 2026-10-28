@@ -20,6 +20,7 @@ var _displayed_thumbnail_path := ""
 var _thumbnail_fade: Tween
 var _status: Label
 var _box_preview: TextureRect
+var _box_shadow: TextureRect
 var _box_hidden := false
 var _edge_back_preview := false
 var _cache_key := ""
@@ -44,6 +45,9 @@ func _ready() -> void:
 	title_label.hide()
 	completed_modes.hide()
 	add_child(_status)
+	_box_shadow = preload("res://scripts/ui/box/BoxShadow.gd").new()
+	_box_shadow.visible = false
+	add_child(_box_shadow)
 	_box_preview = TextureRect.new()
 	var composite := ShaderMaterial.new()
 	composite.shader = preload("res://scripts/ui/box/BoxComposite.gdshader")
@@ -123,34 +127,50 @@ func _apply_view_model() -> void:
 	tooltip_text = ""
 	disabled = _locked or _box_source_texture == null or not _shelf_enabled
 	_status.visible = false
-	_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
-	_request_box()
+	# A finished box already contains its artwork. Present it in this frame,
+	# without waiting for the source image loader or a deferred cache callback.
+	if not _apply_cached_box():
+		_set_thumbnail(_read("thumbnail") as Texture2D, str(_read("thumbnail_path", "")))
+		_request_box()
 	_apply_layout()
 
 
-func _request_box() -> void:
-	if not is_node_ready() or not is_inside_tree() or _cache_key.is_empty():
-		return
-	if (
-		(thumbnail.texture == null and not _thumbnail_path.is_empty())
-		or _requested_token == _request_token
-	):
-		return
-	_requested_token = _request_token
+func _box_packaging() -> Dictionary:
 	var modes: Array = []
 	for state in _read("modes", []):
 		modes.append({"mode": String(state.get("mode")), "status": String(state.get("status"))})
-	var packaging := {
+	return {
 		"theme_id": str(_read("theme_id", "")),
 		"title": title_label.text,
 		"modes": modes,
 		"preview_revealed": bool(_read("preview_revealed", not _locked)),
 		"locked": _locked,
 	}
+
+
+func _apply_cached_box() -> bool:
+	if not is_inside_tree() or _cache_key.is_empty():
+		return false
+	var entry: Dictionary = BoxCache.shared(get_tree()).cached_entry(_cache_key, _box_packaging())
+	if entry.is_empty():
+		return false
+	_requested_token = _request_token
+	_accept_box(entry, _request_token, _cache_key)
+	return true
+
+
+func _request_box() -> void:
+	if not is_node_ready() or not is_inside_tree() or _cache_key.is_empty():
+		return
+	if _requested_token == _request_token or _apply_cached_box():
+		return
+	if thumbnail.texture == null and not _thumbnail_path.is_empty():
+		return
+	_requested_token = _request_token
 	BoxCache.shared(get_tree()).request(
 		_cache_key,
 		thumbnail.texture,
-		packaging,
+		_box_packaging(),
 		_accept_box.bind(_request_token, _cache_key),
 		_box_request_is_current.bind(_request_token, _cache_key)
 	)
@@ -285,6 +305,12 @@ func _apply_layout() -> void:
 			area.position + Vector2((area.size.x - drawn.x) * 0.5, area.size.y - drawn.y)
 		)
 	_box_preview.visible = _box_source_texture != null and (not _box_hidden or _edge_back_preview)
+	_box_shadow.visible = _box_preview.visible
+	if _box_shadow.visible:
+		var shadow_rect: Rect2 = get_global_transform().affine_inverse() * prototype_box_rect()
+		_box_shadow.texture = _box_source_texture
+		_box_shadow.position = shadow_rect.position
+		_box_shadow.size = shadow_rect.size
 	thumbnail.visible = _box_source_texture == null and (not _box_hidden or _edge_back_preview)
 	title_label.hide()
 	completed_modes.hide()

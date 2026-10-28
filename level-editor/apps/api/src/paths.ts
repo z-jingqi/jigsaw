@@ -2,7 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const apiDir = path.dirname(fileURLToPath(import.meta.url));
-export const repoRoot = path.resolve(apiDir, "../../../..");
+export const repoRoot = path.resolve(process.env.JIGCAT_REPO_ROOT || path.resolve(apiDir, "../../../.."));
 export const levelsRoot = path.join(repoRoot, "levels");
 export const catalogPath = path.join(levelsRoot, "catalog.json");
 export const FLAT_GROUP_ID = "levels";
@@ -52,4 +52,13 @@ export function topicIconResPath(topicId: string, extension: string) {
 export function levelResPath(topicId: string, groupId: string, levelId: string) {
   if (groupId === FLAT_GROUP_ID) return `res://levels/${topicId}/${levelId}/level.json`;
   return `res://levels/${topicId}/${groupId}/${levelId}/level.json`;
+}
+
+export function resourceDiskPath(resource: string) {
+  if (!/^res:\/\/(levels|assets)\//.test(resource)) throw new Error("资源必须位于 levels 或 assets 目录");
+  const resolved = path.resolve(repoRoot, resource.slice(6));
+  const relative = path.relative(repoRoot, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("资源路径超出项目目录");
+  if (!/^(levels|assets)[\\/]/.test(relative)) throw new Error("资源路径超出资源目录");
+  return resolved;
 }

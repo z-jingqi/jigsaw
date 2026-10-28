@@ -72,6 +72,7 @@ export type LevelConfig = {
   title_i18n: I18nText;
   description: string;
   description_i18n: I18nText;
+  thumbnail?: { path: string; width?: number; height?: number };
   image: {
     path: string;
     width: number;

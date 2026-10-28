@@ -1,5 +1,36 @@
 # JigCat UI visual style
 
+## 统一尺寸规范（当前实现）
+
+尺寸源为 `scripts/ui/foundation/UiMetrics.gd`，颜色、字体及按钮状态源为
+`CleanTheme.gd`。页面不得各自定义同一角色的字号、按钮高度或缩放公式。
+旧章节中的历史美术说明不覆盖这里的当前运行时规范。
+
+- 基准画布为 390 × 844；逻辑单位使用宽高等比缩放的较小值。
+- 系统安全区只加一次；顶部栏额外留白 12，左右内容边距 24。
+- 间距使用 8 / 16 / 24 / 32；导航与分页触摸区 48，主按钮高 52。
+- 页面标题 26，正文及主按钮 18，辅助说明与页数 14；标题先按字体测量缩小，最低为辅助文字 14 逻辑单位。首页、完成页和相册名称允许两行，主题卡片允许三行；可用空间仍不足时才省略并保留完整名称。
+- 多列主题卡片名称从正文 18 开始适配；名称区域固定，禁止按文字最小宽度扩大卡片标题区域。
+- 普通按钮圆角 12、横向内边距 16、焦点描边 2，均随逻辑单位缩放。导航图标基准笔画 1.5；所有返回箭头共用 `NavigationGlyph.gd`，不得另写绘制比例。
+- Logo 为 144 × 48；菜单宽 224、行高 48，使用与页面相同的逻辑单位。
+- 原生像素换算 `CleanTheme.canvas_scale` 仅用于输入阈值等需要设备像素的场景；
+  不再用于分页和菜单的视觉尺寸，不新建页面专属比例。
+- 首页、关卡列表、模式选择、游戏顶部栏、完成页、相册与作品详情、设置已接入共同角色。
+  棋盘与托盘保留玩法几何缩放；纸盒保留透视布局，选项名称和状态使用共同文字规格。
+- 相册主题选择为居中淡入淡出弹窗；只有首页的全部主题使用顶部落下、向上收起。
+
+首页从上至下为顶部栏、固定主题名称、横向滚动图片、分页控件、数字页数、固定进入按钮。
+标题只改变透明度，不移动位置；透明度由实际视觉分页进度计算，中点完全淡出并切换文案，
+再渐显下一标题。拖动、回弹、连续切换和 Reduced Motion 共用图片的分页状态。
+页数表示当前选择，进入按钮只在选中页稳定后可用；未开放主题显示“敬请期待”。
+图片只负责分页，进入主题由固定按钮负责。
+
+模式页优先选中第一个进行中的可用模式，否则选中第一个未完成的模式；全部完成时选中第一个已完成模式供重玩。关闭请求需在发出信号前完成本地关闭标记，取消关闭后必须重新启用交互。
+
+拼图完成属于当前棋盘的展示延续：使用完成页原有 AnimationPlayer，将完整图片从棋盘位置过渡到展示尺寸，不叠加通用左右翻页动画。减少动态效果时直接显示最终状态。
+
+纸盒印刷属于透视美术，不使用屏幕字号：在 80 到 56 的印刷字号范围内适配，必要时分为两行并让出图片空间，仍无法容纳才省略。纸盒标题样式版本参与缩略图缓存键。
+
 ## Shared screen palette
 
 Home, level selection, and gameplay share the warm ivory background in
@@ -80,6 +111,16 @@ intrinsic edge shading inside the material. Gameplay buttons and tray surfaces
 use no runtime drop shadows; puzzle pieces retain their existing intrinsic
 side faces and bevels.
 
+The approved B carton treatment is an exception for puzzle boxes only. Keep the
+global background unchanged. Use restrained off-white matte paper, fine fibers
+that fade at thumbnail scale, fold/lip definition, and a slightly deeper printed
+spine. Both shelf thumbnails and the live mode box share `BoxShadow.gdshader`:
+a short, soft, low-opacity silhouette shadow directed down-right. It is composed
+at runtime, outside the 3D viewport texture, never baked into artwork or cached
+box images. Shadow bounds follow the full uncropped box projection, including
+press scaling and transition hiding; they must not affect input or cache keys.
+Material/print revisions invalidate the box cache through its style signature.
+
 Do not generate concentric rims, doubled borders, or inset copies for mode
 icons. Shared SVG glyphs use one clear contour and only the cuts or arrows
 needed to identify each mode.
@@ -127,3 +168,19 @@ level title and Done button enter in the same 0.96-second AnimationPlayer
 timeline. The completion screen contains only the level title, artwork, and
 Done button. The entire artwork stays visible. Reduced Motion
 uses the settled layout immediately.
+
+## Shared navigation motion
+
+Only All Themes uses a top sheet: drop down to open, retract upward to close.
+Other full route pages, including mode selection, enter from the right
+and leave to the right on Back. The navigation host owns these transitions;
+page-local content animations must not add another route entrance or exit.
+Reduced Motion settles the route immediately. Settings remains a popup with its
+own open/close animation; native Back dismisses it without a horizontal drag.
+
+Back starts only within the leftmost 24 logical design units (UiMetrics.BACK_EDGE).
+The route follows the finger; release past 30 percent of screen width or a
+qualified rightward fling commits, otherwise it returns to its starting position.
+GestureArena reserves the pointer on press: edge gestures cannot page content,
+and a paging drag cannot become Back when it reaches the edge. All Themes keeps
+its sheet close control and does not claim horizontal edge Back.

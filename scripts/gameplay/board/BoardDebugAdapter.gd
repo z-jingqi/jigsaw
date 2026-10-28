@@ -159,10 +159,13 @@ func _debug_smoke_piece_mode(result: Dictionary) -> void:
 		var reentered_position := Vector2(center.x, host._tray_area().position.y + 48.0)
 		host.handle_input(_debug_mouse_button(center, true), false)
 		host.handle_input(_debug_mouse_motion(lift_position, lift_position - center), false)
+		var expected_lifted_scale: float = (
+			host.view_scale if host.reduced_motion else initial_screen_scale
+		)
 		var lifted_at_same_size: bool = (
 			host.dragging == picked
 			and not picked.in_tray
-			and is_equal_approx(_debug_group_screen_scale(picked), initial_screen_scale)
+			and is_equal_approx(_debug_group_screen_scale(picked), expected_lifted_scale)
 		)
 		host.handle_input(
 			_debug_mouse_motion(reentered_position, reentered_position - lift_position), false
@@ -302,6 +305,7 @@ func _debug_smoke_swap(result: Dictionary) -> void:
 			. create_timer(host._motion_duration(host.SWAP_ANIMATION_TIME) + 0.03)
 			. timeout
 		)
+		await _debug_wait_for_swap_motion()
 		var swapped := (
 			int(first["slot_index"]) == second_slot and int(second["slot_index"]) == first_slot
 		)
