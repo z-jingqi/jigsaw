@@ -1,7 +1,7 @@
 extends RuntimeModeSelectModal
 signal box_closing
 signal box_returned
-## Mode content stays local; the navigator owns the page transition.
+## The selected box moves from its list bounds before its lid opens.
 const OpticalLayout := preload("res://scripts/modals/BoxModeOpticalLayout.gd")
 const BoxScene := preload("res://scenes/ui/box/PuzzleBox3D.tscn")
 const BoxOption := preload("res://scripts/modals/BoxModeOption.gd")
@@ -52,8 +52,7 @@ func navigation_enter(payload: Dictionary, context: Dictionary) -> void:
 		_box.set_rendering(true)
 		_phase = "entering"
 		_apply_layout()
-		_open_lid()
-		_refresh_selection(true)
+		_refresh_selection()
 
 
 func _reconcile_options() -> void:
@@ -82,12 +81,43 @@ func opening() -> void:
 		super.opening()
 
 
+func configure_box_transition(tween: Tween, duration: float) -> bool:
+	if not _prototype:
+		return false
+	if content.size.y <= 0:
+		content.size = size
+	_apply_layout()
+	background.modulate.a = 0.0
+	options.modulate.a = 0.0
+	var initial := _source_rect
+	if not initial.has_area():
+		initial = _destination
+	else:
+		initial.position -= content.global_position
+	_box.position = initial.position
+	_box.size = initial.size
+	if _reduced_motion:
+		_box.position = _destination.position
+		_box.size = _destination.size
+		_open_lid()
+		background.modulate.a = 1.0
+		options.modulate.a = 1.0
+		tween.tween_interval(0.001)
+		return true
+	tween.tween_property(background, "modulate:a", 1.0, duration)
+	tween.tween_property(_box, "position", _destination.position, duration)
+	tween.tween_property(_box, "size", _destination.size, duration)
+	tween.tween_property(options, "modulate:a", 1.0, duration)
+	tween.tween_callback(_open_lid).set_delay(duration)
+	return true
+
+
 func _open_lid() -> void:
 	if _closing or not is_instance_valid(_box):
 		return
 	_box.set_open(true, _reduced_motion)
 	_phase = "ready"
-	_apply_layout()
+	_refresh_selection(true)
 
 
 func _refresh_selection(user_change := false) -> void:
@@ -184,6 +214,8 @@ func settle_box_transition(committed: bool) -> void:
 	if not _prototype or _closing:
 		return
 	if committed:
+		if _phase == "entering":
+			_open_lid()
 		_phase = "ready"
 		_apply_layout()
 		background.modulate.a = 1.0

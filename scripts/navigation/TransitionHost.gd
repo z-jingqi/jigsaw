@@ -323,6 +323,12 @@ func _configure_motion(kind: StringName, duration: float) -> bool:
 	if kind in [&"home_to_themes", &"themes_to_home"] and is_instance_valid(_source_view):
 		_configure_theme_sheet(duration, false)
 		return true
+	if (
+		kind == &"modal"
+		and _active_context.get("reason") == "show_modal"
+		and _target_view.has_method("configure_box_transition")
+	):
+		return _target_view.configure_box_transition(_active_tween, duration)
 	if reduced:
 		_target_view.modulate.a = 1.0
 		if is_instance_valid(_source_view):
